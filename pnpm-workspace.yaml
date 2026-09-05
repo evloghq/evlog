@@ -30,7 +30,7 @@ overrides:
   # so every request reaching the docs SSR function exits 1.
   vue: 3.5.42
   '@types/react': 19.2.18
-  tsdown@0.22.8>rolldown: 1.2.6
+  tsdown@0.22.8>rolldown: 1.2.7
   minimark: 0.2.0
   '@nuxtjs/mcp-toolkit': ^0.19.0
   # One `ai` copy for the whole tree. eve 0.12 needs 7 from the example
@@ -38,7 +38,7 @@ overrides:
   # export. nuxt-studio still declares `ai@^6`; a second copy on Vercel
   # leaves the docs function with v6, so POST /__docus__/assistant crashes
   # at import (FUNCTION_INVOCATION_FAILED).
-  ai: ^7.0.89
+  ai: ^7.0.92
   # Nuxt 4.x requires @unhead/vue ^3.1.8 internally; some deps (e.g. @nuxt/ui)
   # declare a permissive `^2.0.5 || ^3.0.0` peer range that lets pnpm resolve
   # a stale v2, breaking Nuxt's `legacyPlugins` import at build time.
