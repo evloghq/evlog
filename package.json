@@ -52,7 +52,7 @@
     "@changesets/cli": "^2.31.1",
     "@hrcd/eslint-config": "^3.0.3",
     "@types/node": "^25.9.5",
-    "ai": "^7.0.89",
+    "ai": "^7.0.92",
     "automd": "^0.4.3",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.39.5",

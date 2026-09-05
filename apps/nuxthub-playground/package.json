@@ -9,10 +9,10 @@
   },
   "dependencies": {
     "@evlog/nuxthub": "workspace:*",
-    "@libsql/client": "^0.17.4",
-    "@ai-sdk/vue": "^4.0.89",
+    "@libsql/client": "^0.18.0",
+    "@ai-sdk/vue": "^4.0.92",
     "@nuxthub/core": "^0.10.8",
-    "ai": "^7.0.89",
+    "ai": "^7.0.92",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "evlog": "workspace:*",
