@@ -2,7 +2,7 @@ import type { ParseFn } from './parse'
 import type { ProjectFacts } from './project-facts'
 
 /** Frameworks the `map` command can scan (adapter selection key). */
-export type Framework = 'nuxt' | 'nitro' | 'next' | 'tanstack-start' | 'hono'
+export type Framework = 'nuxt' | 'nitro' | 'next' | 'tanstack-start' | 'hono' | 'express' | 'fastify' | 'elysia'
 
 /** Route shape as detected on disk, before observability checks run. */
 export type RouteKind = 'api' | 'page' | 'middleware' | 'server-action' | 'cron' | 'websocket'

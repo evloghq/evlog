@@ -26,7 +26,7 @@ import type { MapView } from '../lib/map/telemetry'
 import type { Framework, ScanContext, ScanResult } from '../lib/map/types'
 import { writeMapFile } from '../lib/map/write'
 
-const FRAMEWORKS: readonly Framework[] = ['nuxt', 'nitro', 'next', 'tanstack-start', 'hono']
+const FRAMEWORKS: readonly Framework[] = ['nuxt', 'nitro', 'next', 'tanstack-start', 'hono', 'express', 'fastify', 'elysia']
 
 function isFramework(value: string): value is Framework {
   return (FRAMEWORKS as readonly string[]).includes(value)
@@ -230,7 +230,7 @@ export default defineEvlogCommand('map', {
   args: {
     entry: { type: 'positional', required: false, description: 'Inspect one entry point by route or file path' },
     cwd: { type: 'string', description: 'Project directory (default: current)' },
-    framework: { type: 'string', description: 'Override framework detection (nuxt, nitro, next, tanstack-start, hono)' },
+    framework: { type: 'string', description: 'Override framework detection (nuxt, nitro, next, tanstack-start, hono, express, fastify, elysia)' },
     all: { type: 'boolean', description: 'Every entry point, as a check matrix' },
     minScore: { type: 'string', description: 'Exit 1 if the global score is below this threshold' },
     baseline: {

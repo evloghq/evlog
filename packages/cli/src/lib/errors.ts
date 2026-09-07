@@ -63,7 +63,7 @@ export const cliErrors = defineErrorCatalog('cli', {
   },
   MAP_FRAMEWORK_NOT_DETECTED: {
     status: 400,
-    message: 'Could not detect a supported framework (nuxt, nitro, next, tanstack-start, hono)',
+    message: 'Could not detect a supported framework (nuxt, nitro, next, tanstack-start, hono, express, fastify, elysia)',
     why: 'No matching dependency or config file was found in this project',
     fix: 'Use --framework <name> to override detection',
     tags: ['map', 'project'],
@@ -72,8 +72,8 @@ export const cliErrors = defineErrorCatalog('cli', {
     status: 400,
     message: ({ value }: { value: string }) =>
       `Unknown --framework "${value}"`,
-    why: 'map only ships adapters for nuxt, nitro, next, tanstack-start, and hono',
-    fix: 'Pass one of: nuxt, nitro, next, tanstack-start, hono',
+    why: 'map only ships adapters for nuxt, nitro, next, tanstack-start, hono, express, fastify, and elysia',
+    fix: 'Pass one of: nuxt, nitro, next, tanstack-start, hono, express, fastify, elysia',
     tags: ['map'],
   },
   INIT_INVALID_FRAMEWORK: {

@@ -21,7 +21,7 @@ import type { CheckId, Framework, Grade, RouteEntry, RouteKind, ScanResult } fro
  */
 const PREFIX = 'map'
 
-const FRAMEWORKS: readonly Framework[] = ['nuxt', 'nitro', 'next', 'tanstack-start', 'hono']
+const FRAMEWORKS: readonly Framework[] = ['nuxt', 'nitro', 'next', 'tanstack-start', 'hono', 'express', 'fastify', 'elysia']
 const GRADES: readonly Grade[] = ['excellent', 'good', 'needs-work', 'at-risk']
 
 /** Entry-point kinds the map can scan, a closed set, in scan order. */

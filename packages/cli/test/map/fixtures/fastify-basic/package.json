@@ -1,0 +1,9 @@
+{
+  "name": "fastify-basic-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "evlog": "workspace:*",
+    "fastify": "^5.0.0"
+  }
+}

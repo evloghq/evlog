@@ -1,0 +1,9 @@
+{
+  "name": "elysia-basic-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "elysia": "^1.0.0",
+    "evlog": "workspace:*"
+  }
+}

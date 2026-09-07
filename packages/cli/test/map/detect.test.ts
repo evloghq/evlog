@@ -42,9 +42,33 @@ describe('detectFramework', () => {
     expect(() => detectFramework(project)).toThrowError(/monorepo root/i)
   })
 
-  it('throws MAP_FRAMEWORK_NOT_DETECTED for an unsupported single-package project', async () => {
+  it('detects express from a dependency', async () => {
     const dir = await makeProject({
       'package.json': JSON.stringify({ name: 'app', dependencies: { express: '^5.0.0' } }),
+    })
+    const project = await resolveProject(dir)
+    expect(detectFramework(project).framework).toBe('express')
+  })
+
+  it('detects fastify from a dependency', async () => {
+    const dir = await makeProject({
+      'package.json': JSON.stringify({ name: 'app', dependencies: { fastify: '^5.0.0' } }),
+    })
+    const project = await resolveProject(dir)
+    expect(detectFramework(project).framework).toBe('fastify')
+  })
+
+  it('detects elysia from a dependency', async () => {
+    const dir = await makeProject({
+      'package.json': JSON.stringify({ name: 'app', dependencies: { elysia: '^1.0.0' } }),
+    })
+    const project = await resolveProject(dir)
+    expect(detectFramework(project).framework).toBe('elysia')
+  })
+
+  it('throws MAP_FRAMEWORK_NOT_DETECTED for an unsupported single-package project', async () => {
+    const dir = await makeProject({
+      'package.json': JSON.stringify({ name: 'app', dependencies: { koa: '^3.0.0' } }),
     })
     const project = await resolveProject(dir)
     expect(() => detectFramework(project)).toThrowError(/could not detect a supported framework/i)

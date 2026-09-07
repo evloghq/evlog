@@ -48,6 +48,9 @@ const APPS = [
   { name: 'tanstack', fixture: 'tanstack-basic' },
   { name: 'nitro', generate: generateNitroApp },
   { name: 'hono', fixture: 'hono-basic' },
+  { name: 'express', fixture: 'express-basic', mapOnly: true },
+  { name: 'fastify', fixture: 'fastify-basic', mapOnly: true },
+  { name: 'elysia', fixture: 'elysia-basic', mapOnly: true },
 ]
 
 /**
@@ -147,7 +150,7 @@ function ensureCliBuilt() {
     && statSync(dist).mtimeMs > newestSourceTime(join(ROOT, 'packages/cli/src'))
   if (fresh) return
 
-  process.stderr.write(dim('building @evlog/cli…\n'))
+  process.stderr.write(dim('building @evlog/cli—\n'))
   const built = spawnSync('pnpm', ['--filter', '@evlog/cli', 'build'], { cwd: ROOT, stdio: 'inherit' })
   if (built.status !== 0) {
     process.stderr.write(red('could not build the CLI — run `pnpm --filter @evlog/cli build`\n'))
@@ -461,22 +464,49 @@ check('telemetry status', (dir) => {
 
 /* ── run ────────────────────────────────────────────────────────────────── */
 
+const MAP_ONLY_CHECKS = new Set([
+  'doctor --json',
+  'map --json --no-write',
+  'map --all / map <entry>',
+  'map --min-score gates',
+  'telemetry status',
+])
+
+function checksFor(app) {
+  if (!app.mapOnly) return checks
+  return checks.filter(({ name }) => MAP_ONLY_CHECKS.has(name))
+}
+
+function smokeHeader(apps) {
+  const mapOnlyCount = checks.filter(({ name }) => MAP_ONLY_CHECKS.has(name)).length
+  const fullCount = checks.length
+  const mapOnlyApps = apps.filter(app => app.mapOnly).length
+  if (mapOnlyApps === apps.length) {
+    return `${mapOnlyCount} checks — ${apps.length} apps`
+  }
+  if (mapOnlyApps === 0) {
+    return `${fullCount} checks — ${apps.length} apps`
+  }
+  return `${mapOnlyCount} checks (map-only) / ${fullCount} checks (full) — ${apps.length} apps`
+}
+
 function smoke(apps) {
   let failed = 0
-  process.stderr.write(`\n${bold('smoke')} ${dim(`${checks.length} checks × ${apps.length} apps`)}\n\n`)
+  process.stderr.write(`\n${bold('smoke')} ${dim(smokeHeader(apps))}\n\n`)
 
   for (const app of apps) {
-    process.stderr.write(`${bold(app.name)}\n`)
-    for (const { name, fn } of checks) {
+    const run = checksFor(app)
+    process.stderr.write(`${bold(app.name)}${app.mapOnly ? dim(' (map only — init not supported yet)') : ''}\n`)
+    for (const { name, fn } of run) {
       /* A fresh copy per check: `init` writes files, and a check that inherits
          the previous one's leftovers passes or fails for the wrong reason. */
       const dir = createApp(app)
       try {
         fn(dir)
-        process.stderr.write(`  ${green('✓')} ${name}\n`)
+        process.stderr.write(`  ${green('ok')} ${name}\n`)
       } catch (error) {
         failed++
-        process.stderr.write(`  ${red('✗')} ${name}\n    ${dim(error.message)}\n`)
+        process.stderr.write(`  ${red('fail')} ${name}\n    ${dim(error.message)}\n`)
       }
     }
     process.stderr.write('\n')
@@ -538,7 +568,7 @@ if (args.includes('--smoke')) {
   smoke(apps)
 } else if (args.includes('--reset')) {
   for (const app of apps) resetApp(app)
-  process.stderr.write(`${green('✓')} ${dim(`reset ${apps.map(app => app.name).join(', ')}`)}\n`)
+  process.stderr.write(`${green('ok')} ${dim(`reset ${apps.map(app => app.name).join(', ')}`)}\n`)
 } else {
   if (!args.includes('--keep')) for (const app of apps) createApp(app)
   cheatSheet(apps)

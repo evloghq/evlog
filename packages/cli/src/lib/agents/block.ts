@@ -25,6 +25,9 @@ const ACCESSOR: Record<Framework, string> = {
   'next': '`useLogger()` from your `lib/evlog.ts` inside a route handler',
   'tanstack-start': '`req.context.log` inside a server route',
   'hono': '`c.get(\'log\')` or `useLogger()` from `evlog/hono` inside a route handler',
+  'express': '`req.log` inside a route handler',
+  'fastify': '`req.log` inside a route handler',
+  'elysia': '`log` inside a route handler',
 }
 
 const DEFAULT_ACCESSOR = '`useLogger()` inside a request handler'

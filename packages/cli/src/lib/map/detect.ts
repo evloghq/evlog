@@ -66,6 +66,18 @@ export function detectFramework(project: ProjectInfo, override?: Framework): Det
     matches.push({ framework: 'hono', specificity: 10, reason: 'hono dependency' })
   }
 
+  if (hasDep(pkg, ['express'])) {
+    matches.push({ framework: 'express', specificity: 10, reason: 'express dependency' })
+  }
+
+  if (hasDep(pkg, ['fastify'])) {
+    matches.push({ framework: 'fastify', specificity: 10, reason: 'fastify dependency' })
+  }
+
+  if (hasDep(pkg, ['elysia'])) {
+    matches.push({ framework: 'elysia', specificity: 10, reason: 'elysia dependency' })
+  }
+
   if (matches.length === 0) {
     const isBareWorkspaceRoot = project.kind !== 'single' && project.packageDir === project.root
     if (isBareWorkspaceRoot) {
