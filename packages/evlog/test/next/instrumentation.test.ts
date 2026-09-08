@@ -91,8 +91,6 @@ describe('createInstrumentation', () => {
     expect(config.env.service).toBe('my-app')
     expect(config.pretty).toBe(false)
     expect(config.silent).toBe(true)
-    // The drain is wrapped to run through Next's after() lifecycle; with
-    // after() unavailable in this test, the wrapper delegates directly.
     expect(typeof config.drain).toBe('function')
     await config.drain({ event: { message: 'test' } })
     expect(drainMock).toHaveBeenCalledTimes(1)

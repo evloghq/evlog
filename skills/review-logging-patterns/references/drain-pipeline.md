@@ -82,7 +82,7 @@ drain.pending         // Number of events currently buffered (readonly)
 
 ## Serverless
 
-`drain(ctx)` returns after buffering, so delivery must outlive the response. When the pipeline is passed as the `drain` option of a framework integration, the shared middleware registers `drain.settled()` with the runtime's `waitUntil` (Next `after()`, Workers `ctx.waitUntil`) automatically: the instance stays alive until the batch is delivered or dropped. `batch.intervalMs` bounds when the first delivery attempt starts; retry backoff can extend the lifetime past it. Nitro's `evlog:drain` hook path can't do this for you; on Cloudflare register `drain.settled()` with the execution context's `waitUntil` where the hook is wired.
+`drain(ctx)` returns after buffering, so delivery must outlive the response. When the pipeline is passed as the `drain` option of a framework integration, the shared middleware registers `drain.settled()` with the runtime's `waitUntil` (Next `after()`, Workers `ctx.waitUntil`) automatically: the instance stays alive until the batch is delivered or dropped. Next.js global drains configured through `createInstrumentation()` start inside `after()` and await `drain.settled()` after enqueueing. `batch.intervalMs` bounds when the first delivery attempt starts; retry backoff can extend the lifetime past it. Nitro's `evlog:drain` hook path can't do this for you; on Cloudflare register `drain.settled()` with the execution context's `waitUntil` where the hook is wired.
 
 ## Common Patterns
 
