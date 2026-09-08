@@ -1,20 +1,8 @@
 /**
- * Competitive comparison: evlog vs pino vs winston vs consola.
- *
- * Methodology:
- * - All loggers output JSON to a no-op destination (no real I/O measured)
- * - pino:    writes JSON to /dev/null (sync mode — full serialization + syscall)
- * - winston: writes JSON to a no-op Writable stream (full serialization)
- * - consola: uses a no-op reporter (internal processing, no serialization)
- * - evlog:   uses silent mode (event construction, no serialization)
- *
- * This reflects real-world production configurations where each library
- * sends output to an external service (pino piped to a collector, evlog
- * draining to Axiom/OTLP, etc.) rather than stdout.
- *
- * Note: evlog is a wide-event library, not a traditional line logger.
- * The "wide event lifecycle" benchmark highlights this architectural
- * difference: 1 rich event vs N individual log lines.
+ * These workloads use different output paths, not equivalent-output configurations.
+ * Pino serializes JSON and writes to /dev/null; Winston serializes to a no-op stream.
+ * Silent evlog and the no-op Consola reporter exclude console serialization.
+ * The lifecycle group also compares one evlog event with multiple alternative records.
  */
 
 import { Writable } from 'node:stream'
