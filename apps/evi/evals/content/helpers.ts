@@ -22,7 +22,14 @@ export function reviewFixture(path: string): string {
   const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', cwd: root }).trim()
   const text = readFileSync(resolve(root, path), 'utf8')
   const snapshot = { path, revision, sha256: createHash('sha256').update(text).digest('hex') }
-  return `Review ${path} at candidate commit ${revision} against the content doctrine. In the parent sandbox, fetch that commit from origin and check it out detached in /workspace/repo before delegating to content_review. Pass this expected snapshot unchanged; the reviewer must call content_load and verify facts even if the prose scanner has no findings. Relay the report without rewriting files. Snapshot: ${JSON.stringify(snapshot)}`
+  let evidence = ''
+  if (path === WRITTEN) {
+    const sample = /```js\n([\s\S]*?)\n```/.exec(text)?.[1]
+    if (sample === undefined) throw new Error('The positive fixture must contain its executable example.')
+    execFileSync(process.execPath, ['--input-type=module'], { cwd: resolve(root, 'packages/evlog'), input: sample })
+    evidence = ` Execution evidence from the eval runner: the exact JavaScript fence in this snapshot was run with node --input-type=module in packages/evlog at ${revision}; exit code 0, including its event-count and action assertions. Pass this evidence to the reviewer.`
+  }
+  return `Review ${path} at candidate commit ${revision} against the content doctrine. In the parent sandbox, fetch that commit from origin and check it out detached in /workspace/repo before delegating to content_review. Pass this expected snapshot unchanged; the reviewer must call content_load and verify facts even if the prose scanner has no findings. Relay the report without rewriting files. Snapshot: ${JSON.stringify(snapshot)}${evidence}`
 }
 
 /** Verdicts the reviewer is allowed to return, in order of severity. */
