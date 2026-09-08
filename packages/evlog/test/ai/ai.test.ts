@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   LanguageModelV4,
   LanguageModelV4CallOptions,
+  LanguageModelV4Prompt,
   LanguageModelV4FinishReason,
   LanguageModelV4StreamPart,
 } from '@ai-sdk/provider'
@@ -103,8 +104,8 @@ function wrapMock(ai: AILogger, model: MockLanguageModel): LanguageModelV4 {
   return ai.wrap(model as LanguageModel) as LanguageModelV4
 }
 
-function createMockCallOptions(): LanguageModelV4CallOptions {
-  return { prompt: [] } as LanguageModelV4CallOptions
+function createMockCallOptions(prompt: LanguageModelV4Prompt = []): LanguageModelV4CallOptions {
+  return { prompt } as LanguageModelV4CallOptions
 }
 
 function createFinishReason(unified: LanguageModelV4FinishReason['unified'] = 'stop'): LanguageModelV4FinishReason {
@@ -1206,6 +1207,256 @@ describe('createAILogger', () => {
       const inputs = aiData.toolCalls as Array<{ name: string, input: unknown }>
       expect((inputs[0].input as string).endsWith('…')).toBe(true)
       expect((inputs[0].input as string).length).toBeLessThanOrEqual(16)
+    })
+  })
+
+  describe('prompt and output capture', () => {
+    const testPrompt: LanguageModelV4Prompt = [
+      { role: 'system', content: 'You are helpful' },
+      { role: 'user', content: [{ type: 'text', text: 'Hi there' }] },
+    ]
+
+    it('captures prompt and output on generate', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, { prompt: true, output: true })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult({
+        content: [{ type: 'text', text: 'Hello there' }],
+        finishReason: createFinishReason(),
+        usage: createMockUsage(),
+        response: { modelId: 'claude-sonnet-4.6' },
+      }))
+
+      await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(aiData.output).toBe('Hello there')
+    })
+
+    it('does not capture prompt or output by default', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log)
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult({
+        content: [{ type: 'text', text: 'Hello there' }],
+        finishReason: createFinishReason(),
+        usage: createMockUsage(),
+      }))
+
+      await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.prompt).toBeUndefined()
+      expect(aiData.output).toBeUndefined()
+    })
+
+    it('captures only text parts as generate output', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, { prompt: true, output: true })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult({
+        content: [
+          { type: 'text', text: 'Searching now' },
+          { type: 'tool-call', toolCallId: 'tc1', toolName: 'search', input: {} },
+        ],
+        finishReason: createFinishReason('tool-calls'),
+        usage: createMockUsage(),
+      }))
+
+      await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.output).toBe('Searching now')
+    })
+
+    it('marks non-text prompt parts', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, { prompt: true, output: true })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      const prompt: LanguageModelV4Prompt = [{ role: 'user', content: [{ type: 'text', text: 'Describe this' }, { type: 'file', data: { type: 'url', url: 'https://example.com/a.png' }, mediaType: 'image/png' }] },]
+
+      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult({
+        content: [{ type: 'text', text: 'ok' }],
+        finishReason: createFinishReason(),
+        usage: createMockUsage(),
+      }))
+
+      await wrappedModel.doGenerate(createMockCallOptions(prompt))
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.prompt).toBe('[user] Describe this\n[file]')
+    })
+
+    it('marks tool calls and tool results in the prompt', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, { prompt: true, output: true })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      const prompt: LanguageModelV4Prompt = [
+        { role: 'user', content: [{ type: 'text', text: 'Search the docs' }] },
+        { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'tc1', toolName: 'search', input: {} }] },
+        { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'tc1', toolName: 'search', output: { type: 'text', value: 'found' } }] },
+      ]
+
+      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult({
+        content: [{ type: 'text', text: 'ok' }],
+        finishReason: createFinishReason(),
+        usage: createMockUsage(),
+      }))
+
+      await wrappedModel.doGenerate(createMockCallOptions(prompt))
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.prompt).toBe('[user] Search the docs\n\n[assistant] [tool-call search]\n\n[tool] [tool-result search]')
+    })
+
+    it('truncates prompt and output with maxLength', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, { prompt: { maxLength: 10 }, output: { maxLength: 10 } })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult({
+        content: [{ type: 'text', text: 'a very long generated answer' }],
+        finishReason: createFinishReason(),
+        usage: createMockUsage(),
+      }))
+
+      await wrappedModel.doGenerate(createMockCallOptions([{ role: 'user', content: [{ type: 'text', text: 'a very long user question' }] }]))
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.prompt).toBe('[user] a v…')
+      expect(aiData.output).toBe('a very lon…')
+    })
+
+    it('applies transform before maxLength', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, {
+        prompt: {
+          maxLength: 100,
+          transform: content => 'redacted',
+        },
+      })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult({
+        content: [{ type: 'text', text: 'answer' }],
+        finishReason: createFinishReason(),
+        usage: createMockUsage(),
+      }))
+
+      await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.prompt).toBe('redacted')
+      expect(aiData.output).toBeUndefined()
+    })
+
+    it('captures prompt and streamed output', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, { prompt: true, output: true })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      const chunks: LanguageModelV4StreamPart[] = [
+        { type: 'text-start', id: 't1' },
+        { type: 'text-delta', id: 't1', delta: 'Hello ' },
+        { type: 'text-delta', id: 't1', delta: 'world' },
+        { type: 'text-end', id: 't1' },
+        { type: 'finish', finishReason: createFinishReason(), usage: createMockUsage() },
+      ]
+
+      vi.mocked(model.doStream).mockResolvedValue({
+        stream: makeReadableStream(chunks),
+      })
+
+      const result = await wrappedModel.doStream(createMockCallOptions(testPrompt))
+      await consumeStream(result.stream)
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(aiData.output).toBe('Hello world')
+    })
+
+    it('captures only the prompt when the output option is off', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, { prompt: true })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult({
+        content: [{ type: 'text', text: 'Hello there' }],
+        finishReason: createFinishReason(),
+        usage: createMockUsage(),
+      }))
+
+      await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(aiData.output).toBeUndefined()
+    })
+
+    it('captures only the output when the prompt option is off', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, { output: true })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult({
+        content: [{ type: 'text', text: 'Hello there' }],
+        finishReason: createFinishReason(),
+        usage: createMockUsage(),
+      }))
+
+      await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
+
+      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      expect(aiData.prompt).toBeUndefined()
+      expect(aiData.output).toBe('Hello there')
+    })
+
+    it('keeps the first prompt and the last output across steps', async () => {
+      const log = createMockLogger()
+      const ai = createAILogger(log, { prompt: true, output: true })
+      const model = createMockModel()
+      const wrappedModel = wrapMock(ai, model)
+
+      const secondPrompt: LanguageModelV4Prompt = [{ role: 'user', content: [{ type: 'text', text: 'second turn' }] },]
+
+      vi.mocked(model.doGenerate)
+        .mockResolvedValueOnce(asGenerateResult({
+          content: [{ type: 'text', text: 'first answer' }],
+          finishReason: createFinishReason(),
+          usage: createMockUsage(),
+        }))
+        .mockResolvedValueOnce(asGenerateResult({
+          content: [{ type: 'text', text: 'final answer' }],
+          finishReason: createFinishReason(),
+          usage: createMockUsage(),
+        }))
+
+      await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
+      await wrappedModel.doGenerate(createMockCallOptions(secondPrompt))
+
+      const merged = log.merged.ai as Record<string, unknown>
+      expect(merged.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(merged.output).toBe('final answer')
+
+      const metadata = ai.getMetadata()
+      expect(metadata.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(metadata.output).toBe('final answer')
     })
   })
 

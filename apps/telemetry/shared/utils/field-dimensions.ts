@@ -71,11 +71,11 @@ export function gradeForScore(score: number): string {
 /**
  * Bands the framework timeline plots before the tail folds into `other`.
  *
- * One per framework the CLI can actually report. Seven stacked bands of
- * near-identical fill is not a chart you can read — the tail is more honest
- * as a single `other` band than as three more shades nobody can name.
+ * One per framework the CLI can actually report (five today). Stacking more
+ * near-identical fills than that is not a chart you can read — the tail is
+ * more honest as a single `other` band than as more shades nobody can name.
  */
-export const MAX_FRAMEWORK_SERIES = 4
+export const MAX_FRAMEWORK_SERIES = 5
 
 /**
  * Fixed hue per framework, in slot order.
@@ -89,6 +89,7 @@ const FRAMEWORK_COLORS: Record<string, string> = {
   'next': 'var(--chart-cat-2)',
   'nitro': 'var(--chart-cat-3)',
   'tanstack-start': 'var(--chart-cat-4)',
+  'hono': 'var(--chart-cat-5)',
 }
 
 /**
@@ -96,7 +97,7 @@ const FRAMEWORK_COLORS: Record<string, string> = {
  *
  * Ids the CLI cannot emit — legacy rows, another tool's vocabulary — share the
  * neutral. Handing them a categorical slot would mean the palette changes
- * meaning with the data, and there are only four validated slots to give.
+ * meaning with the data, and there are only five validated slots to give.
  */
 export function frameworkColor(framework: string): string {
   return FRAMEWORK_COLORS[framework] ?? 'var(--chart-cat-other)'
@@ -122,13 +123,14 @@ export function frameworkSeries(framework: string): string {
 /** Band the tail folds into — matches `OTHER_VERSION` in `adoption-shape`. */
 export const OTHER_SERIES = 'other'
 
-/* Nitro has no simple-icons glyph (`simple-icons:nitro` 404s), so it falls
-   through to the local bolt — closer to its own mark than a generic box. */
+/* Nitro has no simple-icons glyph (`simple-icons:nitro` 404s); its official
+   mark lives in the UnJS collection instead. */
 const FRAMEWORK_ICONS: Record<string, string> = {
   'nuxt': 'i-simple-icons-nuxt',
   'next': 'i-simple-icons-nextdotjs',
-  'nitro': 'i-nucleo-bolt',
+  'nitro': 'i-unjs-nitro',
   'tanstack-start': 'i-simple-icons-tanstack',
+  'hono': 'i-simple-icons-hono',
 }
 
 /** Icon for a framework id — unknown ids get a neutral package glyph. */
@@ -141,6 +143,7 @@ const FRAMEWORK_LABELS: Record<string, string> = {
   'next': 'Next.js',
   'nitro': 'Nitro',
   'tanstack-start': 'TanStack Start',
+  'hono': 'Hono',
 }
 
 /** Display name for a framework id — ids arrive as CLI slugs. */

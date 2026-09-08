@@ -445,6 +445,21 @@ function asToolCallArray(value: unknown): ToolCallEntry[] | undefined {
   return value.every(isToolCallEntry) ? value : undefined
 }
 
+const CAPTURED_LINE_MAX_LENGTH = 160
+const CAPTURED_MAX_LINES = 8
+
+function asCapturedLines(value: unknown): string[] | undefined {
+  if (typeof value !== 'string' || value.length === 0) return undefined
+  const lines = value.split('\n').map((line) => {
+    return line.length > CAPTURED_LINE_MAX_LENGTH ? `${line.slice(0, CAPTURED_LINE_MAX_LENGTH)}…` : line
+  })
+  if (lines.length > CAPTURED_MAX_LINES) {
+    lines.length = CAPTURED_MAX_LINES
+    lines.push(`+${value.split('\n').length - CAPTURED_MAX_LINES} more lines (full text in the event)`)
+  }
+  return lines
+}
+
 function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
   const entries: TreeEntry[] = []
 
@@ -555,6 +570,13 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
   } else if (steps !== undefined && steps > 1) {
     entries.push({ key: 'ai.steps', value: String(steps) })
   }
+
+  // Captured prompt and output — one console line per message block,
+  // truncated here. The full text stays in the wide event for drains.
+  const promptLines = asCapturedLines(ai.prompt)
+  if (promptLines) entries.push({ key: 'ai.prompt', value: '', children: promptLines })
+  const outputLines = asCapturedLines(ai.output)
+  if (outputLines) entries.push({ key: 'ai.output', value: '', children: outputLines })
 
   // Embedding
   const embedding = isPlainObject(ai.embedding) ? ai.embedding : undefined

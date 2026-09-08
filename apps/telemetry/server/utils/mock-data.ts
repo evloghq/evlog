@@ -115,8 +115,8 @@ const MOCK_CUSTOM_POOL: { key: string, values: (boolean | number | string)[] }[]
   { key: 'filesChanged', values: [1, 3, 7, 12, 28] },
   { key: 'cacheHit', values: [true, false] },
   { key: 'plan', values: ['free', 'pro', 'enterprise'] },
-  { key: 'initFramework', values: ['nuxt', 'nuxt', 'nuxt', 'next', 'next', 'nitro', 'tanstack-start'] },
-  { key: 'mapFramework', values: ['nuxt', 'nuxt', 'nuxt', 'nuxt', 'next', 'next', 'nitro', 'tanstack-start'] },
+  { key: 'initFramework', values: ['nuxt', 'nuxt', 'nuxt', 'next', 'next', 'nitro', 'tanstack-start', 'hono'] },
+  { key: 'mapFramework', values: ['nuxt', 'nuxt', 'nuxt', 'nuxt', 'next', 'next', 'nitro', 'tanstack-start', 'tanstack-start', 'hono', 'hono'] },
   { key: 'mapGrade', values: ['good', 'good', 'good', 'needs-work', 'needs-work', 'excellent', 'at-risk'] },
   /* Spread inside the bands, not just on the thresholds — the histogram exists
      to show where in a band scores actually land. */

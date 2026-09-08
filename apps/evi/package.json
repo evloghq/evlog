@@ -24,14 +24,14 @@
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/sdk-trace-base": "^2.11.0",
-    "@posthog/ai": "^8.9.3",
+    "@posthog/ai": "^8.10.1",
     "@vercel/blob": "^2.8.0",
-    "@vercel/connect": "^2.0.1",
+    "@vercel/connect": "^2.0.2",
     "@vercel/oidc": "^3.8.5",
     "@vercel/otel": "^2.1.3",
-    "ai": "^7.0.89",
+    "ai": "^7.0.93",
     "drizzle-orm": "^0.45.2",
-    "eve": "^0.47.7",
+    "eve": "^0.49.1",
     "evlog": "workspace:*",
     "postgres": "^3.4.9",
     "zod": "^4.5.4"
@@ -39,7 +39,7 @@
   "devDependencies": {
     "@types/node": "24.13.3",
     "drizzle-kit": "^0.31.10",
-    "microsandbox": "^0.6.16",
+    "microsandbox": "^0.6.17",
     "typescript": "7.0.2",
     "vitest": "^4.1.11"
   }

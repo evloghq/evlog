@@ -48,7 +48,7 @@
     "typescript": "^6.0.3"
   },
   "peerDependencies": {
-    "evlog": "^2.28.0",
+    "evlog": "^2.28.1",
     "@nuxthub/core": "^0.10.8",
     "drizzle-orm": ">=0.45.2"
   },

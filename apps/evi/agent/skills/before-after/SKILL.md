@@ -40,7 +40,16 @@ The tool's URLs go public the instant it runs. Landing, docs, and playground pag
 - Capturing `evlog.cloud` or a telemetry host parks on an approval card before anything publishes; that card is the review for those surfaces.
 - Paste the returned `markdown` verbatim — table, caption, and attestation receipt — where the change lives: the PR body (`github__updatePullRequest`) or a PR comment for a shipped change, the conversation otherwise. The receipt is the proof of what was compared; never strip it.
 
-## 4. Motion evidence: record a flow
+## 4. Publish and verify the evidence
+
+A capture that lives only in the conversation is not evidence: the chat scrolls away, the PR is the durable surface. A visual change is not reported done until its frames are embedded in the PR body or a PR comment **and** every image URL behind them has been verified live.
+
+- **Verify before you cite.** After any `blob__upload_image` (or the markdown `capture__before_after` returns), `curl -sI` each returned URL and require `HTTP 200`, a `content-type: image/...`, and a `content-length` matching the file on disk. A URL the tool returned is a claim, not a fact, until this passes.
+- **Never write "attached" or "shown above" before that check passes.** If the upload tool errors, retry once; session-level tooling glitches usually clear on a later turn, so retrying there is the second move, not a workaround.
+- **Fallback ladder, in order:** single sequential upload (parallel batches have been observed to break the upload tool's replay), then a fresh turn, then committing the frames to the branch and referencing them by relative path in the PR body or a follow-up comment. Both surfaces render images; either is acceptable, but the PR body must say which state the evidence is in and link to it. Never imply evidence is attached when it is not: say what failed and where the frames actually are.
+- **One claim per file.** The verification is per URL, not per call: a batch upload where one of two URLs failed is one verified frame and one unverified, and only the verified one may be cited.
+
+## 5. Motion evidence: record a flow
 
 A still freezes a state. Some changes are only visible in motion: an animation, a hover state, a scroll reveal, a multi-step interaction, a CLI walkthrough. When the timing or the path through the flow is the evidence, record it with the sandbox's `agent-browser` and attach a short clip next to the table.
 
@@ -74,6 +83,6 @@ then `blob__upload_image` on the `.webp`.
 - Keep clips short. A ten-second scroll at 800px and 12 fps is a few hundred KB; 60 fps roughly doubles the size. Stay well under the 8 MB upload limit.
 - Still and clip answer different questions: the screenshot proves the end state, the video proves the timing and how the flow got there. When both matter, attach both. A recording never replaces the before/after table, and the table's attestation receipt is never stripped.
 
-## 5. Precise checks, when they earn their keep
+## 6. Precise checks, when they earn their keep
 
 The `before-and-after` CLI is installed in the sandbox as a diff engine for the frames the tool already saved under `/workspace/screenshots/`: `before-and-after '<before.png>' '<after.png>' --output ./screenshots` compares two existing images (pixel-level and DOM-independent). Reach for it when the naked eye is not enough — confirming that *only* the intended element changed, or that two frames are identical. Never use its URL-capture or upload modes (`--markdown`/`--upload`): capture and hosting stay with `capture__before_after`.

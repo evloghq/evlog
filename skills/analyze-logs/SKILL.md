@@ -97,7 +97,8 @@ Each line is a self-contained JSON object (wide event). Key fields:
 | `method` | `string` | HTTP method (`GET`, `POST`, etc.) |
 | `path` | `string` | Request path (`/api/checkout`) |
 | `status` | `number` | HTTP response status code |
-| `duration` | `string` | Request duration (`"234ms"`) |
+| `duration` | `string` | Request duration, human-formatted (`"234ms"`) |
+| `durationMs` | `number` | Request duration in milliseconds. Filter and sort on this one |
 | `requestId` | `string` | Unique request identifier |
 | `error` | `object` | Error details: `name`, `message`, `stack`, `statusCode`, `data` |
 | `error.data.why` | `string` | Human-readable explanation of what went wrong |
@@ -119,7 +120,7 @@ Filter based on the user's question:
 
 - **Errors**: look for `"level":"error"` or `status >= 400`
 - **Specific endpoint**: match on `path`
-- **Slow requests**: parse `duration` (e.g. `"706ms"`) and filter high values
+- **Slow requests**: filter on `durationMs` (e.g. `durationMs > 500`)
 - **Specific user/action**: match on application-specific fields
 - **Client-side issues**: filter by `"source":"client"`
 - **Time range**: compare `timestamp` values
@@ -147,8 +148,8 @@ Look for: recurring patterns, common failure modes
 ### Find slow requests
 
 ```
-Filter: parse duration string, compare > threshold (e.g. 1000ms)
-Sort by: duration descending
+Filter: durationMs > 1000
+Sort by: durationMs descending
 Look for: specific endpoints, time-of-day patterns
 ```
 
@@ -179,6 +180,6 @@ Look for: client errors that don't have corresponding server errors (network iss
 
 - Each line is a **complete, self-contained event**. Unlike traditional logs, you don't need to correlate multiple lines. One line has all the context for one request.
 - The `error.data.why` and `error.data.fix` fields are evlog-specific structured error fields. When present, they provide the most actionable information.
-- Duration values are strings with units (e.g. `"706ms"`). Parse the numeric part for comparisons.
+- `duration` is human-formatted with units (e.g. `"706ms"`). `durationMs` is the same duration in milliseconds; filter and sort on `durationMs`.
 - Events with `"source":"client"` originated from browser-side logging and were sent to the server via the HTTP drain endpoint.
 - Log files are `.gitignore`'d automatically. They exist only on the local machine or server where the app runs.

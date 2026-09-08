@@ -1248,6 +1248,86 @@ describe('pretty-print tool input serialization', () => {
   })
 })
 
+describe('pretty-print captured prompt and output', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    initLogger({ pretty: true })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders captured prompt and output as tree lines', () => {
+    const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r1' })
+    logger.set({
+      ai: {
+        calls: 1,
+        prompt: '[system] You are helpful\n\n[user] Hi there',
+        output: 'Hello! How can I help?',
+      },
+    })
+    logger.emit()
+
+    const logSpy = vi.mocked(console.log)
+    const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
+
+    expect(output).toContain('ai.prompt:')
+    expect(output).toContain('[system] You are helpful')
+    expect(output).toContain('[user] Hi there')
+    expect(output).toContain('ai.output:')
+    expect(output).toContain('Hello! How can I help?')
+  })
+
+  it('truncates long captured text in the console', () => {
+    const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r2' })
+    const longLine = 'x'.repeat(300)
+    logger.set({
+      ai: {
+        output: longLine,
+      },
+    })
+    logger.emit()
+
+    const logSpy = vi.mocked(console.log)
+    const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
+
+    expect(output).toContain('ai.output:')
+    expect(output).toContain(`${'x'.repeat(160)}…`)
+    expect(output).not.toContain('x'.repeat(200))
+  })
+
+  it('marks additional lines beyond the console cap', () => {
+    const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r3' })
+    const manyLines = Array.from({ length: 12 }, (_, i) => `line ${i}`)
+    logger.set({
+      ai: {
+        prompt: manyLines.join('\n'),
+      },
+    })
+    logger.emit()
+
+    const logSpy = vi.mocked(console.log)
+    const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
+
+    expect(output).toContain('+4 more lines (full text in the event)')
+  })
+
+  it('omits entries when nothing was captured', () => {
+    const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r4' })
+    logger.set({
+      ai: { calls: 1 },
+    })
+    logger.emit()
+
+    const logSpy = vi.mocked(console.log)
+    const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
+
+    expect(output).not.toContain('ai.prompt:')
+    expect(output).not.toContain('ai.output:')
+  })
+})
+
 describe('pretty-print array field values', () => {
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
