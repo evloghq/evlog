@@ -1,6 +1,5 @@
 import { defineEventHandler, setResponseHeader } from 'h3'
 import { queryCollection } from '@nuxt/content/server'
-import { withHttps } from 'ufo'
 import { type SitemapUrl, collectSitemapUrls } from '../utils/sitemap'
 
 /**
@@ -15,7 +14,7 @@ import { type SitemapUrl, collectSitemapUrls } from '../utils/sitemap'
  *    pointing at a URL that does not match any prerendered page. We rewrite it to `/`.
  */
 export default defineEventHandler(async (event) => {
-  const siteUrl = inferSiteURL() || ''
+  const siteUrl = getSiteConfig(event).url
 
   let urls: SitemapUrl[] = []
 
@@ -30,24 +29,10 @@ export default defineEventHandler(async (event) => {
   return generateSitemap(urls, siteUrl)
 })
 
-function inferSiteURL() {
-  const url
-    = process.env.NUXT_PUBLIC_SITE_URL
-      || process.env.NUXT_SITE_URL
-      || process.env.VERCEL_PROJECT_PRODUCTION_URL
-      || process.env.VERCEL_BRANCH_URL
-      || process.env.VERCEL_URL
-      || process.env.URL
-      || process.env.CI_PAGES_URL
-      || process.env.CF_PAGES_URL
-
-  return url ? withHttps(url) : undefined
-}
-
 function generateSitemap(urls: SitemapUrl[], siteUrl: string): string {
   const urlEntries = urls
     .map((url) => {
-      const loc = siteUrl ? `${siteUrl}${url.loc}` : url.loc
+      const loc = new URL(url.loc, siteUrl).href
       let entry = `  <url>\n    <loc>${escapeXml(loc)}</loc>`
       if (url.lastmod) {
         entry += `\n    <lastmod>${escapeXml(url.lastmod)}</lastmod>`
