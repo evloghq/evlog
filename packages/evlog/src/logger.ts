@@ -742,10 +742,33 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
   }
 }
 
+function serializeError(err: Error): Record<string, unknown> {
+  const errorObj: Record<string, unknown> = {
+    name: err.name,
+    message: err.message,
+    stack: isDev() ? compactStackForStorage(err.stack) : err.stack,
+  }
+  const errRecord = err as unknown as Record<string, unknown>
+  for (const k of ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'cause', 'internal'] as const) {
+    if (k in err) errorObj[k] = errRecord[k]
+  }
+
+  if (EvlogError.isEvlogError(err)) {
+    if (err.code) errorObj.code = err.code
+    if (err.why) errorObj.why = err.why
+    if (err.fix) errorObj.fix = err.fix
+    if (err.link) errorObj.link = err.link
+    if (err.status) errorObj.status = err.status
+  }
+  return errorObj
+}
+
 function createLogMethod(level: LogLevel) {
-  return function logMethod(tagOrEvent: string | Record<string, unknown>, message?: string): void {
+  return function logMethod(tagOrEvent: string | Error | Record<string, unknown>, message?: string): void {
     if (typeof tagOrEvent === 'string' && message !== undefined) {
       emitTaggedLog(level, tagOrEvent, message)
+    } else if (tagOrEvent instanceof Error) {
+      emitWideEvent(level, { error: serializeError(tagOrEvent) })
     } else if (typeof tagOrEvent === 'object') {
       emitWideEvent(level, tagOrEvent)
     } else {
@@ -906,23 +929,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
         mergeInto(context, errorContext as Record<string, unknown>)
       }
 
-      const errorObj: Record<string, unknown> = {
-        name: err.name,
-        message: err.message,
-        stack: isDev() ? compactStackForStorage(err.stack) : err.stack,
-      }
-      const errRecord = err as unknown as Record<string, unknown>
-      for (const k of ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'cause', 'internal'] as const) {
-        if (k in err) errorObj[k] = errRecord[k]
-      }
-
-      if (EvlogError.isEvlogError(err)) {
-        if (err.code) errorObj.code = err.code
-        if (err.why) errorObj.why = err.why
-        if (err.fix) errorObj.fix = err.fix
-        if (err.link) errorObj.link = err.link
-        if (err.status) errorObj.status = err.status
-      }
+      const errorObj = serializeError(err)
 
       if (isPlainObject(context.error)) {
         mergeInto(context.error as Record<string, unknown>, errorObj)

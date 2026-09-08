@@ -24,15 +24,16 @@ export function createLoggerStorage(contextHint: string, id: string = contextHin
   /** @internal Every registered instance is a real ALS; the registry only widens the type. */
   const storage = getSharedStorage(id, () => new AsyncLocalStorage<AuditableLogger>()) as AsyncLocalStorage<AuditableLogger>
 
-  function useLogger<T extends object = Record<string, unknown>>(): AuditableLogger<T> {
+  function useLogger<T extends object = Record<string, unknown>>(): AuditableLogger<T>
+  // eslint-disable-next-line no-redeclare -- TypeScript overload implementation.
+  function useLogger(): AuditableLogger {
     const logger = storage.getStore()
     if (!logger) {
       throw new Error(
         `[evlog] useLogger() was called outside of an evlog ${contextHint}`,
       )
     }
-    /** @internal ALS store is untyped; cast satisfies the caller's generic `T`. */
-    return logger as AuditableLogger<T>
+    return logger
   }
 
   return { storage, useLogger }

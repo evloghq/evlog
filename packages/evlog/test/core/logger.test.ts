@@ -3,6 +3,7 @@ import { createError } from '../../src/error'
 import { createLogger, createRequestLogger, getEnvironment, initLogger, isEnabled, log } from '../../src/logger'
 import { withFakeTimers } from '../helpers/timers'
 import { defined } from '../helpers/defined'
+import { createPipelineSpies, findEventViaDrain } from '../helpers/framework'
 
 describe('initLogger', () => {
   beforeEach(() => {
@@ -91,6 +92,40 @@ describe('log', () => {
     const [[output]] = infoSpy.mock.calls
     expect(output).toContain('"action":"checkout"')
     expect(output).toContain('"items":3')
+  })
+
+  it('preserves standard Error fields in the global drain', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ silent: true, redact: false, drain })
+    const error = Object.assign(new Error('Database unavailable'), { code: 'DB_UNAVAILABLE', status: 503 })
+    log.error(error)
+
+    expect(drain).toHaveBeenCalledTimes(1)
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({
+      name: 'Error', message: 'Database unavailable', code: 'DB_UNAVAILABLE', status: 503,
+    })
+    expect(event.error?.stack).toContain('Database unavailable')
+  })
+
+  it('preserves EvlogError guidance and redacts internal fields in the global drain', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ silent: true, drain, redact: { paths: ['error.internal.token'] } })
+    const error = createError({
+      message: 'Payment failed', status: 402, code: 'PAYMENT_FAILED',
+      why: 'The card was declined', fix: 'Use another card', link: 'https://example.com/help',
+      internal: { token: 'secret', provider: 'test' },
+    })
+    log.error(error)
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({
+      message: error.message, status: 402, code: 'PAYMENT_FAILED',
+      why: error.why, fix: error.fix, link: error.link,
+      internal: { provider: 'test' },
+    })
+    expect(JSON.stringify(event)).not.toContain('secret')
+    expect(drain).toHaveBeenCalledTimes(1)
   })
 
   it('uses error console method for error level', () => {
