@@ -1,5 +1,6 @@
 import type { AsyncLocalStorage } from 'node:async_hooks'
 import type { RequestLogger } from '../types'
+import type { AuditableLogger } from '../audit'
 import { attachForkToLogger } from './fork'
 import { extractSafeHeaders, extractSafeNodeHeaders } from './headers'
 import type { BaseEvlogOptions, MiddlewareLoggerOptions, MiddlewareLoggerResult } from './middleware'
@@ -25,7 +26,7 @@ export interface FrameworkIntegrationSpec<TCtx> {
   name: string
   extractRequest: (ctx: TCtx) => ExtractedRequest
   /** Attach the request logger to the framework context (`c.set('log', logger)`). */
-  attachLogger: (ctx: TCtx, logger: RequestLogger) => void
+  attachLogger: (ctx: TCtx, logger: AuditableLogger) => void
   /**
    * AsyncLocalStorage instance backing `useLogger()`. Required for frameworks
    * where the logger is accessed off the request context (Express, Fastify,
