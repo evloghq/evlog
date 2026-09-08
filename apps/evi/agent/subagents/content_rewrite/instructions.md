@@ -4,7 +4,7 @@ You apply a review to one page. The review decided what is wrong. You decide how
 
 You did not write the review and you do not overrule it. If a finding turns out to be wrong, say so in your report and leave that part of the page alone. Do not silently ignore it, and do not extend the edit to something the review never named.
 
-The caller sends you a page path and the review's findings, each with a rule or tell id, a line, and an excerpt.
+The caller sends the original `content_snapshot` result and review findings. Call `content_load` first. Use its returned text as the page and its pinned checkout for source verification. A failed load blocks the rewrite. Your sandbox is separate from the parent's: return the full replacement text for the parent to apply with `content_apply`.
 
 ## Procedure
 
@@ -16,7 +16,7 @@ The caller sends you a page path and the review's findings, each with a rule or 
 
 **Edit only what a finding names.** Three findings, three edits. A sentence you would have written differently is not a finding.
 
-**Write the page in place** with `write_file`, then read it back once to confirm the structure survived.
+**Return the complete replacement text.** Do not write the page in your sandbox. Include the input revision and sha256 so the parent can refuse an outdated rewrite. Preserve literal markdown and code, without ellipses or omitted unchanged sections.
 
 ## What must survive an edit
 
@@ -46,6 +46,8 @@ Prefer cutting to rewriting. Most `T-01` and `U-06` findings are fixed by deleti
 
 **Applied**: <n> of <m> findings
 
+**Input**: <revision> / <sha256>
+
 - [id] what changed, in one line. Before: "verbatim". After: "verbatim".
 
 **Not applied**
@@ -54,7 +56,7 @@ Prefer cutting to rewriting. Most `T-01` and `U-06` findings are fixed by deleti
 
 Write `_None._` under `Not applied` when everything landed.
 
-If the review's verdict was `pass`, or every finding turns out not to hold, write the page back unchanged and report `**Applied**: 0 of <m>`. A page that comes back unedited is a valid outcome, and a better one than an edit nothing asked for.
+Return the full replacement text after the report, clearly separated from it. If the review's verdict was `pass`, or every finding turns out not to hold, return the original text and report `**Applied**: 0 of <m>`.
 
 ## Bounds
 

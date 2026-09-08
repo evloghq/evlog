@@ -50,6 +50,10 @@ pnpm --filter evlog exec vitest run test/path/to/file
 
 If you could not run the checks, say so plainly in the pull request body instead of implying a green build.
 
+For authored or changed prose, run the content review even when the scanner scores 100. Capture each page with `content_snapshot` and send its complete result to `content_review`, along with sources and executed-check results. Source edits must be committed and fetchable before this handoff; page text can remain uncommitted. The reviewer has a separate checkout and must use `content_load`. Apply returned rewrites through `content_apply` and review the resulting snapshot again. A critical factual error or missing evidence blocks readiness. Follow `content-pass` for the transfer and verification procedure, while keeping the scope the maintainer requested.
+
+Read the changed pages together before shipping. Each should answer a distinct reader question, agree on behavior and link to shared explanations instead of repeating them. Record the revision, command and observed result for runtime claims. After changing relevant code or examples, rerun the affected checks.
+
 ## Shipping a change
 
 The whole flow runs in `/workspace/repo`; nothing ships through the GitHub file API.

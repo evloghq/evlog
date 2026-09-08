@@ -39,8 +39,10 @@ otherwise, because an unauthenticated run reports a regression that is not one. 
 always run locally, where `vc link` supplies the token. Anything asserting
 `notCalledTool` on a GitHub tool needs no credentials and always runs.
 
-A PR touching `agent/` (excluding tests) or an `.eval.ts` file runs the `fast`
-subset automatically. That is deliberate: Evi opens PRs on her own behaviour,
+A PR touching `agent/` (excluding tests), evaluation code or fixtures, the shared
+content doctrine, or the content scanner runs the `fast` subset automatically.
+Content evals transfer fixture text with the candidate commit, which must be
+fetchable by the sandbox. That is deliberate: Evi opens PRs on her own behaviour,
 and an agent cannot be relied on to label its own regression risk. Keep the PR
 a draft while it is in flux, since drafts never run, and add `skip-evals` when a
 watched path changed but the behaviour did not.

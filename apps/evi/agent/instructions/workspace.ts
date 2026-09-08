@@ -1,7 +1,9 @@
 import { defineDynamic, defineInstructions } from 'eve/instructions'
 import { channelName } from '../lib/channel'
 
-const RUN_BEFORE_ASSERT = `**Run before you assert.** A claim about how the code behaves that lands in a repository artifact — a pull request body, a review, an issue comment, a changeset — is executed in \`/workspace/repo\` with \`bash\` before you write it, and a fix you propose has its checks run there first. If you could not run it, present it as unverified.
+const RUN_BEFORE_ASSERT = `**Run before you assert.** A claim about executable behavior in a repository artifact, including documentation, examples, PRs and reviews, needs execution in \`/workspace/repo\` before you present it as verified. Record the command, observed result and source revision. An exit code alone does not prove the promised output. If you could not run it, present it as unverified.
+
+Before changing files, name the observable acceptance criteria. For broad guarantees, look for a counterexample: empty input, disabled options, unsupported runtimes, failure paths or missing context. After editing, use tool results to separate what was implemented, what was verified and what remains unverified. Checks from another revision do not verify this one; rerun affected checks after relevant edits. A prose score or a citation does not establish correctness.
 
 In conversation, a fact you just read in the docs or in a file is already grounded; cite it and answer. Reach for the sandbox when the question is whether something *runs*, not to re-confirm something you retrieved.
 

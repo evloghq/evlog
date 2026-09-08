@@ -7,7 +7,7 @@ description: The daily pass over evlog's written surfaces. Picks the files the s
 
 One pass, one group, one pull request. The corpus is ~120 files: the docs tree and the landing, the four package READMEs, the internal and published skills, and the three AGENTS.md files. None of that gets fixed in a day, and trying is how a rewriter starts rewriting for its own sake.
 
-Half the corpus is read by people and half by agents, and the pass treats them differently. A skill or an AGENTS.md governs the agent running this pass, so it may fix a house rule there (punctuation, a dead link, a retired entry point, a wrong term) and nothing else. Procedure, bounds, and a skill's `description` come back as findings for Hugo. That is `M-09` in the doctrine, and `content__targets` enforces it by returning those files with mode `report`.
+Half the corpus is read by people and half by agents, and the pass treats them differently. A skill or an AGENTS.md governs the agent running this pass, so it may fix a house rule there (punctuation, a dead link, a retired entry point, a wrong term) and nothing else. Procedure, bounds, and a skill's `description` come back as findings for Hugo. That is `M-09` in the doctrine, and `content-targets` enforces it by returning those files with mode `report`.
 
 The doctrine lives in the repository, at `.agents/skills/write-evlog-content/`. This file is the procedure; that skill is the standard. Never restate its rules here. Read them there, and when they are wrong, fix them there.
 
@@ -23,7 +23,7 @@ Never run both in one pass. A PR that rewrites two pages and adds a third is a P
 
 ### 1. Pick the targets
 
-Call `content__targets`. It runs the scanner over the whole corpus, drops files changed inside the cooldown, and returns the top files from a single group with their candidates. A group is one docs section, one skill's directory, or a flat surface (`readme`, `agents`, `landing`).
+Call `content-targets`. It runs the scanner over the whole corpus, drops files changed inside the cooldown, and returns the top files from a single group with their candidates. A group is one docs section, one skill's directory, or a flat surface (`readme`, `agents`, `landing`).
 
 Pass `surface` when Hugo asked for one, or when the weekly corpus check found a surface drifting. Otherwise take what ranks.
 
@@ -49,17 +49,13 @@ node scripts/content-lint/index.mjs <each target> --fix
 
 This rewrites only what follows from the rule rather than from taste: a retired entry point, a term with one replacement, a link with a redirect behind it. Dashes are not mechanical and stay findings for the reviewer. It re-scans each file afterwards and reverts anything that scored worse or introduced a new id, so a reverted file is a bug to report, not a file to retry.
 
-Commit it on its own before anything else runs:
+Keep these page edits uncommitted until verification. Snapshot handoffs carry uncommitted page text separately from the published source commit. If the source revision itself is unpublished, publish the feature branch through the contributing flow before delegation; never substitute another revision.
 
-```
-git -C /workspace/repo commit -am "fix(docs): mechanical content fixes"
-```
-
-Then re-run `content__targets`. A file whose findings were all mechanical now comes back clean and is dropped from the pass. Never send a reviewer a finding a codemod already fixed: it costs a dispatch and it teaches the reviewer that findings are cheap.
+Then re-run `content-targets`. A file whose findings were all mechanical now comes back clean and is dropped from the pass. Never send a reviewer a finding a codemod already fixed: it costs a dispatch and it teaches the reviewer that findings are cheap.
 
 ### 4. Review, in parallel
 
-Dispatch `content_review` once per target, in a single parallel dispatch. Each message carries the file path, its surface, that file's candidates verbatim from `content__targets`, and its `modelChecks`. Nothing else: not the other files, not your own reading of them.
+Call `content_snapshot` for each target. Dispatch `content_review` once per target with the complete returned snapshot, its surface, candidates and `modelChecks`. Include factual sources and executed-check results, but not your interpretation or preferred verdict. Declared subagents have independent filesystems. They call `content_load` to check the digest and pin the source, then read the transferred text. A load failure blocks that page; do not fall back to the child's `main` copy.
 
 The candidates are what tripped a counter. The `modelChecks` are what no counter reached on that page, and the reviewer answers every one of them. Pass them through as they came; they are chosen per surface and per page, and editing them is how a pass quietly stops checking something.
 
@@ -67,7 +63,7 @@ The reviewer returns a verdict. `pass` means that page is done for this run; do 
 
 ### 5. Rewrite, in parallel
 
-For every target whose verdict is not `pass` and whose mode is `rewrite`, dispatch `content_rewrite` with the page path and that page's findings. In parallel, one page each, since they write to different files and never contend.
+For every target whose verdict is not `pass` and whose mode is `rewrite`, dispatch `content_rewrite` with the same snapshot and that page's findings. It returns full replacement text and the original digest, not a shared file edit. Apply the result in the parent with `content_apply`, passing the original snapshot and replacement text. Apply serially. If the page or revision changed meanwhile, capture and review it again instead of overwriting newer work.
 
 Targets with mode `report` skip this step: the landing page absent a critical finding, and any skill or AGENTS.md whose findings go past the house rules. Their findings go in the PR body for Hugo to decide on. Do not edit the landing page for voice or rhythm, and do not touch a procedure, a bound, or a `description`.
 
@@ -82,17 +78,20 @@ git -C /workspace/repo diff --stat
 
 Then the checks the changed files actually need:
 
-- A docs page or the landing: `pnpm turbo run lint --filter=evlog-docs`.
+- A docs page or the landing: run the docs lint and content tests, parse changed frontmatter with the actual content parser, and inspect the rendered title, description and changed MDC. Run changed executable examples against the relevant package and runtime. A passing prose scan does not verify metadata, APIs or rendered output.
 - A skill or an AGENTS.md: nothing builds these, so the check is the scanner plus reading the diff. Every relative link is resolved by `U-16`, so a dead cross-reference shows up in the scan.
 - `packages/evlog/README.md`: this one ships to npm. It needs a changeset (`patch`), and the automd blocks are regenerated rather than hand-edited. The other three package READMEs follow the same rule.
 
 What you are checking:
 
-- Every changed file scores at least as well as before, and no new candidate id appeared. A rewrite that trades `T-01` for `T-03` did not work.
+- Correctness is the blocking check. Send every applied snapshot through `content_review` again, with the previous critical findings and execution evidence. Confirm the reported revision and digest match the applied snapshot, and that critical findings are resolved. Missing evidence remains explicitly unverified.
+- Review new scanner candidates against their legitimate twins. Do not revert a factual correction solely because its style score fell. Explain a confirmed false positive in the PR and propose a narrow scanner correction; do not weaken thresholds or add filler to satisfy the score. Required CI failures still prevent marking the PR ready.
 - The diff touches only the target files. A stray change to a component, a config, or a package is a bug in the pass, not a bonus.
 - Frontmatter and MDC structure survived. Read the diff, not just the score.
 
-If a file came back worse, drop it from the branch (`git checkout -- <path>`) and say so in the PR body. Do not ask the rewriter to try again. A second attempt with the same findings gets you a different sentence, not a better one.
+If verification finds a concrete new defect, send that finding back for a targeted correction and rerun affected checks. Do not retry for style variation alone. If the defect cannot be resolved, keep the PR draft and report the blocker.
+
+Before opening the PR, read the changed pages together: state the reader question each answers, remove duplicated explanations where a link suffices, and resolve contradictory promises. Record which checks ran on which revision. After further edits, rerun affected checks rather than carrying a stale pass forward.
 
 ### 7. Open the pull request
 

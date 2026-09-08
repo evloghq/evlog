@@ -1,15 +1,26 @@
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { EveEvalContext } from 'eve/evals'
 
 /**
  * The two calibration fixtures, committed in the repository so the reviewer
  * reads a real file the way it reads a real page.
  *
- * They only exist in the sandbox once they are on `main`: every session checks
- * out `origin/main`, so these evals are meaningless on a branch that has not
- * merged yet. That is why none of them is tagged `fast`.
+ * Transfer local fixture text with the candidate commit so PR evals exercise
+ * the candidate doctrine rather than the sandbox's initial main checkout.
  */
 export const GENERATED = 'scripts/content-lint/fixtures/generated.md'
 export const WRITTEN = 'scripts/content-lint/fixtures/written.md'
+
+export function reviewFixture(path: string): string {
+  const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+  const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', cwd: root }).trim()
+  const text = readFileSync(resolve(root, path), 'utf8')
+  const snapshot = { path, revision, sha256: createHash('sha256').update(text).digest('hex'), text }
+  return `Review this complete page snapshot against the content doctrine using content_review and relay its report. Do not rewrite it. Have the reviewer call content_load and scan the snapshot text, then check facts even if the scan has no findings. Snapshot: ${JSON.stringify(snapshot)}`
+}
 
 /** Verdicts the reviewer is allowed to return, in order of severity. */
 export const VERDICTS = ['pass', 'minor', 'significant', 'blocked'] as const

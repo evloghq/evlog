@@ -1,12 +1,6 @@
 import { defaultBackend, defineSandbox } from 'eve/sandbox'
 
-/**
- * The workspace the content subagents share. eve prewarms one template per
- * subagent at build time, so re-exporting the root sandbox would build its
- * full template (install, checks, Chromium) once per subagent. These two only
- * read and write pages, and `scripts/content-lint` imports nothing beyond
- * node builtins, so the template stops at a bare checkout — no install.
- */
+/** Each content session has its own checkout; execution dependencies stay in the parent sandbox. */
 export default defineSandbox({
   backend: defaultBackend({
     vercel: {

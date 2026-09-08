@@ -1,20 +1,19 @@
 name: evi evals
 
 # Behavioural tests for the Evi agent. Every run spends real gateway tokens on
-# a live model, so this is deliberately NOT part of `ci`. Only four paths
-# trigger it: `apps/evi/agent/**` minus its tests, `apps/evi/evals/**/*.eval.ts`,
-# and this file. Everything else under apps/evi is inert.
+# a live model, so this is deliberately NOT part of `ci`. Agent definitions,
+# evaluation code and fixtures, and the shared content doctrine trigger it.
 #
 # What triggers a run, and what it costs:
-#   - a PR that changes the agent itself or an eval — the 12 `fast` evals.
+#   - a PR that changes behavior or its evaluations: the `fast` subset.
 #     Automatic, because the PR author is often Evi: an agent opening a PR on
 #     its own behaviour cannot be trusted to remember a label.
-#   - a push to main touching the same paths — the full 23. One trend point per
+#   - a push to main touching the same paths: the full suite. One trend point per
 #     behaviour change that shipped, which is what makes cost and latency
 #     comparable over time.
-#   - a weekly cron — the full 23, to catch drift that lands without a commit
+#   - a weekly cron: the full suite, to catch drift that lands without a commit
 #     (a provider silently updating the model behind the id).
-#   - workflow_dispatch with a model — the full 23 against a candidate, to
+#   - workflow_dispatch with a model: the full suite against a candidate, to
 #     compare cost, latency and pass rate before swapping agent.ts.
 #
 # The guards on the automatic path, in order of how much they save:
@@ -42,7 +41,10 @@ on:
     paths:
       - 'apps/evi/agent/**'
       - '!apps/evi/agent/**/*.test.ts'
-      - 'apps/evi/evals/**/*.eval.ts'
+      - 'apps/evi/evals/**'
+      - '!apps/evi/evals/**/*.test.ts'
+      - '.agents/skills/write-evlog-content/**'
+      - 'scripts/content-lint/**'
       - '.github/workflows/evi-evals.yml'
   # Same list as above — GitHub Actions does not support YAML anchors, so the
   # two must be kept in step by hand.
@@ -51,7 +53,10 @@ on:
     paths:
       - 'apps/evi/agent/**'
       - '!apps/evi/agent/**/*.test.ts'
-      - 'apps/evi/evals/**/*.eval.ts'
+      - 'apps/evi/evals/**'
+      - '!apps/evi/evals/**/*.test.ts'
+      - '.agents/skills/write-evlog-content/**'
+      - 'scripts/content-lint/**'
       - '.github/workflows/evi-evals.yml'
   workflow_dispatch:
     inputs:
