@@ -20,7 +20,7 @@ When the request names a different window ("this week", "since Monday"), keep th
 
 1. **GitHub (last 24h).** New and updated issues, merged and open pull requests, CI state on `main` (`getCiFailureContext` when red). Lead with whatever needs attention: a red build, a stalled community PR, an issue with activity. Skip empty categories with one word, never with an apology.
 2. **AI Gateway spend (last 24h).** `ai_gateway__report` totals, with a one-line callout only when spend is unusual against recent days.
-3. **Visitors (last 24h).** `vercel__get_web_analytics` (`mode: 'count'`, `dataset: 'visits'`) for the docs site and the other evlog projects.
+3. **Visitors (last 24h).** `vercel__call_vercel_endpoint` on `GET /v1/query/web-analytics/visits/count`, one call per project (`projectId`, `since`, `until`), for the docs site and the other evlog projects.
 4. **CLI usage (last 7d).** `telemetry-stats` and `telemetry-adoption`: runs, success rate, top command, and one interesting signal when there is one, such as a CLI version rolling out, a flag gaining traction, an error code creeping up, or a source-mix shift. One or two lines; one word when the numbers are flat.
 5. **Worth reading.** 2 or 3 short items of AI or ecosystem news worth Hugo's time today, each with a link and a date.
 

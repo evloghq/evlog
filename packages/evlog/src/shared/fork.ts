@@ -1,5 +1,6 @@
 import type { AsyncLocalStorage } from 'node:async_hooks'
 import type { RequestLogger } from '../types'
+import type { AuditableLogger } from '../audit'
 import { createRequestLogger, getGlobalDrain } from '../logger'
 import { extractErrorStatus } from './errors'
 import type { MiddlewareLoggerOptions } from './middleware'
@@ -10,9 +11,9 @@ import { runEnrichAndDrain } from './middleware'
  */
 export interface ForkLifecycle {
   /** Called after the child logger is installed in storage, before `fn` runs. */
-  onChildEnter?: (child: RequestLogger) => void
+  onChildEnter?: (child: AuditableLogger) => void
   /** Called after the child has finished (emit + enrich/drain), success or failure. */
-  onChildExit?: (child: RequestLogger) => void
+  onChildExit?: (child: AuditableLogger) => void
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { NitroRuntimeHooks } from 'nitropack/types'
+import type {} from 'nitro/types'
 import type { DevTerminalInput } from './shared/dev-terminal'
 
 declare module 'nitropack/types' {
