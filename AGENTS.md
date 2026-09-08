@@ -46,7 +46,7 @@ packages/telemetry/        @evlog/telemetry
 apps/playground/           Main dev environment (`pnpm dev`)
 apps/docs/                 Docus documentation site — has its own AGENTS.md
 apps/*                     Framework playgrounds (next, nitro, nitro-v2, nuxthub, lab, telemetry, ...) — `pnpm playground` to pick one
-examples/                  ~22 runnable examples, one per framework — includes the community-*-skeleton dirs used by the create-adapter/enricher/framework skills
+examples/                  ~20 runnable examples, one per framework, plus the community-*-skeleton dirs used by the create-adapter/enricher/framework skills
 scripts/                   Repo tooling (run-app, cli-sandbox, release-notes, content-lint)
 .agents/skills/            Internal skills for creating adapters, enrichers, and framework integrations, and for writing content — each carries `metadata: internal: true` in its frontmatter so the skills CLI skips them for public installs
 skills/                     Published skills (analyze-logs, build-audit-logs, review-logging-patterns) — served by the docs site via `/.well-known/skills/` and discovered by `npx skills add evloghq/evlog`
