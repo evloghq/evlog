@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
-import { applyRewrite, capturePage, loadPage } from './handoff'
+import { capturePage, loadPage } from './handoff'
 
 const exec = promisify(execCallback)
 const directories: string[] = []
@@ -28,9 +28,9 @@ async function repository() {
 
 function sandbox(path: string) {
   return {
-    async run({ command, env }: { command: string, env?: Record<string, string> }) {
+    async run({ command }: { command: string }) {
       try {
-        const result = await exec(command.replaceAll('/workspace/repo', path), { env: { ...process.env, ...env } })
+        const result = await exec(command.replaceAll('/workspace/repo', path))
         return { ...result, exitCode: 0 }
       } catch (error) {
         const result = error as { stdout: string, stderr: string, code: number }
@@ -38,8 +38,6 @@ function sandbox(path: string) {
       }
     },
     readTextFile: ({ path: file }: { path: string }) => readFile(file.replace('/workspace/repo', path), 'utf8'),
-    writeTextFile: ({ path: file, content }: { path: string, content: string }) => writeFile(file.replace('/workspace/repo', path), content),
-    removePath: ({ path: file }: { path: string }) => rm(file, { force: true }),
   }
 }
 
@@ -55,10 +53,6 @@ describe('content handoff in the shared workspace', () => {
     await expect(loadPage(sandbox(child), snapshot)).rejects.toThrow('changed since')
     expect((await loadPage(sandbox(parent), snapshot)).text).toBe('Uncommitted draft.\n')
     expect(await readFile(join(child, 'page.md'), 'utf8')).toBe('Committed page.\n')
-
-    const result = await applyRewrite(sandbox(parent), snapshot, 'Corrected draft.\n')
-    expect(result.sha256).not.toBe(snapshot.sha256)
-    expect(await readFile(join(parent, 'page.md'), 'utf8')).toBe('Corrected draft.\n')
   })
 
   it('supports a new page that does not exist on main', async () => {
@@ -96,58 +90,39 @@ describe('content handoff in the shared workspace', () => {
     await expect(capturePage(sandbox(path), 'outside.md')).rejects.toThrow('inside the repository')
   })
 
-  it('does not overwrite a parent edit made after review', async () => {
-    const path = await repository()
-    const snapshot = await capturePage(sandbox(path), 'page.md')
-    await writeFile(join(path, 'page.md'), 'New maintainer edit.\n')
-    await expect(applyRewrite(sandbox(path), snapshot, 'Old rewrite.')).rejects.toThrow('changed since')
-    expect(await readFile(join(path, 'page.md'), 'utf8')).toBe('New maintainer edit.\n')
-  })
-
-  it('preserves an edit made after the preliminary snapshot read', async () => {
+  it('requires a fresh review after a parent edit and leaves the page, index and refs unchanged', async () => {
     const path = await repository()
     const workspace = sandbox(path)
     const snapshot = await capturePage(workspace, 'page.md')
-    const read = workspace.readTextFile
-    workspace.readTextFile = async (input) => {
-      const text = await read(input)
-      await writeFile(join(path, 'page.md'), 'Edit during apply.\n')
-      return text
-    }
+    await writeFile(join(path, 'page.md'), 'Parent correction.\n')
+    execFileSync('git', ['-C', path, 'add', 'page.md'])
+    const index = await readFile(join(path, '.git/index'))
+    const refs = execFileSync('git', ['-C', path, 'show-ref'], { encoding: 'utf8' })
 
-    await expect(applyRewrite(workspace, snapshot, 'Obsolete rewrite.')).rejects.toThrow('changed since')
-    expect(await readFile(join(path, 'page.md'), 'utf8')).toBe('Edit during apply.\n')
+    await expect(loadPage(workspace, snapshot)).rejects.toThrow('changed since')
+    const saved = await capturePage(workspace, 'page.md')
+    expect(saved.sha256).not.toBe(snapshot.sha256)
+    expect(saved.revision).toBe(snapshot.revision)
+    expect((await loadPage(workspace, saved)).text).toBe('Parent correction.\n')
+    expect(await readFile(join(path, 'page.md'), 'utf8')).toBe('Parent correction.\n')
+    expect(await readFile(join(path, '.git/index'))).toEqual(index)
+    expect(execFileSync('git', ['-C', path, 'show-ref'], { encoding: 'utf8' })).toBe(refs)
   })
 
-  it('allows only one concurrent rewrite of the same snapshot', async () => {
+  it('loads a large unicode page without putting its contents in a process argument', async () => {
     const path = await repository()
     const workspace = sandbox(path)
-    const snapshot = await capturePage(workspace, 'page.md')
-    const results = await Promise.allSettled([
-      applyRewrite(workspace, snapshot, 'First rewrite.\n'),
-      applyRewrite(workspace, snapshot, 'Second rewrite.\n'),
-    ])
-
-    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
-    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
-    const final = await capturePage(workspace, 'page.md')
-    expect(results.find(result => result.status === 'fulfilled')).toMatchObject({ value: final })
-  })
-
-  it('applies a large passage without putting its contents in a process argument or environment', async () => {
-    const path = await repository()
-    const workspace = sandbox(path)
-    const snapshot = await capturePage(workspace, 'page.md')
     const text = 'é'.repeat(190_000)
-    await applyRewrite(workspace, snapshot, text)
-    expect(await readFile(join(path, 'page.md'), 'utf8')).toBe(text)
+    await writeFile(join(path, 'page.md'), text)
+    const snapshot = await capturePage(workspace, 'page.md')
+    expect((await loadPage(workspace, snapshot)).text).toBe(text)
   })
 
-  it('invalidates a rewrite when the source revision changes', async () => {
+  it('invalidates a review when the source revision changes', async () => {
     const path = await repository()
     const snapshot = await capturePage(sandbox(path), 'page.md')
     execFileSync('git', ['-C', path, 'commit', '--allow-empty', '-qm', 'new source'])
-    await expect(applyRewrite(sandbox(path), snapshot, 'Old rewrite.')).rejects.toThrow('changed since')
+    await expect(loadPage(sandbox(path), snapshot)).rejects.toThrow('changed since')
   })
 
   it('refuses another source revision without changing the checkout', async () => {

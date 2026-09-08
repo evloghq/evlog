@@ -65,7 +65,7 @@ The reviewer returns a verdict. `pass` means that page is done for this run; do 
 
 For every target whose snapshot loaded successfully, whose verdict is not `pass` and whose mode is `rewrite`, dispatch `content_rewrite` with the same snapshot and that page's findings. A `blocked` verdict caused by a failed snapshot load must be recaptured and reviewed before rewriting. A verified page blocked by critical findings is eligible for rewriting those findings.
 
-The rewriter returns full replacement text and the original digest. Wait for all readers, then apply the results serially in the parent with `content_apply`, passing the original snapshot and replacement text. Do not run shell edits, file writes, or Git changes concurrently with an apply. If the page or revision changed meanwhile, capture and review it again instead of overwriting newer work.
+The rewriter returns full replacement text and the original digest. Wait for all readers to finish. Before each edit, call `content_snapshot` again and compare both the revision and digest with the rewrite input. If either changed, capture and review the current page again. Otherwise, read the file and apply only the reviewed changes serially with the parent’s existing editing tools. Do not run other file writes or Git changes concurrently. This check is not an atomic write guard: if another writer is active, stop editing until access is coordinated. After saving, capture a fresh snapshot of the actual file for verification; the proposed text is not evidence of what was saved.
 
 Targets with mode `report` skip this step: the landing page absent a critical finding, and any skill or AGENTS.md whose findings go past the house rules. Their findings go in the PR body for Hugo to decide on. Do not edit the landing page for voice or rhythm, and do not touch a procedure, a bound, or a `description`.
 
@@ -86,7 +86,7 @@ Then the checks the changed files actually need:
 
 What you are checking:
 
-- Correctness is the blocking check. Send every applied snapshot through `content_review` again, with the previous critical findings and execution evidence. Confirm the reported revision and digest match the applied snapshot, and that critical findings are resolved. Missing evidence remains explicitly unverified.
+- Correctness is the blocking check. Send every freshly captured saved snapshot through `content_review` again, with the previous critical findings and execution evidence. Confirm the reported revision and digest match the saved snapshot, and that critical findings are resolved. Missing evidence remains explicitly unverified.
 - Review new scanner candidates against their legitimate twins. Do not revert a factual correction solely because its style score fell. Explain a confirmed false positive in the PR and propose a narrow scanner correction; do not weaken thresholds or add filler to satisfy the score. Required CI failures still prevent marking the PR ready.
 - The diff touches only the target files. A stray change to a component, a config, or a package is a bug in the pass, not a bonus.
 - Frontmatter and MDC structure survived. Read the diff, not just the score.

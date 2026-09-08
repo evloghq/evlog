@@ -70,21 +70,22 @@ explicitly selects `parent.sandbox` through eve's callback API, so both agents
 read the parent's branch and uncommitted pages without cloning another checkout.
 They must not add sandbox seeds or packaged skills, which eve disallows for a
 shared workspace. The parent captures a page identity with `content_snapshot`;
-the child uses `content_load` to verify its digest and source commit. The writer returns text,
-and `content_apply` refuses to overwrite a parent page or revision changed since
-the snapshot. Applying stages the replacement, acquires a per-page lock, and
-checks the page again immediately before an atomic rename in the sandbox.
-The lock serializes `content_apply` calls; shell edits and Git changes do not
-participate in it, so the parent must finish those before applying a rewrite.
-These tools implement transfer validation that prose cannot enforce.
-Capture and load are read-only. Applying a rewrite uses the
-existing maintainer/schedule gate, `canAccessAdminTools`. Logic and local Git
-regression tests live in `agent/lib/content/handoff.ts` and its colocated test.
+the child uses `content_load` to verify its digest and source commit. Both tools
+are read-only. The writer returns proposed text and its input identity. The
+parent waits for readers to finish, checks that identity again, and applies
+reviewed changes serially with its existing editing tools. It then captures the
+saved file and requests a fresh review before publishing. These instructions
+coordinate Evi's edits; the snapshot check does not make writes atomic against
+another process. Concurrent external editing requires coordination before Evi
+continues. No custom write transaction or persistent lock is introduced.
+Logic and local Git regression tests live in `agent/lib/content/handoff.ts` and
+its colocated test, including rejection of stale snapshots after parent edits.
 `content-sandbox.test.ts` verifies that both declared agents select the parent.
 Their shell and file-write tools are disabled; `glob`, `grep` and `read_file`
 support source inspection. The parent executes examples and applies rewrites.
 Scans have a 30-second deadline and clean their staged passages through the
-sandbox file API even when no shell exit event arrives. Executable eval fixtures
+sandbox file API even when no shell exit event arrives. If both scanning and
+cleanup fail, an aggregate error retains both failures and the original cause. Executable eval fixtures
 run in a child process with a 10-second timeout and forced termination.
 
 ## Review checklist

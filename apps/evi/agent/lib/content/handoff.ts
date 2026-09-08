@@ -1,9 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { REPO_DIR, runOutput } from '../workspace'
 import { repoPathError, shellQuote } from './scan'
-import { WRITE_REVIEWED_PAGE } from './write-script'
-import { withDeadline } from './deadline'
 
 export const pagePathSchema = z.string().refine(path => repoPathError(path) === null, 'Pass a markdown path inside the repository.')
 
@@ -16,10 +14,8 @@ export const pageSnapshotSchema = z.object({
 export type PageSnapshot = z.infer<typeof pageSnapshotSchema>
 
 interface ContentSandbox {
-  run: (input: { command: string, env?: Record<string, string> }) => PromiseLike<{ exitCode: number, stdout?: unknown, stderr?: unknown }>
+  run: (input: { command: string }) => PromiseLike<{ exitCode: number, stdout?: unknown, stderr?: unknown }>
   readTextFile: (input: { path: string }) => PromiseLike<string | null>
-  writeTextFile: (input: { path: string, content: string }) => PromiseLike<unknown>
-  removePath: (input: { path: string, force: boolean, abortSignal?: AbortSignal }) => PromiseLike<unknown>
 }
 
 function digest(text: string): string {
@@ -64,20 +60,4 @@ export async function loadPage(sandbox: ContentSandbox, snapshot: PageSnapshot):
     throw new Error('Page or source revision changed since review. Capture and review it again.')
   }
   return current
-}
-
-export async function applyRewrite(sandbox: ContentSandbox, snapshot: PageSnapshot, text: string): Promise<PageSnapshot> {
-  await loadPage(sandbox, snapshot)
-  const payload = `/tmp/evi-rewrite-${randomUUID()}.json`
-  try {
-    await sandbox.writeTextFile({ path: payload, content: JSON.stringify({ snapshot, text }) })
-    const result = await sandbox.run({
-      command: `cd ${REPO_DIR} && node -e ${shellQuote(WRITE_REVIEWED_PAGE)}`,
-      env: { EVI_CONTENT_REWRITE: payload },
-    })
-    if (result.exitCode !== 0) throw new Error(`Rewrite was not applied: ${runOutput(result)}`)
-    return pageSnapshotSchema.parse(JSON.parse(String(result.stdout)))
-  } finally {
-    await withDeadline(abortSignal => sandbox.removePath({ path: payload, force: true, abortSignal }), 5000)
-  }
 }

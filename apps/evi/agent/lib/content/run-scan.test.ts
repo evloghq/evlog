@@ -50,6 +50,20 @@ it('reports cleanup failure instead of claiming the staged content was removed',
   await expect(runContentScan(sandbox, { text: 'Draft.' })).rejects.toThrow('cleanup failed')
 })
 
+it('preserves both the scan failure and the cleanup failure', async () => {
+  const scanError = new Error('shell killed')
+  const cleanupError = new Error('cleanup failed')
+  const sandbox = {
+    run: vi.fn().mockRejectedValue(scanError),
+    writeTextFile: vi.fn().mockResolvedValue(undefined),
+    removePath: vi.fn().mockRejectedValue(cleanupError),
+  }
+  await expect(runContentScan(sandbox, { text: 'Draft.' })).rejects.toMatchObject({
+    cause: scanError,
+    errors: [scanError, cleanupError],
+  })
+})
+
 it('bounds cleanup when the sandbox file API stops responding', async () => {
   vi.useFakeTimers()
   const sandbox = {
