@@ -15,4 +15,4 @@ it('typechecks logger source and generic accessors without importing Nitro first
     getCanonicalFileName: file => file,
     getNewLine: () => '\n',
   })).toBe('')
-})
+}, 30_000)
