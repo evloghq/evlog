@@ -742,6 +742,25 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
   }
 }
 
+function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown {
+  if (value === null || typeof value !== 'object') return value
+  if (ancestors.has(value)) return '[Circular]'
+
+  ancestors.add(value)
+  let changed = false
+  const visit = (item: unknown): unknown => {
+    const result = removeErrorCycles(item, ancestors)
+    if (!Object.is(result, item)) changed = true
+    return result
+  }
+  const copy = Array.isArray(value)
+    ? value.map(visit)
+    : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, visit(item)]))
+  ancestors.delete(value)
+
+  return changed ? copy : value
+}
+
 function serializeError(err: Error): Record<string, unknown> {
   const errorObj: Record<string, unknown> = {
     name: err.name,
@@ -749,8 +768,9 @@ function serializeError(err: Error): Record<string, unknown> {
     stack: isDev() ? compactStackForStorage(err.stack) : err.stack,
   }
   const errRecord = err as unknown as Record<string, unknown>
+  const ancestors = new WeakSet<object>([err])
   for (const k of ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'cause', 'internal'] as const) {
-    if (k in err) errorObj[k] = errRecord[k]
+    if (k in err) errorObj[k] = removeErrorCycles(errRecord[k], ancestors)
   }
 
   if (EvlogError.isEvlogError(err)) {
