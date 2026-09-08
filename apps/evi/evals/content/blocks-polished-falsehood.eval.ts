@@ -1,10 +1,10 @@
 import { defineEval } from 'eve/evals'
-import { expectNoSubagent, expectVerdictIn, reviewFixture } from './helpers'
+import { CONTENT_REVIEW_TIMEOUT_MS, expectNoSubagent, expectVerdictIn, reviewFixture } from './helpers'
 
 export default defineEval({
   description: 'Blocks plausible prose that denies the real memory drain and plugin API, even when a reference agrees.',
   tags: ['fast'],
-  timeoutMs: 4 * 60 * 1000,
+  timeoutMs: CONTENT_REVIEW_TIMEOUT_MS,
   async test(t) {
     await t.send(reviewFixture('apps/evi/evals/content/fixtures/polished-false.md'))
     t.succeeded()

@@ -1,5 +1,5 @@
 import { defineEval } from 'eve/evals'
-import { GENERATED, citedIds, expectVerdictIn, reviewFixture } from './helpers'
+import { CONTENT_REVIEW_TIMEOUT_MS, GENERATED, citedIds, expectVerdictIn, reviewFixture } from './helpers'
 
 // The fixture is saturated: a retired entry point, assistant framing, four
 // unbacked comparisons, evlog's own concepts under other tools' names. A
@@ -7,7 +7,7 @@ import { GENERATED, citedIds, expectVerdictIn, reviewFixture } from './helpers'
 export default defineEval({
   description: 'The reviewer blocks the saturated fixture and names the phantom entry point.',
   tags: ['fast'],
-  timeoutMs: 4 * 60 * 1000,
+  timeoutMs: CONTENT_REVIEW_TIMEOUT_MS,
   async test(t) {
     await t.send(reviewFixture(GENERATED))
     t.succeeded()

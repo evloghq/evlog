@@ -14,6 +14,9 @@ import type { EveEvalContext } from 'eve/evals'
 export const GENERATED = 'scripts/content-lint/fixtures/generated.md'
 export const WRITTEN = 'scripts/content-lint/fixtures/written.md'
 
+// A cold Docker workspace installs the monorepo and browser before the review starts.
+export const CONTENT_REVIEW_TIMEOUT_MS = 8 * 60 * 1000
+
 export function reviewFixture(path: string): string {
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
   const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', cwd: root }).trim()
