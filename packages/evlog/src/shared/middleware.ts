@@ -1,6 +1,6 @@
 import type { DrainContext, EnrichContext, RedactConfig, RequestLogger, RouteConfig, TailSamplingContext, WideEvent } from '../types'
 import type { AuditableLogger } from '../audit'
-import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, markWideEventDrainStarted, shouldKeep } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, markWideEventDrainStarted, noopLogger, shouldKeep } from '../logger'
 import { isGloballyRedacted, redactEvent, resolveRedactConfig } from '../redact'
 import { elapsedMs } from '../utils'
 import { extractErrorStatus } from './errors'
@@ -89,19 +89,7 @@ export interface MiddlewareLoggerResult {
 }
 
 const noopResult: MiddlewareLoggerResult = {
-  logger: {
-    set() {},
-    error() {},
-    info() {},
-    warn() {},
-    setLevel() {},
-    emit() {
-      return null 
-    },
-    getContext() {
-      return {} 
-    },
-  },
+  logger: noopLogger,
   finish: () => Promise.resolve(null),
   finishResponse: (response) => Promise.resolve(response),
   skipped: true,

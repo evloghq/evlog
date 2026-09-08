@@ -73,7 +73,7 @@ useSeoMeta({
     <div class="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-white/3 rounded-full blur-3xl" aria-hidden="true" />
     <div class="relative z-10">
       <main class="mx-auto max-w-2xl px-6 pb-24 pt-14 md:px-8 md:pt-20 md:pb-32">
-        <LandingComark v-if="tree" :tree />
+        <LandingComark v-if="tree" :value="tree" />
       </main>
 
       <footer class="border-t border-default px-6 py-10 md:px-8">

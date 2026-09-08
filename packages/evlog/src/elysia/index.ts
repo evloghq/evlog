@@ -40,7 +40,9 @@ export type EvlogElysiaOptions = BaseEvlogOptions
  * }
  * ```
  */
-export function useLogger<T extends object = Record<string, unknown>>(): AuditableLogger<T> {
+export function useLogger<T extends object = Record<string, unknown>>(): AuditableLogger<T>
+// eslint-disable-next-line no-redeclare -- TypeScript overload implementation.
+export function useLogger(): AuditableLogger {
   const logger = storage.getStore()
   if (!logger || !activeLoggers.has(logger)) {
     throw new Error(
@@ -48,7 +50,7 @@ export function useLogger<T extends object = Record<string, unknown>>(): Auditab
       + 'Make sure app.use(evlog()) is registered before your routes.',
     )
   }
-  return logger as AuditableLogger<T>
+  return logger
 }
 
 interface ElysiaContext {

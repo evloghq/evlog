@@ -23,7 +23,9 @@ export const evlogStorage = getSharedStorage(
  * })
  * ```
  */
-export function useLogger<T extends object = Record<string, unknown>>(): AuditableLogger<T> {
+export function useLogger<T extends object = Record<string, unknown>>(): AuditableLogger<T>
+// eslint-disable-next-line no-redeclare -- TypeScript overload implementation.
+export function useLogger(): AuditableLogger {
   const logger = evlogStorage.getStore()
   if (!logger) {
     throw new Error(
@@ -31,5 +33,5 @@ export function useLogger<T extends object = Record<string, unknown>>(): Auditab
       + 'Wrap your route handler or server action with withEvlog().',
     )
   }
-  return logger as AuditableLogger<T>
+  return logger
 }
