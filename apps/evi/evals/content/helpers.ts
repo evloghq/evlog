@@ -17,11 +17,16 @@ export const WRITTEN = 'scripts/content-lint/fixtures/written.md'
 // A cold Docker workspace installs the monorepo and browser before the review starts.
 export const CONTENT_REVIEW_TIMEOUT_MS = 8 * 60 * 1000
 
-export function reviewFixture(path: string): string {
+function fixtureSnapshot(path: string) {
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
   const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', cwd: root }).trim()
   const text = readFileSync(resolve(root, path), 'utf8')
-  const snapshot = { path, revision, sha256: createHash('sha256').update(text).digest('hex') }
+  return { root, text, snapshot: { path, revision, sha256: createHash('sha256').update(text).digest('hex') } }
+}
+
+export function reviewFixture(path: string): string {
+  const { root, text, snapshot } = fixtureSnapshot(path)
+  const { revision } = snapshot
   let evidence = ''
   if (path === WRITTEN) {
     const sample = /```js\n([\s\S]*?)\n```/.exec(text)?.[1]
@@ -30,6 +35,13 @@ export function reviewFixture(path: string): string {
     evidence = ` Execution evidence from the eval runner: the exact JavaScript fence in this snapshot was run with node --input-type=module in packages/evlog at ${revision}; exit code 0, including its event-count and action assertions. Pass this evidence to the reviewer.`
   }
   return `Review ${path} at candidate commit ${revision} against the content doctrine. In the parent sandbox, fetch that commit from origin and check it out detached in /workspace/repo before delegating to content_review. Pass this expected snapshot unchanged; the reviewer must call content_load and verify facts even if the prose scanner has no findings. Relay the report without rewriting files. Snapshot: ${JSON.stringify(snapshot)}${evidence}`
+}
+
+export async function expectReviewedSnapshot(t: EveEvalContext, path: string): Promise<void> {
+  // Parent streams contain delegation events, not the child's tool calls.
+  const children = t.events.flatMap(event => event.type === 'subagent.called' && event.data.name === 'content_review' ? [event.data.childSessionId] : [])
+  for (const child of new Set(children)) await t.target.attachSession(child)
+  t.calledTool('content_load', { input: fixtureSnapshot(path).snapshot })
 }
 
 /** Verdicts the reviewer is allowed to return, in order of severity. */

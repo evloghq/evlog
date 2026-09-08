@@ -1,5 +1,5 @@
 import { defineEval } from 'eve/evals'
-import { CONTENT_REVIEW_TIMEOUT_MS, WRITTEN, expectNoSubagent, expectVerdictIn, reviewFixture } from './helpers'
+import { CONTENT_REVIEW_TIMEOUT_MS, WRITTEN, expectNoSubagent, expectReviewedSnapshot, expectVerdictIn, reviewFixture } from './helpers'
 
 // The mirror of the detection eval, and the one that matters more. A reviewer
 // that finds fault everywhere produces a rewriter that edits everything, and a
@@ -12,6 +12,7 @@ export default defineEval({
   timeoutMs: CONTENT_REVIEW_TIMEOUT_MS,
   async test(t) {
     await t.send(reviewFixture(WRITTEN))
+    await expectReviewedSnapshot(t, WRITTEN)
     t.succeeded()
     t.calledSubagent('content_review')
     t.notCalledTool('write_file')

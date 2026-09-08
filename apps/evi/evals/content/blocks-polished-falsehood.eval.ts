@@ -1,5 +1,5 @@
 import { defineEval } from 'eve/evals'
-import { CONTENT_REVIEW_TIMEOUT_MS, expectNoSubagent, expectVerdictIn, reviewFixture } from './helpers'
+import { CONTENT_REVIEW_TIMEOUT_MS, expectNoSubagent, expectReviewedSnapshot, expectVerdictIn, reviewFixture } from './helpers'
 
 export default defineEval({
   description: 'Blocks plausible prose that denies the real memory drain and plugin API, even when a reference agrees.',
@@ -7,6 +7,7 @@ export default defineEval({
   timeoutMs: CONTENT_REVIEW_TIMEOUT_MS,
   async test(t) {
     await t.send(reviewFixture('apps/evi/evals/content/fixtures/polished-false.md'))
+    await expectReviewedSnapshot(t, 'apps/evi/evals/content/fixtures/polished-false.md')
     t.succeeded()
     t.calledSubagent('content_review')
     expectNoSubagent(t, 'content_rewrite')

@@ -1,5 +1,5 @@
 import { defineEval } from 'eve/evals'
-import { CONTENT_REVIEW_TIMEOUT_MS, GENERATED, citedIds, expectVerdictIn, reviewFixture } from './helpers'
+import { CONTENT_REVIEW_TIMEOUT_MS, GENERATED, citedIds, expectReviewedSnapshot, expectVerdictIn, reviewFixture } from './helpers'
 
 // The fixture is saturated: a retired entry point, assistant framing, four
 // unbacked comparisons, evlog's own concepts under other tools' names. A
@@ -10,6 +10,7 @@ export default defineEval({
   timeoutMs: CONTENT_REVIEW_TIMEOUT_MS,
   async test(t) {
     await t.send(reviewFixture(GENERATED))
+    await expectReviewedSnapshot(t, GENERATED)
     t.succeeded()
     t.calledSubagent('content_review')
     t.notCalledTool('write_file')
