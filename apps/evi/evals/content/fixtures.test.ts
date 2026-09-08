@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
+import { executeExample } from './example'
 
 it('keeps the factual regression invisible to the prose scanner', () => {
   const root = resolve(import.meta.dirname, '../../../..')
@@ -20,9 +21,10 @@ it('executes the positive fixture example without rewriting its code', () => {
   const text = readFileSync(resolve(root, 'scripts/content-lint/fixtures/written.md'), 'utf8')
   const sample = /```js\n([\s\S]*?)\n```/.exec(text)?.[1]
   expect(sample).toBeDefined()
-  expect(() => execFileSync(process.execPath, ['--input-type=module'], {
-    cwd: resolve(root, 'packages/evlog'),
-    input: sample,
-    encoding: 'utf8',
-  })).not.toThrow()
+  expect(() => executeExample(sample!, root)).not.toThrow()
 })
+
+it('kills an example that ignores termination instead of blocking the eval runner', () => {
+  const root = resolve(import.meta.dirname, '../../../..')
+  expect(() => executeExample('process.on("SIGTERM", () => {}); while (true) {}', root, 100)).toThrow(/ETIMEDOUT/)
+}, 5000)

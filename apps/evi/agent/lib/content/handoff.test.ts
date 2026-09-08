@@ -28,9 +28,9 @@ async function repository() {
 
 function sandbox(path: string) {
   return {
-    async run({ command }: { command: string }) {
+    async run({ command, env }: { command: string, env?: Record<string, string> }) {
       try {
-        const result = await exec(command.replaceAll('/workspace/repo', path))
+        const result = await exec(command.replaceAll('/workspace/repo', path), { env: { ...process.env, ...env } })
         return { ...result, exitCode: 0 }
       } catch (error) {
         const result = error as { stdout: string, stderr: string, code: number }
@@ -39,6 +39,7 @@ function sandbox(path: string) {
     },
     readTextFile: ({ path: file }: { path: string }) => readFile(file.replace('/workspace/repo', path), 'utf8'),
     writeTextFile: ({ path: file, content }: { path: string, content: string }) => writeFile(file.replace('/workspace/repo', path), content),
+    removePath: ({ path: file }: { path: string }) => rm(file, { force: true }),
   }
 }
 
@@ -101,6 +102,45 @@ describe('content handoff in the shared workspace', () => {
     await writeFile(join(path, 'page.md'), 'New maintainer edit.\n')
     await expect(applyRewrite(sandbox(path), snapshot, 'Old rewrite.')).rejects.toThrow('changed since')
     expect(await readFile(join(path, 'page.md'), 'utf8')).toBe('New maintainer edit.\n')
+  })
+
+  it('preserves an edit made after the preliminary snapshot read', async () => {
+    const path = await repository()
+    const workspace = sandbox(path)
+    const snapshot = await capturePage(workspace, 'page.md')
+    const read = workspace.readTextFile
+    workspace.readTextFile = async (input) => {
+      const text = await read(input)
+      await writeFile(join(path, 'page.md'), 'Edit during apply.\n')
+      return text
+    }
+
+    await expect(applyRewrite(workspace, snapshot, 'Obsolete rewrite.')).rejects.toThrow('changed since')
+    expect(await readFile(join(path, 'page.md'), 'utf8')).toBe('Edit during apply.\n')
+  })
+
+  it('allows only one concurrent rewrite of the same snapshot', async () => {
+    const path = await repository()
+    const workspace = sandbox(path)
+    const snapshot = await capturePage(workspace, 'page.md')
+    const results = await Promise.allSettled([
+      applyRewrite(workspace, snapshot, 'First rewrite.\n'),
+      applyRewrite(workspace, snapshot, 'Second rewrite.\n'),
+    ])
+
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1)
+    const final = await capturePage(workspace, 'page.md')
+    expect(results.find(result => result.status === 'fulfilled')).toMatchObject({ value: final })
+  })
+
+  it('applies a large passage without putting its contents in a process argument or environment', async () => {
+    const path = await repository()
+    const workspace = sandbox(path)
+    const snapshot = await capturePage(workspace, 'page.md')
+    const text = 'é'.repeat(190_000)
+    await applyRewrite(workspace, snapshot, text)
+    expect(await readFile(join(path, 'page.md'), 'utf8')).toBe(text)
   })
 
   it('invalidates a rewrite when the source revision changes', async () => {

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { EveEvalContext } from 'eve/evals'
+import { executeExample } from './example'
 
 /**
  * The two calibration fixtures, committed in the repository so the reviewer
@@ -31,7 +32,7 @@ export function reviewFixture(path: string): string {
   if (path === WRITTEN) {
     const sample = /```js\n([\s\S]*?)\n```/.exec(text)?.[1]
     if (sample === undefined) throw new Error('The positive fixture must contain its executable example.')
-    execFileSync(process.execPath, ['--input-type=module'], { cwd: resolve(root, 'packages/evlog'), input: sample })
+    executeExample(sample, root)
     evidence = ` Execution evidence from the eval runner: the exact JavaScript fence in this snapshot was run with node --input-type=module in packages/evlog at ${revision}; exit code 0, including its event-count and action assertions. Pass this evidence to the reviewer.`
   }
   return `Review ${path} at candidate commit ${revision} against the content doctrine. In the parent sandbox, fetch that commit from origin and check it out detached in /workspace/repo before delegating to content_review. Pass this expected snapshot unchanged; the reviewer must call content_load and verify facts even if the prose scanner has no findings. Relay the report without rewriting files. Snapshot: ${JSON.stringify(snapshot)}${evidence}`

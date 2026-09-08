@@ -63,7 +63,9 @@ The reviewer returns a verdict. `pass` means that page is done for this run; do 
 
 ### 5. Rewrite, in parallel
 
-For every target whose verdict is not `pass` and whose mode is `rewrite`, dispatch `content_rewrite` with the same snapshot and that page's findings. It returns full replacement text and the original digest. Wait for all readers, then apply the results serially in the parent with `content_apply`, passing the original snapshot and replacement text. If the page or revision changed meanwhile, capture and review it again instead of overwriting newer work.
+For every target whose snapshot loaded successfully, whose verdict is not `pass` and whose mode is `rewrite`, dispatch `content_rewrite` with the same snapshot and that page's findings. A `blocked` verdict caused by a failed snapshot load must be recaptured and reviewed before rewriting. A verified page blocked by critical findings is eligible for rewriting those findings.
+
+The rewriter returns full replacement text and the original digest. Wait for all readers, then apply the results serially in the parent with `content_apply`, passing the original snapshot and replacement text. Do not run shell edits, file writes, or Git changes concurrently with an apply. If the page or revision changed meanwhile, capture and review it again instead of overwriting newer work.
 
 Targets with mode `report` skip this step: the landing page absent a critical finding, and any skill or AGENTS.md whose findings go past the house rules. Their findings go in the PR body for Hugo to decide on. Do not edit the landing page for voice or rhythm, and do not touch a procedure, a bound, or a `description`.
 

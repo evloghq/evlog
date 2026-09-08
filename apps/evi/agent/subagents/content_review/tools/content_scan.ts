@@ -1,6 +1,7 @@
 import { defineTool } from 'eve/tools'
 import { z } from 'zod'
-import { parseLintReport, repoPathError, scanCommand } from '../../../lib/content/scan'
+import { parseLintReport, repoPathError } from '../../../lib/content/scan'
+import { runContentScan } from '../../../lib/content/run-scan'
 import { runOutput } from '../../../lib/workspace'
 
 /** A passage larger than this is a file, and a file has a path. */
@@ -38,9 +39,7 @@ export default defineTool({
     }
 
     const sandbox = await toolCtx.getSandbox()
-    const { command, passage } = scanCommand(input)
-    if (passage !== undefined) await sandbox.writeTextFile(passage)
-    const result = await sandbox.run({ command })
+    const result = await runContentScan(sandbox, input)
 
     if (result.exitCode !== 0) {
       return { success: false as const, error: `content-lint exited ${result.exitCode}: ${runOutput(result)}` }
