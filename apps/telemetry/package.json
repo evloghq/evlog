@@ -30,7 +30,7 @@
     "nuxt-charts": "^2.2.1",
     "postgres": "^3.4.9",
     "zod": "^4.5.4",
-    "jose": "^6.2.10"
+    "jose": "^6.2.12"
   },
   "devDependencies": {
     "eslint": "^9.39.5",
