@@ -42,8 +42,8 @@ function sandbox(path: string) {
   }
 }
 
-describe('content handoff between isolated sandboxes', () => {
-  it('reviews the supplied draft rather than the child checkout and returns the rewrite to the parent', async () => {
+describe('content handoff in the shared workspace', () => {
+  it('refuses an outdated clone and reads the uncommitted draft from the shared workspace', async () => {
     const parent = await repository()
     const child = await mkdtemp(join(tmpdir(), 'evi-child-'))
     directories.push(child)
@@ -51,14 +51,13 @@ describe('content handoff between isolated sandboxes', () => {
     await writeFile(join(parent, 'page.md'), 'Uncommitted draft.\n')
     const snapshot = await capturePage(sandbox(parent), 'page.md')
 
-    expect(await loadPage(sandbox(child), snapshot)).toEqual(snapshot)
-    expect(snapshot.text).toBe('Uncommitted draft.\n')
+    await expect(loadPage(sandbox(child), snapshot)).rejects.toThrow('changed since')
+    expect((await loadPage(sandbox(parent), snapshot)).text).toBe('Uncommitted draft.\n')
     expect(await readFile(join(child, 'page.md'), 'utf8')).toBe('Committed page.\n')
 
     const result = await applyRewrite(sandbox(parent), snapshot, 'Corrected draft.\n')
-    expect(result.text).toBe('Corrected draft.\n')
     expect(result.sha256).not.toBe(snapshot.sha256)
-    expect(await readFile(join(parent, 'page.md'), 'utf8')).toBe(result.text)
+    expect(await readFile(join(parent, 'page.md'), 'utf8')).toBe('Corrected draft.\n')
   })
 
   it('supports a new page that does not exist on main', async () => {
@@ -68,10 +67,10 @@ describe('content handoff between isolated sandboxes', () => {
     expect((await loadPage(sandbox(path), snapshot)).text).toBe('New page.\n')
   })
 
-  it('refuses a truncated or changed transfer before touching the checkout', async () => {
+  it('refuses a mismatched digest before reviewing', async () => {
     const path = await repository()
     const snapshot = await capturePage(sandbox(path), 'page.md')
-    await expect(loadPage(sandbox(path), { ...snapshot, text: 'Different page.' })).rejects.toThrow('digest')
+    await expect(loadPage(sandbox(path), { ...snapshot, sha256: '0'.repeat(64) })).rejects.toThrow('changed since')
   })
 
   it('refuses uncommitted source changes instead of attesting to an older implementation', async () => {
@@ -82,11 +81,11 @@ describe('content handoff between isolated sandboxes', () => {
     await expect(capturePage(sandbox(path), 'page.md')).rejects.toThrow('Commit source changes')
   })
 
-  it('refuses a dirty child checkout instead of checking against local edits', async () => {
+  it('refuses a page edited after the snapshot was captured', async () => {
     const path = await repository()
     const snapshot = await capturePage(sandbox(path), 'page.md')
     await writeFile(join(path, 'page.md'), 'Changed child.\n')
-    await expect(loadPage(sandbox(path), snapshot)).rejects.toThrow('local edits')
+    await expect(loadPage(sandbox(path), snapshot)).rejects.toThrow('changed since')
   })
 
   it('rejects a markdown symlink that resolves outside the repository', async () => {
@@ -111,10 +110,11 @@ describe('content handoff between isolated sandboxes', () => {
     await expect(applyRewrite(sandbox(path), snapshot, 'Old rewrite.')).rejects.toThrow('changed since')
   })
 
-  it('fails closed when the requested source revision cannot be fetched', async () => {
+  it('refuses another source revision without changing the checkout', async () => {
     const path = await repository()
     const snapshot = await capturePage(sandbox(path), 'page.md')
     await expect(loadPage(sandbox(path), { ...snapshot, revision: 'a'.repeat(40) })).rejects.toThrow('source revision')
+    expect(execFileSync('git', ['-C', path, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()).toBe(snapshot.revision)
   })
 
   it('rejects paths outside the checkout and shell input masquerading as a revision', async () => {

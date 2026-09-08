@@ -9,7 +9,6 @@ export const pageSnapshotSchema = z.object({
   path: pagePathSchema,
   revision: z.string().regex(/^[a-f0-9]{40}$/),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
-  text: z.string().max(200_000),
 })
 
 export type PageSnapshot = z.infer<typeof pageSnapshotSchema>
@@ -22,12 +21,6 @@ interface ContentSandbox {
 
 function digest(text: string): string {
   return createHash('sha256').update(text).digest('hex')
-}
-
-function verify(snapshot: PageSnapshot): PageSnapshot {
-  pageSnapshotSchema.parse(snapshot)
-  if (digest(snapshot.text) !== snapshot.sha256) throw new Error('Page digest mismatch. Transfer the complete snapshot again.')
-  return snapshot
 }
 
 async function run(sandbox: ContentSandbox, command: string, failure: string): Promise<string> {
@@ -47,36 +40,31 @@ async function checkUntrackedSource(sandbox: ContentSandbox): Promise<void> {
   if (files) throw new Error('Commit source changes before capturing or loading a page.')
 }
 
-export async function capturePage(sandbox: ContentSandbox, path: string): Promise<PageSnapshot> {
+async function readPage(sandbox: ContentSandbox, path: string): Promise<PageSnapshot & { text: string }> {
   const file = await checkedPath(sandbox, path)
   await run(sandbox, 'git diff --quiet HEAD -- . \':(exclude,glob)**/*.md\'', 'Commit source changes before capturing a page')
   await checkUntrackedSource(sandbox)
   const revision = await run(sandbox, 'git rev-parse HEAD', 'Cannot identify source revision')
   const text = await sandbox.readTextFile({ path: file })
   if (text === null) throw new Error('Page could not be read.')
-  return pageSnapshotSchema.parse({ path, revision, text, sha256: digest(text) })
+  return { ...pageSnapshotSchema.parse({ path, revision, sha256: digest(text) }), text }
 }
 
-export async function loadPage(sandbox: ContentSandbox, snapshot: PageSnapshot): Promise<PageSnapshot> {
-  verify(snapshot)
-  await run(sandbox, 'git diff --quiet HEAD', 'Content checkout has local edits; use a fresh reviewer')
-  await checkUntrackedSource(sandbox)
-  const sha = snapshot.revision
-  await run(sandbox,
-    `(git cat-file -e ${sha}^{commit} || git fetch origin ${sha}) && git checkout --detach ${sha}`,
-    'Cannot load the requested source revision; publish the source commit or report verification as blocked')
-  const actual = await run(sandbox, 'git rev-parse HEAD', 'Cannot identify source revision')
-  if (actual !== sha) throw new Error('Source revision mismatch.')
-  return snapshot
+export async function capturePage(sandbox: ContentSandbox, path: string): Promise<PageSnapshot> {
+  return pageSnapshotSchema.parse(await readPage(sandbox, path))
 }
 
-export async function applyRewrite(sandbox: ContentSandbox, snapshot: PageSnapshot, text: string): Promise<PageSnapshot> {
-  verify(snapshot)
-  const current = await capturePage(sandbox, snapshot.path)
+export async function loadPage(sandbox: ContentSandbox, snapshot: PageSnapshot): Promise<PageSnapshot & { text: string }> {
+  pageSnapshotSchema.parse(snapshot)
+  const current = await readPage(sandbox, snapshot.path)
   if (current.revision !== snapshot.revision || current.sha256 !== snapshot.sha256) {
     throw new Error('Page or source revision changed since review. Capture and review it again.')
   }
-  pageSnapshotSchema.parse({ ...snapshot, text, sha256: digest(text) })
+  return current
+}
+
+export async function applyRewrite(sandbox: ContentSandbox, snapshot: PageSnapshot, text: string): Promise<PageSnapshot> {
+  await loadPage(sandbox, snapshot)
   const file = await checkedPath(sandbox, snapshot.path)
   await sandbox.writeTextFile({ path: file, content: text })
   const written = await capturePage(sandbox, snapshot.path)

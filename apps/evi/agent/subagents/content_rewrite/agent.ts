@@ -10,6 +10,6 @@ export default defineAgent({
   },
   description:
     'Apply a content review to one evlog page. Takes the review findings and edits only what they name, in the evlog voice, preserving MDC structure, frontmatter, and every link target. '
-    + 'Loads the caller snapshot with content_load and verifies factual changes against the pinned source. Returns the complete replacement text and input digest for the parent to apply; its filesystem is separate. '
+    + 'Loads the caller snapshot with content_load and verifies factual changes against the shared source. Returns the complete replacement text and input digest for the parent to apply after checking for intervening edits. '
     + 'Never edits a page it was not given findings for, and never invents findings of its own.',
 })

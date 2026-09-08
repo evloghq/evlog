@@ -49,13 +49,13 @@ node scripts/content-lint/index.mjs <each target> --fix
 
 This rewrites only what follows from the rule rather than from taste: a retired entry point, a term with one replacement, a link with a redirect behind it. Dashes are not mechanical and stay findings for the reviewer. It re-scans each file afterwards and reverts anything that scored worse or introduced a new id, so a reverted file is a bug to report, not a file to retry.
 
-Keep these page edits uncommitted until verification. Snapshot handoffs carry uncommitted page text separately from the published source commit. If the source revision itself is unpublished, publish the feature branch through the contributing flow before delegation; never substitute another revision.
+Keep these page edits uncommitted until verification. The content agents share the parent's actual workspace, including new pages and local edits. Source code changes must be committed before capturing an identity; a local commit is sufficient. Never change Git state or write files while a reviewer is reading them.
 
 Then re-run `content-targets`. A file whose findings were all mechanical now comes back clean and is dropped from the pass. Never send a reviewer a finding a codemod already fixed: it costs a dispatch and it teaches the reviewer that findings are cheap.
 
 ### 4. Review, in parallel
 
-Call `content_snapshot` for each target. Dispatch `content_review` once per target with the complete returned snapshot, its surface, candidates and `modelChecks`. Include factual sources and executed-check results, but not your interpretation or preferred verdict. Declared subagents have independent filesystems. They call `content_load` to check the digest and pin the source, then read the transferred text. A load failure blocks that page; do not fall back to the child's `main` copy.
+Call `content_snapshot` for each target. Dispatch `content_review` once per target with the returned identity, its surface, candidates and `modelChecks`. Include factual sources and executed-check results, but not your interpretation or preferred verdict. Content agents explicitly share the parent sandbox and call `content_load` to check the digest and source revision before reading. A load failure blocks that page; capture it again rather than substituting another version.
 
 The candidates are what tripped a counter. The `modelChecks` are what no counter reached on that page, and the reviewer answers every one of them. Pass them through as they came; they are chosen per surface and per page, and editing them is how a pass quietly stops checking something.
 
@@ -63,7 +63,7 @@ The reviewer returns a verdict. `pass` means that page is done for this run; do 
 
 ### 5. Rewrite, in parallel
 
-For every target whose verdict is not `pass` and whose mode is `rewrite`, dispatch `content_rewrite` with the same snapshot and that page's findings. It returns full replacement text and the original digest, not a shared file edit. Apply the result in the parent with `content_apply`, passing the original snapshot and replacement text. Apply serially. If the page or revision changed meanwhile, capture and review it again instead of overwriting newer work.
+For every target whose verdict is not `pass` and whose mode is `rewrite`, dispatch `content_rewrite` with the same snapshot and that page's findings. It returns full replacement text and the original digest. Wait for all readers, then apply the results serially in the parent with `content_apply`, passing the original snapshot and replacement text. If the page or revision changed meanwhile, capture and review it again instead of overwriting newer work.
 
 Targets with mode `report` skip this step: the landing page absent a critical finding, and any skill or AGENTS.md whose findings go past the house rules. Their findings go in the PR body for Hugo to decide on. Do not edit the landing page for voice or rhythm, and do not touch a procedure, a bound, or a `description`.
 

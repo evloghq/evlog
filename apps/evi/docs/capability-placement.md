@@ -65,15 +65,20 @@ whose correctness depends on two parties not sharing a context. `content_review`
 and `content_rewrite` exist as separate subagents because a reviewer that can
 edit talks itself into changes it cannot justify, and a writer that has read the
 review's reasoning rewrites to that reasoning instead of to the page. The
-isolation is the mechanism, not the tidiness. Both reuse the lightweight
-`agent/lib/content-sandbox.ts` definition, but each session has its own checkout.
-The parent captures a page with `content_snapshot`; the child uses `content_load`
-to verify its digest and check out the source commit. The writer returns text,
+conversation isolation keeps the roles separate. `agent/lib/content-sandbox.ts`
+explicitly selects `parent.sandbox` through eve's callback API, so both agents
+read the parent's branch and uncommitted pages without cloning another checkout.
+They must not add sandbox seeds or packaged skills, which eve disallows for a
+shared workspace. The parent captures a page identity with `content_snapshot`;
+the child uses `content_load` to verify its digest and source commit. The writer returns text,
 and `content_apply` refuses to overwrite a parent page or revision changed since
 the snapshot. These tools implement transfer validation that prose cannot enforce.
-Capture and load are read-only for page content. Applying a rewrite uses the
+Capture and load are read-only. Applying a rewrite uses the
 existing maintainer/schedule gate, `canAccessAdminTools`. Logic and local Git
 regression tests live in `agent/lib/content/handoff.ts` and its colocated test.
+`content-sandbox.test.ts` verifies that both declared agents select the parent.
+Their shell and file-write tools are disabled; `glob`, `grep` and `read_file`
+support source inspection. The parent executes examples and applies rewrites.
 
 ## Review checklist
 

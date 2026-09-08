@@ -8,8 +8,8 @@ import type { EveEvalContext } from 'eve/evals'
  * The two calibration fixtures, committed in the repository so the reviewer
  * reads a real file the way it reads a real page.
  *
- * Transfer local fixture text with the candidate commit so PR evals exercise
- * the candidate doctrine rather than the sandbox's initial main checkout.
+ * Pin the candidate commit so PR evals exercise its fixtures and doctrine
+ * rather than the sandbox's initial main checkout.
  */
 export const GENERATED = 'scripts/content-lint/fixtures/generated.md'
 export const WRITTEN = 'scripts/content-lint/fixtures/written.md'
@@ -18,8 +18,8 @@ export function reviewFixture(path: string): string {
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
   const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', cwd: root }).trim()
   const text = readFileSync(resolve(root, path), 'utf8')
-  const snapshot = { path, revision, sha256: createHash('sha256').update(text).digest('hex'), text }
-  return `Review this complete page snapshot against the content doctrine using content_review and relay its report. Do not rewrite it. Have the reviewer call content_load and scan the snapshot text, then check facts even if the scan has no findings. Snapshot: ${JSON.stringify(snapshot)}`
+  const snapshot = { path, revision, sha256: createHash('sha256').update(text).digest('hex') }
+  return `Review ${path} at candidate commit ${revision} against the content doctrine. In the parent sandbox, fetch that commit from origin and check it out detached in /workspace/repo before delegating to content_review. Pass this expected snapshot unchanged; the reviewer must call content_load and verify facts even if the prose scanner has no findings. Relay the report without rewriting files. Snapshot: ${JSON.stringify(snapshot)}`
 }
 
 /** Verdicts the reviewer is allowed to return, in order of severity. */
