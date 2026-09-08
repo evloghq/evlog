@@ -49,7 +49,17 @@ export const VERDICTS = ['pass', 'minor', 'significant', 'blocked'] as const
 
 export type Verdict = typeof VERDICTS[number]
 
-/** The `**Verdict**:` line from the relayed review, or null when nothing parseable came back. */
+export function reviewerReport(events: EveEvalContext['events']): string | null {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]
+    if (event?.type === 'subagent.completed' && event.data.subagentName === 'content_review' && !event.data.backgroundTask) {
+      return event.data.output
+    }
+  }
+  return null
+}
+
+/** The `**Verdict**:` line from the review, or null when nothing parseable came back. */
 export function verdictOf(reply: string | null | undefined): Verdict | null {
   const match = /\*\*Verdict\*\*:\s*(pass|minor|significant|blocked)/i.exec(reply ?? '')
   return match ? match[1].toLowerCase() as Verdict : null
@@ -63,7 +73,7 @@ export function verdictOf(reply: string | null | undefined): Verdict | null {
  * said.
  */
 export function expectVerdictIn(t: EveEvalContext, allowed: readonly Verdict[]) {
-  const verdict = verdictOf(t.reply)
+  const verdict = verdictOf(reviewerReport(t.events))
   return t.eventsSatisfy(
     verdict === null
       ? `expected a verdict in ${allowed.join(' | ')}, found no verdict line`
@@ -85,7 +95,7 @@ export function expectNoSubagent(t: EveEvalContext, name: string) {
 }
 
 /**
- * Every finding id the relayed report cites. The review format puts them in
+ * Every finding id the report cites. The review format puts them in
  * brackets at the head of each line.
  */
 export function citedIds(reply: string | null | undefined): Set<string> {

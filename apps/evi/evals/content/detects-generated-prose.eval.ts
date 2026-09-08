@@ -1,5 +1,5 @@
 import { defineEval } from 'eve/evals'
-import { CONTENT_REVIEW_TIMEOUT_MS, GENERATED, citedIds, expectReviewedSnapshot, expectVerdictIn, reviewFixture } from './helpers'
+import { CONTENT_REVIEW_TIMEOUT_MS, GENERATED, citedIds, expectReviewedSnapshot, expectVerdictIn, reviewFixture, reviewerReport } from './helpers'
 
 // The fixture is saturated: a retired entry point, assistant framing, four
 // unbacked comparisons, evlog's own concepts under other tools' names. A
@@ -16,7 +16,7 @@ export default defineEval({
     t.notCalledTool('write_file')
     expectVerdictIn(t, ['blocked'])
 
-    const ids = citedIds(t.reply)
+    const ids = citedIds(reviewerReport(t.events))
     // T-15 is the only critical in the fixture: `evlog/shared` is not an entry
     // point, so nothing in that code block runs.
     t.eventsSatisfy('cites T-15 for the retired entry point', () => ids.has('T-15'))
