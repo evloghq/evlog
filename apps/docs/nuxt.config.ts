@@ -90,7 +90,7 @@ export default defineNuxtConfig({
     // only what it does. `notes` is the only place in the generated document
     // where that fits; the pages themselves never state it.
     notes: [
-      'evlog is MIT-licensed and drop-in for console.log, pino, or consola.',
+      'evlog is MIT-licensed. Migrating from pino or consola requires adapting call signatures and output configuration.',
       'Wide events replace log lines: log.set accumulates context, createError carries why and fix.',
       'The CLI ships `evlog map`, a deterministic observability score that gates in CI.',
       'When to use evlog: you ship TypeScript and want one structured event per request, job, or script run, with the context attached as the work happens instead of scattered across log lines.',
