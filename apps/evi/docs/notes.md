@@ -194,12 +194,9 @@ purpose: single-user surface, a static bearer is the right size.
 
 ## Open
 
-- Per-tool input-token attribution. `ai.tools[]` records name, duration and
-  success but not how much context each result added; `docs__list-pages` is ~85%
-  of a grounded turn's input and it took a manual diff to establish that.
-- `ai.provider` on the event. The gateway slug is recorded, the deployment that
-  served it is not.
-- GitHub rate-limit headers on tool results. For an agent about to run off
-  webhooks, that is what breaks first and most quietly.
 - A `toTelemetry(output)` mirror of `toModelOutput`, so a tool can carry
-  diagnostics that never cost a context token.
+  diagnostics that never cost a context token (tracked as EVL-366).
+
+Landed since this list was written: per-tool input tokens on `ai.tools[]`
+(#622), the resolved provider as `ai.provider` (#622), and GitHub rate-limit
+state on tool results (EVL-343, in the github-tools extension).

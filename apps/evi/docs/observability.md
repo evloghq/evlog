@@ -95,40 +95,22 @@ to be empty.
 
 ### evlog/eve — let `defineEvlogInstrumentation` take `events`
 
-The sharpest one, and it half-unblocks the caller gap. eve *does* support
-per-model-call attribution: `events["step.started"]` in `instrumentation.ts`
-receives `{ session, turn, step, channel, modelInput }` — including
-`session.auth` — and whatever it returns under `runtimeContext` rides onto the
-spans. That is the supported path the hook attempts above were groping for.
-
-But `defineEvlogInstrumentation` hardcodes that slot to inject its own
-correlation ids and exposes no passthrough:
-
-```ts
-// packages/evlog/src/eve/index.ts
-events: { 'step.started': buildInstrumentationContext },
-```
-
-So a consumer must choose between evlog correlation and their own runtime
-context. Merging the two is a few lines:
-
-```ts
-'step.started': (input) => {
-  const base = buildInstrumentationContext(input)
-  const extra = options.events?.['step.started']?.(input)
-  if (!base && !extra) return undefined
-  return { runtimeContext: { ...base?.runtimeContext, ...extra?.runtimeContext } }
-},
-```
-
-With that, `caller.principal_id` lands on every span for free.
+Superseded before anyone took it up: the supported composition path shipped
+instead. `evlogRuntimeContext(input)` is exported from `evlog/eve`, and a
+caller whose instrumentation is not evlog's alone drops the wrapper and spreads
+it into their own `defineInstrumentation` — the merge the proposal wanted, done
+by the caller (documented on `defineEvlogInstrumentation` in
+`packages/evlog/src/eve/index.ts`).
 
 ### evlog/eve — reach the eve session from enrichment
 
-Spans are not the wide event. Grouping cost per user still means the caller has
-to reach `enrich`, whose context is HTTP-shaped. Either widen it for the eve
-integration to carry the eve session, or expose a turn-scoped callback that runs
-where the logger is known to exist:
+Largely addressed for the common case: `evlog/eve` records `eve.caller` on the
+event itself (see the gap section above), so grouping cost per user no longer
+requires a hook. What remains here is the general ask, for consumers who want
+more than the principal on the turn. Spans are still not the wide event, and
+`enrich` stays HTTP-shaped. Either widen it for the eve integration to carry the
+eve session, or expose a turn-scoped callback that runs where the logger is
+known to exist:
 
 ```ts
 defineEvlogHook({
@@ -141,53 +123,19 @@ multi-user channel wants this, not just this one.
 
 ### evlog/eve — attribute input tokens to the tool that caused them
 
-`ai.tools[]` records `name`, `durationMs`, `success`. It does not record how much
-context each result added. A grounded turn here costs ~74k input tokens, and it
-took a manual before/after comparison to establish that `docs__list-pages` was
-~85% of it. An input-token delta per tool result would have made that the first
-thing anyone noticed, and it generalises: the most common way an agent gets
-expensive is one tool returning too much, every turn.
+Landed (#622, EVL-289): `ai.tools[]` entries now carry `inputTokens`, a step
+delta split across the tools that fed the model.
 
 ### evlog/eve — record the resolved provider
 
-`ai.model` is the gateway slug. It does not say which deployment served the call.
-Routing here was landing on a $0.20/$0.40 provider when $0.09/$0.18 ones served
-the same model; finding that meant reconstructing the rate card from observed
-totals and matching it against the model catalogue. An `ai.provider` field turns
-a 55% overspend into something you read off a dashboard.
+Landed (#622): the deployment that served the call is on the event as
+`ai.provider`.
 
 ### github-tools — surface GitHub rate-limit state on tool results
 
-Every GitHub API response carries `x-ratelimit-remaining`, `x-ratelimit-limit`
-and `x-ratelimit-reset`. None of it reaches the agent or the log. For a bot about
-to run autonomously off webhooks, the rate limit is what breaks first and most
-silently — turns just start failing.
-
-The plumbing to consume it already exists and needs nothing from eve. A hook can
-narrow a tool result to a specific extension tool with full typing, including for
-a mounted extension, because `toolResultFrom` keys off the tool definition rather
-than the namespaced name:
-
-```ts
-import { searchCode } from '@github-tools/eve-extension/tools'
-
-'action.result'(event) {
-  const result = toolResultFrom(event.data.result, searchCode)
-  if (result) useLogger().set({ github: { remaining: result.output.rateLimit?.remaining } })
-}
-```
-
-So the whole ask is on the github-tools side: **put the rate-limit headers on the
-tool output**. Ideally behind a flag, or on a side channel the model never sees —
-a `remaining` count in every result is context the model does not need and would
-occasionally reason about.
-
-That last point generalises into a nicer primitive worth considering in eve:
-`toModelOutput` already shapes what the model sees. Its mirror — something like
-`toTelemetry(output)` — would shape what hooks and drains see, letting a tool
-carry rich diagnostics that never cost a context token. Today the two audiences
-share one payload, so every field is a tradeoff between observability and prompt
-size.
+Landed upstream in the github-tools extension (EVL-343, 2026-08-27): the
+tool's result surface now exposes the rate-limit state and the eve extension
+records it.
 
 ### github-tools — per-session tool scoping
 
