@@ -412,6 +412,27 @@ describe('express adapter', () => {
     expect(routes.map(route => `${route.method} ${route.path}`)).toEqual(['PUT /orders/:id'])
   })
 
+  it('reads CommonJS require bindings for express and Router', async () => {
+    const root = await project({
+      'src/index.js': [
+        'const express = require(\'express\')',
+        'const { Router } = require(\'express\')',
+        'const app = express()',
+        'app.get(\'/health\', (_req, res) => res.json({ ok: true }))',
+        'const router = Router()',
+        'router.post(\'/checkout\', (_req, res) => res.json({ ok: true }))',
+        'module.exports = app',
+      ].join('\n'),
+    })
+
+    const routes = await routesOf('express', root)
+
+    expect(routes.map(route => `${route.method} ${route.path}`).sort()).toEqual([
+      'GET /health',
+      'POST /checkout',
+    ])
+  })
+
   it('reads app.route(path).get(handler) and router.route chains', async () => {
     const root = await project({
       'src/index.ts': [

@@ -22,37 +22,85 @@ export interface ElysiaReceiverContext {
   imports: ImportNames
 }
 
-/** Local bindings for a module's default and named imports. */
+function identifierName(node: Node | undefined): string | null {
+  return node?.type === 'Identifier' ? (node as { name: string }).name : null
+}
+
+function stringLiteral(node: Node | undefined): string | null {
+  if (!node) return null
+  if (node.type === 'Literal' && typeof (node as { value: unknown }).value === 'string') {
+    return (node as { value: string }).value
+  }
+  return null
+}
+
+/** Whether `node` is `require('module')`. */
+function isRequireOf(node: Node | undefined, module: string): boolean {
+  if (!node || node.type !== 'CallExpression') return false
+  const call = node as { callee: Node, arguments: Node[] }
+  if (identifierName(call.callee) !== 'require') return false
+  return stringLiteral(call.arguments[0]) === module
+}
+
+/** Record named bindings from `const { Router } = …` / `const { Router: R } = …`. */
+function collectNamedBindings(id: Node, named: Map<string, string>): void {
+  if (id.type !== 'ObjectPattern') return
+  const { properties } = id as { properties: Node[] }
+  for (const prop of properties) {
+    if (prop.type !== 'Property') continue
+    const { key, value } = prop as { key: Node, value: Node }
+    const imported = identifierName(key)
+    const local = identifierName(value)
+    if (imported && local) named.set(imported, local)
+  }
+}
+
+/**
+ * Local bindings for a module's default and named imports.
+ *
+ * Covers ESM (`import express from 'express'`, `import { Router } from 'express'`)
+ * and CommonJS (`const express = require('express')`, `const { Router } = require('express')`).
+ */
 function importNames(parsed: ParseResult, module: string): ImportNames {
   const named = new Map<string, string>()
   let defaultName: string | null = null
 
   walkAst(parsed.program, (node) => {
-    if (node.type !== 'ImportDeclaration') return
-    const declaration = node as {
-      source: { value: string }
-      specifiers: Array<{
-        type: string
-        imported?: { name?: string }
-        local?: { name: string }
-      }>
-    }
-    if (declaration.source.value !== module) return
-    for (const specifier of declaration.specifiers) {
-      if (!specifier.local) continue
-      if (specifier.type === 'ImportDefaultSpecifier') {
-        defaultName = specifier.local.name
-      } else if (specifier.type === 'ImportSpecifier' && specifier.imported?.name) {
-        named.set(specifier.imported.name, specifier.local.name)
+    if (node.type === 'ImportDeclaration') {
+      const declaration = node as {
+        source: { value: string }
+        specifiers: Array<{
+          type: string
+          imported?: { name?: string }
+          local?: { name: string }
+        }>
       }
+      if (declaration.source.value !== module) return
+      for (const specifier of declaration.specifiers) {
+        if (!specifier.local) continue
+        if (specifier.type === 'ImportDefaultSpecifier') {
+          defaultName = specifier.local.name
+        } else if (specifier.type === 'ImportSpecifier' && specifier.imported?.name) {
+          named.set(specifier.imported.name, specifier.local.name)
+        }
+      }
+      return
     }
+
+    if (node.type !== 'VariableDeclarator') return
+    const declarator = node as { id: Node, init?: Node }
+    const { id, init } = declarator
+    if (!isRequireOf(init, module)) return
+
+    const binding = identifierName(id)
+    if (binding) {
+      defaultName = binding
+      return
+    }
+    collectNamedBindings(id, named)
   })
 
   return { defaultName, named }
-}
-
-function identifierName(node: Node | undefined): string | null {
-  return node?.type === 'Identifier' ? (node as { name: string }).name : null
 }
 
 /** Whether `callee` is `express()` or `Router()`. */
