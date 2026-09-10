@@ -116,3 +116,9 @@ Applies to: prose on every surface.
 Flagged: nothing. Three anchors across two pages pointed at headings this branch had renamed, and one had been dead since before it.
 Actual: a broken fragment reports no error anywhere. The page loads, the link resolves, and the reader arrives at the top of it. The scanner checked no anchor at all, and the audit written by hand only compared cross-page links, so same-page ones stayed invisible twice.
 Applies to: `apps/docs/content/`. `reach.mjs` now resolves every fragment against the headings of the page it targets. Rename a heading and the link is a second edit, not an optional one.
+
+## 2026-09-10 · U-04, D-01 · Accuracy should preserve the product promise
+
+Flagged: introductory claims and migration copy were rewritten as implementation constraints; two search entry pages repeated onboarding and reference material.
+Actual: keep a confident, benefit-led introduction, correct unsupported claims, and put detailed limits where the reader makes that decision. Give each guide a distinct task and contextual links from the existing documentation.
+Applies to: introductory pages, product summaries, and new documentation guides. A factual correction does not require turning marketing copy into a warning.
