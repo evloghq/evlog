@@ -35,9 +35,15 @@ next               a link out, on the thing they will need after this
 
 A page in the wrong directory is a structural finding, not a wording one.
 
-## Integration pages carry the same contract
+## Integration pages carry the contract of their tier
 
-Every framework integration exposes `evlog()`, `useLogger()`, `log.fork()`, and the full `BaseEvlogOptions` surface, alongside the framework-native accessor. A framework page that documents only the native accessor is incomplete, and one that documents only `useLogger()` misses the idiomatic path. `evlog/workers` is the documented exception: no `useLogger()`, and the logger arrives as the handler's fourth argument.
+The contract follows how the integration is built, so check the tier before flagging a page as incomplete:
+
+- First-class integrations built on `defineFrameworkIntegration` (elysia, express, fastify, hono, next, nestjs, orpc, react-router, sveltekit, workers) take the full `BaseEvlogOptions` surface and expose a request-bound logger, but the entry point's own accessor names differ: `evlog()` and `withEvlog()` on orpc, `evlog()` on elysia, express, fastify, hono, react-router and sveltekit, `createEvlog()` and `evlogMiddleware()` on next, `EvlogModule` on nestjs, `withEvlog()` and `createWorkersLogger()` on workers. A framework page that documents only the framework-native accessor is incomplete, and one that documents only `useLogger()` misses the idiomatic path.
+- `log.fork()` is wired where the request scope is `AsyncLocalStorage`-backed: every first-class integration except workers, which must stay free of `node:async_hooks`.
+- Nuxt and Nitro are event-bound: `useLogger(event)`, and no `log.fork()`. Documenting `log.fork()` there claims an API that does not exist.
+- Astro, AWS Lambda and standalone are guide-level on the core API (`initLogger`, `createLogger`, `createRequestLogger`): no `evlog()`, no `useLogger()`, no `log.fork()`. Do not add them to these pages.
+- `evlog/workers` delivers the logger as the handler's fourth argument, not through `useLogger()`.
 
 ## Code blocks
 
