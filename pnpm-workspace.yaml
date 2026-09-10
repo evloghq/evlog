@@ -54,6 +54,7 @@ minimumReleaseAgeExclude:
   - 'nuxt-*'
   # Vercel
   - '@vercel/*'
+  - '@agent-browser/*'
   - '@ai-sdk/*'
   - 'ai'
   - '@github-tools/*'
