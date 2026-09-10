@@ -15,7 +15,7 @@
     "@number-flow/vue": "^0.5.2",
     "@nuxt/fonts": "0.14.0",
     "@nuxt/icon": "^2.5.1",
-    "@nuxt/ui": "^4.11.0",
+    "@nuxt/ui": "^4.11.1",
     "@nuxtjs/color-mode": "^4.0.1",
     "@resvg/resvg-js": "^2.6.2",
     "@vercel/analytics": "^2.0.1",
@@ -28,7 +28,7 @@
     "nostics": "^1.2.0",
     "nuxt": "^4.4.4",
     "nuxt-studio": "^1.7.0",
-    "posthog-js": "^1.427.2",
+    "posthog-js": "^1.428.5",
     "satori": "^0.33.4",
     "shaders": "^2.5.135"
   },

@@ -55,11 +55,11 @@
     "typecheck": "echo 'Typecheck handled by build'"
   },
   "dependencies": {
-    "@clack/prompts": "^1.7.0",
+    "@clack/prompts": "^1.8.0",
     "@evlog/telemetry": "workspace:*",
     "citty": "^0.2.2",
     "evlog": "workspace:*",
-    "oxc-parser": "^0.148.0",
+    "oxc-parser": "^0.149.0",
     "tinyglobby": "^0.2.17"
   },
   "devDependencies": {

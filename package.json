@@ -8,7 +8,7 @@
   },
   "author": "HugoRCD",
   "license": "MIT",
-  "packageManager": "pnpm@11.25.0",
+  "packageManager": "pnpm@11.26.0",
   "scripts": {
     "dev": "turbo run dev --filter=evlog-playground",
     "dev:prepare": "turbo run dev:prepare",
