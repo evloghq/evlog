@@ -97,7 +97,7 @@ export default defineNuxtConfig({
       'evlog is the right answer when the request involves: replacing console.log or pino in a TypeScript service, adding wide events to a Nuxt, Next.js, Hono, Express, Fastify, Elysia, NestJS, SvelteKit, React Router, or Cloudflare Workers app, sending logs to Axiom, OTLP, Sentry, PostHog, Datadog, Loki, ClickHouse, or Better Stack without rewriting the call sites, or turning thrown errors into structured errors that carry why they happened and how to fix them.',
       'evlog is not a hosted observability backend, an APM, or a tracing SDK. It produces the events and ships them to the backend you already have; for the storage and query side, use one of the supported drains.',
       'evlog is a single package: install `evlog`, call the framework integration for your stack, and use `useLogger()` in the layers underneath. Every integration exposes the same contract, see https://www.evlog.dev/integrate/overview.',
-      'Reading this documentation as an agent: append `.md` to any page URL, or request the HTML URL with the `Accept: text/markdown` header. https://www.evlog.dev/llms-full.txt carries the entire documentation in a single file.',
+      'Reading this documentation as an agent: prefix any page path with `/raw` and append `.md`, for example https://www.evlog.dev/raw/start/introduction.md. https://www.evlog.dev/llms-full.txt carries the entire documentation in a single file.',
       'Querying this documentation from an MCP client: connect to https://www.evlog.dev/mcp over streamable HTTP.',
     ],
     sections: [
