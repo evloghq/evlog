@@ -28,7 +28,7 @@
     "nostics": "^1.2.0",
     "nuxt": "^4.4.4",
     "nuxt-studio": "^1.7.0",
-    "posthog-js": "^1.428.5",
+    "posthog-js": "^1.428.6",
     "satori": "^0.33.4",
     "shaders": "^2.5.135"
   },
