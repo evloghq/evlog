@@ -56,6 +56,53 @@ describe('asyncStorageScope', () => {
     expect(supportsAsyncLocalStorageEnterWith(new AsyncLocalStorage<string>())).toBe(true)
   })
 
+  it('preserves the active store when probing native enterWith', async () => {
+    const storage = new AsyncLocalStorage<object>()
+    const logger = { requestId: 'active' }
+
+    await storage.run(logger, async () => {
+      expect(supportsAsyncLocalStorageEnterWith(storage)).toBe(true)
+      expect(storage.getStore()).toBe(logger)
+      await Promise.resolve()
+      expect(storage.getStore()).toBe(logger)
+    })
+    expect(storage.getStore()).toBeUndefined()
+  })
+
+  it('isolates the probe even when the caller has no store', () => {
+    const native = new AsyncLocalStorage<unknown>()
+    const storage = {
+      getStore: native.getStore.bind(native),
+      run: native.run.bind(native),
+      enterWith(store: unknown) {
+        expect(native.getStore()).toBeDefined()
+        native.enterWith(store)
+      },
+    }
+
+    expect(supportsAsyncLocalStorageEnterWith(storage)).toBe(true)
+    expect(storage.getStore()).toBeUndefined()
+  })
+
+  it('restores the active store when enterWith mutates it and throws', () => {
+    const native = new AsyncLocalStorage<unknown>()
+    const storage = {
+      getStore: native.getStore.bind(native),
+      run: native.run.bind(native),
+      enterWith(store: unknown) {
+        native.enterWith(store)
+        throw new Error('enterWith is not supported')
+      },
+    }
+    const logger = { requestId: 'active' }
+
+    storage.run(logger, () => {
+      expect(supportsAsyncLocalStorageEnterWith(storage)).toBe(false)
+      expect(storage.getStore()).toBe(logger)
+    })
+    expect(storage.getStore()).toBeUndefined()
+  })
+
   it('detects throwing enterWith as unsupported', () => {
     class LocalAsyncLocalStorage extends AsyncLocalStorage<string> {}
     Object.defineProperty(LocalAsyncLocalStorage.prototype, 'enterWith', {

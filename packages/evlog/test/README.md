@@ -27,6 +27,7 @@ verify the test really exercises the framework's runtime, not a substitute.
 | `frameworks/hono.test.ts` | `app.request(...)` Fetch API | Real Hono router, real handler dispatch |
 | `frameworks/fastify.test.ts` | `app.inject(...)` (Light My Request) | Real Fastify lifecycle (preHandler / handler / response hooks) |
 | `frameworks/elysia.test.ts` | `app.handle(new Request(...))` | Real Elysia handler |
+| `shared/bun-import.test.ts` | Bun subprocesses importing Elysia and eve | Top-level await, `bun:test` lifecycle hooks, and a real Elysia request with `useLogger()` |
 | `frameworks/nestjs.test.ts` | Extracts middleware via `EvlogModule.configure()` and mounts on Express | Module API + the Connect-style middleware itself; **does NOT boot NestFactory** |
 | `frameworks/nestjs-real-runtime.test.ts` | `Test.createTestingModule(...)` + `app.init()` + supertest | **Real NestFactory boot, real DI, real exception filter pipeline** |
 | `frameworks/react-router.test.ts` | Calls middleware directly with `new RouterContextProvider()` from `react-router` | Real react-router context provider (set/get semantics, throws on missing) |
@@ -149,6 +150,10 @@ pnpm test:e2e                                   # real network (skipped without 
 pnpm run mutate                                 # Stryker (slow; weekly cron in CI)
 ```
 
+`shared/bun-import.test.ts` requires `bun` on `PATH` and skips locally when it is
+absent. CI installs Bun 1.3.14 to exercise import-time async context regressions.
+The `.mjs` fixtures run in Bun, outside Vitest's TypeScript test discovery.
+
 ## Coverage thresholds
 
 The thresholds in [`packages/evlog/vitest.config.ts`](../vitest.config.ts) (`statements` / `branches` / `functions` / `lines`) are kept ~3 points below the measured baseline so a real regression fails CI but flaky-but-fast metrics don't generate false alarms.
@@ -170,12 +175,13 @@ Set `EVLOG_SLOW_TEST_BUDGET_MS=300 CI=1 pnpm test` to surface tests above 300ms
 
 ## CI structure
 
-`.github/workflows/ci.yml` runs five independent jobs in parallel on every PR:
+`.github/workflows/ci.yml` runs four jobs in parallel on every PR:
 
-- `lint` — `pnpm run dev:prepare` + `pnpm run lint`
-- `typecheck` — `pnpm run dev:prepare` + `pnpm run typecheck`
-- `test` — `pnpm run dev:prepare` + `pnpm run build:package`, then `vitest run --shard=N/4` across a 4-way matrix
-- `coverage` — `pnpm run dev:prepare` + `pnpm run build:package` + `pnpm --filter evlog run test:coverage` (enforces the thresholds in `vitest.config.ts`)
-- `publish` — needs all of the above; runs `pkg-pr-new publish` for evlog + nuxthub on PR / main / manual dispatch
+- `quality`: lint and typecheck affected packages, excluding `evlog-telemetry` from typecheck.
+- `test`: test affected workspace packages, run content checks, then build evlog and run its full coverage suite. Bun 1.3.14 runs the import regressions. CLI changes also run the sandbox smoke tests.
+- `examples`: build affected examples.
+- `publish`: build and publish preview packages independently of the other checks.
+
+The `ci` job checks that `quality`, `test`, and `examples` succeeded.
 
 Mutation testing is intentionally separate: `.github/workflows/mutation.yml` runs Stryker on a weekly Monday cron and on `workflow_dispatch` (Stryker is too slow to gate every PR).

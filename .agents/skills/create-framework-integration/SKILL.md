@@ -153,6 +153,8 @@ export function evlog(options: Evlog{Framework}Options = {}): FrameworkMiddlewar
 - **SvelteKit**: `src/sveltekit/index.ts`. `evlog()` handle + `evlogHandleError()` + `createEvlogHooks()`
 - **Workers**: `src/workers/index.ts`. `defineWorkerFetch` / `withEvlog`, no ALS `useLogger()` (compat-flag constraint)
 
+For integrations that bind with `enterWith()`, use `createSharedEnterWithStorage` from `src/shared/asyncStorageScope.ts`. Its capability probe runs in a temporary scope with a distinct store, preserving the importer's async context on Bun and Node.
+
 ### Key Architecture Rules
 
 1. **Prefer `defineFrameworkIntegration`**: it handles header normalization, request-id generation, ALS, fork attachment, and `waitUntil`.

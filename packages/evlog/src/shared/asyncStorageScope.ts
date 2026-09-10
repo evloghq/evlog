@@ -19,16 +19,17 @@ export interface AsyncLocalStorageLike<T> {
  * Whether this runtime provides a working native `AsyncLocalStorage.enterWith()`.
  *
  * Cloudflare Workers expose `enterWith` on the prototype but throw when it is
- * called, so a `typeof` check alone is not enough — we probe with a call.
+ * called, so a `typeof` check alone is not enough. Probe inside a temporary
+ * scope so importing an integration preserves the caller's async context.
  */
-export function supportsAsyncLocalStorageEnterWith(
-  storage: { enterWith?: unknown },
+export function supportsAsyncLocalStorageEnterWith<T>(
+  storage: AsyncLocalStorageLike<T>,
 ): boolean {
   if (typeof storage.enterWith !== 'function') return false
   try {
-    // Must call as a method — unbound enterWith loses `this` and throws on Node.
-    const probe = storage as { enterWith: (store: undefined) => void }
-    probe.enterWith(undefined)
+    const probe = storage as AsyncLocalStorageLike<unknown>
+    // A distinct store forces a new scope; run(undefined) can reuse the caller's.
+    probe.run({}, () => probe.enterWith(undefined))
     return true
   } catch {
     return false
