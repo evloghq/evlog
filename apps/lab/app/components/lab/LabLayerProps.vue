@@ -7,7 +7,7 @@
  * camera is expressed as a zoom rather than a distance.
  */
 
-import { FONT_CATALOGUE } from '~/utils/lab/layers'
+import { FONT_CATALOGUE, MAX_LAYER_SPEED, MIN_LAYER_SPEED, canChangeLayerSpeed, layerDurationForSourceEnd, layerSpeed, withLayerSpeed } from '~/utils/lab/layers'
 import type { Layer } from '~/utils/lab/layers'
 import { ENTRIES } from '~/utils/lab/registry'
 
@@ -37,9 +37,14 @@ const emit = defineEmits<{
  */
 const fitLength = computed(() => {
   if (!props.sequenceMs) return null
-  const length = Math.max(100, props.sequenceMs - (props.layer.trim ?? 0))
+  const length = layerDurationForSourceEnd(props.layer, props.sequenceMs)
   return Math.abs(length - props.layer.duration) < 50 ? null : length
 })
+
+function setSpeed(speed: number) {
+  const updated = withLayerSpeed(props.layer, speed)
+  emit('update', { duration: updated.duration, speed: updated.speed })
+}
 
 const KINDS = {
   component: { label: 'animation', icon: 'i-lucide-square-play' },
@@ -456,6 +461,18 @@ const TEXT_TOGGLES = [
       unit="ms"
       :default="0"
       @update:model-value="emit('update', { start: $event })"
+    />
+    <LabNumber
+      v-if="canChangeLayerSpeed(layer)"
+      :model-value="layerSpeed(layer)"
+      label="Speed"
+      hint="Playback rate. Faster playback shortens the clip without changing its source out-point."
+      :min="MIN_LAYER_SPEED"
+      :max="MAX_LAYER_SPEED"
+      :step="0.05"
+      unit="×"
+      :default="1"
+      @update:model-value="setSpeed"
     />
     <LabNumber
       :model-value="layer.duration"

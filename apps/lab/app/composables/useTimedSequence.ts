@@ -11,7 +11,7 @@
 
 import { useTimedSequence as sequence } from '../../../docs/app/composables/useTimedSequence'
 import type { UseTimedSequenceOptions } from '../../../docs/app/composables/useTimedSequence'
-import { LAB_STAGE_LAYER, reportSequenceDuration } from '~/utils/lab/sequence'
+import { LAB_STAGE_LAYER, LAB_STAGE_SPEED, reportSequenceDuration, sequenceAtSpeed } from '~/utils/lab/sequence'
 
 export type { TimedEvent, UseTimedSequenceOptions } from '../../../docs/app/composables/useTimedSequence'
 
@@ -19,7 +19,9 @@ export function useTimedSequence(options: UseTimedSequenceOptions) {
   // Absent outside a stage — the same component can be mounted with no clip
   // behind it, and then there is nothing to report to.
   const layerId = inject(LAB_STAGE_LAYER, null)
+  const speed = inject(LAB_STAGE_SPEED, () => 1)()
+  const timing = sequenceAtSpeed(options.events, options.totalDuration, speed)
   if (layerId) reportSequenceDuration(layerId, options.totalDuration)
 
-  return sequence(options)
+  return sequence({ ...options, ...timing })
 }

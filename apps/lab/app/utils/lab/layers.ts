@@ -14,6 +14,8 @@
 
 import { evaluateEffects, sanitizeEffects } from './effects'
 import type { EffectResult, LayerEffect } from './effects'
+import { SHOT_SETTING_KEYS, sanitizeShotSettings } from './settings'
+import type { ShotSettings } from './settings'
 
 export type LayerKind = 'text' | 'image' | 'video' | 'component'
 
@@ -27,6 +29,13 @@ export type LayerKind = 'text' | 'image' | 'video' | 'component'
  * matter how the shot is angled.
  */
 export type LayerSpace = 'plate' | 'scene' | 'overlay'
+
+export interface LayerShot {
+  /** Sparse visual overrides; absent values continue to follow the timeline shot. */
+  settings?: Partial<ShotSettings>
+  /** Camera moves local to this clip. Absent inherits the timeline moves. */
+  camera?: LayerEffect[]
+}
 
 export interface Layer {
   id: string
@@ -134,7 +143,14 @@ export interface Layer {
   src?: string
   /** Where in the source clip the layer starts, in ms. */
   trim?: number
+  /** Source playback rate for video and staged component layers. */
+  speed?: number
+  /** Shot overrides active while this clip is on the timeline. */
+  shot?: LayerShot
 }
+
+export const MIN_LAYER_SPEED = 0.25
+export const MAX_LAYER_SPEED = 4
 
 let counter = 0
 
@@ -244,6 +260,34 @@ export function layerEnd(layer: Layer): number {
   return layer.start + layer.duration
 }
 
+/** Whether this layer has a time-based source whose playback rate can change. */
+export function canChangeLayerSpeed(layer: Layer): boolean {
+  return layer.kind === 'video' || layer.kind === 'component'
+}
+
+/** Playback rate for a time-based clip. */
+export function layerSpeed(layer: Layer): number {
+  return canChangeLayerSpeed(layer) ? (layer.speed ?? 1) : 1
+}
+
+/** Position in a media source at a point on the timeline, in ms. */
+export function layerSourceTimeAt(layer: Layer, time: number): number {
+  return (layer.trim ?? 0) + (time - layer.start) * layerSpeed(layer)
+}
+
+/** Timeline span left before a source reaches its declared end, in ms. */
+export function layerDurationForSourceEnd(layer: Layer, sourceEnd: number): number {
+  return Math.max(100, Math.round((sourceEnd - (layer.trim ?? 0)) / layerSpeed(layer)))
+}
+
+/** Change playback rate without moving the source out-point. */
+export function withLayerSpeed(layer: Layer, speed: number): Layer {
+  if (!canChangeLayerSpeed(layer)) return layer
+  const nextSpeed = Math.min(MAX_LAYER_SPEED, Math.max(MIN_LAYER_SPEED, speed))
+  const duration = Math.max(100, Math.round((layer.duration * layerSpeed(layer)) / nextSpeed))
+  return { ...layer, duration, speed: nextSpeed === 1 ? undefined : nextSpeed }
+}
+
 /**
  * The instant the clip's source is at its own zero.
  *
@@ -256,7 +300,7 @@ export function layerEnd(layer: Layer): number {
  * exactly the case of a cut whose tail was dragged back to the top.
  */
 export function layerOrigin(layer: Layer): number {
-  return layer.start - (layer.trim ?? 0)
+  return layer.start - (layer.trim ?? 0) / layerSpeed(layer)
 }
 
 /**
@@ -273,8 +317,19 @@ const JOIN_TOLERANCE = 60
 export function canJoin(a: Layer, b: Layer): boolean {
   if (a.kind !== b.kind) return false
   if (a.component !== b.component || a.src !== b.src) return false
+  if (layerSpeed(a) !== layerSpeed(b)) return false
+  if (!sameShot(a.shot, b.shot)) return false
   if (Math.abs(layerEnd(a) - b.start) > JOIN_TOLERANCE) return false
-  return Math.abs((b.trim ?? 0) - ((a.trim ?? 0) + a.duration)) <= JOIN_TOLERANCE
+  return Math.abs((b.trim ?? 0) - ((a.trim ?? 0) + a.duration * layerSpeed(a))) <= JOIN_TOLERANCE
+}
+
+function sameShot(a: LayerShot | undefined, b: LayerShot | undefined): boolean {
+  if (a?.camera === undefined || b?.camera === undefined) {
+    if (a?.camera !== b?.camera) return false
+  } else if (JSON.stringify(a.camera) !== JSON.stringify(b.camera)) {
+    return false
+  }
+  return SHOT_SETTING_KEYS.every(key => a?.settings?.[key] === b?.settings?.[key])
 }
 
 /**
@@ -431,6 +486,23 @@ export function sanitizeLayers(value: unknown): Layer[] {
         hidden: layer.hidden === true,
         start: Number.isFinite(layer.start) ? Math.max(0, layer.start) : 0,
         duration: Number.isFinite(layer.duration) ? Math.max(100, layer.duration) : 1000,
+        speed: canChangeLayerSpeed(layer) && Number.isFinite(layer.speed)
+          ? Math.min(MAX_LAYER_SPEED, Math.max(MIN_LAYER_SPEED, layer.speed ?? 1))
+          : undefined,
+        shot: sanitizeLayerShot(layer.shot),
       }
     })
+}
+
+function sanitizeLayerShot(value: unknown): LayerShot | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  const settings = sanitizeShotSettings(record.settings)
+  const hasCamera = Array.isArray(record.camera)
+  if (!Object.keys(settings).length && !hasCamera) return undefined
+
+  return {
+    ...(Object.keys(settings).length ? { settings } : {}),
+    ...(hasCamera ? { camera: sanitizeEffects(record.camera) } : {}),
+  }
 }

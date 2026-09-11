@@ -24,7 +24,8 @@ import { LabRenderer } from '~/utils/lab/renderer'
 import { canvasToBlob, download, encodeVideo, isEncodingSupported, takeName } from '~/utils/lab/record'
 import type { Container } from '~/utils/lab/record'
 import { DEFAULT_COMPONENT, resolveEntry } from '~/utils/lab/registry'
-import { DEFAULT_SETTINGS, PLATE_SCALE, frameCountFor, frameStep, outputDuration } from '~/utils/lab/settings'
+import { DEFAULT_SETTINGS, PLATE_SCALE, SHOT_SETTING_KEYS, frameCountFor, frameStep, outputDuration } from '~/utils/lab/settings'
+import type { LabSettings, ShotSettingKey, ShotSettings } from '~/utils/lab/settings'
 import { useSequenceDurations } from '~/utils/lab/sequence'
 import { MAX_SHARE_URL, createDocument, resolveInitialDocument, saveStored, shareUrl } from '~/utils/lab/storage'
 import type { LabDocument, LabMode } from '~/utils/lab/storage'
@@ -39,9 +40,10 @@ import {
   layerDepth,
   layerAtRest,
   layerStateAt,
-  layerTextureKey, layerEnd, layerOrigin, canJoin
+  layerTextureKey, layerDurationForSourceEnd, layerEnd, layerOrigin, layerSourceTimeAt, layerSpeed, canJoin
 } from '~/utils/lab/layers'
 import type { Layer } from '~/utils/lab/layers'
+import { hasLayerShot, resolveLayerShotSettings, resolveTimelineShot, withoutLayerShotSetting } from '~/utils/lab/shot'
 import { evaluateEffects } from '~/utils/lab/effects'
 import { getVideo, rasterizeLayer, seekVideo } from '~/utils/lab/layer-textures'
 import type { LayerPlane, OverlayQuad } from '~/utils/lab/renderer'
@@ -134,9 +136,7 @@ const gizmo = ref(false)
  * which is not what anyone clicking an axis is asking for.
  */
 function snapCamera(pitch: number, yaw: number) {
-  settings.value.pitch = pitch
-  settings.value.yaw = yaw
-  settings.value.roll = 0
+  editorShotSettings.value = { ...editorShotSettings.value, pitch, yaw, roll: 0 }
   cue('toggle')
 }
 /** Pointer over the frame, 0..1, for the crosshair readout. */
@@ -273,18 +273,26 @@ const previewSize = computed(() => {
  * and a fade takes the whole frame down to black through exposure. Same ramps,
  * same curves, same editor.
  */
+const resolvedShot = computed(() => resolveTimelineShot(
+  settings.value,
+  camera.value,
+  mode.value === 'video' ? layers.value : [],
+  playhead.value,
+))
+
 const shotSettings = computed(() => {
-  if (!camera.value.length) return settings.value
-  const move = evaluateEffects(camera.value, playhead.value, settings.value.timelineLength)
+  const shot = resolvedShot.value
+  if (!shot.camera.length) return shot.settings
+  const move = evaluateEffects(shot.camera, shot.cameraTime, shot.cameraDuration)
   return {
-    ...settings.value,
+    ...shot.settings,
     // Depth reads as distance: still displaced means still pulled back, so the
     // move resolves into the framing rather than out of it.
-    zoom: Math.max(0.05, (settings.value.zoom * move.scale) / (1 + move.depth)),
-    panX: settings.value.panX + move.offsetX,
-    panY: settings.value.panY + move.offsetY,
-    roll: settings.value.roll + move.rotation,
-    exposure: settings.value.exposure * move.opacity,
+    zoom: Math.max(0.05, (shot.settings.zoom * move.scale) / (1 + move.depth)),
+    panX: shot.settings.panX + move.offsetX,
+    panY: shot.settings.panY + move.offsetY,
+    roll: shot.settings.roll + move.rotation,
+    exposure: shot.settings.exposure * move.opacity,
   }
 })
 
@@ -459,7 +467,9 @@ const stageOrigin = computed(() => Math.min(0, ...componentLayers.value.map(laye
  * un-run. So the whole take is replayed from the earliest origin whenever any of
  * them moves, which is the same path a backward scrub already takes.
  */
-const originSignature = computed(() => componentLayers.value.map(layerOrigin).join(','))
+const originSignature = computed(() => componentLayers.value
+  .map(layer => `${layerOrigin(layer)}@${layerSpeed(layer)}`)
+  .join(','))
 let replayedSignature: string | null = null
 
 /**
@@ -868,6 +878,69 @@ function togglePlay() {
 }
 
 const selectedLayer = computed(() => layers.value.find(layer => layer.id === selectedId.value) ?? null)
+const selectedShotLayer = computed(() => mode.value === 'video' ? selectedLayer.value : null)
+
+const editorShotSettings = computed<LabSettings>({
+  get: () => resolveLayerShotSettings(settings.value, selectedShotLayer.value),
+  set: next => updateShotSettings(next),
+})
+
+const editorCamera = computed({
+  get: () => selectedShotLayer.value?.shot?.camera ?? camera.value,
+  set: (moves) => {
+    const layer = selectedShotLayer.value
+    if (!layer) {
+      camera.value = moves
+      return
+    }
+    updateLayer(layer.id, { shot: { ...layer.shot, camera: moves } })
+    previewSelectedShot(layer)
+  },
+})
+
+const selectedShotCustomized = computed(() => Boolean(selectedShotLayer.value && hasLayerShot(selectedShotLayer.value)))
+
+function updateShotSetting(key: ShotSettingKey, value: ShotSettings[ShotSettingKey]) {
+  const layer = selectedShotLayer.value
+  if (!layer) {
+    Object.assign(settings.value, { [key]: value })
+    return
+  }
+
+  updateLayer(layer.id, {
+    shot: {
+      ...layer.shot,
+      settings: { ...layer.shot?.settings, [key]: value },
+    },
+  })
+  previewSelectedShot(layer)
+}
+
+function updateShotSettings(next: LabSettings) {
+  const current = editorShotSettings.value
+  const changed = SHOT_SETTING_KEYS.filter(key => next[key] !== current[key])
+  if (!changed.length) return
+
+  const layer = selectedShotLayer.value
+  if (!layer) {
+    for (const key of changed) Object.assign(settings.value, { [key]: next[key] })
+    return
+  }
+
+  const overrides: Partial<ShotSettings> = { ...layer.shot?.settings }
+  for (const key of changed) Object.assign(overrides, { [key]: next[key] })
+  updateLayer(layer.id, { shot: { ...layer.shot, settings: overrides } })
+  previewSelectedShot(layer)
+}
+
+function previewSelectedShot(layer: Layer) {
+  if (playhead.value < layer.start || playhead.value > layerEnd(layer)) void seekTo(layer.start)
+}
+
+function resetSelectedShot() {
+  const layer = selectedShotLayer.value
+  if (layer) updateLayer(layer.id, { shot: undefined })
+}
 
 /** Layers are placed against the stage, so their geometry needs its size. */
 const stageBox = computed(() => ({ width: settings.value.stageWidth, height: settings.value.stageHeight }))
@@ -1017,7 +1090,7 @@ const layerPlanes = computed<LayerPlane[]>(() => {
         halfHeight: halfWidth / aspect,
         rotation: layer.rotation + state.rotation,
         opacity: state.opacity,
-        emission: settings.value.emission,
+        emission: shotSettings.value.emission,
       },
     ]
   })
@@ -1137,7 +1210,7 @@ async function syncVideoFrames(time: number, exact: boolean) {
 
     const video = await getVideo(layer.src)
     if (!video?.videoWidth || !renderer) continue
-    await seekVideo(video, (time - layer.start + (layer.trim ?? 0)) / 1000, exact)
+    await seekVideo(video, layerSourceTimeAt(layer, time) / 1000, exact)
     renderer.setLayerTexture(layer.id, video)
   }
 }
@@ -1184,7 +1257,7 @@ function splitLayer(id: string) {
     // timeline. Without this the second piece plays its media from the top, so
     // dragging it back to zero replays what the first piece already showed
     // instead of carrying on from the frame the blade landed on.
-    trim: (layer.trim ?? 0) + (at - layer.start),
+    trim: (layer.trim ?? 0) + (at - layer.start) * layerSpeed(layer),
     effects: layer.effects.filter(e => e.at === 'out'),
   }
   layers.value = layers.value.flatMap(entry => (entry.id === id ? [head, tail] : [entry]))
@@ -1299,19 +1372,27 @@ function focusFromPointer(clientX: number, clientY: number, box: DOMRect): numbe
 function onFocusHover(event: PointerEvent) {
   if (!picking.value) return
   const focus = focusFromPointer(event.clientX, event.clientY, (event.currentTarget as HTMLElement).getBoundingClientRect())
-  if (focus !== null) settings.value.focus = Number(focus.toFixed(3))
+  if (focus !== null) updateShotSetting('focus', Number(focus.toFixed(3)))
 }
 
 /** What focus was before the reticle was armed, so leaving without a click undoes it. */
 let focusBeforePicking = 0
+let focusOverrideBeforePicking: number | undefined
 
 watch(picking, (armed) => {
-  if (armed) focusBeforePicking = settings.value.focus
+  if (!armed) return
+  focusBeforePicking = editorShotSettings.value.focus
+  focusOverrideBeforePicking = selectedShotLayer.value?.shot?.settings?.focus
 })
 
 function cancelPicking() {
   if (!picking.value) return
-  settings.value.focus = focusBeforePicking
+  const layer = selectedShotLayer.value
+  if (layer && focusOverrideBeforePicking === undefined) {
+    updateLayer(layer.id, { shot: withoutLayerShotSetting(layer, 'focus') })
+  } else {
+    updateShotSetting('focus', focusBeforePicking)
+  }
   picking.value = false
 }
 
@@ -1327,8 +1408,8 @@ function onFrameClick(event: MouseEvent) {
 
   // The hover has already set it; the click is what makes it stick.
   const focus = focusFromPointer(event.clientX, event.clientY, (event.currentTarget as HTMLElement).getBoundingClientRect())
-  if (focus !== null) settings.value.focus = Number(focus.toFixed(3))
-  focusBeforePicking = settings.value.focus
+  if (focus !== null) updateShotSetting('focus', Number(focus.toFixed(3)))
+  focusBeforePicking = editorShotSettings.value.focus
   picking.value = false
 }
 
@@ -1361,7 +1442,16 @@ function isLive(layer: Layer): boolean {
 
 /** Back to a square-on, edge-to-edge framing without touching the grade. */
 function resetCamera() {
-  Object.assign(settings.value, { pitch: 0, yaw: 0, roll: 0, zoom: 1, focus: 0.5, panX: 0, panY: 0 })
+  editorShotSettings.value = {
+    ...editorShotSettings.value,
+    pitch: 0,
+    yaw: 0,
+    roll: 0,
+    zoom: 1,
+    focus: 0.5,
+    panX: 0,
+    panY: 0,
+  }
 }
 
 /**
@@ -1398,14 +1488,13 @@ function addComponent() {
 /**
  * Cut a clip to the length its animation declares.
  *
- * Reported in component milliseconds, which is what the timeline is measured in,
- * so it transfers across as-is. A trimmed clip gets what is left after the trim
- * rather than the whole cycle.
+ * Reported in source milliseconds. A trimmed or retimed clip gets the timeline
+ * span left before that source reaches its end.
  */
 function fitToSequence(id: string, reportedMs: number) {
   const layer = layers.value.find(candidate => candidate.id === id)
   if (!layer) return
-  const duration = Math.max(100, reportedMs - (layer.trim ?? 0))
+  const duration = layerDurationForSourceEnd(layer, reportedMs)
   if (Math.abs(layer.duration - duration) < 50) return
   layers.value = layers.value.map(candidate =>
     candidate.id === id ? { ...candidate, duration } : candidate,
@@ -1921,7 +2010,7 @@ const panel = useResizable({ key: 'panel-width', initial: 290, min: 240, max: 56
 const dock = useResizable({ key: 'timeline-height', initial: 232, min: 140, max: 520, axis: 'y' })
 
 const gestures = useCameraGestures(
-  settings,
+  editorShotSettings,
   // Never while a layer is being dragged: one pointer, and whichever gesture
   // claimed it keeps it. Orbiting the camera under a layer being placed would
   // move the thing and the frame it is being placed against at once.
@@ -2368,9 +2457,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             class="absolute right-2 top-2"
           >
             <LabGizmo
-              :pitch="settings.pitch"
-              :yaw="settings.yaw"
-              :roll="settings.roll"
+              :pitch="editorShotSettings.pitch"
+              :yaw="editorShotSettings.yaw"
+              :roll="editorShotSettings.roll"
               @snap="snapCamera"
             />
           </div>
@@ -2544,7 +2633,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       v-show="panelVisible"
       v-model:settings="settings"
       v-model:picking="picking"
-      v-model:camera="camera"
+      v-model:camera="editorCamera"
       :style="{ width: `${panel.size.value}px` }"
       :mode
       :cues-enabled
@@ -2556,6 +2645,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       :high-precision
       :capture-ms
       :selected-layer
+      :shot-settings="editorShotSettings"
+      :shot-customized="selectedShotCustomized"
       :sequence-ms="selectedSequenceMs"
       :can-undo
       :can-redo
@@ -2563,6 +2654,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       @undo="undo"
       @redo="redo"
       @update-layer="updateLayer"
+      @update-shot-setting="updateShotSetting"
+      @reset-shot="resetSelectedShot"
       @remove-layer="removeSelected"
       @duplicate-layer="duplicateSelected"
       @fit="resetCamera"
@@ -2637,6 +2730,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       v-for="staged in stagedComponents"
       :key="staged.layer.id"
       :data-stage="staged.layer.id"
+      :data-stage-speed="layerSpeed(staged.layer)"
       class="absolute left-0 top-0 overflow-hidden bg-default"
       :style="{
         width: `${settings.stageWidth}px`,
@@ -2644,11 +2738,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         zIndex: isLive(staged.layer) ? 1 : 0,
       }"
     >
-      <LabStage :layer-id="staged.layer.id">
+      <LabStage :layer-id="staged.layer.id" :speed="layerSpeed(staged.layer)">
         <component
           :is="staged.component"
           v-if="staged.component && playhead >= layerOrigin(staged.layer)"
-          :key="`${stageKey}:${layerOrigin(staged.layer)}`"
+          :key="`${stageKey}:${layerOrigin(staged.layer)}:${layerSpeed(staged.layer)}`"
         />
       </LabStage>
     </div>

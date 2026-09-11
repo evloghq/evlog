@@ -13,6 +13,7 @@
  */
 
 import type { InjectionKey } from 'vue'
+import { readonly, ref } from 'vue'
 
 /**
  * The clip a staged component belongs to, provided per stage.
@@ -22,6 +23,9 @@ import type { InjectionKey } from 'vue'
  * component tree, on the other hand, knows precisely which stage it sits under.
  */
 export const LAB_STAGE_LAYER: InjectionKey<string> = Symbol('lab:stage-layer')
+
+/** Current playback rate for the staged component under this provider. */
+export const LAB_STAGE_SPEED: InjectionKey<() => number> = Symbol('lab:stage-speed')
 
 const durations = ref<Record<string, number>>({})
 
@@ -36,4 +40,16 @@ export function reportSequenceDuration(layerId: string, totalDuration: number): 
 /** Lengths reported so far, keyed by clip id. */
 export function useSequenceDurations() {
   return readonly(durations)
+}
+
+/** Scale a component sequence so its source time follows the clip playback rate. */
+export function sequenceAtSpeed<T extends { at: number }>(
+  events: T[],
+  totalDuration: number,
+  speed: number,
+): { events: T[], totalDuration: number } {
+  return {
+    events: events.map(event => ({ ...event, at: event.at / speed })),
+    totalDuration: totalDuration / speed,
+  }
 }
