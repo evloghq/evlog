@@ -83,7 +83,7 @@ The event, emitted automatically at request end:
 npm install evlog
 ```
 
-## Quick start (Nuxt)
+## Start in Nuxt
 
 The recommended way to use evlog. Zero config, everything just works.
 
@@ -104,7 +104,7 @@ Now `useLogger(event)` is available in any API route, and the wide event is emit
 
 Outside a framework, use `initLogger()` and `createRequestLogger()`. Client-side logging ships with `evlog/client`. Both are covered in the [docs](https://www.evlog.dev).
 
-## Supported frameworks
+## Which framework are you on?
 
 | Framework | Integration |
 |-----------|-------------|
@@ -128,7 +128,7 @@ Outside a framework, use `initLogger()` and `createRequestLogger()`. Client-side
 | **Vinxi** | Nitro v2 module setup |
 | **SolidStart** | Nitro v2 module setup ([example](https://github.com/evloghq/evlog/tree/main/examples/solidstart)) |
 
-## Sending logs somewhere
+## Send logs somewhere
 
 Built-in drain adapters send wide events to external platforms from a Nitro plugin:
 
@@ -156,7 +156,7 @@ export default defineNitroPlugin((nitroApp) => {
 
 Each adapter's configuration and environment variables are documented at [evlog.dev/integrate/adapters/overview](https://www.evlog.dev/integrate/adapters/overview). For production volume, wrap a drain with `createDrainPipeline` from `evlog/pipeline` for batching, retry with backoff, and buffer overflow protection, and use sampling (head rates and tail keep rules) to control cost. See the [drain pipeline docs](https://www.evlog.dev/extend/drain-pipeline).
 
-## CLI
+## Run the CLI
 
 [`@evlog/cli`](https://npmjs.com/package/@evlog/cli) is a separate package, still early, that scores what your app can tell you when something goes wrong. It reads your project on disk, with no traffic and no instrumentation, and names the entry points to fix first.
 
