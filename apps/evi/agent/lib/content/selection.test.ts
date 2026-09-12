@@ -64,7 +64,7 @@ describe('selectTargets', () => {
       pages: [
         page('apps/docs/content/2.learn/a.md', 40),
         page('apps/docs/content/2.learn/b.md', 50),
-        page('apps/docs/content/6.extend/c.md', 45),
+        page('apps/docs/content/7.extend/c.md', 45),
       ],
       recentlyTouched: [],
     })
@@ -123,7 +123,7 @@ describe('selectTargets', () => {
       pages: [
         page('apps/docs/content/2.learn/a.md', 40),
         page('apps/docs/content/2.learn/b.md', 50),
-        page('apps/docs/content/6.extend/c.md', 45),
+        page('apps/docs/content/7.extend/c.md', 45),
         { path: 'apps/docs/content/2.learn/clean.md', surface: 'docs', score: 100, findings: [] },
       ],
       recentlyTouched: ['apps/docs/content/2.learn/a.md'],

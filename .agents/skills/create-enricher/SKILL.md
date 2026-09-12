@@ -117,7 +117,7 @@ interface {Name}Info {
 
 3. If the enricher joined the default composition, update the "All built-in enrichers" section text listing what `createDefaultEnrichers()` composes.
 
-Custom-enricher authoring docs live separately at `apps/docs/content/6.extend/5.custom-enrichers.md`, with no change needed there unless the toolkit contract itself changed.
+Custom-enricher authoring docs live separately at `apps/docs/content/7.extend/5.custom-enrichers.md`, with no change needed there unless the toolkit contract itself changed.
 
 ## Step 4: Update the Public Skill
 

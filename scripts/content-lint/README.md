@@ -71,7 +71,7 @@ Three absences are deliberate: `apps/evi/agent/skills/` (the pass's own instruct
 | Unbacked comparison | U-12 | a claim about pino, winston, consola, or OTel with no number and no link |
 | Dead internal link | U-16 | a `/path` with no page, or a relative link resolving to nothing on disk |
 
-Surfaces carry different budgets. `0.landing.md` and `7.reference/` are held tightest on hollow vocabulary and loosest on rhythm; `2.learn/` and blog posts are the reverse.
+Surfaces carry different budgets. `0.landing.md` and `8.reference/` are held tightest on hollow vocabulary and loosest on rhythm; `2.learn/` and blog posts are the reverse.
 
 ## What it cannot measure, and says so
 
