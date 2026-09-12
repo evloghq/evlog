@@ -47,12 +47,12 @@
     "release": "turbo run build --filter='./packages/*' && changeset publish"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "^4.0.10",
+    "@ai-sdk/provider": "^4.0.13",
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.1",
     "@hrcd/eslint-config": "^3.0.3",
-    "@types/node": "^25.9.5",
-    "ai": "^7.0.93",
+    "@types/node": "^25.9.6",
+    "ai": "^7.0.97",
     "automd": "^0.4.3",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.39.5",
