@@ -24,7 +24,7 @@
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/sdk-trace-base": "^2.11.0",
-    "@posthog/ai": "^8.10.3",
+    "@posthog/ai": "^8.11.0",
     "@vercel/blob": "^2.8.0",
     "@vercel/connect": "^2.0.4",
     "@vercel/oidc": "^3.8.7",
@@ -34,7 +34,7 @@
     "eve": "^0.49.1",
     "evlog": "workspace:*",
     "postgres": "^3.4.9",
-    "zod": "^4.6.1"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "@types/node": "24.13.4",
