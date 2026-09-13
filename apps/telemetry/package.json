@@ -29,7 +29,7 @@
     "nuxt-auth-utils": "^0.5.30",
     "nuxt-charts": "^2.2.1",
     "postgres": "^3.4.9",
-    "zod": "^4.6.1",
+    "zod": "^4.6.2",
     "jose": "^6.2.12"
   },
   "devDependencies": {

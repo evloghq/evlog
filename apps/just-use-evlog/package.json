@@ -11,7 +11,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@comark/nuxt": "^0.6.2",
+    "@comark/nuxt": "^0.7.0",
     "@nuxt/content": "^3.16.0",
     "@nuxt/fonts": "0.14.0",
     "@nuxt/icon": "^2.5.1",
