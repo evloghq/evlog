@@ -7,7 +7,7 @@ const REPO_ROOT = resolve(import.meta.dirname, '../../..')
 describe('surfaceOf', () => {
   it('separates the surfaces that carry different thresholds', () => {
     expect(surfaceOf('apps/docs/content/0.landing.md')).toBe('landing')
-    expect(surfaceOf('apps/docs/content/7.reference/2.performance.md')).toBe('reference')
+    expect(surfaceOf('apps/docs/content/8.reference/2.performance.md')).toBe('reference')
     expect(surfaceOf('apps/docs/content/blog/why-wide-events.md')).toBe('blog')
     expect(surfaceOf('apps/docs/content/2.learn/2.wide-events.md')).toBe('docs')
   })

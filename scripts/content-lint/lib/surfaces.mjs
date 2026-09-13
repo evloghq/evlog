@@ -52,7 +52,7 @@ export function surfaceOf(path) {
   if (normalized.endsWith('0.landing.md')) return 'landing'
   if (normalized.includes('/blog/')) return 'blog'
   if (normalized.startsWith('apps/docs/content/')) {
-    return /\/(7\.reference|4\.integrate)\//.test(normalized) ? 'reference' : 'docs'
+    return /\/(8\.reference|4\.integrate)\//.test(normalized) ? 'reference' : 'docs'
   }
   if (normalized.endsWith('AGENTS.md')) return 'agents'
   if (normalized.startsWith('.agents/skills/') || normalized.startsWith('skills/')) return 'skill'
