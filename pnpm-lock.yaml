@@ -133,11 +133,11 @@ importers:
   apps/evi:
     dependencies:
       '@agent-browser/eve':
-        specifier: ^0.36.0
-        version: 0.36.0(eve@0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))
+        specifier: ^0.37.1
+        version: 0.37.1(eve@0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18))
       '@github-tools/eve-extension':
-        specifier: ^0.7.0
-        version: 0.7.0(9368a4c261f38151ae88abf0bc818ba4)
+        specifier: ^0.7.1
+        version: 0.7.1(a698ab2ddca87b5b58feee459967b106)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -155,7 +155,7 @@ importers:
         version: 2.8.0
       '@vercel/connect':
         specifier: ^2.0.4
-        version: 2.0.4(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(cd121a335899245e41cbd60991d3ea9b))(eve@0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))
+        version: 2.0.4(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(cd121a335899245e41cbd60991d3ea9b))(eve@0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18))
       '@vercel/oidc':
         specifier: ^3.8.7
         version: 3.8.7
@@ -169,8 +169,8 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9)
       eve:
-        specifier: ^0.49.1
-        version: 0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+        specifier: ^0.54.3
+        version: 0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18)
       evlog:
         specifier: workspace:*
         version: link:../../packages/evlog
@@ -584,7 +584,7 @@ importers:
         version: 4.3.0
       '@vercel/connect':
         specifier: 0.2.2
-        version: 0.2.2(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(70f44b91199a33a5f286cecb7397f1f8))(eve@0.30.8(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))
+        version: 0.2.2(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(4fd9e5b2f4f9590046e79df9ab21a7bb))(eve@0.30.8(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))
       ai:
         specifier: ^7.0.97
         version: 7.0.98(zod@4.6.1)
@@ -1189,14 +1189,14 @@ packages:
       bcrypt:
         optional: true
 
-  '@agent-browser/eve@0.36.0':
-    resolution: {integrity: sha512-HBt7KTsraA07aVm+4a00H/Gk/tV8Gxj23sTQopRbIt8teAIywk9igDCYRqqs8GXvqrJjfQSlZGeE/5wdkLLLWA==}
+  '@agent-browser/eve@0.37.1':
+    resolution: {integrity: sha512-aGBOKA1rpHhD/NZvjRI+jf7yku7eXRRN+N8wgiTljnZ/+ODr241Fy+q7MdRzIW6ul1VscyWmvZ3ZfDOjSEJGiw==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       eve: '>=0.39.1'
 
-  '@agent-browser/sandbox@0.36.0':
-    resolution: {integrity: sha512-54P1vNEyknt5e+22MgHaZFB8AavpNsQ4QMiA3udQ08IzU2/GOLqbTgopfT89YXYoI3G6AKIH1bu6BKuRldrGEQ==}
+  '@agent-browser/sandbox@0.37.1':
+    resolution: {integrity: sha512-vgSgTpxfUWni5NNK9yqC1THtmRVkzL017UabUZ3kwVXzVKUaZ0Ru8iGP48on4AN1NIGD95OWBjrKabdTi6vcDg==}
     peerDependencies:
       '@vercel/sandbox': '>=1.0.0'
     peerDependenciesMeta:
@@ -2688,24 +2688,24 @@ packages:
   '@floating-ui/vue@1.1.11':
     resolution: {integrity: sha512-HzHKCNVxnGS35r9fCHBc3+uCnjw9IWIlCPL683cGgM9Kgj2BiAl8x1mS7vtvP6F9S/e/q4O6MApwSHj8hNLGfw==}
 
-  '@github-tools/eve-extension@0.7.0':
-    resolution: {integrity: sha512-vbE50v4YMCXvhM9IfPj8Nxzvj9pa6T627DbZd8lrCWgKZtGNVh1aTxens351C52KL886ksm4XSxgSL9i4r41dA==}
-    engines: {node: 24.x}
+  '@github-tools/eve-extension@0.7.1':
+    resolution: {integrity: sha512-Yfm5JA7kDGUI2sb07jSOPCHwvzmlLtbl+yn13+/YQsk9IrAqglYc0wkzO3M93fJ0qFosqZBTAHtW5TqKlEW39w==}
+    engines: {node: '>=24'}
     peerDependencies:
       '@vercel/connect': '>=0.3.2'
-      eve: '>=0.44.0 <0.48.0'
+      eve: '*'
     peerDependenciesMeta:
       '@vercel/connect':
         optional: true
 
-  '@github-tools/sdk@1.16.0':
-    resolution: {integrity: sha512-7r+T1WPPxStcyuxWkK0o2Eu51U97IGDTi0gy/xHJ4WrhkqwTR3OK8o7NR+w6yySoZjWGtteQAtcGu+kT25A+0w==}
+  '@github-tools/sdk@1.16.1':
+    resolution: {integrity: sha512-QJxRbeh6nTre8qskcb0XtOBXXxOLp5FJ+HkPw3zgmSpxCgzKUYYFCEOMsCZge4bc/3axpPg75HNb4ivldsM0Eg==}
     peerDependencies:
       '@ai-sdk/workflow': ^1.0.16
       '@vercel/connect': '>=0.3.2'
       '@workflow/ai': ^4.1.2
       ai: ^7.0.97
-      eve: '>=0.44.0 <0.48.0'
+      eve: '>=0.44.0'
       workflow: ^4.5.0
       zod: ^4.3.6
     peerDependenciesMeta:
@@ -11165,20 +11165,23 @@ packages:
       microsandbox:
         optional: true
 
-  eve@0.49.1:
-    resolution: {integrity: sha512-VM5VkTnzgHfta5OIkVMR/hDSfSokD7pTknLsHOVvOcQZaBxLwdK+gyb9y26oBeMgjhVOPR1CkPwnVFGqdwlnrw==}
+  eve@0.54.3:
+    resolution: {integrity: sha512-OOKmnmcyal5N+qaQcdpNbho+SpXBCZw11q9dSnqtN5f9ccIdcps53do4h49ZyefA/2xYSR8IOVnUB6vqUFtV4w==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.0.0
       ai: ^7.0.97
       braintrust: ^3.0.0
+      dd-trace: ^6.13.0
       just-bash: ^3.1.0
       microsandbox: ^0.5.0
     peerDependenciesMeta:
       '@opentelemetry/api':
         optional: true
       braintrust:
+        optional: true
+      dd-trace:
         optional: true
       just-bash:
         optional: true
@@ -11207,27 +11210,27 @@ packages:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
     engines: {node: '>=18.0.0'}
 
-  evlog@2.28.0:
-    resolution: {integrity: sha512-P7kmMGo9VWgDFMz4vRu1VriIi3dysp/wGQM7SS4fjV44XHS+Mm3/xtz0rDM1ugDGkCQeZStsTc5pOxSgF8Q1JQ==}
+  evlog@2.29.0:
+    resolution: {integrity: sha512-1qk5W3lttyAUz326ptqRbasPyc19u/ECa8UULjtRihUUyKV8W2ihsr4kB2qkxfqaMY4dFNhH9iShrYy93jxt5A==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@nestjs/common': '>=11.1.28'
+      '@nestjs/common': '>=11.2.3'
       '@nuxt/kit': ^4.4.2
-      '@orpc/server': '>=1.14.8'
-      '@tanstack/start-client-core': ^1.170.14
+      '@orpc/server': '>=1.15.0'
+      '@tanstack/start-client-core': ^1.170.28
       ai: ^7.0.97
-      elysia: '>=1.4.29'
+      elysia: '>=1.4.30'
       eve: '>=0.30.0'
       express: '>=5.2.1'
-      fastify: '>=5.10.0'
+      fastify: '>=5.12.3'
       h3: ^1.15.11
-      hono: '>=4.12.30'
-      next: '>=16.2.10'
+      hono: '>=4.13.7'
+      next: '>=16.3.4'
       nitro: ^3.0.260311-beta
       nitropack: ^2.13.4
       ofetch: ^1.5.1
-      react: '>=19.2.7'
-      react-router: '>=7.18.1'
+      react: '>=19.2.8'
+      react-router: '>=7.18.3'
       vite: ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@nestjs/common':
@@ -17014,15 +17017,15 @@ snapshots:
       '@phc/format': 1.0.0
       '@poppinss/utils': 6.10.1
 
-  '@agent-browser/eve@0.36.0(eve@0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))':
+  '@agent-browser/eve@0.37.1(eve@0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18))':
     dependencies:
-      '@agent-browser/sandbox': 0.36.0
-      eve: 0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@agent-browser/sandbox': 0.37.1
+      eve: 0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18)
       zod: 4.4.3
     transitivePeerDependencies:
       - '@vercel/sandbox'
 
-  '@agent-browser/sandbox@0.36.0': {}
+  '@agent-browser/sandbox@0.37.1': {}
 
   '@ai-sdk/gateway@3.0.151(zod@4.6.1)':
     dependencies:
@@ -18446,13 +18449,13 @@ snapshots:
       - '@vue/composition-api'
       - vue
 
-  '@github-tools/eve-extension@0.7.0(9368a4c261f38151ae88abf0bc818ba4)':
+  '@github-tools/eve-extension@0.7.1(a698ab2ddca87b5b58feee459967b106)':
     dependencies:
-      '@github-tools/sdk': 1.16.0(9bf33e95149ac2db1516a2d53149abd7)
-      eve: 0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@github-tools/sdk': 1.16.1(aadb746f85bb318fcc5bc9886c88006d)
+      eve: 0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18)
       zod: 4.6.1
     optionalDependencies:
-      '@vercel/connect': 2.0.4(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(cd121a335899245e41cbd60991d3ea9b))(eve@0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))
+      '@vercel/connect': 2.0.4(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(cd121a335899245e41cbd60991d3ea9b))(eve@0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18))
     transitivePeerDependencies:
       - '@ai-sdk/workflow'
       - '@nestjs/common'
@@ -18475,15 +18478,15 @@ snapshots:
       - vite
       - workflow
 
-  '@github-tools/sdk@1.16.0(9bf33e95149ac2db1516a2d53149abd7)':
+  '@github-tools/sdk@1.16.1(aadb746f85bb318fcc5bc9886c88006d)':
     dependencies:
       ai: 7.0.98(zod@4.6.1)
-      evlog: 2.28.0(878f0f7bd2cefeb3e903dba3e563c66f)
+      evlog: 2.29.0(285141d351f3b2f889e980a0bb17a982)
       octokit: 5.0.5
       zod: 4.6.1
     optionalDependencies:
-      '@vercel/connect': 2.0.4(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(cd121a335899245e41cbd60991d3ea9b))(eve@0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))
-      eve: 0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@vercel/connect': 2.0.4(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(cd121a335899245e41cbd60991d3ea9b))(eve@0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18))
+      eve: 0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18)
     transitivePeerDependencies:
       - '@nestjs/common'
       - '@nuxt/kit'
@@ -26475,16 +26478,16 @@ snapshots:
       - vite-plugin-solid
       - webpack
 
-  '@tanstack/react-start-rsc@0.0.40(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
+  '@tanstack/react-start-rsc@0.0.40(crossws@0.4.12(srvx@0.11.22))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
       '@tanstack/react-router': 1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@tanstack/react-start-server': 1.166.50(crossws@0.4.12(srvx@1.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@tanstack/react-start-server': 1.166.50(crossws@0.4.12(srvx@0.11.22))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/router-core': 1.169.1
       '@tanstack/router-utils': 1.161.7(supports-color@10.2.2)
       '@tanstack/start-client-core': 1.168.1
       '@tanstack/start-fn-stubs': 1.161.6
-      '@tanstack/start-plugin-core': 1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
-      '@tanstack/start-server-core': 1.167.28(crossws@0.4.12(srvx@1.0.3))
+      '@tanstack/start-plugin-core': 1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(crossws@0.4.12(srvx@0.11.22))(esbuild@0.28.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@tanstack/start-server-core': 1.167.28(crossws@0.4.12(srvx@0.11.22))
       '@tanstack/start-storage-context': 1.166.34
       pathe: 2.0.3
       react: 19.3.0
@@ -26504,15 +26507,15 @@ snapshots:
       - webpack
     optional: true
 
-  '@tanstack/react-start-rsc@0.0.40(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
+  '@tanstack/react-start-rsc@0.0.40(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
       '@tanstack/react-router': 1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@tanstack/react-start-server': 1.166.50(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@tanstack/react-start-server': 1.166.50(crossws@0.4.12(srvx@1.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/router-core': 1.169.1
       '@tanstack/router-utils': 1.161.7(supports-color@10.2.2)
       '@tanstack/start-client-core': 1.168.1
       '@tanstack/start-fn-stubs': 1.161.6
-      '@tanstack/start-plugin-core': 1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(esbuild@0.28.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@tanstack/start-plugin-core': 1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
       '@tanstack/start-server-core': 1.167.28(crossws@0.4.12(srvx@1.0.3))
       '@tanstack/start-storage-context': 1.166.34
       pathe: 2.0.3
@@ -26546,19 +26549,6 @@ snapshots:
       - crossws
 
   '@tanstack/react-start-server@1.166.50(crossws@0.4.12(srvx@1.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
-    dependencies:
-      '@tanstack/history': 1.161.6
-      '@tanstack/react-router': 1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@tanstack/router-core': 1.169.1
-      '@tanstack/start-client-core': 1.168.1
-      '@tanstack/start-server-core': 1.167.28(crossws@0.4.12(srvx@1.0.3))
-      react: 19.3.0
-      react-dom: 19.3.0(react@19.3.0)
-    transitivePeerDependencies:
-      - crossws
-    optional: true
-
-  '@tanstack/react-start-server@1.166.50(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@tanstack/history': 1.161.6
       '@tanstack/react-router': 1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -26630,16 +26620,16 @@ snapshots:
       - vite-plugin-solid
       - webpack
 
-  '@tanstack/react-start@1.167.61(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
+  '@tanstack/react-start@1.167.61(crossws@0.4.12(srvx@0.11.22))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
       '@tanstack/react-router': 1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/react-start-client': 1.166.47(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@tanstack/react-start-rsc': 0.0.40(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
-      '@tanstack/react-start-server': 1.166.50(crossws@0.4.12(srvx@1.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@tanstack/react-start-rsc': 0.0.40(crossws@0.4.12(srvx@0.11.22))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@tanstack/react-start-server': 1.166.50(crossws@0.4.12(srvx@0.11.22))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/router-utils': 1.161.7(supports-color@10.2.2)
       '@tanstack/start-client-core': 1.168.1
-      '@tanstack/start-plugin-core': 1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
-      '@tanstack/start-server-core': 1.167.28(crossws@0.4.12(srvx@1.0.3))
+      '@tanstack/start-plugin-core': 1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(crossws@0.4.12(srvx@0.11.22))(esbuild@0.28.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@tanstack/start-server-core': 1.167.28(crossws@0.4.12(srvx@0.11.22))
       pathe: 2.0.3
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -26660,15 +26650,15 @@ snapshots:
       - webpack
     optional: true
 
-  '@tanstack/react-start@1.167.61(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
+  '@tanstack/react-start@1.167.61(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
       '@tanstack/react-router': 1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/react-start-client': 1.166.47(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@tanstack/react-start-rsc': 0.0.40(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
-      '@tanstack/react-start-server': 1.166.50(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@tanstack/react-start-rsc': 0.0.40(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@tanstack/react-start-server': 1.166.50(crossws@0.4.12(srvx@1.0.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/router-utils': 1.161.7(supports-color@10.2.2)
       '@tanstack/start-client-core': 1.168.1
-      '@tanstack/start-plugin-core': 1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(esbuild@0.28.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@tanstack/start-plugin-core': 1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
       '@tanstack/start-server-core': 1.167.28(crossws@0.4.12(srvx@1.0.3))
       pathe: 2.0.3
       react: 19.3.0
@@ -26957,7 +26947,7 @@ snapshots:
       - vite-plugin-solid
       - webpack
 
-  '@tanstack/start-plugin-core@1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
+  '@tanstack/start-plugin-core@1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(crossws@0.4.12(srvx@0.11.22))(esbuild@0.28.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
       '@babel/code-frame': 7.27.1
       '@babel/core': 7.29.0(supports-color@10.2.2)
@@ -26968,7 +26958,7 @@ snapshots:
       '@tanstack/router-plugin': 1.167.32(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(esbuild@0.28.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
       '@tanstack/router-utils': 1.161.7(supports-color@10.2.2)
       '@tanstack/start-client-core': 1.168.1
-      '@tanstack/start-server-core': 1.167.28(crossws@0.4.12(srvx@1.0.3))
+      '@tanstack/start-server-core': 1.167.28(crossws@0.4.12(srvx@0.11.22))
       cheerio: 1.2.0
       exsolve: 1.1.1
       lightningcss: 1.33.0
@@ -26999,7 +26989,7 @@ snapshots:
       - webpack
     optional: true
 
-  '@tanstack/start-plugin-core@1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(esbuild@0.28.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
+  '@tanstack/start-plugin-core@1.169.16(@tanstack/react-router@1.169.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(crossws@0.4.12(srvx@1.0.3))(esbuild@0.28.0)(rolldown@1.2.8)(rollup@4.60.2)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
       '@babel/code-frame': 7.27.1
       '@babel/core': 7.29.0(supports-color@10.2.2)
@@ -28272,23 +28262,23 @@ snapshots:
     dependencies:
       execa: 5.1.1
 
-  '@vercel/connect@0.2.2(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(70f44b91199a33a5f286cecb7397f1f8))(eve@0.30.8(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))':
+  '@vercel/connect@0.2.2(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(4fd9e5b2f4f9590046e79df9ab21a7bb))(eve@0.30.8(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))':
     dependencies:
       '@vercel/oidc': 3.6.1
     optionalDependencies:
       '@ai-sdk/mcp': 2.0.39(zod@4.6.1)
       ai: 7.0.98(zod@4.6.1)
-      better-auth: 1.7.3(70f44b91199a33a5f286cecb7397f1f8)
+      better-auth: 1.7.3(4fd9e5b2f4f9590046e79df9ab21a7bb)
       eve: 0.30.8(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(rollup@4.60.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
 
-  '@vercel/connect@2.0.4(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(cd121a335899245e41cbd60991d3ea9b))(eve@0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))':
+  '@vercel/connect@2.0.4(@ai-sdk/mcp@2.0.39(zod@4.6.1))(ai@7.0.98(zod@4.6.1))(better-auth@1.7.3(cd121a335899245e41cbd60991d3ea9b))(eve@0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18))':
     dependencies:
       '@vercel/oidc': 3.8.7
     optionalDependencies:
       '@ai-sdk/mcp': 2.0.39(zod@4.6.1)
       ai: 7.0.98(zod@4.6.1)
       better-auth: 1.7.3(cd121a335899245e41cbd60991d3ea9b)
-      eve: 0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      eve: 0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18)
 
   '@vercel/nft@1.5.0(rollup@4.60.2)(supports-color@10.2.2)':
     dependencies:
@@ -29121,7 +29111,7 @@ snapshots:
 
   before-after-hook@4.0.0: {}
 
-  better-auth@1.7.3(70f44b91199a33a5f286cecb7397f1f8):
+  better-auth@1.7.3(4fd9e5b2f4f9590046e79df9ab21a7bb):
     dependencies:
       '@better-auth/core': 1.7.3(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@4.20260503.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.1))(jose@6.2.12)(kysely@0.28.17)(nanostores@1.3.0)
       '@better-auth/drizzle-adapter': 1.7.3(@better-auth/core@1.7.3(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@4.20260503.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.6.1))(jose@6.2.12)(kysely@0.28.17)(nanostores@1.3.0))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))
@@ -29142,7 +29132,7 @@ snapshots:
       zod: 4.6.1
     optionalDependencies:
       '@sveltejs/kit': 2.70.3(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(supports-color@10.2.2)(svelte@5.55.5(@typescript-eslint/types@8.59.1))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.1))(typescript@5.9.3)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
-      '@tanstack/react-start': 1.167.61(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      '@tanstack/react-start': 1.167.61(crossws@0.4.12(srvx@0.11.22))(esbuild@0.28.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(vite-plugin-solid@2.11.12(solid-js@1.9.12)(supports-color@10.2.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
       better-sqlite3: 12.11.1
       drizzle-kit: 0.31.10
       drizzle-orm: 0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9)
@@ -31106,53 +31096,14 @@ snapshots:
       - xml2js
       - zephyr-agent
 
-  eve@0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)):
+  eve@0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18):
     dependencies:
       ai: 7.0.98(zod@4.6.1)
-      nitro: 3.0.260610-beta(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@vercel/blob@2.8.0)(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      nitro: 3.0.260903-beta
       undici: 8.9.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       microsandbox: 0.6.18
-    transitivePeerDependencies:
-      - '@azure/app-configuration'
-      - '@azure/cosmos'
-      - '@azure/data-tables'
-      - '@azure/identity'
-      - '@azure/keyvault-secrets'
-      - '@azure/storage-blob'
-      - '@capacitor/preferences'
-      - '@deno/kv'
-      - '@electric-sql/pglite'
-      - '@libsql/client'
-      - '@netlify/blobs'
-      - '@netlify/runtime'
-      - '@planetscale/database'
-      - '@upstash/redis'
-      - '@vercel/blob'
-      - '@vercel/functions'
-      - '@vercel/kv'
-      - '@vercel/queue'
-      - aws4fetch
-      - better-sqlite3
-      - chokidar
-      - dotenv
-      - drizzle-orm
-      - giget
-      - idb-keyval
-      - ioredis
-      - jiti
-      - lru-cache
-      - miniflare
-      - mongodb
-      - mysql2
-      - rollup
-      - sqlite3
-      - uploadthing
-      - vite
-      - wrangler
-      - xml2js
-      - zephyr-agent
 
   event-target-shim@5.0.1: {}
 
@@ -31172,7 +31123,7 @@ snapshots:
     dependencies:
       eventsource-parser: 3.0.8
 
-  evlog@2.28.0(878f0f7bd2cefeb3e903dba3e563c66f):
+  evlog@2.29.0(285141d351f3b2f889e980a0bb17a982):
     optionalDependencies:
       '@nestjs/common': 11.2.3(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2)
       '@nuxt/kit': 4.5.2(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.149.0)(rolldown@1.2.8)(unplugin@3.3.0(esbuild@0.28.0)(rolldown@1.2.8)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))
@@ -31180,7 +31131,7 @@ snapshots:
       '@tanstack/start-client-core': 1.170.29
       ai: 7.0.98(zod@4.6.1)
       elysia: 1.4.30(@sinclair/typebox@0.34.49)(@types/bun@1.4.2)(exact-mirror@1.0.0)(file-type@21.3.4(supports-color@10.2.2))(openapi-types@12.1.3)(typescript@7.0.2)
-      eve: 0.49.1(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.98(zod@4.6.1))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(microsandbox@0.6.18)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
+      eve: 0.54.3(@opentelemetry/api@1.9.1)(ai@7.0.98(zod@4.6.1))(microsandbox@0.6.18)
       express: 5.2.1(supports-color@10.2.2)
       fastify: 5.12.3
       h3: 1.15.11
@@ -31188,7 +31139,7 @@ snapshots:
       next: 16.3.4(@babel/core@7.29.0(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@types/node@24.13.4)(babel-plugin-macros@3.1.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       nitro: 3.0.260311-beta(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(better-sqlite3@12.11.1)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(jiti@2.7.0)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
       nitropack: 2.13.4(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@vercel/blob@2.8.0)(better-sqlite3@12.11.1)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(oxc-parser@0.149.0)(rolldown@1.2.8)(srvx@0.11.22)(supports-color@10.2.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
-      ofetch: 2.0.0-alpha.3
+      ofetch: 1.5.1
       react: 19.3.0
       react-router: 7.18.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       vite: 8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)
@@ -33873,60 +33824,6 @@ snapshots:
       - miniflare
       - mysql2
       - sqlite3
-      - wrangler
-
-  nitro@3.0.260610-beta(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@vercel/blob@2.8.0)(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(rollup@4.60.2)(vite@8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)):
-    dependencies:
-      consola: 3.4.2
-      crossws: 0.4.12(srvx@0.11.22)
-      db0: 0.3.4(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(better-sqlite3@12.11.1)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))
-      env-runner: 0.1.16
-      h3: 2.0.1-rc.22(crossws@0.4.12(srvx@0.11.22))
-      hookable: 6.1.1
-      nf3: 0.3.24
-      ocache: 0.1.5
-      ofetch: 2.0.0-alpha.3
-      ohash: 2.0.12
-      rolldown: 1.2.8
-      srvx: 0.11.22
-      unenv: 2.0.0-rc.24
-      unstorage: 2.0.0-alpha.7(@vercel/blob@2.8.0)(chokidar@5.0.0)(db0@0.3.4(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(better-sqlite3@12.11.1)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9)))(ioredis@5.10.1(supports-color@10.2.2))(lru-cache@11.3.5)(ofetch@2.0.0-alpha.3)
-    optionalDependencies:
-      dotenv: 17.4.2
-      giget: 3.3.0
-      jiti: 2.7.0
-      rollup: 4.60.2
-      vite: 8.2.2(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - '@azure/app-configuration'
-      - '@azure/cosmos'
-      - '@azure/data-tables'
-      - '@azure/identity'
-      - '@azure/keyvault-secrets'
-      - '@azure/storage-blob'
-      - '@capacitor/preferences'
-      - '@deno/kv'
-      - '@electric-sql/pglite'
-      - '@libsql/client'
-      - '@netlify/blobs'
-      - '@netlify/runtime'
-      - '@planetscale/database'
-      - '@upstash/redis'
-      - '@vercel/blob'
-      - '@vercel/functions'
-      - '@vercel/kv'
-      - aws4fetch
-      - better-sqlite3
-      - chokidar
-      - drizzle-orm
-      - idb-keyval
-      - ioredis
-      - lru-cache
-      - miniflare
-      - mongodb
-      - mysql2
-      - sqlite3
-      - uploadthing
       - wrangler
 
   nitro@3.0.260610-beta(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@vercel/blob@2.8.0)(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(rollup@4.60.2)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)):
