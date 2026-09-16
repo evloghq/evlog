@@ -49,7 +49,7 @@ feat({framework}): add {Framework} middleware integration
 | 10 | `apps/docs/app/components/features/FeatureFrameworks.vue` | Add framework tab |
 | 11 | `skills/review-logging-patterns/SKILL.md` | Add framework setup section + update frontmatter description |
 | 12 | `packages/evlog/README.md` | Add framework section + row in the Framework Support table |
-| 13 | `examples/{framework}/` | Create example app with test UI (auto-discovered by `pnpm example {framework}` — no root script needed) |
+| 13 | `examples/{framework}/` | Create example app with test UI (auto-discovered by `pnpm example {framework}`, no root script needed) |
 | 14 | `.changeset/{framework}-integration.md` | Create changeset (`minor`) |
 | 15 | `.github/workflows/semantic-pull-request.yml` + `.github/pull_request_template.md` | Register `{framework}` as a PR scope in both files |
 
@@ -68,7 +68,7 @@ All integrations share the same core utilities. **Never reimplement logic that e
 
 | Utility | Location | Purpose |
 |---------|----------|---------|
-| `defineFrameworkIntegration` | `../shared/integration` | Manifest factory — extract request, create logger, attach, run with ALS |
+| `defineFrameworkIntegration` | `../shared/integration` | Manifest factory: extract request, create logger, attach, run with ALS |
 | `createMiddlewareLogger` | `../shared/middleware` | Lower-level lifecycle (custom mode): logger creation, route filtering, tail sampling, emit, enrich, drain |
 | `BaseEvlogOptions` | `../shared/middleware` | Base user-facing options type with `drain`, `enrich`, `keep`, `include`, `exclude`, `routes`, `plugins` |
 | `createLoggerStorage` | `../shared/storage` (`evlog/toolkit/storage`) | Factory returning `{ storage, useLogger }` for `AsyncLocalStorage`-backed `useLogger()`. Prefer `evlog/toolkit/storage` on Workers / edge |
@@ -233,7 +233,7 @@ Create `apps/docs/content/4.integrate/frameworks/{NN}.{framework}.md` with a com
 ```yaml
 ---
 title: {Framework}
-description: Using evlog with {Framework} — automatic wide events, structured errors, drain adapters, enrichers, and tail sampling in {Framework} applications.
+description: Using evlog with {Framework}: automatic wide events, structured errors, drain adapters, enrichers, and tail sampling in {Framework} applications.
 navigation:
   title: {Framework}
   icon: i-simple-icons-{framework}

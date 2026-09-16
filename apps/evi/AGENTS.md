@@ -56,5 +56,5 @@ cannot read an image is not a drop-in.
 Routing to a deployment is the gateway's job, not the app's: `gatewayRouting`
 sends a sort and `zeroDataRetention`, and names no provider. A candidate's
 advertised price is not what Evi pays, because ZDR drops the deployments that
-keep data and those are routinely the cheap ones — read the real floor from a
+keep data and those are routinely the cheap ones. Read the real floor from a
 call's `provider_metadata.gateway`, not from the model's page.

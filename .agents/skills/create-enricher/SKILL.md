@@ -22,7 +22,7 @@ Enrichers live in the core package surface (`evlog/enrichers`), so use the `core
 | # | File | Action |
 |---|------|--------|
 | 1 | `packages/evlog/src/enrichers/index.ts` | Add enricher source (one `defineEnricher` call) |
-| 2 | Same file — `createDefaultEnrichers()` | Decide whether the enricher belongs in the default composition (see below) |
+| 2 | Same file: `createDefaultEnrichers()` | Decide whether the enricher belongs in the default composition (see below) |
 | 3 | `packages/evlog/test/toolkit/enrichers.test.ts` | Add tests (one `describe` block per enricher) |
 | 4 | `apps/docs/content/5.use-cases/5.enrichers.md` | Add a section for the enricher + update the import list and, if applicable, the "All built-in enrichers" default composition text |
 | 5 | `skills/review-logging-patterns/SKILL.md` | Add the enricher to the `Built-in:` line in the Enrichers section |

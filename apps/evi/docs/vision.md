@@ -9,7 +9,7 @@ The base model must stay one that takes images *and* runs a whole turn, tools
 included, not one that only captions a picture: an image sits in the history
 that every later step reads. A text-only base model would need a second model
 for the turns that carry image parts, and a middleware stubbing those parts
-out of the history afterwards, since it rejects them raw — that machinery is
+out of the history afterwards, since it rejects them raw. That machinery is
 what native vision removes.
 
 Image parts are re-sent on every later model call in the session, which is why
