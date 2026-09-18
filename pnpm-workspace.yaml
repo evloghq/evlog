@@ -56,6 +56,7 @@ minimumReleaseAgeExclude:
   - '@vercel/*'
   - '@ai-sdk/*'
   - 'ai'
+  - '@agent-browser/*'
   - '@github-tools/*'
   - 'eve'
   # Other
