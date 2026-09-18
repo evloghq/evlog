@@ -1,6 +1,6 @@
 ---
 name: self-review
-description: Weekly pass over the evlog repository and Evi's own surface, in two halves: what has drifted out of coherence (a capability wired but never consumed, code contradicting a written guide, a description promising a tool the allowlist lacks), and what is missing (a capability worth having, a manual step worth automating, a gap in evlog users keep hitting). Load this when the self-review schedule fires, or when Hugo asks for a self-review, an audit, ideas for what Evi should do next, or what is inconsistent in the repo.
+description: "Weekly pass over the evlog repository and Evi's own surface, in two halves: what has drifted out of coherence (a capability wired but never consumed, code contradicting a written guide, a description promising a tool the allowlist lacks), and what is missing (a capability worth having, a manual step worth automating, a gap in evlog users keep hitting). Load this when the self-review schedule fires, or when Hugo asks for a self-review, an audit, ideas for what Evi should do next, or what is inconsistent in the repo."
 ---
 
 # Self review

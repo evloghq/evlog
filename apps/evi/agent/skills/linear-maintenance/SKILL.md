@@ -1,6 +1,6 @@
 ---
 name: linear-maintenance
-description: Bi-weekly housekeeping pass over the evlog team's Linear backlog: labels, projects, priorities, stale triage, work that is done but still open, and anything misfiled next to its siblings. Applies the mechanically verifiable fixes and surfaces the rest as decisions. Load this when the linear-maintenance schedule fires, or when Hugo asks for a Linear clean-up, a backlog pass, or a triage consistency check.
+description: "Bi-weekly housekeeping pass over the evlog team's Linear backlog: labels, projects, priorities, stale triage, work that is done but still open, and anything misfiled next to its siblings. Applies the mechanically verifiable fixes and surfaces the rest as decisions. Load this when the linear-maintenance schedule fires, or when Hugo asks for a Linear clean-up, a backlog pass, or a triage consistency check."
 ---
 
 # Linear maintenance
