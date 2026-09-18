@@ -29,7 +29,7 @@ The frameworks this app runs on move independently: eve and its satellites (@age
 
 ## 4. Track what needs a human in Linear
 
-A draft PR is its own artifact and needs nothing else. But an upstream finding that could **not** become a safe PR — a deprecation to plan around, a breaking change to schedule, a new capability worth adopting deliberately — becomes a **Linear issue** via `linear__save_issue` on the evlog team: a title stating the situation, the upstream link, what it affects in this repo, and the decision Hugo has to make. One issue per finding; search `linear__list_issues` first so a recurring finding updates the existing issue instead of duplicating it.
+A draft PR is its own artifact and needs nothing else. But an upstream finding that could **not** become a safe PR (a deprecation to plan around, a breaking change to schedule, a new capability worth adopting deliberately) becomes a **Linear issue** via `linear__save_issue` on the evlog team: a title stating the situation, the upstream link, what it affects in this repo, and the decision Hugo has to make. One issue per finding; search `linear__list_issues` first so a recurring finding updates the existing issue instead of duplicating it.
 
 Then post one summary to the thread: one line per draft PR and per Linear issue, links inline.
 

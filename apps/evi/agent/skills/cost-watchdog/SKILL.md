@@ -66,7 +66,7 @@ One constraint the report does not show: today the agent runs a single model eve
 
 ## Deliver
 
-**The full report is a Linear document** on the evlog team, titled `Cost/model watchdog — YYYY-MM-DD`, with markdown sections: spend and model mix per surface, drift, landscape notes with sources, and the per-surface recommendations (or the explicit "nothing to improve").
+**The full report is a Linear document** on the evlog team, titled `Cost/model watchdog: YYYY-MM-DD`, with markdown sections: spend and model mix per surface, drift, landscape notes with sources, and the per-surface recommendations (or the explicit "nothing to improve").
 
 **The thread get two or three lines**: the single most attention-worthy number or finding, and the document link.
 

@@ -15,9 +15,15 @@ describe('surfaceOf', () => {
   it('tells the surfaces an agent reads from the ones a person reads', () => {
     expect(surfaceOf('.agents/skills/create-adapter/SKILL.md')).toBe('skill')
     expect(surfaceOf('skills/analyze-logs/SKILL.md')).toBe('skill')
+    expect(surfaceOf('apps/evi/agent/skills/self-review/SKILL.md')).toBe('skill')
     expect(surfaceOf('AGENTS.md')).toBe('agents')
     expect(surfaceOf('apps/docs/AGENTS.md')).toBe('agents')
+    expect(surfaceOf('apps/evi/AGENTS.md')).toBe('agents')
     expect(surfaceOf('packages/evlog/README.md')).toBe('readme')
+  })
+
+  it('judges the evi docs as prose', () => {
+    expect(surfaceOf('apps/evi/docs/vision.md')).toBe('docs')
   })
 })
 
@@ -37,12 +43,13 @@ describe('corpusFiles', () => {
     expect(files).toContain('packages/evlog/README.md')
     expect(files.some(file => file.startsWith('apps/docs/content/'))).toBe(true)
     expect(files.some(file => file.startsWith('.agents/skills/'))).toBe(true)
+    expect(files.some(file => file.startsWith('apps/evi/docs/'))).toBe(true)
+    expect(files.some(file => file.startsWith('apps/evi/agent/skills/'))).toBe(true)
   })
 
   it('leaves out what a pass must not rewrite', () => {
-    // Evi's operating instructions, the doctrine's own worked pairs, and the
-    // symlinked root README that would double every finding.
-    expect(files.some(file => file.startsWith('apps/evi/agent/skills/'))).toBe(false)
+    // The doctrine's own worked pairs, and the symlinked root README that
+    // would double every finding.
     expect(files.some(file => file.startsWith('.agents/skills/write-evlog-content/references/'))).toBe(false)
     expect(files).not.toContain('README.md')
   })

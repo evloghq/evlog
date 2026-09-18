@@ -27,8 +27,8 @@ server-side, from an identity the actor cannot choose.
 
 `onComment` runs on a webhook GitHub has signed, before any model exists, and it
 may be async. `defaultGitHubAuth(ctx)` already projects the actor into
-`principalId: "github:<sender.id>"` — the numeric id, so a login rename or
-re-registration does not move it — with `principalType: "user"` (or `"service"`
+`principalId: "github:<sender.id>"` (the numeric id, so a login rename or
+re-registration does not move it) with `principalType: "user"` (or `"service"`
 for bots) and repository metadata in `attributes`.
 
 So: resolve a tier there, stamp it on `auth.attributes`, and let everything
@@ -48,7 +48,7 @@ async function tierFor(ctx: GitHubInboundContext): Promise<'admin' | 'public'> {
 
 Both paths on purpose: the hardcoded set keeps working when the API call fails or
 rate-limits, and the permission lookup means adding a maintainer on GitHub is
-enough — nobody has to remember to edit this file.
+enough: nobody has to remember to edit this file.
 
 **Cache the lookup by actor id, never by session.** A GitHub thread is one
 session that different people comment in, so a tier cached on the session would
@@ -70,8 +70,8 @@ return { auth: { ...auth, attributes: { ...auth.attributes, tier } } }
 `{ session, toolName, toolInput, approvedTools, callId }`. Two of its return
 values resolve without a human:
 
-- `'not-applicable'` — runs immediately, no prompt
-- `{ type: 'denied', reason }` — refused server-side, uncontestable by any comment
+- `'not-applicable'`: runs immediately, no prompt
+- `{ type: 'denied', reason }`: refused server-side, uncontestable by any comment
 
 That is enough to build the whole gate today:
 
@@ -164,7 +164,7 @@ threads regardless of who is asking.
 `onIssue`, `onPullRequest`, and `onCheckSuite` all dispatch with
 `defaultGitHubAuth(ctx)`, where the sender is whoever opened the issue or pushed
 the commit. An automated CI-triage turn would therefore run under a random
-contributor's identity, and — with the tier logic above — under their permissions.
+contributor's identity, and, with the tier logic above, under their permissions.
 
 Agent-initiated work needs a constructed system principal instead, at a tier
 chosen for the task rather than inherited from whoever tripped the webhook. It
@@ -174,15 +174,15 @@ approve anything, so it should only reach tools that are safe unattended.
 ## The gap in @github-tools/eve-extension
 
 Everything above enforces at the approval layer, which means every tool still sits
-in every caller's context — schemas cost roughly 7k tokens per turn for the
-maintainer surface — and a denied call burns a model step to learn it was refused.
+in every caller's context (schemas cost roughly 7k tokens per turn for the
+maintainer surface), and a denied call burns a model step to learn it was refused.
 
 The clean fix is a tool surface that varies per caller. The extension already
 resolves tools inside a dynamic resolver on `step.started`, and simply ignores the
 context eve hands it. If `include` / `exclude` / `preset` accepted a resolver of
 that context alongside a static value, an agent could hand admins the full surface
 and everyone else the read-only one, with the schemas to match. Worth proposing
-upstream — it is useful to any agent on a public repository, not just this one.
+upstream: it is useful to any agent on a public repository, not just this one.
 
 ## Still open
 

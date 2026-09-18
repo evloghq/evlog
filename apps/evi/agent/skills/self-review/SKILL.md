@@ -1,6 +1,6 @@
 ---
 name: self-review
-description: Weekly pass over the evlog repository and Evi's own surface, in two halves — what has drifted out of coherence (a capability wired but never consumed, code contradicting a written guide, a description promising a tool the allowlist lacks), and what is missing (a capability worth having, a manual step worth automating, a gap in evlog users keep hitting). Load this when the self-review schedule fires, or when Hugo asks for a self-review, an audit, ideas for what Evi should do next, or what is inconsistent in the repo.
+description: "Weekly pass over the evlog repository and Evi's own surface, in two halves: what has drifted out of coherence (a capability wired but never consumed, code contradicting a written guide, a description promising a tool the allowlist lacks), and what is missing (a capability worth having, a manual step worth automating, a gap in evlog users keep hitting). Load this when the self-review schedule fires, or when Hugo asks for a self-review, an audit, ideas for what Evi should do next, or what is inconsistent in the repo."
 ---
 
 # Self review
@@ -38,7 +38,7 @@ Something is produced and nothing consumes it. For each connection, extension an
 | Guide | Check |
 | --- | --- |
 | Root `AGENTS.md` | A new entrypoint registered in all three of `package.json#exports`, `package.json#typesVersions`, `tsdown.config.ts`. No `evlog/shared` import (`evlog/toolkit` is the public name). No HTML comment in a Vue `<template>`. |
-| Root `AGENTS.md` | Every framework integration exposes the same contract: `evlog()`, `useLogger()`, `log.fork()`. `evlog/workers` is the documented exception. |
+| Root `AGENTS.md` | Every first-class framework integration exposes the same contract: `evlog()`, `useLogger()`, `log.fork()`. Guide-level integrations (Astro, AWS Lambda) document the generic API instead, and `evlog/workers` is the documented exception. |
 | `apps/evi/docs/capability-placement.md` | The two-layer rule: a file under `agent/` outside `agent/lib/` holding logic instead of wiring, an `agent/lib/` module with no colocated `*.test.ts`, or a caller check written inline instead of going through `agent/lib/trust.ts`. |
 | `packages/evlog/test/README.md` | A framework test driving the app by hand instead of through its real request driver. |
 | Root `AGENTS.md` | A behavior change whose matching `.agents/skills/` or `skills/` SKILL.md still describes the old shape. |

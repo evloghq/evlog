@@ -169,7 +169,7 @@ Two more, now that the corpus spans both audiences:
 - Touch a file inside its cooldown, whoever changed it.
 - Edit the landing page for voice or rhythm.
 - Change a skill's procedure, bounds, or `description`. Those are proposals, in the PR body.
-- Touch `apps/evi/agent/skills/`. Those are this pass's own instructions and they are outside the corpus for that reason.
+- Rewrite `apps/evi/agent/skills/`. The scanner reads those now, but they are this pass's own instructions: findings on them are reported for a person to judge, never applied.
 - Open more than one PR, or a PR that is not a draft.
 - Add a changeset for a change confined to `apps/*`.
 - Widen its own scope because the group looked bad. The group will still be there tomorrow.

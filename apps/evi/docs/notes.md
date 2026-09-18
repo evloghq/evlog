@@ -1,7 +1,7 @@
 # Notes
 
 Things that cost time to find out. Each one is why some line of this agent looks
-the way it does — kept here so the code does not have to carry the paragraph.
+the way it does, kept here so the code does not have to carry the paragraph.
 
 ## eve
 
@@ -100,7 +100,7 @@ deployments and promos move.
 On GLM 5.3 Flash the two deployments at half the going rate keep data, so ZDR
 drops them and the floor Evi can reach is the next tier up. `only: ['<provider>']`
 with ZDR set answers per provider: an ineligible one fails with a ZDR error
-rather than routing elsewhere. A hand-written `order` cannot fix this — a
+rather than routing elsewhere. A hand-written `order` cannot fix this. A
 provider it names that ZDR has dropped is skipped silently, which reads as
 vetted while doing nothing.
 
@@ -116,8 +116,8 @@ skill reads both; the surface set must be taken from the rows, never assumed.
 
 ## github-tools
 
-**The `maintainer` preset ships gist tools that always 403 over Connect** — the
-Gists API rejects installation tokens — plus repo creation and merge.
+**The `maintainer` preset ships gist tools that always 403 over Connect** (the
+Gists API rejects installation tokens), plus repo creation and merge.
 
 **`updateIssue` also sets `state`**, so auto-approving it grants `closeIssue` as
 well, since supplying `state` closes the issue. Gate on the input, not the tool
@@ -180,7 +180,7 @@ for both local and eval traffic while the spend tags separate them. Both now rea
 
 External harnesses (Raycast AI, Claude Code, Cursor) reach Evi at
 `/eve/v1/mcp` with `Authorization: Bearer $EVI_MCP_TOKEN`, served by eve's
-native MCP channel (`mcpChannel`). Clients get the durable invocation tools —
+native MCP channel (`mcpChannel`). Clients get the durable invocation tools:
 `agent_start`, `agent_get`, `agent_update`, `agent_cancel`: start returns an
 invocation id immediately, the harness polls `agent_get`, and human-input
 requests surface as `input_required` instead of a hanging HTTP call. Each

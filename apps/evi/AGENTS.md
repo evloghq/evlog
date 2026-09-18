@@ -28,8 +28,9 @@ a deliberate trade.
 ## Evals cost real money
 
 `pnpm eval` runs the agent against a live model. Twenty evals is a real bill, so
-the CI triggers are narrow. See `.github/workflows/evi-evals.yml` for the full
-list and the guards.
+nothing runs automatically: the GitHub Actions workflow
+(`.github/workflows/evi-evals.yml`) is dispatch-only, and everything else runs
+from a checkout with `pnpm --filter evi exec eve eval`.
 
 Evals tagged `needs-connect` assert on GitHub calls that must *succeed*, and
 GitHub is reached through Vercel Connect, which authenticates with a Vercel
@@ -39,13 +40,8 @@ otherwise, because an unauthenticated run reports a regression that is not one. 
 always run locally, where `vc link` supplies the token. Anything asserting
 `notCalledTool` on a GitHub tool needs no credentials and always runs.
 
-A PR touching `agent/` (excluding tests), evaluation code or fixtures, the shared
-content doctrine, or the content scanner runs the `fast` subset automatically.
 Content evals check out the candidate commit, which must be fetchable by the
-sandbox, and verify fixture digests before review. Evi opens PRs on her own behaviour,
-and an agent cannot be relied on to label its own regression risk. Keep the PR
-a draft while it is in flux, since drafts never run, and add `skip-evals` when a
-watched path changed but the behaviour did not.
+sandbox, and verify fixture digests before review.
 
 Swapping the model goes through `EVI_MODEL`, not an edit to `agent.ts`: run the
 workflow manually against the candidate, compare cost, latency and pass rate in
@@ -56,5 +52,5 @@ cannot read an image is not a drop-in.
 Routing to a deployment is the gateway's job, not the app's: `gatewayRouting`
 sends a sort and `zeroDataRetention`, and names no provider. A candidate's
 advertised price is not what Evi pays, because ZDR drops the deployments that
-keep data and those are routinely the cheap ones — read the real floor from a
+keep data and those are routinely the cheap ones. Read the real floor from a
 call's `provider_metadata.gateway`, not from the model's page.

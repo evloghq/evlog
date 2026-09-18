@@ -26,7 +26,7 @@ This is the design decision everything else follows from (see `apps/docs/content
 
 | | Requirement | Opportunity |
 |---|---|---|
-| Effect on the score | Costs `weight` points when it fails | None, ever — the type forbids a weight |
+| Effect on the score | Costs `weight` points when it fails | None, ever. The type forbids a weight |
 | When it appears | Whenever it applies | Only when the project **already uses** the feature (`appliesTo.when` gated on `project.features` / `project.pairable`) |
 | In the report | `FIX FIRST` / `THEN` | `GOING FURTHER` |
 | Can fail a CI gate (`--min-score`, `--baseline`) | Yes | No |
@@ -42,7 +42,7 @@ Current requirements: `wide-event` (40), `audit` (25), `structured-errors` (20),
 | 1 | `packages/cli/src/lib/map/rules/{id}.ts` | Create the rule (one exported const) |
 | 2 | `packages/cli/src/lib/map/rules/index.ts` | Import + one line in `REGISTRY` |
 | 3 | `packages/cli/src/lib/map/types.ts` | Add the id to the `CheckId` union (a type assert in `index.ts` fails the build if the registry and union drift) |
-| 4 | `packages/cli/test/map/rules.test.ts` | Add cases (the file has an ESLint-`RuleTester`-style `Case` harness — `runRuleSet` exercises one rule in isolation) |
+| 4 | `packages/cli/test/map/rules.test.ts` | Add cases (the file has an ESLint-`RuleTester`-style `Case` harness (`runRuleSet` exercises one rule in isolation)) |
 | 5 | `apps/docs/content/3.cli/3.rules.md` | Add a row to the Requirements or Opportunities table + a `### {title}` section |
 | 6 | `apps/docs/content/3.cli/4.scoring.md` | Requirements only: reflect the new weight in the scoring explanation |
 | 7 | `skills/review-logging-patterns/references/code-review.md` | Add a row to the matching rules table |
@@ -149,9 +149,9 @@ Teaching `evlog map` a new framework is a different, heavier change: the adapter
 | 3 | `packages/cli/src/lib/map/types.ts` | Extend the `Framework` union |
 | 4 | `packages/cli/src/lib/map/detect.ts` | Detect the framework from the project (`detectFramework`) |
 | 5 | `packages/cli/test/map/adapters.test.ts` + `detect.test.ts` + `fixtures/` | Route extraction + detection tests against a fixture tree |
-| 6 | `packages/cli/src/lib/init/` | Decide whether `evlog init` gains the framework too (separate scope of work — flag it explicitly in the PR if not) |
+| 6 | `packages/cli/src/lib/init/` | Decide whether `evlog init` gains the framework too (a separate scope of work, so flag it explicitly in the PR if not) |
 | 7 | `apps/docs/content/3.cli/2.map.md` + `0.overview.md` | Update the supported-frameworks statements |
-| 8 | `skills/review-logging-patterns/SKILL.md` | Update every "Nuxt, Nitro, Next.js, and TanStack Start" list (frontmatter description + CLI section) — same in `references/code-review.md` and `skills/build-audit-logs/SKILL.md` (Pass 2) and `analyze-logs/SKILL.md` (init suggestion) |
+| 8 | `skills/review-logging-patterns/SKILL.md` | Update every "Nuxt, Nitro, Next.js, and TanStack Start" list (frontmatter description + CLI section), same in `references/code-review.md` and `skills/build-audit-logs/SKILL.md` (Pass 2) and `analyze-logs/SKILL.md` (init suggestion) |
 | 9 | `scripts/cli-sandbox.mjs` | Add the framework to `APPS` (reuse the map fixture) so `pnpm cli:sandbox` covers it and `--smoke` exercises every CLI command against it |
 | 10 | `.changeset/{framework}-map-adapter.md` | Changeset for `"@evlog/cli": minor` |
 

@@ -92,7 +92,7 @@ run in a child process with a 10-second timeout and forced termination.
 
 Before adding a capability, answer in the PR:
 
-1. Skill, schedule, connection, tool, or subagent — and why not the cheaper
+1. Skill, schedule, connection, tool, or subagent, and why not the cheaper
    one above it?
 2. Which `trust.ts` gate applies, and what does an autonomous turn see?
 3. Where does the logic live in `agent/lib/`, and where is its test?

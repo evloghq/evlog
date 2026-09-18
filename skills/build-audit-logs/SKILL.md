@@ -22,8 +22,8 @@ When you already know the system is wired and just need to remember the API:
 | Standalone job / script / CLI (no request) | `audit({ action, actor, target, outcome })` |
 | Auto-record success / failure / denied for a function | `withAudit({ action, target }, fn)` |
 | Recording a state change | add `changes: auditDiff(before, after)` |
-| Centralised typed action vocabulary | `defineAuditCatalog('billing', { INVOICE_REFUND: { target: 'invoice' } })` — or `defineAuditAction('invoice.refund', { target: 'invoice' })` for one-offs |
-| Asserting audits in tests | `mockAudit()` — `assertAudit()` or `toIncludeAuditOf()` |
+| Centralised typed action vocabulary | `defineAuditCatalog('billing', { INVOICE_REFUND: { target: 'invoice' } })`, or `defineAuditAction('invoice.refund', { target: 'invoice' })` for one-offs |
+| Asserting audits in tests | `mockAudit()`, then `assertAudit()` or `toIncludeAuditOf()` |
 
 `AuditFields` schema (always provide `action`, `actor`, `outcome`; `target` strongly recommended; the rest is filled in for you):
 
@@ -132,7 +132,7 @@ Pick a window per drain and document it. Enforce at the drain layer, not in app 
 | SOC2      | 1 year minimum, 7 years recommended                                 |
 | HIPAA     | 6 years                                                             |
 | PCI DSS   | 1 year (3 months immediately accessible)                            |
-| GDPR      | "As long as necessary" — see "GDPR vs append-only" below            |
+| GDPR      | "As long as necessary" (see "GDPR vs append-only" below)           |
 
 How to enforce per drain:
 

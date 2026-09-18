@@ -23,10 +23,10 @@ Review and improve logging patterns in TypeScript/JavaScript codebases. Transfor
 
 | Working on...           | Resource                                                           |
 | ----------------------- | ------------------------------------------------------------------ |
-| Setup (CLI)             | [`evlog init`](https://www.evlog.dev/cli/init) — wire evlog into the project |
-| Project conventions (CLI) | [`evlog agents`](https://www.evlog.dev/cli/agents) — write the evlog block into the project's AGENTS.md |
-| Coverage map (CLI)      | [`evlog map`](https://www.evlog.dev/cli/map) — score dark entry points |
-| CI gating (CLI)         | [`evlog map --min-score / --baseline`](https://www.evlog.dev/cli/ci) — gate regressions |
+| Setup (CLI)             | [`evlog init`](https://www.evlog.dev/cli/init): wire evlog into the project |
+| Project conventions (CLI) | [`evlog agents`](https://www.evlog.dev/cli/agents): write the evlog block into the project's AGENTS.md |
+| Coverage map (CLI)      | [`evlog map`](https://www.evlog.dev/cli/map): score dark entry points |
+| CI gating (CLI)         | [`evlog map --min-score / --baseline`](https://www.evlog.dev/cli/ci): gate regressions |
 | Wide events patterns    | [references/wide-events.md](references/wide-events.md)             |
 | Error handling          | [references/structured-errors.md](references/structured-errors.md) |
 | Code review checklist   | [references/code-review.md](references/code-review.md)             |
@@ -937,8 +937,8 @@ All options work in Nuxt (`evlog` key), Nitro (passed to `evlog()`), Next.js (`c
 | Grafana Loki | `evlog/loki` | `LOKI_ENDPOINT`, optional `LOKI_API_KEY` + `LOKI_USER` (Grafana Cloud) or `LOKI_TENANT_ID` (multi-tenant) |
 | ClickHouse | `evlog/clickhouse` | `CLICKHOUSE_ENDPOINT`, optional `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` / `CLICKHOUSE_DATABASE` / `CLICKHOUSE_TABLE` |
 | File System | `evlog/fs` | None (local file system) |
-| Memory | `evlog/memory` | None (in-process ring buffer; optional `EVLOG_MEMORY_STORE`, `EVLOG_MEMORY_MAX_EVENTS`). Read back with `readMemoryLogs()` — ideal for dev-only log endpoints agents can query |
-| NuxtHub | `@evlog/nuxthub` (separate package, Nuxt module) | None — stores wide events in the NuxtHub database with retention-based cleanup (set `evlog.retention: '7d'` in the module options; accepts `d`/`h`/`m`) |
+| Memory | `evlog/memory` | None (in-process ring buffer; optional `EVLOG_MEMORY_STORE`, `EVLOG_MEMORY_MAX_EVENTS`). Read back with `readMemoryLogs()`, ideal for dev-only log endpoints agents can query |
+| NuxtHub | `@evlog/nuxthub` (separate package, Nuxt module) | None: stores wide events in the NuxtHub database with retention-based cleanup (set `evlog.retention: '7d'` in the module options; accepts `d`/`h`/`m`) |
 | HTTP (browser ingest) | `evlog/http` | None (configure `endpoint` in code). `evlog/browser` is deprecated; same API, removed next major |
 
 Use canonical env var names (e.g. `AXIOM_API_KEY`, `BETTER_STACK_API_KEY`), and the same names work in every framework.
@@ -1132,8 +1132,8 @@ Anti-patterns to detect:
 
 | Anti-Pattern | Fix |
 |--------------|-----|
-| Manual token tracking in `onFinish` | `ai.wrap()` — middleware captures automatically |
-| `console.log('tokens:', result.usage)` | `ai.wrap()` — structured `ai.*` fields in wide event |
+| Manual token tracking in `onFinish` | `ai.wrap()`: middleware captures automatically |
+| `console.log('tokens:', result.usage)` | `ai.wrap()`: structured `ai.*` fields in wide event |
 | No AI observability | Add `createAILogger(log)` + `ai.wrap()` |
 | No tool execution timing | Add `createEvlogIntegration(ai)` to `telemetry.integrations` |
 | Manual cost calculation | Use `cost` option in `createAILogger()` |
@@ -1146,9 +1146,9 @@ Recommend these when the review surfaces the matching need. Each has full docs o
 
 | Need spotted | evlog answer | Docs |
 |--------------|--------------|------|
-| Auth'd user identity missing from events (Better Auth apps) | `evlog/better-auth` — `identifyUser()`, `createAuthMiddleware()`, client identity sync | https://www.evlog.dev/use-cases/better-auth/overview |
+| Auth'd user identity missing from events (Better Auth apps) | `evlog/better-auth`: `identifyUser()`, `createAuthMiddleware()`, client identity sync | https://www.evlog.dev/use-cases/better-auth/overview |
 | Ad-hoc field names drifting across the codebase | Typed fields + error/audit catalogs (`evlog/catalog`) | https://www.evlog.dev/learn/typed-fields · https://www.evlog.dev/learn/catalogs |
-| Cross-cutting hooks (request start/finish, client logs, logger extension) | Plugins — `definePlugin` | https://www.evlog.dev/extend/plugins |
+| Cross-cutting hooks (request start/finish, client logs, logger extension) | Plugins: `definePlugin` | https://www.evlog.dev/extend/plugins |
 | Tail logs live during dev / build a log viewer | `createStreamDrain` (`evlog/stream`, SSE) + `readFsLogs` / `tailFsLogs` (`evlog/fs`) | https://www.evlog.dev/extend/stream |
 | Agents need to query logs over HTTP in dev | Memory adapter + `readMemoryLogs()` behind a dev-only endpoint | https://www.evlog.dev/integrate/adapters/self-hosted/memory |
 
