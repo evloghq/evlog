@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["agent/**/*.ts", "evals/**/*.ts", "db/**/*.ts", "drizzle.config.ts"]
+  "include": ["agent/**/*.ts", "evals/**/*.ts", "scripts/**/*.ts"]
 }
