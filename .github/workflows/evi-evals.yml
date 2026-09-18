@@ -1,63 +1,19 @@
 name: evi evals
 
 # Behavioural tests for the Evi agent. Every run spends real gateway tokens on
-# a live model, so this is deliberately NOT part of `ci`. Agent definitions,
-# evaluation code and fixtures, and the shared content doctrine trigger it.
+# a live model. Runs on demand only: dispatch it manually, with a model input
+# to compare a candidate against the current one before swapping agent.ts.
 #
-# What triggers a run, and what it costs:
-#   - a PR that changes behavior or its evaluations: the `fast` subset.
-#     Automatic, because the PR author is often Evi: an agent opening a PR on
-#     its own behaviour cannot be trusted to remember a label.
-#   - a push to main touching the same paths: the full suite. One trend point per
-#     behaviour change that shipped, which is what makes cost and latency
-#     comparable over time.
-#   - a weekly cron: the full suite, to catch drift that lands without a commit
-#     (a provider silently updating the model behind the id).
-#   - workflow_dispatch with a model: the full suite against a candidate, to
-#     compare cost, latency and pass rate before swapping agent.ts.
-#
-# The guards on the automatic path, in order of how much they save:
-#   - paths: wiring, instructions, tools, skills and evals only. Tests, docs
-#     and every other app never trigger a run.
-#   - drafts are skipped, so a work-in-progress branch does not buy a suite per
-#     push. Marking it ready runs one.
-#   - `skip-evals` on the PR opts out when the author knows the change is inert
-#     but touched a watched path.
-#   - fork PRs and PRs from authors without write access never run: the job
-#     executes checked-out code with the gateway and PostHog secrets.
-#   - concurrency cancels the previous run on the same ref, so a burst of
-#     pushes costs one suite rather than one per push.
+# Automatic triggers (push to main, PRs, weekly cron) were removed: the
+# results were not being acted on, and the connect-dependent evals cannot run
+# on a runner anyway. Run the suite from a checkout (`pnpm --filter evi exec
+# eve eval`) or from here.
 #
 # Results reach PostHog as `evi_eval` / `evi_eval_run`, joined to the agent's
 # LLM traces by the eve session id. Spend is tagged `evi:env:eval` on the
 # gateway, so an eval bill is never confused with production traffic.
 
 on:
-  schedule:
-    - cron: '0 4 * * 1'
-  push:
-    branches:
-      - main
-    paths:
-      - 'apps/evi/agent/**'
-      - '!apps/evi/agent/**/*.test.ts'
-      - 'apps/evi/evals/**'
-      - '!apps/evi/evals/**/*.test.ts'
-      - '.agents/skills/write-evlog-content/**'
-      - 'scripts/content-lint/**'
-      - '.github/workflows/evi-evals.yml'
-  # Same list as above — GitHub Actions does not support YAML anchors, so the
-  # two must be kept in step by hand.
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - 'apps/evi/agent/**'
-      - '!apps/evi/agent/**/*.test.ts'
-      - 'apps/evi/evals/**'
-      - '!apps/evi/evals/**/*.test.ts'
-      - '.agents/skills/write-evlog-content/**'
-      - 'scripts/content-lint/**'
-      - '.github/workflows/evi-evals.yml'
   workflow_dispatch:
     inputs:
       model:
@@ -74,19 +30,6 @@ concurrency:
 
 jobs:
   evals:
-    # Drafts, opt-outs, fork PRs and untrusted authors never spend anything,
-    # and never reach the gateway or PostHog secrets. Evi is allowed by login:
-    # a GitHub App carries no author association.
-    if: |
-      github.event_name != 'pull_request' || (
-        github.event.pull_request.draft == false
-        && !contains(github.event.pull_request.labels.*.name, 'skip-evals')
-        && github.event.pull_request.head.repo.full_name == github.repository
-        && (
-          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
-          || github.event.pull_request.user.login == 'evlogai[bot]'
-        )
-      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -139,7 +82,6 @@ jobs:
         # regression that is not one. Run them locally, or from a deployment.
         run: >
           pnpm --filter evi exec eve eval
-          ${{ github.event_name == 'pull_request' && '--tag fast' || '' }}
           ${{ env.VERCEL_OIDC_TOKEN == '' && '--exclude-tag needs-connect' || '' }}
           --junit evi-evals.xml
         env:
