@@ -7,12 +7,13 @@ import { decideEnvVarWrite } from '../lib/vercel-env'
 
 const { EVI_VERCEL_API_CONNECTOR, VERCEL_TEAM_ID } = process.env
 
-// `vercel/api` is the Vercel-managed connector UID for the management API;
-// override with EVI_VERCEL_API_CONNECTOR if the team's connector is
-// provisioned under a different UID. App principal, so the agent itself holds
-// the credential, the same one the read-only vercel connection rides.
+// The `vercel/mcp` connector is what the read-only connection already rides,
+// so the write path uses the same installation; the REST upsert rides its
+// token. Override with EVI_VERCEL_API_CONNECTOR if a dedicated Vercel API
+// connector is ever provisioned. App principal, so the agent itself holds
+// the credential.
 function connectToken(): Promise<string> {
-  return getToken(EVI_VERCEL_API_CONNECTOR ?? 'vercel/api', { subject: { type: 'app' } })
+  return getToken(EVI_VERCEL_API_CONNECTOR ?? 'vercel/mcp', { subject: { type: 'app' } })
 }
 
 // Writes never exist for autonomous turns (first responder, schedules): the
