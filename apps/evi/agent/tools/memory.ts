@@ -1,11 +1,13 @@
 import { useLogger } from 'evlog/eve'
 import { defineDynamic, defineTool } from 'eve/tools'
+import type { ToolContext } from 'eve/tools'
 import { z } from 'zod'
 import { memoryAvailable } from '../lib/memory/config'
 import { surfaceOf } from '../lib/memory/identity'
 import { MemoryRejected } from '../lib/memory/policy'
 import { writableTarget } from '../lib/memory/scope'
 import { openMemorySession } from '../lib/memory/session'
+import type { MemorySession } from '../lib/memory/session'
 import type { MemorySource } from '../lib/memory/types'
 import { DEFAULT_SEARCH_LIMIT, MAX_MEMORY_TEXT_LENGTH, MAX_MEMORY_TITLE_LENGTH } from '../lib/memory/types'
 import { channelName } from '../lib/channel'
@@ -22,22 +24,32 @@ const REMEMBER_DESCRIPTION = `Remember one durable fact for future sessions. Rea
 
 Say once, plainly, that you saved it. Do not read it back.`
 
+/**
+ * Eve durably serializes the callbacks it stamps on dynamic tools, so an
+ * `execute` must not close over a live session: it reopens one from the
+ * verified auth on the tool context instead.
+ */
+async function reopenedSession(toolCtx: ToolContext): Promise<MemorySession | null> {
+  return await openMemorySession(toolCtx.session.auth.current)
+}
+
+const MEMORY_UNAVAILABLE = { success: false as const, error: 'Memory is not available in this session.' }
+
 export default defineDynamic({
   events: {
     'turn.started': async (_event, ctx) => {
       if (!memoryAvailable()) return null
-      const auth = ctx.session.auth.current
 
       // An autonomous turn sees no tools; a store that cannot answer costs
       // the tools, never the turn.
-      let session
+      let gating
       try {
-        session = await openMemorySession(auth)
+        gating = await openMemorySession(ctx.session.auth.current)
       } catch (error) {
         console.error('[evi:memory] tools unavailable', error)
         return null
       }
-      if (session === null) return null
+      if (gating === null) return null
 
       const source: MemorySource = {
         surface: surfaceOf(channelName(ctx.channel.kind)),
@@ -59,6 +71,9 @@ export default defineDynamic({
               .describe('The id of a memory this one corrects. The old one stops being used and stays readable as history.'),
           }),
           async execute(input, toolCtx) {
+            const auth = toolCtx.session.auth.current
+            const session = await reopenedSession(toolCtx)
+            if (session === null) return MEMORY_UNAVAILABLE
             const log = useLogger(toolCtx)
             const target = writableTarget(auth, input.about, session.personId)
             if (target === null) {
@@ -94,6 +109,8 @@ export default defineDynamic({
             limit: z.number().int().min(1).max(25).default(DEFAULT_SEARCH_LIMIT),
           }),
           async execute(input, toolCtx) {
+            const session = await reopenedSession(toolCtx)
+            if (session === null) return MEMORY_UNAVAILABLE
             const records = await session.store.search(session.targets, input.query, input.limit)
             useLogger(toolCtx).set({ memory: { searched: true, hits: records.length } })
             return {
@@ -115,7 +132,9 @@ export default defineDynamic({
           inputSchema: z.object({
             id: z.string().uuid().describe('The id of the memory to stop using.'),
           }),
-          async execute(input) {
+          async execute(input, toolCtx) {
+            const session = await reopenedSession(toolCtx)
+            if (session === null) return MEMORY_UNAVAILABLE
             const forgotten = await session.store.forget(session.targets, input.id)
             return forgotten
               ? { success: true as const, forgotten: true as const }
