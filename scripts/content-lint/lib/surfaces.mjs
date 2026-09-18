@@ -34,7 +34,7 @@ const PROFILES = {
 export const SURFACES = Object.keys(PROFILES)
 
 /** Trees scanned whole. */
-const TREES = ['apps/docs/content', 'skills', '.agents/skills']
+const TREES = ['apps/docs/content', 'apps/evi/docs', 'skills', '.agents/skills', 'apps/evi/agent/skills']
 
 /**
  * The doctrine's own reference files quote the prose they ban, worked pair by
@@ -55,7 +55,7 @@ export function surfaceOf(path) {
     return /\/(7\.reference|4\.integrate)\//.test(normalized) ? 'reference' : 'docs'
   }
   if (normalized.endsWith('AGENTS.md')) return 'agents'
-  if (normalized.startsWith('.agents/skills/') || normalized.startsWith('skills/')) return 'skill'
+  if (normalized.startsWith('apps/evi/agent/skills/') || normalized.startsWith('.agents/skills/') || normalized.startsWith('skills/')) return 'skill'
   if (normalized === 'README.md' || /^(packages|apps)\/[^/]+\/README\.md$/.test(normalized)) return 'readme'
   return 'docs'
 }
@@ -71,11 +71,11 @@ export function profileOf(surface) {
 /**
  * Every file a content pass may open, repo-relative.
  *
- * Two absences are deliberate. Evi's own skills under `apps/evi/agent/skills`
- * are the agent's operating instructions, and an unattended pass that can
- * rewrite the instructions it just followed has no floor. The playground
- * READMEs under `apps/` are scaffolding nobody arrives at; only the package
- * READMEs ship to npm.
+ * Evi's own written surfaces are in: `apps/evi/docs` as prose, its skills
+ * under `apps/evi/agent/skills` as skills. Drift there is prose drift like any
+ * other, and a pass reports findings on a skill rather than handing them to a
+ * rewrite. One absence is deliberate: the playground READMEs under `apps/` are
+ * scaffolding nobody arrives at; only the package READMEs ship to npm.
  *
  * @param {string} repoRoot
  * @returns {string[]}

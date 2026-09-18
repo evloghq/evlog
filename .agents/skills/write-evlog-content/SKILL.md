@@ -42,12 +42,14 @@ Everything evlog ships as prose, on both sides of the line:
 
 | Read by | Surfaces | What decides quality |
 | --- | --- | --- |
-| People | docs pages, the landing, blog posts, the package READMEs | Whether the reader can act, and whether they believe the page |
-| Agents | `.agents/skills/`, `skills/`, the `AGENTS.md` files | Whether an agent does the right thing having read only this |
+| People | docs pages, the landing, blog posts, the package READMEs, Evi's own docs under `apps/evi/docs/` | Whether the reader can act, and whether they believe the page |
+| Agents | `.agents/skills/`, `skills/`, `apps/evi/agent/skills/`, the `AGENTS.md` files | Whether an agent does the right thing having read only this |
 
 The house rules cross the line: punctuation, terminology, accuracy, dead links. Rhythm does not. A skill whose four steps read as four parallel imperatives is a procedure, and the scanner leaves rhythm alone there. See `rules/machine.md`.
 
-Two parts of that table are excluded from the scan. Evi's own operating skills under `apps/evi/agent/skills/` are outside the corpus because the pass that would rewrite them is the pass they instruct. This skill's own `references/` are outside it because they quote the prose they ban, worked pair by worked pair, and scanning them measures the examples. Both exclusions live in `scripts/content-lint/lib/surfaces.mjs`, and both mean the scanner will never tell you these files drifted. Read them yourself.
+One part of that table is excluded from the scan: this skill's own `references/`, because they quote the prose they ban, worked pair by worked pair, and scanning them measures the examples. The exclusion lives in `scripts/content-lint/lib/surfaces.mjs`, and it means the scanner will never tell you those files drifted. Read them yourself.
+
+Evi's own trees used to sit outside the corpus too, so the scanner read everything but them while their prose accumulated em dashes for months. They are in now, and that history is the reason: a written surface the scanner cannot see is one that can drift forever. Findings on a skill surface come back as a report for a person to judge, never as a rewrite of the instructions the pass itself runs on.
 
 ## Severity
 

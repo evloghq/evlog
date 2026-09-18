@@ -46,13 +46,14 @@ Defined in `lib/surfaces.mjs`, not in the caller:
 | Surface | Files | Judged on |
 | --- | --- | --- |
 | `landing` `docs` `reference` `blog` | `apps/docs/content` | everything |
+| `docs` | `apps/evi/docs` | everything |
 | `readme` | `packages/*/README.md` | everything |
-| `skill` | `.agents/skills/`, `skills/` | house rules and drift only |
+| `skill` | `.agents/skills/`, `skills/`, `apps/evi/agent/skills/` | house rules and drift only |
 | `agents` | `AGENTS.md`, `apps/*/AGENTS.md` | house rules and drift only |
 
 Rhythm checks are off on the last two. Those files are read by an agent that will act on them, and four parallel imperatives there are a procedure, not a template.
 
-Three absences are deliberate: `apps/evi/agent/skills/` (the pass's own instructions), the doctrine's own `references/` (they quote the prose they ban), and the root `README.md` (a symlink onto the package one).
+Two absences are deliberate: the doctrine's own `references/` (they quote the prose they ban), and the root `README.md` (a symlink onto the package one). Evi's own trees are in: drift there survived months of clean scans before the scanner saw them, and a pass reports findings on a skill rather than rewriting it.
 
 ## What it measures
 

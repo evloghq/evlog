@@ -13,7 +13,7 @@
  *   node scripts/content-lint --url https://…              a page that is not in the repo
  *   cat draft.md | node scripts/content-lint --stdin       prose that is not a file yet
  *
- * The corpus is the docs tree, the landing, the package READMEs, the skills,
+ * The corpus is the docs trees, the landing, the package READMEs, the skills,
  * and the AGENTS.md files. It is defined in `lib/surfaces.mjs`, not here.
  *
  * Nothing this prints is a decision. Every finding carries the id of a rule or
