@@ -1,4 +1,5 @@
 ---
+name: ecosystem-usage
 description: "Measure agent-facing traffic to the evlog docs site (MCP transport, raw Markdown, discovery paths) with Vercel Observability, and read it without inflating it."
 ---
 
