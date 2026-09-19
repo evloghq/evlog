@@ -26,7 +26,10 @@ export default defineDynamic({
       if (!canAccessAdminTools(ctx.session.auth.current)) return null
       return {
         set_vercel_env: defineTool({
-          description: 'Create or update one non-secret environment variable on one Vercel project, via the REST upsert (POST /v10/projects/{idOrName}/env?upsert=true). The type is always `plain`: secret-shaped keys (`*TOKEN`, `*SECRET`, `*KEY`, `DATABASE_URL`, `*DSN`, ...) are refused outright, by policy, even with an approval. Allowlisted non-secret agent-config keys on writable projects run on their own; anything else pauses for a human approval card. A write lands on the project the next deployment reads, so a redeploy is required for the change to apply. This is the only write surface on Vercel: never look for a workaround around it. ' + SEQUENTIAL_APPROVAL_RULE,
+          description: [
+            'Create or update one non-secret environment variable on one Vercel project, via the REST upsert (POST /v10/projects/{idOrName}/env?upsert=true). The type is always `plain`: secret-shaped keys (`*TOKEN`, `*SECRET`, `*KEY`, `DATABASE_URL`, `*DSN`, ...) are refused outright, by policy, even with an approval. Allowlisted non-secret agent-config keys on writable projects run on their own; anything else pauses for a human approval card. A write lands on the project the next deployment reads, so a redeploy is required for the change to apply. This is the only write surface on Vercel: never look for a workaround around it.',
+            SEQUENTIAL_APPROVAL_RULE,
+          ].join(' '),
           inputSchema: z.object({
             projectId: z.string().min(1).describe('The Vercel project id, like `prj_...`. Find ids with the read-only `vercel__list_projects`.'),
             key: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Environment variable names are letters, digits, and underscores.')
