@@ -15,6 +15,14 @@ and the spend tags go through it.
 only, so `Tools 0` still means `bash`, `read_file`, `write_file`, `glob`, `grep`,
 `web_fetch`, `todo` and `load_skill` are all present.
 
+**Two Approve cards in one step do not resume reliably.** Parallel
+`set_vercel_env` calls that each pause for Slack Approve have left the run at
+`waiting` with both tools `running` after both cards were approved, even when
+the REST upserts landed. eve's `defineTool` surface has no serial or exclusive
+option (Tools and TypeScript API, eve 0.49), so the guard is instructional: one
+gated tool per step, kept on the system prompt, the Vercel connection, and the
+`set_vercel_env` description. Independent reads stay parallel.
+
 **Only the GitHub channel checks out the repository.** It happens before the
 first model call, at the triggering ref, incrementally across turns, and only on
 a firewall-capable backend. Locally and on every other channel `/workspace` is

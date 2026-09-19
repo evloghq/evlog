@@ -41,6 +41,9 @@ export type EnvVarWriteDecision =
   | 'user-approval'
   | 'not-applicable'
 
+/** Two gated writes in one step park the Slack session after Approve. Serialize them. */
+export const SEQUENTIAL_APPROVAL_RULE = 'Never raise two Approve cards in the same step. Call `set_vercel_env` once, wait for Approve, report the result, then the next. Independent reads may still run in parallel.'
+
 /**
  * The write policy, as Hugo specified it: allowlisted non-secret keys on
  * allowlisted projects run on their own, everything else pauses for a human,

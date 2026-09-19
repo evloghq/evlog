@@ -1,5 +1,6 @@
 import { defineMcpClientConnection } from 'eve/connections'
 import { adminOnlyAppConnection } from '../lib/connect'
+import { SEQUENTIAL_APPROVAL_RULE } from '../lib/vercel-env'
 
 const { VERCEL_TEAM_ID, EVI_VERCEL_DOCS_PROJECT_ID, EVI_VERCEL_MCP_ROUTE } = process.env
 
@@ -71,7 +72,7 @@ const VERCEL_MCP_INSTRUCTIONS = [
   `- Evi's own Agent Runs use the same teamId but a DIFFERENT projectId, the eve service, not the app. Call \`list_agent_run_projects\` first and use that id on \`list_agent_runs\` / \`get_agent_run\`. Still NOT tokens/cost: use \`ai_gateway__*\` for that. Never fetch traces (\`get_agent_run_trace\` is not allowlisted).`,
   '- `search_vercel_documentation` needs no ids: general Vercel platform docs search.',
   '',
-  '**Writes:** this connection is read-only. The one write surface is the `set_vercel_env` tool, which upserts a single non-secret environment variable on one project and is policy-gated (allowlisted agent-config keys on writable projects run on their own; anything else raises an Approve card; secret-shaped keys are refused outright). When a Vercel write is needed, call `set_vercel_env` and wait for the approval, instead of explaining CLI commands or asking the user to paste values.',
+  `**Writes:** this connection is read-only. The one write surface is the \`set_vercel_env\` tool, which upserts a single non-secret environment variable on one project and is policy-gated (allowlisted agent-config keys on writable projects run on their own; anything else raises an Approve card; secret-shaped keys are refused outright). When a Vercel write is needed, call \`set_vercel_env\` and wait for the approval, instead of explaining CLI commands or asking the user to paste values. ${SEQUENTIAL_APPROVAL_RULE}`,
 ].join(String.fromCharCode(10))
 
 export default defineMcpClientConnection({
