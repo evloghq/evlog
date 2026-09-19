@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { AUTO_APPROVED_KEYS, decideEnvVarWrite, writableProjects } from './vercel-env'
+import { AUTO_APPROVED_KEYS, decideEnvVarWrite, SEQUENTIAL_APPROVAL_RULE, writableProjects } from './vercel-env'
 
 const PROJECT = { EVI_VERCEL_WRITABLE_PROJECTS: 'prj_evi, prj_evlog-docs' }
 
@@ -48,5 +50,23 @@ describe('decideEnvVarWrite', () => {
 
   it('denies a secret-shaped key before any other check, even on an unlisted project', () => {
     expect(decideEnvVarWrite({ projectId: 'prj_other', key: 'VERCEL_TOKEN' }, PROJECT)).toMatchObject({ type: 'denied' })
+  })
+})
+
+describe('SEQUENTIAL_APPROVAL_RULE', () => {
+  it('forbids two Approve cards in one step', () => {
+    expect(SEQUENTIAL_APPROVAL_RULE).toContain('Never raise two Approve cards in the same step')
+    expect(SEQUENTIAL_APPROVAL_RULE).toContain('wait for Approve')
+    expect(SEQUENTIAL_APPROVAL_RULE).toContain('Independent reads may still run in parallel')
+  })
+
+  it('is wired into the write tool, the Vercel connection, and the system prompt', () => {
+    const agent = join(import.meta.dirname, '..')
+    expect(readFileSync(join(agent, 'tools/set-vercel-env.ts'), 'utf8')).toContain('SEQUENTIAL_APPROVAL_RULE')
+    expect(readFileSync(join(agent, 'connections/vercel.ts'), 'utf8')).toContain('SEQUENTIAL_APPROVAL_RULE')
+    const instructions = readFileSync(join(agent, 'instructions.md'), 'utf8')
+    expect(instructions).toContain('One Approve card per step')
+    expect(instructions).toContain('Never raise two gated tools in the same step')
+    expect(instructions).toContain('issue independent reads together in one step')
   })
 })
