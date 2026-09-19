@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
-import { addTemplate, defineNuxtModule } from '@nuxt/kit'
+import { defineNuxtModule } from '@nuxt/kit'
 
 /**
  * Where the things being filmed come from.
@@ -84,7 +84,7 @@ export default defineNuxtModule<StagesOptions>({
       const absolute = resolve(root, source.glob)
       // Vite reads the literal, so it has to be a path relative to this file —
       // and one that starts with a dot, or it is taken for a package.
-      const path = withLeadingDot(relative(generatedDir, absolute))
+      const path = toViteRelativePath(generatedDir, absolute)
       return `  ...withGroup(import.meta.glob(${JSON.stringify(path)}), ${JSON.stringify(source.group ?? `group-${index}`)}),`
     })
 
@@ -127,21 +127,9 @@ ${entries.join('\n')}
     const scanned = sources.flatMap(source => (source.source ? [resolve(root, source.source)] : []))
 
     if (stylesheets.length || scanned.length) {
-      const sheet = addTemplate({
-        filename: 'render-labs-stage-sources.css',
-        write: true,
-        getContents: () => [
-          // Relative to the project root rather than to this file or to the
-          // filesystem. An `@import` inside a Nuxt CSS entry is resolved from
-          // the root whatever directory the entry itself was written to, so an
-          // absolute path is read as root-relative and a path relative to the
-          // build directory lands a level too high.
-          ...stylesheets.map(path => `@import ${JSON.stringify(withLeadingDot(relative(root, path)))};`),
-          ...scanned.map(path => `@source ${JSON.stringify(path)};`),
-          '',
-        ].join('\n'),
-      })
-      nuxt.options.css.push(sheet.dst)
+      const generatedStyles = resolve(generatedDir, 'sources.css')
+      writeFileSync(generatedStyles, renderStageSourceStylesheet(generatedDir, stylesheets, scanned))
+      nuxt.options.css.push(generatedStyles)
     }
 
     // The sources sit outside the project root, which Vite refuses to serve from
@@ -164,4 +152,23 @@ function globBase(pattern: string): string {
 
 function withLeadingDot(path: string): string {
   return isAbsolute(path) || path.startsWith('.') ? path : `./${path}`
+}
+
+/** Convert a filesystem path to the slash-separated form Vite parses. */
+export function toVitePath(path: string): string {
+  return path.replaceAll('\\', '/')
+}
+
+/** Resolve a Vite import path between two filesystem locations. */
+export function toViteRelativePath(from: string, to: string): string {
+  return withLeadingDot(toVitePath(relative(from, to)))
+}
+
+/** Render the stylesheet that carries external stage styles and Tailwind sources. */
+export function renderStageSourceStylesheet(root: string, stylesheets: string[], scanned: string[]): string {
+  return [
+    ...stylesheets.map(path => `@import ${JSON.stringify(toViteRelativePath(root, path))};`),
+    ...scanned.map(path => `@source ${JSON.stringify(toVitePath(path))};`),
+    '',
+  ].join('\n')
 }
