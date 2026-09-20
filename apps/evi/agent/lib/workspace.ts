@@ -9,6 +9,11 @@ export function checkoutDir(repository: Repository): string {
   return `/workspace/${repositorySlug(repository)}`
 }
 
+/** Frozen install with whatever package manager the lockfile names; corepack fetches a missing one without asking. */
+export function installCommand(dir: string): string {
+  return `cd ${dir} && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 nci`
+}
+
 /** What a failed sandbox command has to say for itself: stderr first, stdout as fallback. */
 export function runOutput(run: { stdout?: unknown, stderr?: unknown }): string {
   return String(run.stderr ?? '').trim() || String(run.stdout ?? '').trim()

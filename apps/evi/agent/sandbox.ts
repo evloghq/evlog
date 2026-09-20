@@ -8,6 +8,9 @@ import { cloneUrl, homeRepository, repositorySlug } from './lib/repo'
  */
 const BEFORE_AFTER_CLI = '@vercel/before-and-after@0.0.4'
 
+/** Package managers for repositories that are not the home one: corepack covers pnpm and yarn, bun is separate, `nci` picks from the lockfile. */
+const PACKAGE_MANAGER_CLIS = ['@antfu/ni@30.6.0', 'bun@1.4.2']
+
 const HOME = homeRepository()
 
 /**
@@ -27,14 +30,15 @@ export default defineSandbox({
       snapshotExpiration: 14 * 24 * 60 * 60 * 1000,
     },
   }),
-  revalidationKey: () => `evlog-workspace-v5:${repositorySlug(HOME)}:${agentBrowserRevalidationKey()}:${BEFORE_AFTER_CLI}`,
+  revalidationKey: () => `evlog-workspace-v5:${repositorySlug(HOME)}:${agentBrowserRevalidationKey()}:${[BEFORE_AFTER_CLI, ...PACKAGE_MANAGER_CLIS].join(':')}`,
   async bootstrap({ use }) {
     const sandbox = await use()
+    await sandbox.run({ command: `corepack enable && npm install -g ${[BEFORE_AFTER_CLI, ...PACKAGE_MANAGER_CLIS].join(' ')}` })
     await sandbox.run({ command: `git clone --depth 50 ${cloneUrl(HOME)} repo` })
     // Frozen: a cold install in a fresh clone otherwise re-resolves the whole
     // graph, and any <48h transitive release then fails the template build on
     // the repo's own minimumReleaseAge policy. The lockfile is what CI tested.
-    await sandbox.run({ command: 'cd repo && corepack enable && corepack prepare --activate && pnpm install --frozen-lockfile && pnpm run dev:prepare' })
+    await sandbox.run({ command: 'cd repo && corepack prepare --activate && pnpm install --frozen-lockfile && pnpm run dev:prepare' })
     // Prime the turbo cache on deployed builds only: locally this is minutes
     // of CPU on every template rebuild.
     if (process.env.VERCEL) {
@@ -43,7 +47,6 @@ export default defineSandbox({
     // Commits authored in the sandbox belong to the bot, on every channel.
     await sandbox.run({ command: 'git config --global user.name "evlogai[bot]" && git config --global user.email "evlogai[bot]@users.noreply.github.com"' })
     await installAgentBrowser(sandbox)
-    await sandbox.run({ command: `npm install -g ${BEFORE_AFTER_CLI}` })
   },
   async onSession({ use }) {
     const sandbox = await use()

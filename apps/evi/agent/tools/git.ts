@@ -7,7 +7,7 @@ import { githubCredentials } from '../lib/github/credentials'
 import { isValidRefName, mintInstallationToken, pushBrokerPolicy, validatePushBranch } from '../lib/github/push'
 import { cloneUrl, homeRepository, parseRepository, repositorySlug } from '../lib/repo'
 import { isMaintainer, isScheduleAppAuth } from '../lib/trust'
-import { checkoutDir, REPO_DIR, runOutput } from '../lib/workspace'
+import { checkoutDir, installCommand, REPO_DIR, runOutput } from '../lib/workspace'
 
 /** Maintainer and schedule-app turns ship code; nothing else reaches git over the network. */
 function canShip(auth: SessionAuthContext | null): boolean {
@@ -22,7 +22,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
   const home = repositorySlug(homeRepository())
   return {
     git__checkout: defineTool({
-      description: `Clone a repository the GitHub App is installed on into the sandbox, at /workspace/<owner>/<repo>, to read or change it there. ${home} is already checked out at ${REPO_DIR} and never needs this. Pass \`ref\` to land on a branch or commit instead of the default branch. The credential is brokered at the sandbox firewall and never enters the sandbox.`,
+      description: `Clone a repository the GitHub App is installed on into the sandbox, at /workspace/<owner>/<repo>, and install its dependencies with the package manager its lockfile names, so you can read, run and change it there. ${home} is already checked out at ${REPO_DIR} and never needs this. Pass \`ref\` to land on a branch or commit instead of the default branch. Nothing is cached for this checkout: checks run cold, so say so when you report them. The credential is brokered at the sandbox firewall and never enters the sandbox.`,
       inputSchema: z.object({
         repository: z.string().min(1).describe('owner/repo to clone'),
         ref: z.string().optional().describe('Branch or commit to check out'),
@@ -58,6 +58,28 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
         } finally {
           await sandbox.setNetworkPolicy('allow-all')
         }
+      },
+    }),
+    git__install: defineTool({
+      description: `Install the dependencies of a git__checkout directory with the package manager its lockfile names (pnpm, yarn, npm or bun), frozen to the lockfile. Run it once after the checkout and before any check; ${REPO_DIR} already has its dependencies.`,
+      inputSchema: z.object({
+        repository: z.string().min(1).describe('owner/repo already checked out'),
+      }),
+      async execute(input, toolCtx) {
+        if (!canShip(toolCtx.session.auth.current)) return { success: false as const, error: NOT_ALLOWED }
+        const log = useLogger(toolCtx)
+        const repository = parseRepository(input.repository)
+        if (repository === null) return { success: false as const, error: `"${input.repository}" is not an owner/repo slug.` }
+        const slug = repositorySlug(repository)
+        const dir = checkoutDir(repository)
+        const sandbox = await toolCtx.getSandbox()
+        const install = await sandbox.run({ command: installCommand(dir) })
+        if (install.exitCode !== 0) {
+          log.set({ git: { install: { repository: slug, done: false, reason: `exit_${install.exitCode}` } } })
+          return { success: false as const, error: `install exited ${install.exitCode}: ${runOutput(install)}` }
+        }
+        log.set({ git: { install: { repository: slug, done: true } } })
+        return { success: true as const, repository: slug, path: dir }
       },
     }),
     git__push: defineTool({
