@@ -29,8 +29,8 @@ and the continuation token carries only `repositoryId`. So `ctx.channel.metadata
 is empty in dynamic tools and instruction fragments on a GitHub turn, and the
 thread's `owner`/`repo` reach only the channel's own event handlers through
 `channel.state`. That is why escalation follows the thread (`repositoryOf(state)`)
-while `git__push` and the `github__*` defaults follow `EVI_REPOSITORY` and take
-an explicit repository otherwise. The upstream ask is a `metadata` projection of
+while `git__checkout`, `git__push` and the `github__*` defaults follow
+`EVI_REPOSITORY` and take an explicit repository otherwise. The upstream ask is a `metadata` projection of
 `{ owner, repo, installationId }` on the GitHub channel; with it, `repositoryOf`
 narrows `ctx.channel` through `isChannel` and the explicit inputs go away.
 

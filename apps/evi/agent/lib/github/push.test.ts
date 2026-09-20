@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { mintInstallationToken, pushBrokerPolicy, validatePushBranch } from './push'
+import { isValidRefName, mintInstallationToken, pushBrokerPolicy, validatePushBranch } from './push'
+
+describe('isValidRefName', () => {
+  it('accepts branch names and commit shas', () => {
+    expect(isValidRefName('main')).toBe(true)
+    expect(isValidRefName('release/2.1')).toBe(true)
+    expect(isValidRefName('9c1a3515f0e2b7c4d8a6e1f3b5c7d9e0a2b4c6d8')).toBe(true)
+  })
+
+  it('refuses anything that could escape the command line or the ref namespace', () => {
+    expect(isValidRefName('main; rm -rf /')).toBe(false)
+    expect(isValidRefName('v1`x')).toBe(false)
+    expect(isValidRefName('-flag')).toBe(false)
+    expect(isValidRefName('a..b')).toBe(false)
+    expect(isValidRefName('a//b')).toBe(false)
+    expect(isValidRefName('')).toBe(false)
+  })
+})
 
 describe('validatePushBranch', () => {
   it('accepts ordinary feature branch names', () => {

@@ -12,7 +12,7 @@ In conversation, a fact you just read in the docs or in a file is already ground
 
 const checkedOut = (home: string) => `## Workspace
 
-Your home repository is \`${home}\`: the \`github__*\` tools default to it, and so does \`git__push\`. When the thread you were summoned on lives in another repository, pass \`owner\` and \`repo\` to the GitHub tools and \`repository\` to \`git__push\`.
+Your home repository is \`${home}\`: the \`github__*\` tools default to it, and so does \`git__push\`. When the thread you were summoned on lives in another repository, pass \`owner\` and \`repo\` to the GitHub tools; to change it, \`git__checkout\` clones it under \`/workspace/<owner>/<repo>\` and \`git__push\` takes the same \`repository\`.
 
 Two checkouts are live in the sandbox, and this channel has already opened it to check the thread out, so the file tools cost you nothing here:
 
@@ -25,7 +25,7 @@ ${RUN_BEFORE_ASSERT}`
 
 const noThreadCheckout = (home: string) => `## Workspace
 
-Your home repository is \`${home}\`: the \`github__*\` tools default to it, and so does \`git__push\`. Name another repository explicitly (\`owner\` and \`repo\` on the GitHub tools, \`repository\` on \`git__push\`) only when the person asked about one.
+Your home repository is \`${home}\`: the \`github__*\` tools default to it, and so does \`git__push\`. Name another repository only when the person asked about one: \`owner\` and \`repo\` on the GitHub tools, \`git__checkout\` to clone it under \`/workspace/<owner>/<repo>\`, and the same \`repository\` on \`git__push\`.
 
 There is no thread checkout on this channel. The sandbox carries \`${home}\` at \`/workspace/repo\` — a working copy on the current \`main\`, dependencies installed and \`dev:prepare\` run — but it is an **execution** surface here, not a reading one: opening it costs a VM start, which is minutes when the session has not touched it yet.
 
