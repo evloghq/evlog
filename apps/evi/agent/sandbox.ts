@@ -8,7 +8,7 @@ import { cloneUrl, homeRepository, repositorySlug } from './lib/repo'
  */
 const BEFORE_AFTER_CLI = '@vercel/before-and-after@0.0.4'
 
-/** Package managers for repositories that are not the home one: corepack covers pnpm and yarn, bun is separate, `nci` picks from the lockfile. */
+/** Package managers for repositories that are not the home one: the image ships pnpm and yarn, bun is separate, `nci` picks from the lockfile. */
 const PACKAGE_MANAGER_CLIS = ['@antfu/ni@30.6.0', 'bun@1.4.2']
 
 const HOME = homeRepository()
@@ -33,7 +33,7 @@ export default defineSandbox({
   revalidationKey: () => `evlog-workspace-v5:${repositorySlug(HOME)}:${agentBrowserRevalidationKey()}:${[BEFORE_AFTER_CLI, ...PACKAGE_MANAGER_CLIS].join(':')}`,
   async bootstrap({ use }) {
     const sandbox = await use()
-    await sandbox.run({ command: `corepack enable && npm install -g ${[BEFORE_AFTER_CLI, ...PACKAGE_MANAGER_CLIS].join(' ')}` })
+    await sandbox.run({ command: `npm install -g ${[BEFORE_AFTER_CLI, ...PACKAGE_MANAGER_CLIS].join(' ')}` })
     await sandbox.run({ command: `git clone --depth 50 ${cloneUrl(HOME)} repo` })
     // Frozen: a cold install in a fresh clone otherwise re-resolves the whole
     // graph, and any <48h transitive release then fails the template build on
