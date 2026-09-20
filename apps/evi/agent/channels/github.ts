@@ -1,7 +1,7 @@
 import { defaultGitHubAuth, githubChannel } from 'eve/channels/github'
 import type { GitHubChannelState } from 'eve/channels/github'
 import { githubCredentials } from '../lib/github/credentials'
-import { escalateFailedTriage, isAutonomousTriageState } from '../lib/github/escalate'
+import { escalateTriage, isAutonomousTriageState } from '../lib/github/escalate'
 import { failureComment } from '../lib/failure'
 import { AUTONOMOUS_GITHUB_PRINCIPAL, isAutonomous, MAINTAINER_GITHUB_ID, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'
 
@@ -61,7 +61,7 @@ export default githubChannel({
 async function escalate(state: GitHubChannelState): Promise<void> {
   if (state.issueNumber === null) return
   try {
-    await escalateFailedTriage(state.issueNumber)
+    await escalateTriage(state.issueNumber)
   } catch (error) {
     // Never let the escalation turn a triage failure into a failure loop.
     console.error('[evi:github] failed to escalate a failed triage', error)
