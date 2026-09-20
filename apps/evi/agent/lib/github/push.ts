@@ -10,8 +10,13 @@ const PROTECTED_BRANCHES = new Set(['main', 'master'])
  */
 const REF_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$/
 
+/** git-check-ref-format, per slash component: no leading dot, no trailing dot or `.lock`. */
+function isValidRefComponent(component: string): boolean {
+  return component.length > 0 && !component.startsWith('.') && !component.endsWith('.') && !component.endsWith('.lock')
+}
+
 export function isValidRefName(ref: string): boolean {
-  return REF_PATTERN.test(ref) && !ref.includes('..') && !ref.includes('//')
+  return REF_PATTERN.test(ref) && !ref.includes('..') && ref.split('/').every(isValidRefComponent)
 }
 
 /** Returns the refusal reason, or null when the branch may be pushed. */

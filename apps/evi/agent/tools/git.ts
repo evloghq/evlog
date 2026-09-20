@@ -39,7 +39,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
         const token = await mintInstallationToken(githubCredentials)
         await sandbox.setNetworkPolicy(pushBrokerPolicy(token))
         try {
-          const clone = await sandbox.run({ command: `test -d ${dir}/.git || git clone --depth 50 ${cloneUrl(repository)} ${dir}` })
+          const clone = await sandbox.run({ command: `test -d ${dir}/.git || (mkdir -p ${dir} && git clone --depth 50 ${cloneUrl(repository)} ${dir})` })
           if (clone.exitCode !== 0) {
             log.set({ git: { checkout: { repository: slug, done: false, reason: `exit_${clone.exitCode}` } } })
             return { success: false as const, error: `git clone exited ${clone.exitCode}: ${runOutput(clone)}` }
@@ -51,7 +51,11 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
               return { success: false as const, error: `git checkout exited ${checkout.exitCode}: ${runOutput(checkout)}` }
             }
           }
-          const head = await sandbox.run({ command: `git -C ${dir} rev-parse HEAD` })
+          const head = await sandbox.run({ command: `git -C ${dir} rev-parse --verify HEAD` })
+          if (head.exitCode !== 0) {
+            log.set({ git: { checkout: { repository: slug, done: false, reason: 'no_commits' } } })
+            return { success: false as const, error: `${slug} has no commits to check out.` }
+          }
           const sha = String(head.stdout).trim()
           log.set({ git: { checkout: { repository: slug, done: true, sha } } })
           return { success: true as const, repository: slug, path: dir, sha }

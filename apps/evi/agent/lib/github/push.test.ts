@@ -16,6 +16,14 @@ describe('isValidRefName', () => {
     expect(isValidRefName('a//b')).toBe(false)
     expect(isValidRefName('')).toBe(false)
   })
+
+  it('refuses components git itself rejects', () => {
+    expect(isValidRefName('release/.draft')).toBe(false)
+    expect(isValidRefName('release./x')).toBe(false)
+    expect(isValidRefName('release.lock')).toBe(false)
+    expect(isValidRefName('release.lock/x')).toBe(false)
+    expect(isValidRefName('release/v2.lock.1')).toBe(true)
+  })
 })
 
 describe('validatePushBranch', () => {
