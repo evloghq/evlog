@@ -134,10 +134,10 @@ importers:
     dependencies:
       '@agent-browser/eve':
         specifier: file:./vendor/agent-browser-eve-0.38.1-pr1945.tgz
-        version: file:apps/evi/vendor/agent-browser-eve-0.38.1-pr1945.tgz(eve@0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))
+        version: file:apps/evi/vendor/agent-browser-eve-0.38.1-pr1945.tgz(eve@0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))
       '@github-tools/eve-extension':
-        specifier: 0.7.2
-        version: 0.7.2(2c69163c170fd0164cb20c3f968bb9d3)
+        specifier: 0.7.3
+        version: 0.7.3(e9da578ae3ea303bcc48a866878e6105)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -155,7 +155,7 @@ importers:
         version: 2.8.0
       '@vercel/connect':
         specifier: ^2.2.0
-        version: 2.3.0(@ai-sdk/mcp@2.0.39(zod@4.6.2))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.2))(ai@7.0.107(zod@4.6.2))(better-auth@1.7.4(3dfba0b16694ee612a76e3f76bb9aa71))(eve@0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))
+        version: 2.3.0(@ai-sdk/mcp@2.0.39(zod@4.6.2))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.2))(ai@7.0.107(zod@4.6.2))(better-auth@1.7.4(3dfba0b16694ee612a76e3f76bb9aa71))(eve@0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))
       '@vercel/oidc':
         specifier: ^3.8.7
         version: 3.8.7
@@ -166,8 +166,8 @@ importers:
         specifier: ^7.0.105
         version: 7.0.107(zod@4.6.2)
       eve:
-        specifier: 0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
+        specifier: 0.63.0
+        version: 0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
       evlog:
         specifier: workspace:*
         version: link:../../packages/evlog
@@ -1184,7 +1184,7 @@ packages:
         optional: true
 
   '@agent-browser/eve@file:apps/evi/vendor/agent-browser-eve-0.38.1-pr1945.tgz':
-    resolution: {integrity: sha512-AGwKHQBMUjNa6wdRhXXqI36auutqgpFdc7/Dl4aX6BhX4ENX0KI1D1KUYadQClaIc79NhVh6+E6rCEkslFlbrg==, tarball: file:apps/evi/vendor/agent-browser-eve-0.38.1-pr1945.tgz}
+    resolution: {integrity: sha512-gAj+2O4zTR3jYm7Z5boCCCVDYTE8BlyqnWT8onWIMg1W6HK9yL3gr3gF1VpNk4F88LFKBNYqKW/hJxeWa+q+Sw==, tarball: file:apps/evi/vendor/agent-browser-eve-0.38.1-pr1945.tgz}
     version: 0.38.1
     engines: {node: '>=24.0.0'}
     peerDependencies:
@@ -2714,8 +2714,8 @@ packages:
   '@floating-ui/vue@1.1.11':
     resolution: {integrity: sha512-HzHKCNVxnGS35r9fCHBc3+uCnjw9IWIlCPL683cGgM9Kgj2BiAl8x1mS7vtvP6F9S/e/q4O6MApwSHj8hNLGfw==}
 
-  '@github-tools/eve-extension@0.7.2':
-    resolution: {integrity: sha512-b0/8Obk663880y5m9/CRfHQaTf2p3Y1T3E5TjpVS50a8+1hdbGCnogN1+wM4NFvxMCmQK1sUlPuS+srgBU1moA==}
+  '@github-tools/eve-extension@0.7.3':
+    resolution: {integrity: sha512-giLCX329i0T11VBAODA0adcNuwVF7eEIUPyjlY/WMdrgyFhW4Et+dsO3FT1HOKsj86uAXPwY9aqa17pWdsnJNw==}
     engines: {node: '>=24'}
     peerDependencies:
       '@vercel/connect': '>=0.3.2'
@@ -11311,8 +11311,8 @@ packages:
       microsandbox:
         optional: true
 
-  eve@0.62.0:
-    resolution: {integrity: sha512-tQ9bb4CT/EhxVSpnSUu/HjWCDu9Enk719H6i8ZOk6N7xv43zdB7TBn5+h+95EVfK+S0bU2fd9Cxq2bXWVS0EQQ==}
+  eve@0.63.0:
+    resolution: {integrity: sha512-iDv0S4MXvZimaXNTJnyB2THumRQLWQSAgpMcZsGtMNquYQpSKB1+i8sxX4KJOHHCLd04lwD+06xnh+ja7rlZIw==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
@@ -17157,10 +17157,10 @@ snapshots:
       '@phc/format': 1.0.0
       '@poppinss/utils': 6.10.1
 
-  '@agent-browser/eve@file:apps/evi/vendor/agent-browser-eve-0.38.1-pr1945.tgz(eve@0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))':
+  '@agent-browser/eve@file:apps/evi/vendor/agent-browser-eve-0.38.1-pr1945.tgz(eve@0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))':
     dependencies:
       '@agent-browser/sandbox': 0.38.1
-      eve: 0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
+      eve: 0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
       zod: 4.4.3
     transitivePeerDependencies:
       - '@vercel/sandbox'
@@ -18614,13 +18614,13 @@ snapshots:
       - '@vue/composition-api'
       - vue
 
-  '@github-tools/eve-extension@0.7.2(2c69163c170fd0164cb20c3f968bb9d3)':
+  '@github-tools/eve-extension@0.7.3(e9da578ae3ea303bcc48a866878e6105)':
     dependencies:
-      '@github-tools/sdk': 1.16.1(1e30c71c5eb1ebbb509541f165a554e2)
-      eve: 0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
+      '@github-tools/sdk': 1.16.1(e77f90037489e4b30482d88161f64e53)
+      eve: 0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
       zod: 4.6.2
     optionalDependencies:
-      '@vercel/connect': 2.3.0(@ai-sdk/mcp@2.0.39(zod@4.6.2))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.2))(ai@7.0.107(zod@4.6.2))(better-auth@1.7.4(3dfba0b16694ee612a76e3f76bb9aa71))(eve@0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))
+      '@vercel/connect': 2.3.0(@ai-sdk/mcp@2.0.39(zod@4.6.2))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.2))(ai@7.0.107(zod@4.6.2))(better-auth@1.7.4(3dfba0b16694ee612a76e3f76bb9aa71))(eve@0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))
     transitivePeerDependencies:
       - '@ai-sdk/workflow'
       - '@nestjs/common'
@@ -18643,15 +18643,15 @@ snapshots:
       - vite
       - workflow
 
-  '@github-tools/sdk@1.16.1(1e30c71c5eb1ebbb509541f165a554e2)':
+  '@github-tools/sdk@1.16.1(e77f90037489e4b30482d88161f64e53)':
     dependencies:
       ai: 7.0.107(zod@4.6.2)
-      evlog: 2.29.0(04eaf28113f1d6696f190563b5d9f932)
+      evlog: 2.29.0(5fb6f256c6cc8d3b28d248041a434446)
       octokit: 5.0.5
       zod: 4.6.2
     optionalDependencies:
-      '@vercel/connect': 2.3.0(@ai-sdk/mcp@2.0.39(zod@4.6.2))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.2))(ai@7.0.107(zod@4.6.2))(better-auth@1.7.4(3dfba0b16694ee612a76e3f76bb9aa71))(eve@0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))
-      eve: 0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
+      '@vercel/connect': 2.3.0(@ai-sdk/mcp@2.0.39(zod@4.6.2))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.2))(ai@7.0.107(zod@4.6.2))(better-auth@1.7.4(3dfba0b16694ee612a76e3f76bb9aa71))(eve@0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))
+      eve: 0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
     transitivePeerDependencies:
       - '@nestjs/common'
       - '@nuxt/kit'
@@ -28712,7 +28712,7 @@ snapshots:
 
   '@vercel/blob@2.8.0':
     dependencies:
-      '@vercel/oidc': 3.8.7
+      '@vercel/oidc': 3.8.8
       async-retry: 1.3.3
       is-buffer: 2.0.5
       is-node-process: 1.2.0
@@ -28751,7 +28751,7 @@ snapshots:
       better-auth: 1.7.4(d35ad5ecadf63d9a8e5b3f259ecb710f)
       eve: 0.30.8(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.107(zod@4.6.2))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(rollup@4.60.2)(vite@8.3.0(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
 
-  '@vercel/connect@2.3.0(@ai-sdk/mcp@2.0.39(zod@4.6.2))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.2))(ai@7.0.107(zod@4.6.2))(better-auth@1.7.4(3dfba0b16694ee612a76e3f76bb9aa71))(eve@0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))':
+  '@vercel/connect@2.3.0(@ai-sdk/mcp@2.0.39(zod@4.6.2))(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.2))(ai@7.0.107(zod@4.6.2))(better-auth@1.7.4(3dfba0b16694ee612a76e3f76bb9aa71))(eve@0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18))':
     dependencies:
       '@vercel/oidc': 3.8.8
     optionalDependencies:
@@ -28759,7 +28759,7 @@ snapshots:
       '@modelcontextprotocol/sdk': 1.30.0(supports-color@10.2.2)(zod@4.6.2)
       ai: 7.0.107(zod@4.6.2)
       better-auth: 1.7.4(3dfba0b16694ee612a76e3f76bb9aa71)
-      eve: 0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
+      eve: 0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
 
   '@vercel/nft@1.5.0(rollup@4.60.2)(supports-color@10.2.2)':
     dependencies:
@@ -31590,7 +31590,7 @@ snapshots:
       - xml2js
       - zephyr-agent
 
-  eve@0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18):
+  eve@0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18):
     dependencies:
       ai: 7.0.107(zod@4.6.2)
       nitro: 3.0.260903-beta
@@ -31617,7 +31617,7 @@ snapshots:
     dependencies:
       eventsource-parser: 3.0.8
 
-  evlog@2.29.0(04eaf28113f1d6696f190563b5d9f932):
+  evlog@2.29.0(5fb6f256c6cc8d3b28d248041a434446):
     optionalDependencies:
       '@nestjs/common': 11.2.3(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2)
       '@nuxt/kit': 4.5.2(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.149.0)(rolldown@1.2.9)(unplugin@3.3.0(esbuild@0.28.0)(rolldown@1.2.9)(rollup@4.60.2)(vite@8.3.0(@types/node@24.13.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0)))
@@ -31625,7 +31625,7 @@ snapshots:
       '@tanstack/start-client-core': 1.170.29
       ai: 7.0.107(zod@4.6.2)
       elysia: 1.4.30(@sinclair/typebox@0.34.49)(@types/bun@1.4.2)(exact-mirror@1.0.0)(file-type@21.3.4(supports-color@10.2.2))(openapi-types@12.1.3)(typescript@7.0.2)
-      eve: 0.62.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
+      eve: 0.63.0(@opentelemetry/api@1.9.1)(ai@7.0.107(zod@4.6.2))(microsandbox@0.6.18)
       express: 5.2.1(supports-color@10.2.2)
       fastify: 5.12.4
       h3: 1.15.11
