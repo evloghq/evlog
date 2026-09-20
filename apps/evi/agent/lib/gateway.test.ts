@@ -48,6 +48,13 @@ describe('sessionTags', () => {
     const { sessionTags } = await loadGateway({})
     expect(sessionTags()).toEqual(['evi:env:local', 'evi:surface:unknown'])
   })
+
+  it('adds the reasoning decision as its own dimension when a turn was routed', async () => {
+    const { sessionTags } = await loadGateway({ VERCEL_ENV: 'production' })
+    expect(sessionTags('channel:slack', 'low')).toEqual(['evi:env:production', 'evi:surface:slack', 'evi:reasoning:low'])
+    expect(sessionTags('channel:slack', 'fallback')).toContain('evi:reasoning:fallback')
+    expect(sessionTags('channel:slack')).toHaveLength(2)
+  })
 })
 
 describe('defaultReportTags', () => {

@@ -62,7 +62,7 @@ Compare the two windows and call out what moved, with a reason where one is visi
 
 For each surface with nontrivial spend, judge the model it runs against what the report and the landscape research say. Recommend a swap only when there is a real, defensible win in cost, quality/task-fit, or both, with the projected effect. Otherwise state that the surface is fine as is.
 
-One constraint the report does not show: today the agent runs a single model everywhere, set by `EVI_MODEL` in `agent/lib/model.ts` (see `agent/lib/gateway.ts` for tagging). If a per-surface recommendation implies different models per surface, say that routing is currently global and the swap is one of two things: changing the global model, or adding surface-scoped routing as a follow-up decision. Never present a per-surface swap as a one-line config change when routing does not exist yet.
+One constraint the report does not show: today the agent runs a single model everywhere, set by `EVI_MODEL` in `agent/lib/model.ts` (see `agent/lib/gateway.ts` for tagging). What varies per turn is the reasoning effort, chosen by Jev and stamped as `evi:reasoning:<low|medium|high|fallback>`; group by `tag` on that dimension to see how much spend sits in routine turns versus heavy ones, and treat a large `fallback` share as the evaluator failing, not as a model problem. If a per-surface recommendation implies different models per surface, say that model routing is currently global and the swap is one of two things: changing the global model, or adding surface-scoped model routing as a follow-up decision. Never present a per-surface swap as a one-line config change when routing does not exist yet.
 
 ## Deliver
 

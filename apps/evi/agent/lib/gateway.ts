@@ -19,10 +19,15 @@ export function gatewayRouting(unattended = false) {
 
 /**
  * Tags stamped on every gateway request. One tag per dimension, not a compound
- * string: the spend report groups by a single dimension at a time.
+ * string: the spend report groups by a single dimension at a time. The
+ * reasoning tag names the routing decision for the turn (`low`, `medium`,
+ * `high`, or `fallback` when the evaluator could not answer), so the spend
+ * report can split routine turns from heavy ones. Absent when routing is off.
  */
-export function sessionTags(kind?: string): string[] {
-  return [`evi:env:${environment()}`, `evi:surface:${channelName(kind)}`]
+export function sessionTags(kind?: string, reasoning?: string): string[] {
+  const tags = [`evi:env:${environment()}`, `evi:surface:${channelName(kind)}`]
+  if (reasoning) tags.push(`evi:reasoning:${reasoning}`)
+  return tags
 }
 
 /** The Evi attribution tag for the environment this agent runs in. */
