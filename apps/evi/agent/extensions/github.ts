@@ -2,6 +2,7 @@ import githubExtension from '@github-tools/eve-extension'
 import type { ApprovalContext, ApprovalStatus } from 'eve/tools/approval'
 import { GITHUB_CONNECTOR, GITHUB_INSTALLATION_ID } from '../lib/github/credentials'
 import { createLabelPolicy, writePolicy } from '../lib/github/label-approval'
+import { homeRepository } from '../lib/repo'
 import { isAutonomous, isScheduleAppAuth, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'
 
 /**
@@ -94,7 +95,8 @@ function assignPolicy(ctx: ApprovalContext): ApprovalStatus {
 export default githubExtension({
   connector: GITHUB_CONNECTOR,
   connect: { installationId: GITHUB_INSTALLATION_ID },
-  context: { owner: 'evloghq', repo: 'evlog' },
+  // The extension takes no per-call resolver; a thread elsewhere passes owner and repo.
+  context: homeRepository(),
   include: [...TOOLS],
   // Omitted write tools keep the default always(): closeIssue, createPullRequestReview.
   // Connect scopes are derived from `include` (createLabel → issues:write) in sdk ≥ 1.11.1.

@@ -1,5 +1,6 @@
 import { agentBrowserRevalidationKey, installAgentBrowser } from '@agent-browser/eve/sandbox'
 import { defaultBackend, defineSandbox } from 'eve/sandbox'
+import { cloneUrl, homeRepository, repositorySlug } from './lib/repo'
 
 /**
  * Kept for its diff engine, not for capture: capture__before_after owns
@@ -7,11 +8,13 @@ import { defaultBackend, defineSandbox } from 'eve/sandbox'
  */
 const BEFORE_AFTER_CLI = '@vercel/before-and-after@0.0.4'
 
+const HOME = homeRepository()
+
 /**
- * The template carries a ready-to-work evlog checkout so sessions can run
- * lint, typecheck, and tests instead of shipping unverified changes. The
- * clone, install, and browser tooling are paid once per template build;
- * every session inherits the filesystem and only pays a fetch to main.
+ * The template carries a ready-to-work checkout of the home repository so
+ * sessions can run lint, typecheck, and tests instead of shipping unverified
+ * changes. The clone, install, and browser tooling are paid once per template
+ * build; every session inherits the filesystem and only pays a fetch to main.
  */
 export default defineSandbox({
   backend: defaultBackend({
@@ -24,10 +27,10 @@ export default defineSandbox({
       snapshotExpiration: 14 * 24 * 60 * 60 * 1000,
     },
   }),
-  revalidationKey: () => `evlog-workspace-v5:${agentBrowserRevalidationKey()}:${BEFORE_AFTER_CLI}`,
+  revalidationKey: () => `evlog-workspace-v5:${repositorySlug(HOME)}:${agentBrowserRevalidationKey()}:${BEFORE_AFTER_CLI}`,
   async bootstrap({ use }) {
     const sandbox = await use()
-    await sandbox.run({ command: 'git clone --depth 50 https://github.com/evloghq/evlog.git repo' })
+    await sandbox.run({ command: `git clone --depth 50 ${cloneUrl(HOME)} repo` })
     // Frozen: a cold install in a fresh clone otherwise re-resolves the whole
     // graph, and any <48h transitive release then fails the template build on
     // the repo's own minimumReleaseAge policy. The lockfile is what CI tested.

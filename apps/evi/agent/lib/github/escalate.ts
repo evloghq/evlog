@@ -1,10 +1,9 @@
+import { type Repository, repositorySlug } from '../repo'
 import { MAINTAINER_GITHUB_LOGIN } from '../trust'
 import { githubCredentials } from './credentials'
 import { mintInstallationToken } from './push'
 
 const GITHUB_API = 'https://api.github.com'
-const OWNER = 'evloghq'
-const REPO = 'evlog'
 
 export const ESCALATION_LABEL = 'evi:needs-attention'
 
@@ -28,27 +27,28 @@ export function isAutonomousTriageState(state: ChannelStateSlice): boolean {
  * the maintainer so it lands in his notifications, without posting a bot error
  * comment in front of the community.
  */
-export async function escalateFailedTriage(issueNumber: number): Promise<void> {
+export async function escalateFailedTriage(repository: Repository, issueNumber: number): Promise<void> {
+  const slug = repositorySlug(repository)
   const token = await mintInstallationToken(githubCredentials)
-  await ensureEscalationLabel(token)
-  await githubRequest(token, 'POST', `/repos/${OWNER}/${REPO}/issues/${issueNumber}/labels`, {
+  await ensureEscalationLabel(token, slug)
+  await githubRequest(token, 'POST', `/repos/${slug}/issues/${issueNumber}/labels`, {
     labels: [ESCALATION_LABEL],
   })
-  await githubRequest(token, 'POST', `/repos/${OWNER}/${REPO}/issues/${issueNumber}/assignees`, {
+  await githubRequest(token, 'POST', `/repos/${slug}/issues/${issueNumber}/assignees`, {
     assignees: [MAINTAINER_GITHUB_LOGIN],
   })
 }
 
-async function ensureEscalationLabel(token: string): Promise<void> {
+async function ensureEscalationLabel(token: string, slug: string): Promise<void> {
   const existing = await fetch(
-    `${GITHUB_API}/repos/${OWNER}/${REPO}/labels/${encodeURIComponent(ESCALATION_LABEL)}`,
+    `${GITHUB_API}/repos/${slug}/labels/${encodeURIComponent(ESCALATION_LABEL)}`,
     { headers: headers(token) },
   )
   if (existing.ok) return
   if (existing.status !== 404) {
     throw new Error(`GitHub label lookup failed (${existing.status}): ${await existing.text()}`)
   }
-  const created = await fetch(`${GITHUB_API}/repos/${OWNER}/${REPO}/labels`, {
+  const created = await fetch(`${GITHUB_API}/repos/${slug}/labels`, {
     method: 'POST',
     headers: headers(token),
     body: JSON.stringify({

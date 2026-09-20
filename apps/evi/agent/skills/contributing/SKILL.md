@@ -7,7 +7,7 @@ description: How to contribute to evlog, covering commit and PR conventions, cha
 
 The repository's own `AGENTS.md` is the source of truth for all of this. It changes; this skill does not restate it in full on purpose. **Read `AGENTS.md` from the repo before giving specifics.**
 
-Your system context has a **Workspace** section saying whether the repository is checked out on this turn. With a checkout, `read_file /workspace/AGENTS.md`: free, and at the ref you were summoned on. Without one, `github__getFileContent` on `AGENTS.md` at the root of `evloghq/evlog`.
+Your system context has a **Workspace** section saying whether the repository is checked out on this turn. With a checkout, `read_file /workspace/AGENTS.md`: free, and at the ref you were summoned on. Without one, `github__getFileContent` on `AGENTS.md` at the root of the repository that section names.
 
 What follows is the shape of the answer, so you know what to look for and what to warn about.
 

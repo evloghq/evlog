@@ -1,7 +1,11 @@
 # Choosing where a capability lives in Evi
 
-Evi is a vertical agent: one domain (evlog), one repository, one maintainer. The
-root surface carries everything today, and that is correct at this size. The
+Evi is a vertical agent: one domain (evlog), one home repository
+(`EVI_REPOSITORY`, resolved in `agent/lib/repo.ts`), one maintainer. The
+root surface carries everything today, and that is correct at this size.
+Nothing under `agent/` names a repository literally: the home one comes from
+`homeRepository()`, and anything that holds GitHub channel state works on the
+thread's repository through `repositoryOf(state)`. The
 discipline is in *how* each capability is expressed, so the surface stays
 readable as it grows.
 

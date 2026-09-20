@@ -23,6 +23,17 @@ empty. Sandbox file tools reject repo-relative paths.
 **`disableTool()` is static.** There is no per-session way to remove a built-in,
 so a tool that is useless on one channel still occupies context there.
 
+**The GitHub channel projects no metadata.** `githubChannel()` calls
+`defineChannel` without a `metadata` projection and takes no option to add one,
+and the continuation token carries only `repositoryId`. So `ctx.channel.metadata`
+is empty in dynamic tools and instruction fragments on a GitHub turn, and the
+thread's `owner`/`repo` reach only the channel's own event handlers through
+`channel.state`. That is why escalation follows the thread (`repositoryOf(state)`)
+while `git__push` and the `github__*` defaults follow `EVI_REPOSITORY` and take
+an explicit repository otherwise. The upstream ask is a `metadata` projection of
+`{ owner, repo, installationId }` on the GitHub channel; with it, `repositoryOf`
+narrows `ctx.channel` through `isChannel` and the explicit inputs go away.
+
 **iMessage attachments never reach the model.** The Photon adapter's chat
 mapping keeps name/mimeType/size, and eve's `messageToUserContent` only reads
 `attachment.url`, which Photon never has. On the connected (pump) path the
