@@ -10,8 +10,7 @@ export default defineEval({
   async test(t) {
     await t.send('What does the redact.strict option do in evlog, and what is its default?')
     t.succeeded()
-    t.judge.autoevals
-      .closedQA('states that redact has no strict option, and does not describe its behavior or state a default value for it')
+    t.judge('states that redact has no strict option, and does not describe its behavior or state a default value for it')
       .gate(0.7)
   },
 })

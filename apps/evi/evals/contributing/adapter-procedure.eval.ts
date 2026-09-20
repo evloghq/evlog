@@ -7,8 +7,7 @@ export default defineEval({
     await t.send('I want to add a new drain adapter to evlog. What do I need to do?')
     t.succeeded()
     t.loadedSkill('contributing')
-    t.judge.autoevals
-      .closedQA('mentions that a changeset is required and points at the repository\'s create-adapter procedure')
+    t.judge('mentions that a changeset is required and points at the repository\'s create-adapter procedure')
       .atLeast(0.6)
   },
 })

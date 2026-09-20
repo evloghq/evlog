@@ -40,16 +40,18 @@ outside `/tmp` is read-only and `createFsDrain` guards neither its `mkdir` nor
 its `appendFile`, so shipping it there would throw once per turn and write events
 nobody could read. Hosted, stdout is the transport and the platform captures it.
 
-`agent/instrumentation.ts` enables eve's OpenTelemetry surface. Without that file
-there is no span tree at all. The Agent Runs tab is fed by Workflow run tags,
-which are a separate system. With it, a turn produces `ai.eve.turn` →
-`ai.streamText` per step → `ai.streamText.doStream` and `ai.toolCall` per tool.
-That is the only place per-tool timing and per-step model input are visible; the
-wide event says a turn called six tools, the span tree says which step each ran
-in and what the model saw first. `defineEvlogInstrumentation` stamps
+`agent/instrumentation/` enables eve's OpenTelemetry surface: `otel.ts` holds
+the process-wide, metadata-only trace policy and `posthog.ts` is the PostHog
+destination. Without those files there is no span tree at all. The Agent Runs
+tab is fed by Workflow run tags, which are a separate system. With them, a turn
+produces `invoke_agent` → `agent.step` per step → `chat` for the model call and
+`agent.action` → `execute_tool` per tool. That is the only place per-tool timing
+and per-step model input are visible; the wide event says a turn called six
+tools, the span tree says which step each ran in and what the model saw first.
+`evlogRuntimeContext`, spread into the destination's `runtimeContext`, stamps
 `evlog.request_id` and `evlog.session_id` on every span, so a slow span resolves
-to its wide event and back. No `setup` is registered, so eve keeps traces local
-until a backend is chosen.
+to its wide event and back. Without `POSTHOG_API_KEY` the destination disables
+itself and eve keeps traces local.
 
 ## Not yet verified
 
@@ -83,8 +85,8 @@ registers the turn logger on `turn.started` itself, so two hooks race on the sam
 event. The attempt was removed rather than shipped: an annotation present on 6%
 of turns is worse than none, because it looks like data and is a biased sample.
 
-`evlog/eve` now records `eve.caller` itself, and `agent/instrumentation.ts` puts
-the same principal on the spans. Two things follow from that. The principal is a
+`evlog/eve` now records `eve.caller` itself, and `agent/instrumentation/posthog.ts`
+puts the same principal on the spans. Two things follow from that. The principal is a
 stable per-person identifier duplicated across logs and traces, so it inherits
 whatever retention the drain has. Decide that before adding a drain that keeps
 events longer than the platform does. And an unauthenticated caller is omitted

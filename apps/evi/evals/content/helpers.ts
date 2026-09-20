@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { EveEvalContext } from 'eve/evals'
+import type { EveEvalContext, EveEvalSession } from 'eve/evals'
 import { executeExample } from './example'
 
 /**
@@ -38,9 +38,12 @@ export function reviewFixture(path: string): string {
   return `Review ${path} at candidate commit ${revision} against the content doctrine. In the parent sandbox, fetch that commit from origin and check it out detached in /workspace/repo before delegating to content_review. Pass this expected snapshot unchanged; the reviewer must call content_load and verify facts even if the prose scanner has no findings. Relay the report without rewriting files. Snapshot: ${JSON.stringify(snapshot)}${evidence}`
 }
 
-export async function expectReviewedSnapshot(t: EveEvalContext, path: string): Promise<void> {
+/** Events captured on one eval session, as exposed by `turn.session.events`. */
+export type EvalEvents = EveEvalSession['events']
+
+export async function expectReviewedSnapshot(t: EveEvalContext, session: EveEvalSession, path: string): Promise<void> {
   // Parent streams contain delegation events, not the child's tool calls.
-  const children = t.events.flatMap(event => event.type === 'subagent.called' && event.data.name === 'content_review' ? [event.data.childSessionId] : [])
+  const children = session.events.flatMap(event => event.type === 'subagent.called' && event.data.name === 'content_review' ? [event.data.childSessionId] : [])
   for (const child of new Set(children)) await t.target.attachSession(child)
   t.calledTool('content_load', { input: fixtureSnapshot(path).snapshot })
 }
@@ -50,7 +53,7 @@ export const VERDICTS = ['pass', 'minor', 'significant', 'blocked'] as const
 
 export type Verdict = typeof VERDICTS[number]
 
-export function reviewerReport(events: EveEvalContext['events']): string | null {
+export function reviewerReport(events: EvalEvents): string | null {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
     if (event?.type === 'subagent.completed' && event.data.subagentName === 'content_review' && !event.data.backgroundTask) {
@@ -73,8 +76,8 @@ export function verdictOf(reply: string | null | undefined): Verdict | null {
  * costs a rerun at live-model prices to find out what the reviewer actually
  * said.
  */
-export function expectVerdictIn(t: EveEvalContext, allowed: readonly Verdict[]) {
-  const verdict = verdictOf(reviewerReport(t.events))
+export function expectVerdictIn(t: EveEvalContext, session: EveEvalSession, allowed: readonly Verdict[]) {
+  const verdict = verdictOf(reviewerReport(session.events))
   return t.eventsSatisfy(
     verdict === null
       ? `expected a verdict in ${allowed.join(' | ')}, found no verdict line`

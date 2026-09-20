@@ -6,13 +6,13 @@ export default defineEval({
   tags: ['fast'],
   timeoutMs: CONTENT_REVIEW_TIMEOUT_MS,
   async test(t) {
-    await t.send(reviewFixture('apps/evi/evals/content/fixtures/polished-false.md'))
-    await expectReviewedSnapshot(t, 'apps/evi/evals/content/fixtures/polished-false.md')
+    const turn = await t.send(reviewFixture('apps/evi/evals/content/fixtures/polished-false.md'))
+    await expectReviewedSnapshot(t, turn.session, 'apps/evi/evals/content/fixtures/polished-false.md')
     t.succeeded()
     t.calledSubagent('content_review')
     expectNoSubagent(t, 'content_rewrite')
     t.notCalledTool('write_file')
-    expectVerdictIn(t, ['blocked'])
-    t.judge.autoevals.closedQA('Identifies both claims as false: evlog provides an in-memory drain and a plugin API. Supports the findings with the relevant package exports or implementation, rather than merely objecting to style or saying evidence is missing.', { on: reviewerReport(t.events) ?? '' }).gate(0.8)
+    expectVerdictIn(t, turn.session, ['blocked'])
+    t.judge('Identifies both claims as false: evlog provides an in-memory drain and a plugin API. Supports the findings with the relevant package exports or implementation, rather than merely objecting to style or saying evidence is missing.', { on: reviewerReport(turn.session.events) ?? '' }).gate(0.8)
   },
 })

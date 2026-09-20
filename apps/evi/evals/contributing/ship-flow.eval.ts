@@ -9,8 +9,8 @@ export default defineEval({
   async test(t) {
     await t.send('You fixed a bug in packages/evlog. Walk me through exactly how you get it merged.')
     t.succeeded()
-    t.judge.autoevals.closedQA('describes working on a branch, running lint, typecheck and tests before opening the pull request').atLeast(0.5)
-    t.judge.autoevals.closedQA('mentions adding a changeset for a user-facing change').atLeast(0.5)
-    t.judge.autoevals.closedQA('names git__push (not a GitHub file API) as how the branch reaches the remote').atLeast(0.5)
+    t.judge('describes working on a branch, running lint, typecheck and tests before opening the pull request').atLeast(0.5)
+    t.judge('mentions adding a changeset for a user-facing change').atLeast(0.5)
+    t.judge('names git__push (not a GitHub file API) as how the branch reaches the remote').atLeast(0.5)
   },
 })

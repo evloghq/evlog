@@ -42,6 +42,6 @@ export default defineEval({
       const listAt = tools.indexOf('github__listLabels')
       return listAt !== -1 && listAt < writeAt
     })
-    t.judge.autoevals.closedQA('asks the reporter for a way to reproduce the crash').atLeast(0.5)
+    t.judge('asks the reporter for a way to reproduce the crash').atLeast(0.5)
   },
 })

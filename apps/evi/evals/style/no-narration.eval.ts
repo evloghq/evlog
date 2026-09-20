@@ -11,10 +11,10 @@ export default defineEval({
   description: 'The reply opens with the answer, not with a statement of intent.',
   tags: ['fast'],
   async test(t) {
-    await t.send('Does evlog support sampling?')
+    const turn = await t.send('Does evlog support sampling?')
     t.succeeded()
     t.check(
-      t.reply ?? '',
+      turn.message ?? '',
       satisfies(reply => !NARRATION.test(String(reply)), 'reply does not open by narrating retrieval'),
     )
   },

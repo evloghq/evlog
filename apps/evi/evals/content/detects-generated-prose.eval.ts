@@ -9,14 +9,14 @@ export default defineEval({
   tags: ['fast'],
   timeoutMs: CONTENT_REVIEW_TIMEOUT_MS,
   async test(t) {
-    await t.send(reviewFixture(GENERATED))
-    await expectReviewedSnapshot(t, GENERATED)
+    const turn = await t.send(reviewFixture(GENERATED))
+    await expectReviewedSnapshot(t, turn.session, GENERATED)
     t.succeeded()
     t.calledSubagent('content_review')
     t.notCalledTool('write_file')
-    expectVerdictIn(t, ['blocked'])
+    expectVerdictIn(t, turn.session, ['blocked'])
 
-    const ids = citedIds(reviewerReport(t.events))
+    const ids = citedIds(reviewerReport(turn.session.events))
     // T-15 is the only critical in the fixture: `evlog/shared` is not an entry
     // point, so nothing in that code block runs.
     t.eventsSatisfy('cites T-15 for the retired entry point', () => ids.has('T-15'))

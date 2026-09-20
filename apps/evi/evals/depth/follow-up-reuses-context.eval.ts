@@ -17,8 +17,7 @@ export default defineEval({
     followUp.notCalledTool('docs__list-pages')
 
     t.succeeded()
-    t.judge.autoevals
-      .closedQA('adds detail about the sampling decision rather than restating the previous answer', { on: followUp.message })
+    t.judge('adds detail about the sampling decision rather than restating the previous answer', { on: followUp.message })
       .atLeast(0.6)
   },
 })

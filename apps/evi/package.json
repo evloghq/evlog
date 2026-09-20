@@ -9,18 +9,16 @@
   },
   "scripts": {
     "build": "eve build",
-    "vercel-build": "turbo run build --filter=evlog && drizzle-kit migrate && eve build",
+    "vercel-build": "turbo run build --filter=evlog && eve build",
     "dev": "eve dev",
     "eval": "EVE_RUN_MODE=eval eve eval",
     "start": "eve start",
     "typecheck": "tsc",
-    "test": "vitest run",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@agent-browser/eve": "^0.38.1",
-    "@github-tools/eve-extension": "0.7.0",
+    "@agent-browser/eve": "file:./vendor/agent-browser-eve-0.38.1-pr1945.tgz",
+    "@github-tools/eve-extension": "0.7.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/sdk-trace-base": "^2.11.0",
@@ -29,18 +27,16 @@
     "@vercel/connect": "^2.2.0",
     "@vercel/oidc": "^3.8.7",
     "@vercel/otel": "^2.1.3",
-    "ai": "^7.0.97",
-    "drizzle-orm": "^0.45.2",
-    "eve": "^0.51.0",
+    "ai": "^7.0.105",
+    "eve": "0.62.0",
     "evlog": "workspace:*",
-    "postgres": "^3.4.9",
     "zod": "^4.6.2"
   },
   "devDependencies": {
     "@types/node": "24.13.4",
-    "drizzle-kit": "^0.31.10",
     "microsandbox": "^0.6.18",
     "typescript": "7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "postgres": "^3.4.9"
   }
 }

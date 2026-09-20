@@ -8,9 +8,9 @@ export default defineEval({
   description: 'A drafted commit subject follows Conventional Commits and stays lowercase.',
   tags: ['fast'],
   async test(t) {
-    await t.send('Draft the commit subject for a fix to the Axiom drain adapter that stops it dropping the last batch on shutdown.')
+    const turn = await t.send('Draft the commit subject for a fix to the Axiom drain adapter that stops it dropping the last batch on shutdown.')
     t.succeeded()
     t.loadedSkill('contributing')
-    t.check(t.reply, includes(/\b(feat|fix|docs|refactor|test|perf|chore)(\([a-z][a-z-]*\))?: [a-z]/))
+    t.check(turn.message, includes(/\b(feat|fix|docs|refactor|test|perf|chore)(\([a-z][a-z-]*\))?: [a-z]/))
   },
 })

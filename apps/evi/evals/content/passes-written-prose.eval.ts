@@ -11,12 +11,12 @@ export default defineEval({
   tags: ['fast'],
   timeoutMs: CONTENT_REVIEW_TIMEOUT_MS,
   async test(t) {
-    await t.send(reviewFixture(WRITTEN))
-    await expectReviewedSnapshot(t, WRITTEN)
+    const turn = await t.send(reviewFixture(WRITTEN))
+    await expectReviewedSnapshot(t, turn.session, WRITTEN)
     t.succeeded()
     t.calledSubagent('content_review')
     t.notCalledTool('write_file')
     expectNoSubagent(t, 'content_rewrite')
-    expectVerdictIn(t, ['pass', 'minor'])
+    expectVerdictIn(t, turn.session, ['pass', 'minor'])
   },
 })

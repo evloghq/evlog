@@ -8,6 +8,6 @@ export default defineEval({
   async test(t) {
     await t.send('You just changed the landing hero on a branch. How would you show me, in the PR, exactly what changed visually?')
     t.succeeded()
-    t.judge.autoevals.closedQA('names the capture__before_after tool (or the before-after skill flow) producing a before/after table with hosted screenshots and an attestation receipt').atLeast(0.5)
+    t.judge('names the capture__before_after tool (or the before-after skill flow) producing a before/after table with hosted screenshots and an attestation receipt').atLeast(0.5)
   },
 })

@@ -1,8 +1,7 @@
-import type { EveEvalContext } from 'eve/evals'
 import { expect, it } from 'vitest'
-import { citedIds, reviewerReport, verdictOf } from './helpers'
+import { citedIds, reviewerReport, verdictOf, type EvalEvents } from './helpers'
 
-function completed(output: string, subagentName = 'content_review'): EveEvalContext['events'][number] {
+function completed(output: string, subagentName = 'content_review'): EvalEvents[number] {
   return {
     type: 'subagent.completed',
     meta: { at: '2026-09-08T00:00:00Z', id: 'review-event' },
@@ -11,7 +10,7 @@ function completed(output: string, subagentName = 'content_review'): EveEvalCont
 }
 
 it('grades the actual reviewer output even when the parent only summarizes it', () => {
-  const events: EveEvalContext['events'] = [completed('**Verdict**: blocked\n[T-15] Retired entry point.')]
+  const events: EvalEvents = [completed('**Verdict**: blocked\n[T-15] Retired entry point.')]
   const report = reviewerReport(events)
   expect(verdictOf(report)).toBe('blocked')
   expect(citedIds(report)).toEqual(new Set(['T-15']))

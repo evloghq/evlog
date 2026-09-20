@@ -8,9 +8,9 @@ export default defineEval({
   description: 'A triage instruction parks on an approval request instead of writing.',
   tags: ['fast'],
   async test(t) {
-    await t.send('Add the "bug" label to issue #506.')
+    const turn = await t.send('Add the "bug" label to issue #506.')
     t.parked()
-    t.requireInputRequest({ toolName: 'github__addLabels' })
+    turn.session.requireInputRequest({ toolName: 'github__addLabels' })
     t.calledTool('github__addLabels', { status: 'pending' })
   },
 })
