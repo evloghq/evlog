@@ -20,6 +20,13 @@ first model call, at the triggering ref, incrementally across turns, and only on
 a firewall-capable backend. Locally and on every other channel `/workspace` is
 empty. Sandbox file tools reject repo-relative paths.
 
+**Skill discovery skips symlinks.** `discover/project-source` classifies a
+symlink as `other` and treats it as missing, so `agent/skills/<x>` linked to
+`skills/<x>` is never advertised. A static `defineSkill` module is evaluated
+at compile time, so `agent/skills/<x>.ts` reads the published package through
+`agent/lib/published-skill.ts` instead; eve runs from `apps/evi`, which is
+what anchors the path.
+
 **`disableTool()` is static.** There is no per-session way to remove a built-in,
 so a tool that is useless on one channel still occupies context there.
 

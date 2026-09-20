@@ -37,6 +37,7 @@
     "microsandbox": "^0.6.18",
     "typescript": "7.0.2",
     "vitest": "^4.1.11",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "yaml": "^2.9.0"
   }
 }

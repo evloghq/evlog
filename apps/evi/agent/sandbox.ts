@@ -39,6 +39,8 @@ export default defineSandbox({
     // graph, and any <48h transitive release then fails the template build on
     // the repo's own minimumReleaseAge policy. The lockfile is what CI tested.
     await sandbox.run({ command: 'cd repo && corepack prepare --activate && pnpm install --frozen-lockfile && pnpm run dev:prepare' })
+    // The CLI at main, usable from any checkout in the sandbox.
+    await sandbox.run({ command: 'ln -sf /workspace/repo/node_modules/.bin/evlog "$(npm prefix -g)/bin/evlog"' })
     // Prime the turbo cache on deployed builds only: locally this is minutes
     // of CPU on every template rebuild.
     if (process.env.VERCEL) {
