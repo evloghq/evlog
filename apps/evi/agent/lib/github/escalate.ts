@@ -1,10 +1,7 @@
 import { MAINTAINER_GITHUB_LOGIN } from '../trust'
+import { GITHUB_API, OWNER, REPO } from './repo'
 import { githubCredentials } from './credentials'
 import { mintInstallationToken } from './push'
-
-const GITHUB_API = 'https://api.github.com'
-const OWNER = 'evloghq'
-const REPO = 'evlog'
 
 export const ESCALATION_LABEL = 'evi:needs-attention'
 
@@ -24,21 +21,44 @@ export function isAutonomousTriageState(state: ChannelStateSlice): boolean {
 }
 
 /**
- * Silent escalation for a failed autonomous triage: label the issue and assign
- * the maintainer so it lands in his notifications, without posting a bot error
- * comment in front of the community.
+ * needs-maintainer probability at or above which the triage router escalates
+ * before the turn runs instead of waiting for the turn to fail. Deliberately
+ * above the routing thresholds: a wrong assignment notifies the maintainer, a
+ * wrong cheap turn only costs some reasoning budget.
  */
-export async function escalateFailedTriage(issueNumber: number): Promise<void> {
-  const token = await mintInstallationToken(githubCredentials)
-  await ensureEscalationLabel(token)
-  await githubRequest(token, 'POST', `/repos/${OWNER}/${REPO}/issues/${issueNumber}/labels`, {
+export const PRE_ESCALATION_THRESHOLD = 0.85
+
+/** The escalate.ts decision over the router's needs-maintainer signal. */
+export function shouldPreEscalate(probability: number): boolean {
+  return probability >= PRE_ESCALATION_THRESHOLD
+}
+
+/**
+ * Silent escalation: label the issue and assign the maintainer so it lands in
+ * his notifications, without posting a bot error comment in front of the
+ * community. Runs for a failed autonomous triage, and before the turn starts
+ * when the triage router's needs-maintainer signal clears
+ * `PRE_ESCALATION_THRESHOLD` (deterministic code decides, Jev only informs).
+ */
+export async function escalateTriage(issueNumber: number, token?: string): Promise<void> {
+  const credentials = token ?? await mintInstallationToken(githubCredentials)
+  await ensureEscalationLabel(credentials)
+  await githubRequest(credentials, 'POST', `/repos/${OWNER}/${REPO}/issues/${issueNumber}/labels`, {
     labels: [ESCALATION_LABEL],
   })
+  await assignMaintainer(issueNumber, credentials)
+}
+
+/** Notification-only pre-escalation: no label, because Evi has not failed here. */
+export async function preEscalateTriage(issueNumber: number, token: string): Promise<void> {
+  await assignMaintainer(issueNumber, token)
+}
+
+export async function assignMaintainer(issueNumber: number, token: string): Promise<void> {
   await githubRequest(token, 'POST', `/repos/${OWNER}/${REPO}/issues/${issueNumber}/assignees`, {
     assignees: [MAINTAINER_GITHUB_LOGIN],
   })
 }
-
 async function ensureEscalationLabel(token: string): Promise<void> {
   const existing = await fetch(
     `${GITHUB_API}/repos/${OWNER}/${REPO}/labels/${encodeURIComponent(ESCALATION_LABEL)}`,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ESCALATION_LABEL, escalateFailedTriage, isAutonomousTriageState } from './escalate'
+import { ESCALATION_LABEL, escalateTriage, isAutonomousTriageState, PRE_ESCALATION_THRESHOLD, preEscalateTriage, shouldPreEscalate } from './escalate'
 
 vi.mock('./credentials', () => ({
   githubCredentials: { installationToken: async () => 'tok_test' },
@@ -7,6 +7,28 @@ vi.mock('./credentials', () => ({
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('shouldPreEscalate', () => {
+  it('escalates at the threshold and above it', () => {
+    expect(shouldPreEscalate(PRE_ESCALATION_THRESHOLD)).toBe(true)
+    expect(shouldPreEscalate(0.99)).toBe(true)
+    expect(shouldPreEscalate(0.84)).toBe(false)
+  })
+})
+
+describe('preEscalateTriage', () => {
+  it('only assigns the maintainer, without the failure label', async () => {
+    const methods: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      methods.push(`${init?.method ?? 'GET'} ${new URL(String(url)).pathname}`)
+      return new Response('{}', { status: 200 })
+    }))
+
+    await preEscalateTriage(15, 'tok_router')
+
+    expect(methods).toEqual(['POST /repos/evloghq/evlog/issues/15/assignees'])
+  })
 })
 
 describe('isAutonomousTriageState', () => {
@@ -20,7 +42,7 @@ describe('isAutonomousTriageState', () => {
   })
 })
 
-describe('escalateFailedTriage', () => {
+describe('escalateTriage', () => {
   it('labels and assigns the issue, creating the label when missing', async () => {
     const calls: Array<{ url: string, method: string, body: unknown }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -35,7 +57,7 @@ describe('escalateFailedTriage', () => {
       return new Response('{}', { status: 200 })
     }))
 
-    await escalateFailedTriage(42)
+    await escalateTriage(42)
 
     expect(calls.map((call) => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
       `GET /repos/evloghq/evlog/labels/${encodeURIComponent(ESCALATION_LABEL)}`,
@@ -54,7 +76,7 @@ describe('escalateFailedTriage', () => {
       return new Response('{}', { status: 200 })
     }))
 
-    await escalateFailedTriage(7)
+    await escalateTriage(7)
 
     expect(methods).toEqual([
       `GET /repos/evloghq/evlog/labels/${encodeURIComponent(ESCALATION_LABEL)}`,
@@ -75,7 +97,7 @@ describe('escalateFailedTriage', () => {
       return new Response('{}', { status: 200 })
     }))
 
-    await escalateFailedTriage(9)
+    await escalateTriage(9)
 
     expect(methods.slice(1)).toEqual([
       'POST /repos/evloghq/evlog/labels',
@@ -93,7 +115,7 @@ describe('escalateFailedTriage', () => {
       }
       return new Response('{}', { status: 200 })
     }))
-    await expect(escalateFailedTriage(9)).rejects.toThrow('failed (422)')
+    await expect(escalateTriage(9)).rejects.toThrow('failed (422)')
   })
 
   it('surfaces a failed GitHub call', async () => {
@@ -101,6 +123,6 @@ describe('escalateFailedTriage', () => {
       if (init?.method === 'POST') return new Response('nope', { status: 403 })
       return new Response('{}', { status: 200 })
     }))
-    await expect(escalateFailedTriage(7)).rejects.toThrow('failed (403)')
+    await expect(escalateTriage(7)).rejects.toThrow('failed (403)')
   })
 })
