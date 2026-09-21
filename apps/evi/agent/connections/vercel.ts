@@ -5,24 +5,20 @@ const { VERCEL_TEAM_ID, EVI_VERCEL_DOCS_PROJECT_ID, EVI_VERCEL_MCP_ROUTE } = pro
 
 // Follows the Nuxi pattern (nuxt.com layers/nuxi): a team/project-scoped MCP
 // route, an explicit read-only allow list, and one instruction block that
-// carries the query recipes. The route scope is what route-binds Web Analytics
-// to a single project and rejects project overrides from tool arguments, so
-// set EVI_VERCEL_MCP_ROUTE to `<team-slug>/<project-slug>` once the docs site
-// project is known; absent that, the connection falls back to the unscoped
-// server, where Web Analytics calls must pass projectId explicitly.
+// carries the query recipes. Set EVI_VERCEL_MCP_ROUTE to
+// `<team-slug>/<project-slug>` once the docs site project is known; absent
+// that, the connection falls back to the unscoped server.
 const VERCEL_MCP_URL = EVI_VERCEL_MCP_ROUTE
   ? `https://mcp.vercel.com/${ EVI_VERCEL_MCP_ROUTE }`
   : 'https://mcp.vercel.com'
 
-// The dedicated tools are the current Vercel MCP surface (the search/call
-// endpoint pair is gone from the tools reference, 2026-09-15). The pair stays
-// allow-listed because scoped routes may still serve it and it is the
-// transport for POST /v2/observability/query; when the server does not serve
-// it, the entries are inert.
 const ALLOWED_TOOLS: string[] = [
   'search_vercel_documentation',
-  'search_vercel_endpoints',
-  'call_vercel_endpoint',
+  'count_pageviews',
+  'aggregate_pageviews',
+  'count_events',
+  'aggregate_events',
+  'create_observability_query',
   'list_teams',
   'list_projects',
   'get_project',
@@ -31,7 +27,6 @@ const ALLOWED_TOOLS: string[] = [
   'get_deployment_build_logs',
   'get_runtime_logs',
   'get_runtime_errors',
-  'get_web_analytics',
   'list_agent_run_projects',
   'list_agent_runs',
   'get_agent_run',
@@ -61,10 +56,10 @@ const VERCEL_MCP_INSTRUCTIONS = [
   '- `get_runtime_errors` first, then `get_runtime_logs` for runtime behavior; follow those tools\' schemas for explicit ids.',
   '',
   '**Traffic:**',
-  '- Browser traffic: `get_web_analytics` (`dataset: \'visits\'` for pageviews, `events` for custom events; `mode: \'count\'` for one total, `aggregate` for grouped rows; dimensions include `requestPath`, `country`, `referrerHostname`, `deviceType`; `filter` is OData, e.g. `requestPath eq \'/docs\'`). Web Analytics is browser-oriented and must not be used to estimate curl, MCP, or raw Markdown traffic.',
-  `- Agent-facing HTTP usage (includes CDN/static requests Web Analytics misses): the endpoint call on \`POST /v2/observability/query\` with \`metric='vercel.request.count'\`, \`aggregation: 'sum'\`, ISO \`startTime\` / \`endTime\`, and \`scope={ type: 'project', ownerId: '${ TEAM_ID }', projectIds: ['<project id>'] }\`. Use the docs site project ${ DOCS_PROJECT_ID } unless asked for another.`,
+  `- Browser traffic: call \`count_pageviews\` for totals and \`aggregate_pageviews\` for grouped rows. Pass \`projectId='${ DOCS_PROJECT_ID }'\` and \`teamId='${ TEAM_ID }'\`; do not pass \`slug\`. Custom events use \`count_events\` and \`aggregate_events\`. \`filter\` is OData, e.g. \`requestPath eq '/docs'\`. Web Analytics is browser-oriented and must not be used to estimate curl, MCP, or raw Markdown traffic.`,
+  `- Agent-facing HTTP usage (includes CDN/static requests Web Analytics misses): call \`create_observability_query\` with \`requestBody={ metric: 'vercel.request.count', aggregation: 'sum', startTime, endTime, scope: { type: 'project', ownerId: '${ TEAM_ID }', projectIds: ['<project id>'] } }\` and \`teamId='${ TEAM_ID }'\`. Use the docs site project ${ DOCS_PROJECT_ID } unless asked for another.`,
   '- Recipes: MCP transport `request_path eq \'/mcp\' and environment eq \'production\'`. Raw content `endswith(request_path, \'.md\')`. Negotiated Markdown `contains(http_accept, \'text/markdown\')`. Discovery/intake paths: `/llms.txt`, `/llms-full.txt`, `/sitemap.md`, `/.well-known/mcp/server-card.json`. Useful groupings: `client_user_agent`, `bot_category`, `bot_name`, `request_path`, `request_method`, `http_status`, `content_type`.',
-  '- Endpoint-call batch/concurrency limits are not a total-query budget: send subsequent read-only batches until every required metric is collected.',
+  '- Tool-call concurrency limits are not a total-query budget: send subsequent read-only calls until every required metric is collected.',
   '- If a response says `truncated: true` or reports `truncation.omittedArrayItems`, only the returned timeseries was shortened. Use the ungrouped `summary` for the complete total; do not call that a traffic/data gap.',
   '- Be precise: `vercel.request.count` counts HTTP requests, not logical tool calls or unique agents. A `.md` path or a `curl/*` user agent alone does not prove AI usage. Treat explicit `Accept: text/markdown`, known AI bot categories, and POST `/mcp` as the stronger signals.',
   '',

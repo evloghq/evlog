@@ -7,14 +7,14 @@ Use this skill when asked about MCP adoption, AI-agent traffic, raw Markdown con
 
 ## Source of truth
 
-Use `vercel__search_vercel_endpoints` to discover `POST /v2/observability/query`, then call it through `vercel__call_vercel_endpoint` (both from the vercel connection; if the endpoint pair does not surface, agent-facing metrics are unavailable, and that is one line in the answer, not a re-derivation from browser data).
+Use the read-only `vercel__create_observability_query` tool directly.
 
 - Metric: `vercel.request.count`, aggregation `sum`.
 - Scope: `type: 'project'`, `ownerId`: the evlog team id, `projectIds`: the docs site project id (both pre-scoped in the connection description).
 - Always filter to `environment eq 'production'`.
 - Use ISO UTC timestamps for `startTime` and `endTime`.
 - Because the result is read against a comparison, always query the requested window and the immediately preceding equal-length window with the same scope and filter, ungrouped.
-- A per-call batch or concurrency limit is not a total-query budget: send further read-only batches until every requested metric is collected.
+- A tool-call concurrency limit is not a total-query budget: send further read-only calls until every requested metric is collected.
 
 ## Query recipes
 
@@ -47,7 +47,7 @@ Run independent queries in parallel, ungrouped first for the exact total, then g
 - Top-N grouped rows are partial: describe them as top returned rows, never as all traffic.
 - If a response says `truncated: true` or reports `truncation.omittedArrayItems`, only the returned timeseries was shortened; report the summary total and do not call it a data gap. Only label a real data gap when the API explicitly reports one after truncation is ruled out.
 - If a query times out, shorten the window or drop a high-cardinality grouping; the ungrouped total stays authoritative.
-- Browser traffic stays with `get_web_analytics`; label it as browser pageviews and never present it as total readership when agent-facing traffic is in scope.
+- Browser traffic stays with `vercel__count_pageviews` and `vercel__aggregate_pageviews`; label it as browser pageviews and never present it as total readership when agent-facing traffic is in scope.
 
 ## Output
 
