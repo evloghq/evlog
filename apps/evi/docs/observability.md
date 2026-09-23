@@ -146,13 +146,8 @@ by the caller (documented on `defineEvlogInstrumentation` in
 
 ### evlog/eve: reach the eve session from enrichment
 
-Largely addressed for the common case: `evlog/eve` records `eve.caller` on the
-event itself (see the gap section above), so grouping cost per user no longer
-requires a hook. What remains here is the general ask, for consumers who want
-more than the principal on the turn. Spans are still not the wide event, and
-`enrich` stays HTTP-shaped. Either widen it for the eve integration to carry the
-eve session, or expose a turn-scoped callback that runs where the logger is
-known to exist:
+Landed: `defineEvlogHook()` takes `enrichTurn`, a turn-scoped callback that runs
+where the turn logger is created, with the eve session in scope:
 
 ```ts
 defineEvlogHook({
@@ -160,8 +155,12 @@ defineEvlogHook({
 })
 ```
 
-Anything that avoids making consumers guess at hook ordering. Every agent on a
-multi-user channel wants this, not just this one.
+Returned fields merge onto the turn event, over the built-ins, and are not
+carried across turns of the same session. The shape decision: `enrich` stays
+HTTP-shaped because it is part of `BaseEvlogOptions`, shared by every framework
+integration, and widening it would put the eve session into every HTTP
+integration's contract. A turn-scoped option on the eve hook keeps it local and
+removes the hook-ordering guesswork.
 
 ### evlog/eve: attribute input tokens to the tool that caused them
 

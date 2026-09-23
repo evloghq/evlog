@@ -1726,6 +1726,82 @@ describe('evlog/eve', () => {
     assertEnrichBeforeDrain(spies.enrich, spies.drain)
   })
 
+  it('enrichTurn runs once per turn with the eve session in scope', async () => {
+    const spies = createPipelineSpies()
+    const enrichTurn = vi.fn(() => ({
+      caller: 'github:42',
+      eve: { caller: { authenticator: 'github' } },
+    }))
+    const hook = defineEvlogHook({
+      drain: spies.drain,
+      enrichTurn,
+    })
+    const ctx = hookContext({
+      session: {
+        id: SESSION_ID,
+        auth: {
+          current: { principalId: 'github:42', principalType: 'user', authenticator: 'github' },
+          initiator: null,
+        },
+        turn: { id: TURN_ID },
+      },
+    } as Partial<HookContext>)
+
+    await runTurn(hook, { ctx })
+
+    await waitForDrainCalls(spies.drain)
+    const event = findEventViaDrain(spies.drain, () => true)
+    expect(enrichTurn).toHaveBeenCalledTimes(1)
+    expect(enrichTurn).toHaveBeenCalledWith({
+      session: ctx.session,
+      agent: ctx.agent,
+      channel: ctx.channel,
+    })
+    expect(event?.caller).toBe('github:42')
+    expect(event?.eve).toMatchObject({
+      sessionId: SESSION_ID,
+      caller: { authenticator: 'github' },
+    })
+  })
+
+  it('does not throw when enrichTurn fails', async () => {
+    const spies = createPipelineSpies()
+    const hook = defineEvlogHook({
+      drain: spies.drain,
+      enrichTurn: () => {
+        throw new Error('enrichTurn exploded')
+      },
+    })
+
+    await expect(runTurn(hook)).resolves.toBeUndefined()
+
+    await waitForDrainCalls(spies.drain)
+    const event = findEventViaDrain(spies.drain, () => true)
+    expect(event?.eve).toMatchObject({ sessionId: SESSION_ID })
+  })
+
+  it('keeps enrichTurn fields turn-scoped across turns of the same session', async () => {
+    const spies = createPipelineSpies()
+    let turn = 0
+    const hook = defineEvlogHook({
+      drain: spies.drain,
+      enrichTurn: () => {
+        turn += 1
+        return turn === 1 ? { caller: 'github:42', tier: 'pro' } : { caller: 'github:43' }
+      },
+    })
+
+    await runTurn(hook)
+    await runTurn(hook, { turnId: TURN_ID_1 })
+
+    await waitForDrainCalls(spies.drain, 2)
+    const first = findEventViaDrain(spies.drain, e => e.path?.includes(TURN_ID))
+    const second = findEventViaDrain(spies.drain, e => e.path?.includes(TURN_ID_1))
+    expect(first?.tier).toBe('pro')
+    expect(second?.caller).toBe('github:43')
+    expect(second?.tier).toBeUndefined()
+  })
+
   it('omits message.received content by default', async () => {
     const spies = createPipelineSpies()
     const hook = defineEvlogHook({ drain: spies.drain })
