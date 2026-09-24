@@ -42,11 +42,11 @@ The tool's URLs go public the instant it runs. Landing, docs, and playground pag
 
 ## 4. Publish and verify the evidence
 
-A capture that lives only in the conversation is not evidence: the chat scrolls away, the PR is the durable surface. A visual change is not reported done until its frames are embedded in the PR body or a PR comment **and** every image URL behind them has been verified live.
+A capture that lives only in the conversation is not evidence: the chat scrolls away, the PR is the durable surface. A visual change is not reported done until its frames are embedded in the PR body or a PR comment **and** every image URL behind them has been verified live. When no host is available, the fallback ladder below defines what done means instead.
 
 - **Verify before you cite.** After any `blob__upload_image` (or the markdown `capture__before_after` returns), `curl -sI` each returned URL and require `HTTP 200`, a `content-type: image/...`, and a `content-length` matching the file on disk. A URL the tool returned is a claim, not a fact, until this passes.
 - **Never write "attached" or "shown above" before that check passes.** If the upload tool errors, retry once; session-level tooling glitches usually clear on a later turn, so retrying there is the second move, not a workaround.
-- **Fallback ladder, in order:** single sequential upload (parallel batches have been observed to break the upload tool's replay), then a fresh turn, then committing the frames to the branch and referencing them by relative path in the PR body or a follow-up comment. Both surfaces render images; either is acceptable, but the PR body must say which state the evidence is in and link to it. Never imply evidence is attached when it is not: say what failed and where the frames actually are.
+- **Fallback ladder, in order:** single sequential upload (parallel batches have been observed to break the upload tool's replay), then a fresh turn, then reporting the failure and stopping. **Never commit evidence frames to a PR branch or anywhere else in the repository.** A binary asset carries no review value, re-triggers every check on the PR, and a raw URL pinned to that commit dies the moment it is dropped. When no host works, the frames stay in the conversation (sandbox captures are shown inline), the PR or issue says plainly that the image could not be published, and attaching the PNG to GitHub by hand is the maintainer's decision. Never imply evidence is attached when it is not.
 - **One claim per file.** The verification is per URL, not per call: a batch upload where one of two URLs failed is one verified frame and one unverified, and only the verified one may be cited.
 
 ## 5. Motion evidence: record a flow
