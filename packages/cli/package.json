@@ -1,6 +1,6 @@
 {
   "name": "@evlog/cli",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "The official command line for evlog",
   "author": "HugoRCD <contact@evlog.dev>",
   "homepage": "https://evlog.dev",

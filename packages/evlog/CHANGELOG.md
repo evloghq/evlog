@@ -1,5 +1,15 @@
 # evlog
 
+## 2.30.0
+
+### Minor Changes
+
+- [#731](https://github.com/evloghq/evlog/pull/731) [`46cad75`](https://github.com/evloghq/evlog/commit/46cad756f1c15bdd6580f53e86b21980242e368a) Thanks [@evlogai](https://github.com/apps/evlogai)! - Add an `enrichTurn` option to `defineEvlogHook()` in `evlog/eve`. It runs once per turn where the turn logger is created, with the eve session in scope, so enrichers can reach `ctx.session.auth` and the session lineage instead of only HTTP-shaped context. Returned fields merge onto the turn event over the built-in `eve`, `agent` and `channel` fields, and stay turn-scoped: they are not carried across turns of the same session. The existing `enrich` option keeps its HTTP-shaped context.
+
+### Patch Changes
+
+- [#725](https://github.com/evloghq/evlog/pull/725) [`543b00f`](https://github.com/evloghq/evlog/commit/543b00fd7410ac3a11783e127ea30f89d4262baf) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Allow Eve agents to disable subagent lifecycle subscriptions with `subagentEvents: false` when those events do not carry hook session context.
+
 ## 2.29.0
 
 ### Minor Changes
