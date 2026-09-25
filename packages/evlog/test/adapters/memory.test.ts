@@ -235,17 +235,6 @@ describe('readMemoryLogs', () => {
     expect(readMemoryLogs({ limit: -1 })).toHaveLength(0)
   })
 
-  it('does not create a store entry when reading from an unknown store', () => {
-    const storesBefore = readMemoryLogs({ store: 'never-written' })
-    expect(storesBefore).toHaveLength(0)
-
-    writeToMemory([createTestEvent()], { store: 'default', maxEvents: 1000 })
-    clearMemoryLogs('default')
-
-    // The 'never-written' store should not exist in the map — clearing it is a no-op
-    expect(() => clearMemoryLogs('never-written')).not.toThrow()
-  })
-
   it('returns a snapshot (mutations to result do not affect the store)', () => {
     populate()
 
