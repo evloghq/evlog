@@ -157,7 +157,6 @@ function isAppPath(file: string): boolean {
   const normalized = decodeFileUrl(file).replace(/\\/g, '/')
   if (normalized.startsWith('node:')) return false
   if (SKIP_PATH_RE.test(normalized)) return false
-  if (normalized.includes('/node_modules/')) return false
   if (isFrameworkRuntimePath(normalized)) return false
   return true
 }
