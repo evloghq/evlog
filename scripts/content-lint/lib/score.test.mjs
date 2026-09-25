@@ -25,7 +25,7 @@ describe('buildBaseline', () => {
 
     const baseline = buildBaseline([
       ...Array.from({ length: 6 }, (_value, index) => page(`apps/docs/content/blog/${index}.md`, loose)),
-      ...Array.from({ length: 6 }, (_value, index) => page(`apps/docs/content/7.reference/${index}.md`, tight)),
+      ...Array.from({ length: 6 }, (_value, index) => page(`apps/docs/content/8.reference/${index}.md`, tight)),
     ])
 
     expect(baseline.bySurface.blog.epigramRatio).toBeGreaterThan(baseline.bySurface.reference.epigramRatio)
@@ -106,7 +106,7 @@ describe('evaluate', () => {
 
   it('spares the page that documents the deprecation', () => {
     const source = 'The `evlog/browser` path is deprecated and re-exports `evlog/http`.'
-    const result = evaluate(page('apps/docs/content/6.extend/a.md', source), quiet)
+    const result = evaluate(page('apps/docs/content/7.extend/a.md', source), quiet)
 
     expect(result.findings).toEqual([])
   })
@@ -148,7 +148,7 @@ describe('evaluate', () => {
   })
 
   it("flags evlog's own concept under another tool's name", () => {
-    const result = evaluate(page('apps/docs/content/6.extend/a.md', 'Register the sink and every event reaches it.'), quiet)
+    const result = evaluate(page('apps/docs/content/7.extend/a.md', 'Register the sink and every event reaches it.'), quiet)
 
     expect(result.findings.map(finding => finding.id)).toContain('U-15')
   })
@@ -208,14 +208,14 @@ describe('evaluate', () => {
   })
 
   it('spares the sentence that is describing the other tool', () => {
-    const result = evaluate(page('apps/docs/content/7.reference/a.md', 'pino writes through a transport, which runs in a worker thread.'), quiet)
+    const result = evaluate(page('apps/docs/content/8.reference/a.md', 'pino writes through a transport, which runs in a worker thread.'), quiet)
 
     expect(result.findings.map(finding => finding.id)).not.toContain('U-15')
   })
 
   it('flags a claim about another logger with nothing behind it', () => {
-    const bare = evaluate(page('apps/docs/content/7.reference/a.md', "winston cannot sample, so every request pays the full write."), quiet)
-    const measured = evaluate(page('apps/docs/content/7.reference/a.md', 'winston cannot sample, so all 40000 requests pay the full write.'), quiet)
+    const bare = evaluate(page('apps/docs/content/8.reference/a.md', "winston cannot sample, so every request pays the full write."), quiet)
+    const measured = evaluate(page('apps/docs/content/8.reference/a.md', 'winston cannot sample, so all 40000 requests pay the full write.'), quiet)
 
     expect(bare.findings.map(finding => finding.id)).toContain('U-12')
     expect(measured.findings.map(finding => finding.id)).not.toContain('U-12')

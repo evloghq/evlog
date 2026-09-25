@@ -30,8 +30,9 @@ next               a link out, on the thing they will need after this
 | `3.cli/` | running a command | flags, exit codes, what CI does with it |
 | `4.integrate/` | wiring their stack | the exact install and the framework-native accessor |
 | `5.use-cases/` | recognizing their problem | a concrete scenario end to end |
-| `6.extend/` | building on the primitives | the contract and its guarantees |
-| `7.reference/` | checking a fact | tables, defaults, no persuasion |
+| `6.libraries/` | shipping evlog inside a reusable package | the contract, attribution, catalogs |
+| `7.extend/` | building on the primitives | the contract and its guarantees |
+| `8.reference/` | checking a fact | tables, defaults, no persuasion |
 
 A page in the wrong directory is a structural finding, not a wording one.
 
