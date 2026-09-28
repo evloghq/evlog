@@ -29,3 +29,7 @@ pnpm -C packages/@agent-browser/eve pack
 
 Remove this file and point `@agent-browser/eve` back at the registry once upstream publishes a
 release built against eve 0.64 or newer.
+
+At the eve 0.67.2 bump the manifests were checked instead of rebuilding: 0.67.2 still supports
+contract 54 (`EXTENSION_CAPABILITY_CONTRACTS.tool.supported` contains it), so both tarballs load
+unchanged. Rebuild only when a release drops the contract a tarball was built against.

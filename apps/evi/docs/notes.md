@@ -217,7 +217,8 @@ native MCP channel (`mcpChannel`). Clients get the durable invocation tools:
 `agent_start`, `agent_get`, `agent_update`, `agent_cancel`: start returns an
 invocation id immediately, the harness polls `agent_get`, and human-input
 requests surface as `input_required` instead of a hanging HTTP call. Each
-`agent_start` is one task-mode session owned by the `mcp:hugo` principal,
+`agent_start` is one session owned by the `mcp:hugo` principal that parks
+after every turn (eve 0.67 removed the task run mode),
 trusted as the maintainer only while the token env is set; there is no
 cross-call conversation, so a request must carry its own context. Setup:
 generate a token (`openssl rand -hex 32`), set `EVI_MCP_TOKEN` on the project,

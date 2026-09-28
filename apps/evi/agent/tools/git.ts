@@ -9,6 +9,7 @@ import { brokeredSandbox, isValidRefName, pushBrokerPolicy, validatePushBranch }
 import { cloneUrl, homeRepository, parseRepository, type Repository, repositorySlug } from '../lib/repo'
 import { isMaintainer, isScheduleAppAuth } from '../lib/trust'
 import { checkoutDir, installCommand, REPO_DIR, runOutput } from '../lib/workspace'
+import { environment } from '../sandbox'
 
 /** Maintainer and schedule-app turns ship code; nothing else reaches git over the network. */
 function canShip(auth: SessionAuthContext | null): boolean {
@@ -54,7 +55,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
           return refused
         }
         const dir = checkoutDir(repository)
-        const sandbox = brokeredSandbox(await toolCtx.getSandbox())
+        const sandbox = brokeredSandbox(await toolCtx.getSandbox(environment))
         await sandbox.setNetworkPolicy(pushBrokerPolicy(token))
         try {
           const clone = await sandbox.run({ command: `test -d ${dir}/.git || (mkdir -p ${dir} && git clone --depth 50 ${cloneUrl(repository)} ${dir})` })
@@ -134,7 +135,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
         const token = await repositoryToken(repository)
         if (token === null) return refuse(notInstalled(repository))
         const dir = checkoutDir(repository)
-        const sandbox = brokeredSandbox(await toolCtx.getSandbox())
+        const sandbox = brokeredSandbox(await toolCtx.getSandbox(environment))
         await sandbox.setNetworkPolicy(pushBrokerPolicy(token))
         try {
           // The URL is spelled out, never `origin`: remote config inside the

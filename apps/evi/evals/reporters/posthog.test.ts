@@ -23,7 +23,9 @@ function evalResult(overrides: Partial<EveEvalResult> = {}): EveEvalResult {
 }
 
 function assertion(name: string, passed: boolean) {
-  return { name, score: passed ? 1 : 0, severity: 'gate', passed } as const
+  // `errored` distinguishes an assertion failure from the evaluator crashing
+  // while scoring; eve added it with the verdict changes.
+  return { name, score: passed ? 1 : 0, severity: 'gate', passed, errored: false } as const
 }
 
 describe('toEvalEvent', () => {
