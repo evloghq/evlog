@@ -202,8 +202,9 @@ describe('initLogger + redact integration', () => {
 
     expect(event.error).toMatchObject({
       code: '[REDACTED]',
-      cause: expect.any(DOMException),
+      cause: { name: 'TimeoutError', message: 'Upstream request timed out', code: '[REDACTED]' },
     })
+    expect(error.cause.code).toBe(DOMException.TIMEOUT_ERR)
   })
 
   it('applies a computed replacement to the console sink', () => {

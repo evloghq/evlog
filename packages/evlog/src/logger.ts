@@ -745,6 +745,7 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
 function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown {
   if (value === null || typeof value !== 'object') return value
   if (ancestors.has(value)) return '[Circular]'
+  if (value instanceof Error) return serializeError(value, ancestors)
 
   ancestors.add(value)
   let changed = false
@@ -761,17 +762,18 @@ function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown 
   return changed ? copy : value
 }
 
-function serializeError(err: Error): Record<string, unknown> {
+function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<string, unknown> {
   const errorObj: Record<string, unknown> = {
     name: err.name,
     message: err.message,
     stack: isDev() ? compactStackForStorage(err.stack) : err.stack,
   }
   const errRecord = err as unknown as Record<string, unknown>
-  const ancestors = new WeakSet<object>([err])
+  ancestors.add(err)
   for (const k of ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'cause', 'internal'] as const) {
     if (k in err) errorObj[k] = removeErrorCycles(errRecord[k], ancestors)
   }
+  ancestors.delete(err)
 
   if (EvlogError.isEvlogError(err)) {
     if (err.code) errorObj.code = err.code

@@ -186,6 +186,41 @@ describe('log', () => {
     expect(internal.token).toBe('secret')
   })
 
+  it('serializes an Error cause instead of flattening it to {}', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const logger = createRequestLogger({ method: 'GET', path: '/x' })
+    logger.error(new Error('Failed query', {
+      cause: new Error('Connection terminated due to connection timeout'),
+    }))
+    logger.emit()
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    const serialized = JSON.parse(JSON.stringify(event.error))
+    expect(serialized.cause).toMatchObject({
+      name: 'Error',
+      message: 'Connection terminated due to connection timeout',
+      stack: expect.any(String),
+    })
+  })
+
+  it('serializes a cyclic cause chain', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const outer = new Error('Outer')
+    const inner = Object.assign(new Error('Inner', { cause: outer }), { code: 'ECONNREFUSED' })
+    outer.cause = inner
+
+    expect(() => log.error(outer)).not.toThrow()
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({
+      message: 'Outer',
+      cause: { name: 'Error', message: 'Inner', code: 'ECONNREFUSED', cause: '[Circular]' },
+    })
+    expect(outer.cause).toBe(inner)
+  })
+
   it('uses error console method for error level', () => {
     const errorSpy = vi.spyOn(console, 'error')
     log.error('db', 'Connection failed')

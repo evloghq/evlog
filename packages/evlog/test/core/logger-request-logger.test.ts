@@ -246,7 +246,7 @@ describe('createRequestLogger', () => {
       statusCode: 500,
       statusMessage: 'Internal Server Error',
       data: { code: 'VALIDATION_ERROR', why: 'Invalid input' },
-      cause: expect.any(Error),
+      cause: { name: 'Error', message: 'original cause', stack: expect.any(String) },
     })
   })
 
