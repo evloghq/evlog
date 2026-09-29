@@ -4,7 +4,7 @@
 // (nitropack dev loads plugins outside the bundle via Worker threads).
 import { defineNitroPlugin } from 'nitropack/runtime/internal/plugin'
 import { getHeaders } from 'h3'
-import { createRequestLogger, getGlobalPluginRunner, initLogger, isEnabled, markWideEventDrainStarted } from '../logger'
+import { createRequestLogger, getGlobalPluginRunner, initLogger, isEnabled } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
