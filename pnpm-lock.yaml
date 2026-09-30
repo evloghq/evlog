@@ -381,6 +381,9 @@ importers:
 
   apps/playground:
     dependencies:
+      '@evlog/signals':
+        specifier: workspace:*
+        version: link:../../packages/signals
       '@nuxt/icon':
         specifier: ^2.5.1
         version: 2.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.149.0)(rolldown@1.2.12)(vite@8.3.0(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))(vue@3.5.42(typescript@6.0.3))
@@ -1149,6 +1152,27 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+
+  packages/signals:
+    devDependencies:
+      ai:
+        specifier: ^7.0.105
+        version: 7.0.107(zod@4.6.2)
+      evlog:
+        specifier: workspace:*
+        version: link:../evlog
+      tsdown:
+        specifier: ^0.23.0
+        version: 0.23.0(@volar/typescript@2.4.28(typescript@6.0.3))(tsx@4.23.13)(typescript@6.0.3)(unrun@0.2.37)(vue-tsc@3.3.11(typescript@6.0.3))
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@25.9.6)(@vitest/coverage-v8@4.1.11)(happy-dom@20.14.3)(vite@8.3.0(@types/node@25.9.6)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/telemetry:
     dependencies:
