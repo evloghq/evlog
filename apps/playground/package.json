@@ -12,6 +12,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@evlog/signals": "workspace:*",
     "@nuxt/icon": "^2.5.1",
     "@nuxt/ui": "^4.11.1",
     "@nuxtjs/color-mode": "^4.0.1",
