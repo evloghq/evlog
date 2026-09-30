@@ -1,0 +1,74 @@
+{
+  "name": "@evlog/signals",
+  "version": "0.1.0",
+  "description": "Typed model judgments on evlog wide events, built on the AI SDK evaluate contract",
+  "author": "HugoRCD <contact@evlog.dev>",
+  "homepage": "https://evlog.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evloghq/evlog.git",
+    "directory": "packages/signals"
+  },
+  "bugs": {
+    "url": "https://github.com/evloghq/evlog/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.mts",
+      "import": "./dist/testing.mjs",
+      "default": "./dist/testing.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "evlog",
+    "observability",
+    "wide-events",
+    "jev",
+    "typesafe-ai",
+    "ai-sdk",
+    "tail-sampling"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "dev:prepare": "tsdown",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "typecheck": "tsc --noEmit",
+    "demo": "tsx scripts/demo.ts"
+  },
+  "devDependencies": {
+    "ai": "^7.0.107",
+    "evlog": "workspace:*",
+    "tsdown": "^0.23.0",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "ai": ">=7.0.105 <8.0.0",
+    "evlog": "^2.29.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

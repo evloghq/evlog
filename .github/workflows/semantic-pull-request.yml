@@ -66,6 +66,7 @@ jobs:
             release
             repo
             sentry
+            signals
             stream
             sveltekit
             tanstack-start
