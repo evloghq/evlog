@@ -266,7 +266,7 @@ export default definePlugin(async (nitroApp) => {
       const runner = getGlobalPluginRunner()
       if (runner.hasKeep) await runner.runKeep(tailCtx)
 
-      const emittedEvent = log.emit({ _forceKeep: tailCtx.shouldKeep })
+      const emittedEvent = log.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
       await callEnrichAndDrain(hooks, emittedEvent, event, res)
     }
 
@@ -317,7 +317,7 @@ export default definePlugin(async (nitroApp) => {
       const runner = getGlobalPluginRunner()
       if (runner.hasKeep) await runner.runKeep(tailCtx)
 
-      const emittedEvent = log.emit({ _forceKeep: tailCtx.shouldKeep })
+      const emittedEvent = log.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
       if (emittedEvent) {
         ctx._evlogEmitted = true
         void callEnrichAndDrain(hooks, emittedEvent, e, undefined, { deferDrain: true }).catch((err) => {

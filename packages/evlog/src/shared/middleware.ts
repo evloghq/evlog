@@ -315,7 +315,7 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
     }
 
     const forceKeep = tailCtx.shouldKeep || shouldKeep(tailCtx)
-    const emittedEvent = requestLogger.emit({ _forceKeep: forceKeep })
+    const emittedEvent = requestLogger.emit({ _forceKeep: forceKeep, _durationMs: durationMs })
 
     if (
       emittedEvent

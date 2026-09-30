@@ -1068,13 +1068,13 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       }
     },
 
-    emit(overrides?: FieldContext<T> & { _forceKeep?: boolean }): WideEvent | null {
+    emit(overrides?: FieldContext<T> & { _forceKeep?: boolean, _durationMs?: number }): WideEvent | null {
       if (emitted) {
         warnPostEmit('log.emit()', 'Ignoring duplicate emit.')
         return null
       }
 
-      const durationMs = elapsedMs(startTime)
+      const durationMs = overrides?._durationMs ?? elapsedMs(startTime)
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
       let forceKeep = false
@@ -1103,7 +1103,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       if (overrides) {
         const obj = overrides as Record<string, unknown>
         for (const key in obj) {
-          if (key !== '_forceKeep') context[key] = obj[key]
+          if (key !== '_forceKeep' && key !== '_durationMs') context[key] = obj[key]
         }
       }
       context.durationMs = durationMs

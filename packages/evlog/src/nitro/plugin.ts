@@ -52,7 +52,7 @@ async function emitWithTailSampling(
   const runner = getGlobalPluginRunner()
   if (runner.hasKeep) await runner.runKeep(tailCtx)
 
-  return requestLog.emit({ _forceKeep: tailCtx.shouldKeep })
+  return requestLog.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
 }
 
 export default defineNitroPlugin(async (nitroApp) => {

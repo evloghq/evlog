@@ -812,7 +812,7 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * Seals the logger: after this returns (including when the return value is `null`
    * due to sampling), further mutations are ignored with warnings.
    */
-  emit: (overrides?: FieldContext<T> & { _forceKeep?: boolean }) => WideEvent | null
+  emit: (overrides?: FieldContext<T> & { _forceKeep?: boolean, _durationMs?: number }) => WideEvent | null
 
   /**
    * Get the current accumulated context
