@@ -1,7 +1,7 @@
 import { createError } from 'evlog'
 
 // ?outcome=ok | silent | upstream
-export default defineEventHandler(async (event) => {
+export default defineEventHandler((event) => {
   const log = useLogger(event)
   const { outcome = 'ok' } = getQuery(event)
 
