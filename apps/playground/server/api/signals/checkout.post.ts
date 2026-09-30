@@ -10,7 +10,7 @@ export default defineEventHandler((event) => {
   if (outcome === 'upstream') {
     log.set({ payment: { provider: 'stripe', attempt: 1 } })
     throw createError({
-      statusCode: 502,
+      status: 502,
       message: 'request to https://api.stripe.com/v1/payment_intents failed, reason: read ECONNRESET',
       why: 'Stripe did not answer within the client timeout',
       fix: 'Retry with backoff, then fall back to the pending-review path',
