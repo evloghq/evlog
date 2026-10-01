@@ -1,6 +1,6 @@
 ---
 name: review-logging-patterns
-description: Review code for logging patterns and suggest evlog adoption. Optionally use @evlog/cli (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, and Hono. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
+description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, and Hono. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
 license: MIT
 metadata:
   author: HugoRCD
@@ -56,7 +56,7 @@ npm install evlog
 
 ## Use the CLI (recommended on Nuxt, Nitro, Next.js, TanStack Start, Hono)
 
-`@evlog/cli` is a **separate package** from `evlog`, early but worth trying. It reads the project on disk (no traffic, no config). On the five supported frameworks it covers the whole loop: **wire evlog in** (`init`), **score coverage** (`map`), **lock the score in CI** (`--min-score`, `--baseline`). If the CLI is unavailable, the framework has no adapter yet, or the user declines, continue with the manual sections below; the skill does not depend on it. **Ask before installing anything**; prefer `npx` / `pnpm dlx` for one-shots.
+The `evlog` executable ships with the `evlog` package: `pnpm evlog`, `npx evlog`, `bunx evlog`. It runs `@evlog/cli` when installed and fetches it on demand otherwise (no dependency added to the project), so it works on a project with nothing yet. Early but worth trying. It reads the project on disk (no traffic, no config). On the five supported frameworks it covers the whole loop: **wire evlog in** (`init`), **score coverage** (`map`), **lock the score in CI** (`--min-score`, `--baseline`). If the CLI is unavailable, the framework has no adapter yet, or the user declines, continue with the manual sections below; the skill does not depend on it. **Ask before installing anything**.
 
 ### 1. Setup: `evlog init`
 
@@ -64,10 +64,10 @@ On a project that doesn't use evlog yet, prefer `init` over hand-writing the set
 
 ```bash
 # preview everything without writing (always start here)
-npx @evlog/cli init --dry-run --yes
+npx evlog init --dry-run --yes
 
 # then apply — flags instead of prompts
-npx @evlog/cli init --yes \
+npx evlog init --yes \
   --service my-app \
   --drain fs \
   --prodDrain axiom \
@@ -80,8 +80,8 @@ Useful flags: `--framework` (override detection: `nuxt`, `nitro`, `next`, `tanst
 ### 2. Score: `evlog map`
 
 ```bash
-npx @evlog/cli map --no-write
-# agents: npx @evlog/cli map --json --no-write
+npx evlog map --no-write
+# agents: npx evlog map --json --no-write
 ```
 
 What you get:
@@ -89,7 +89,7 @@ What you get:
 - A project score and which entry points are still dark
 - **FIX FIRST**: the three most valuable places to fix
 - **GOING FURTHER**: opportunities (catalogs, audit coverage, AI logging, auth identity) that never cost points
-- Per-file inspect: `npx @evlog/cli map <file> --no-write` shows the shape the handler could take
+- Per-file inspect: `npx evlog map <file> --no-write` shows the shape the handler could take
 - Re-run after fixes and watch the score move
 
 Work FIX FIRST in order, keep changes minimal (`useLogger()`, `log.set()`, `log.audit()`, `createError({ why, fix })`), then re-run with `--no-write`. Omit `--no-write` only when the user wants `evlog.map.json` written.
@@ -99,12 +99,12 @@ Work FIX FIRST in order, keep changes minimal (`useLogger()`, `log.set()`, `log.
 After fixing, propose making the score durable. This is where the CLI earns its keep:
 
 ```bash
-# in CI, after pnpm add -D @evlog/cli (project-local, pinned by the lockfile)
+# in CI, after pnpm add -D @evlog/cli (pinned by the lockfile; ask first)
 pnpm exec evlog map --min-score 80   # absolute gate: exits 1 below the threshold
 pnpm exec evlog map --baseline       # ratchet: exits 1 if this PR made things worse
 ```
 
-`--baseline` compares the fresh scan against the committed `evlog.map.json`, **per entry point and per requirement**, so a refactor that instruments one route and breaks another fails even if the total score is unchanged. Disabling a passing check with a comment counts as a regression too. New uninstrumented routes are listed as `NEW AND DARK` without failing. Workflow: commit `evlog.map.json` once, add the `--baseline` run to CI (`pnpm add -D @evlog/cli` for a pinned version, and ask first), then re-run `map` without `--baseline` to accept an intentional change. Docs: https://www.evlog.dev/cli/ci
+`--baseline` compares the fresh scan against the committed `evlog.map.json`, **per entry point and per requirement**, so a refactor that instruments one route and breaks another fails even if the total score is unchanged. Disabling a passing check with a comment counts as a regression too. New uninstrumented routes are listed as `NEW AND DARK` without failing. Workflow: commit `evlog.map.json` once, add the `--baseline` run to CI, then re-run `map` without `--baseline` to accept an intentional change. Docs: https://www.evlog.dev/cli/ci
 
 Early days: adapters and rules are still evolving; expect scores to move between releases. Docs: https://www.evlog.dev/cli/map · Rules: https://www.evlog.dev/cli/rules
 

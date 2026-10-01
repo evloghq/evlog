@@ -50,13 +50,13 @@ Files are named by date: `2026-03-14.jsonl`. Start with the most recent file.
 
 ## If no logs are found
 
-Before wiring a new drain, you can try `npx @evlog/cli doctor --json`, which checks whether `evlog` is installed and whether a local `.evlog/logs` drain already exists (read-only). Optional; skip if the CLI is unavailable.
+Before wiring a new drain, you can try `npx evlog doctor --json`, which checks whether `evlog` is installed and whether a local `.evlog/logs` drain already exists (read-only). Optional; skip if the CLI is unavailable.
 
 The file system drain may not be enabled. On Nuxt, Nitro, Next.js, TanStack Start, or Hono, the fastest path is the CLI, which detects the framework and wires the fs drain (its default dev drain) in one pass:
 
 ```bash
-npx @evlog/cli init --dry-run --yes   # preview first
-npx @evlog/cli init --yes --drain fs  # apply
+npx evlog init --dry-run --yes   # preview first
+npx evlog init --yes --drain fs  # apply
 ```
 
 Ask before running it. On other frameworks (or if the user declines), guide the manual setup:

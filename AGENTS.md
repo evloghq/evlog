@@ -40,7 +40,7 @@ packages/evlog/            Main package
   src/runtime/             Runtime code (client/, server/, utils/)
   src/<framework>/         One dir per framework integration (hono/, next/, sveltekit/, nestjs/, express/, fastify/, elysia/, orpc/, react-router/, workers/, eve/, better-auth/)
   test/                    Tests
-packages/cli/              @evlog/cli — log exploration CLI (`pnpm cli`)
+packages/cli/              @evlog/cli — the CLI behind the `evlog` executable that `evlog` ships (`pnpm cli` runs it from source)
 packages/nuxthub/          @evlog/nuxthub
 packages/telemetry/        @evlog/telemetry
 apps/playground/           Main dev environment (`pnpm dev`)

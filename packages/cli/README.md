@@ -13,29 +13,26 @@
 
 **Digging through logs is not observability. It's hope.**
 
-The official command line for [evlog](https://evlog.dev), a **separate package** from the logger itself.
+The command line behind the `evlog` executable. [`evlog`](https://npmjs.com/package/evlog) ships the binary without depending on this package: it runs `@evlog/cli` when installed and fetches it with your package manager otherwise, so the logger stays small and the commands are there as soon as evlog is.
 
 Score what your app can tell you when something goes wrong. Diagnose your install when nothing shows up.
 
-> **Early days.** Safe to run on any project, since it reads your source and writes a single `evlog.map.json` at the root (`--no-write` to skip), and it is covered by tests, but young. `evlog map` has adapters for four frameworks today, its rules are still being refined, and both will grow. Expect verdicts and scores to move between releases: pin the CLI as a dev dependency when you gate CI on the number.
+> **Early days.** Safe to run on any project, since it reads your source and writes a single `evlog.map.json` at the root (`--no-write` to skip), and it is covered by tests, but young. `evlog map` has adapters for five frameworks today, its rules are still being refined, and both will grow. Expect verdicts and scores to move between releases: install it as a dev dependency when you gate CI on the number.
 
 ## Usage
 
-Try without installing:
-
 ```bash
-npx @evlog/cli init          # interactive setup — pick a destination, review the plan
-npx @evlog/cli agents        # teach your AI agents the evlog conventions
-npx @evlog/cli map           # score what is still dark
-npx @evlog/cli map --json --no-write
+npx evlog init          # interactive setup — pick a destination, review the plan
+npx evlog agents        # teach your AI agents the evlog conventions
+npx evlog map           # score what is still dark
+npx evlog map --json --no-write
 ```
 
-Or pin it for repeatable scores / CI:
+Without `@evlog/cli` installed, each run fetches it (a few seconds cold, about a second cached). Install it for a pinned, instant run, which is what CI wants:
 
 ```bash
 pnpm add -D @evlog/cli
 pnpm evlog map
-pnpm evlog doctor
 ```
 
 ## Commands
@@ -62,7 +59,7 @@ pnpm evlog doctor
 | `evlog map` | Static observability score for the current app — Lighthouse for wide events |
 | `evlog map <route-or-file>` | Explain one entry point: why it was scanned, each verdict, the shape it could take |
 | `evlog map --all` | Every entry point as a check matrix, grouped by directory |
-| `evlog map --framework <name>` | Override framework detection (`nuxt`, `nitro`, `next`, `tanstack-start`) |
+| `evlog map --framework <name>` | Override framework detection (`nuxt`, `nitro`, `next`, `tanstack-start`, `hono`) |
 | `evlog map --min-score <n>` | Exit 1 if the global score is below `n` |
 | `evlog map --baseline [ref]` | Exit 1 on a regression against the committed `evlog.map.json` (path, or `git:<ref>`) |
 | `evlog map --no-write` | Skip writing `evlog.map.json` to the project root |
@@ -150,7 +147,7 @@ Maintainer notes on frictions / wishlist: [`DEBUG-DX.md`](./DEBUG-DX.md).
 ## Adding a command
 
 1. Create `src/commands/<name>.ts` with `defineEvlogCommand('name', { run({ args, cli, log, ui }) { … } })`: the header, `--json` / `--debug` / `--no-header`, and the debug file is automatic. Use `log.step` / `log.finding` for diagnostics; `ui.done` / `ui.human` / `ui.json` for output.
-2. Register it with one import + one line in [`src/commands/index.ts`](src/commands/index.ts).
+2. Add one lazy entry in [`src/commands/index.ts`](src/commands/index.ts), so the command only loads when it runs.
 
 `src/index.ts` stays a thin shell (meta + `withTelemetry`). Do not embed command bodies there.
 

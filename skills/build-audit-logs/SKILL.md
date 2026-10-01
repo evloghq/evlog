@@ -395,7 +395,7 @@ rg -n "createError\(.*403|throw .*Forbidden|status:\s*403|statusCode:\s*403" --t
 rg -n "(?i)\b(delete|update|create|refund|grant|revoke|promote|demote|reset|impersonate)\b.*async\s+function|defineEventHandler" --type ts
 ```
 
-On Nuxt, Nitro, Next.js, TanStack Start, or Hono, you can also run `npx @evlog/cli map --no-write`, whose `audit` / `audit-coverage` checks flag sensitive routes that log nothing. Useful as a second pass; keep the greps above for denials and actor shape, which the CLI does not fully cover.
+On Nuxt, Nitro, Next.js, TanStack Start, or Hono, you can also run `npx evlog map --no-write`, whose `audit` / `audit-coverage` checks flag sensitive routes that log nothing. Useful as a second pass; keep the greps above for denials and actor shape, which the CLI does not fully cover.
 
 For each match, check:
 - Mutating endpoint without a `log.audit()` or `withAudit()` → coverage gap.
