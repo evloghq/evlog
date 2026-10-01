@@ -10,24 +10,19 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiOrderRouteImport } from './routes/api/order'
-import { Route as ApiHelloRouteImport } from './routes/api/hello'
-import { Route as ApiCheckoutRouteImport } from './routes/api/checkout'
 import { Route as ApiAdminRouteImport } from './routes/api/admin'
+import { Route as ApiCheckoutRouteImport } from './routes/api/checkout'
+import { Route as ApiHelloRouteImport } from './routes/api/hello'
+import { Route as ApiOrderRouteImport } from './routes/api/order'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiOrderRoute = ApiOrderRouteImport.update({
-  id: '/api/order',
-  path: '/api/order',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiHelloRoute = ApiHelloRouteImport.update({
-  id: '/api/hello',
-  path: '/api/hello',
+const ApiAdminRoute = ApiAdminRouteImport.update({
+  id: '/api/admin',
+  path: '/api/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCheckoutRoute = ApiCheckoutRouteImport.update({
@@ -35,9 +30,14 @@ const ApiCheckoutRoute = ApiCheckoutRouteImport.update({
   path: '/api/checkout',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminRoute = ApiAdminRouteImport.update({
-  id: '/api/admin',
-  path: '/api/admin',
+const ApiHelloRoute = ApiHelloRouteImport.update({
+  id: '/api/hello',
+  path: '/api/hello',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOrderRoute = ApiOrderRouteImport.update({
+  id: '/api/order',
+  path: '/api/order',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -94,18 +94,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/order': {
-      id: '/api/order'
-      path: '/api/order'
-      fullPath: '/api/order'
-      preLoaderRoute: typeof ApiOrderRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/hello': {
-      id: '/api/hello'
-      path: '/api/hello'
-      fullPath: '/api/hello'
-      preLoaderRoute: typeof ApiHelloRouteImport
+    '/api/admin': {
+      id: '/api/admin'
+      path: '/api/admin'
+      fullPath: '/api/admin'
+      preLoaderRoute: typeof ApiAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/checkout': {
@@ -115,11 +108,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin': {
-      id: '/api/admin'
-      path: '/api/admin'
-      fullPath: '/api/admin'
-      preLoaderRoute: typeof ApiAdminRouteImport
+    '/api/hello': {
+      id: '/api/hello'
+      path: '/api/hello'
+      fullPath: '/api/hello'
+      preLoaderRoute: typeof ApiHelloRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/order': {
+      id: '/api/order'
+      path: '/api/order'
+      fullPath: '/api/order'
+      preLoaderRoute: typeof ApiOrderRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
