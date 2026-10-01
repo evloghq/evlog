@@ -4,7 +4,7 @@
  * Usage:
  *   tsx bench/scripts/report.ts
  *
- * Reads from bench/baseline/{bench,comparison,size}.json
+ * Reads from bench/baseline/{bench,bundled-size,comparison,size}.json
  * Writes to bench/RESULTS.md
  */
 
@@ -47,6 +47,20 @@ interface EntrySize {
 interface SizeReport {
   entries: EntrySize[]
   total: { raw: number, gzip: number }
+}
+
+interface BundledEntry {
+  library: string
+  version: string
+  raw: number
+  gzip: number
+  modules: number
+}
+
+interface BundledSizeReport {
+  bundler: { name: string, version: string }
+  options: { platform: string, format: string, target: string, minify: boolean }
+  entries: BundledEntry[]
 }
 
 // --- Helpers ---
@@ -162,6 +176,25 @@ function renderBundleSize(report: SizeReport): string {
   return lines.join('\n')
 }
 
+function renderBundledSize(report: BundledSizeReport): string {
+  const lines: string[] = []
+  lines.push('## Bundled size vs alternatives')
+  lines.push('')
+  lines.push(`> Canonical basic setup per library (\`bench/bundled/\`), bundled with ${report.bundler.name} ${report.bundler.version} (${report.options.format}, platform ${report.options.platform}, target ${report.options.target}, minify ${report.options.minify ? 'on' : 'off'}), gzipped.`)
+  lines.push('> See `bench/scripts/bundled-size.ts` for methodology.')
+  lines.push('')
+  lines.push('| Library | Version | Raw | Gzip | Modules |')
+  lines.push('|---------|---------|----:|-----:|--------:|')
+
+  for (const entry of report.entries) {
+    lines.push(`| ${entry.library} | ${entry.version} | ${formatBytes(entry.raw)} | ${formatBytes(entry.gzip)} | ${entry.modules} |`)
+  }
+
+  lines.push('')
+
+  return lines.join('\n')
+}
+
 // --- Main ---
 
 const BASE = new URL('../baseline/', import.meta.url).pathname
@@ -169,6 +202,7 @@ const BASE = new URL('../baseline/', import.meta.url).pathname
 const bench = await loadJSON<BenchReport>(`${BASE}bench.json`)
 const comparison = await loadJSON<BenchReport>(`${BASE}comparison.json`)
 const size = await loadJSON<SizeReport>(`${BASE}size.json`)
+const bundledSize = await loadJSON<BundledSizeReport>(`${BASE}bundled-size.json`)
 
 const sections: string[] = []
 
@@ -179,6 +213,10 @@ sections.push('')
 
 if (size) {
   sections.push(renderBundleSize(size))
+}
+
+if (bundledSize) {
+  sections.push(renderBundledSize(bundledSize))
 }
 
 if (comparison) {

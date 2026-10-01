@@ -407,6 +407,7 @@
     "bench:report": "tsx bench/scripts/report.ts",
     "size": "tsx bench/scripts/size.ts",
     "size:json": "tsx bench/scripts/size.ts --json",
+    "size:alternatives": "tsx bench/scripts/bundled-size.ts --write && tsx bench/scripts/report.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
@@ -416,6 +417,7 @@
   },
   "devDependencies": {
     "@codspeed/vitest-plugin": "^5.7.1",
+    "esbuild": "^0.25.12",
     "@nestjs/common": "^11.2.3",
     "@nestjs/core": "^11.2.3",
     "@nestjs/platform-express": "^11.2.3",
