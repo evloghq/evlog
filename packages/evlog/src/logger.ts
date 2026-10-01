@@ -233,6 +233,20 @@ export function shouldKeep(ctx: TailSamplingContext): boolean {
   })
 }
 
+/**
+ * Production without `initLogger()` still emits (the defaults are safe to run),
+ * but the events carry no redaction, the default service/environment and no
+ * drain. Warn once per process so the misconfiguration is visible instead of
+ * silent; `noopLogger` stays reserved for the explicit `enabled: false`.
+ */
+function warnOnceUninitializedProduction(): void {
+  if (state.initialized || isDev() || state.warnedUninitialized) return
+  state.warnedUninitialized = true
+  console.warn(
+    '[evlog] running in production without initLogger(). Events are emitted with the default service and environment, without redaction, and no drain is configured so nothing reaches observability. Call initLogger({ drain }) once at startup, or wire a framework hook (evlog:drain).',
+  )
+}
+
 interface EmitWideEventOptions {
   deferDrain?: boolean
   ownsEvent?: boolean
@@ -246,6 +260,7 @@ function emitWideEvent(
 ): WideEvent | null {
   const { deferDrain = false, ownsEvent = false, waitUntil } = options
   if (!state.enabled) return null
+  warnOnceUninitializedProduction()
 
   if (!ownsEvent) {
     if (!isLevelEnabled(level, state.minLevel)) {
@@ -816,6 +831,16 @@ const _log: Log = {
 }
 
 export { _log as log }
+
+/**
+ * Drop-in default export for projects migrating from pino or consola:
+ * `import logger from 'evlog'` prints immediately, with no `initLogger()` call.
+ *
+ * This is the bare {@link log} API, not a `createLogger` scope: every call
+ * outputs right away and there is no accumulation or `emit()`. For wide events
+ * with drains and sampling, keep `initLogger()` + `createLogger()`.
+ */
+export default _log
 
 const noopAudit = Object.assign(() => {}, { deny: () => {} }) as AuditMethod
 /** @internal Accepts every call and emits nothing; reused wherever logging must not fail the caller. */

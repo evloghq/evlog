@@ -49,6 +49,8 @@ export interface EvlogGlobalConfig {
   minLevel: LogLevel
   locked: boolean
   initialized: boolean
+  /** Set after the first production emit without `initLogger()` warned about it. */
+  warnedUninitialized: boolean
   pluginRunner: PluginRunner
 }
 
@@ -77,6 +79,7 @@ function createConfig(): EvlogGlobalConfig {
     minLevel: 'debug',
     locked: false,
     initialized: false,
+    warnedUninitialized: false,
     pluginRunner: getEmptyPluginRunner(),
   }
 }
