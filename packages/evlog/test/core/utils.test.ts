@@ -165,6 +165,11 @@ describe('getLevelColor', () => {
     expect(getLevelColor('debug')).toBe(colors.gray)
   })
 
+  it('colors fatal red and trace gray', () => {
+    expect(getLevelColor('fatal')).toBe(colors.red)
+    expect(getLevelColor('trace')).toBe(colors.gray)
+  })
+
   it('returns white for unknown level', () => {
     expect(getLevelColor('unknown')).toBe(colors.white)
   })
@@ -180,6 +185,19 @@ describe('isLevelEnabled', () => {
     expect(isLevelEnabled('info', 'warn')).toBe(false)
     expect(isLevelEnabled('warn', 'warn')).toBe(true)
     expect(isLevelEnabled('error', 'warn')).toBe(true)
+  })
+
+  it('gates trace like debug', () => {
+    expect(isLevelEnabled('trace', 'debug')).toBe(true)
+    expect(isLevelEnabled('trace', 'trace')).toBe(true)
+    expect(isLevelEnabled('trace', 'info')).toBe(false)
+    expect(isLevelEnabled('debug', 'trace')).toBe(true)
+  })
+
+  it('treats fatal as the most severe level', () => {
+    expect(isLevelEnabled('fatal', 'error')).toBe(true)
+    expect(isLevelEnabled('fatal', 'fatal')).toBe(true)
+    expect(isLevelEnabled('error', 'fatal')).toBe(false)
   })
 })
 

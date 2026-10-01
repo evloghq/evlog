@@ -186,7 +186,7 @@ export function clearMemoryLogs(store = DEFAULT_STORE): void {
   if (s) s.length = 0
 }
 
-const VALID_LEVELS = new Set<LogLevel>(['info', 'error', 'warn', 'debug'])
+const VALID_LEVELS = new Set<LogLevel>(['info', 'error', 'warn', 'debug', 'fatal', 'trace'])
 
 /**
  * Parse a flat query-string object (e.g. from `c.req.query()` in Hono, or

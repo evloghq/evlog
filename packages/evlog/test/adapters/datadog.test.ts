@@ -60,6 +60,11 @@ describe('datadog adapter', () => {
       expect(resolveDatadogLogStatus(createTestEvent({ level: 'debug' }))).toBe('debug')
     })
 
+    it('maps fatal to error and trace to debug', () => {
+      expect(resolveDatadogLogStatus(createTestEvent({ level: 'fatal' }))).toBe('error')
+      expect(resolveDatadogLogStatus(createTestEvent({ level: 'trace' }))).toBe('debug')
+    })
+
     it('maps HTTP 5xx to error when level is still info', () => {
       expect(resolveDatadogLogStatus(createTestEvent({ status: 503 }))).toBe('error')
     })

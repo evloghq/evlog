@@ -80,9 +80,9 @@ export function formatDatadogMessageLine(event: WideEvent): string {
  * ran. Purely business errors on **HTTP 200** only change Datadog if you call `log.error()`.
  */
 export function resolveDatadogLogStatus(event: WideEvent): 'error' | 'warn' | 'info' | 'debug' {
-  if (event.level === 'error') return 'error'
+  if (event.level === 'error' || event.level === 'fatal') return 'error'
   if (event.level === 'warn') return 'warn'
-  if (event.level === 'debug') return 'debug'
+  if (event.level === 'debug' || event.level === 'trace') return 'debug'
   const code = typeof event.status === 'number' ? event.status : undefined
   if (code !== undefined && code >= 500) return 'error'
   if (code !== undefined && code >= 400) return 'warn'

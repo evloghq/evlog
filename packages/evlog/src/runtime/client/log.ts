@@ -7,7 +7,8 @@ import { cssColors, escapeFormatString, getCssLevelColor, isBrowser, isLevelEnab
  * Info filter; the structured payload still has `level: 'debug'`.
  */
 function browserConsoleMethod(level: LogLevel): 'log' | 'info' | 'warn' | 'error' {
-  if (level === 'debug') return 'log'
+  if (level === 'debug' || level === 'trace') return 'log'
+  if (level === 'fatal') return 'error'
   return level as 'info' | 'warn' | 'error'
 }
 
@@ -163,6 +164,8 @@ const _clientLog: Log = {
   error: createLogMethod('error'),
   warn: createLogMethod('warn'),
   debug: createLogMethod('debug'),
+  fatal: createLogMethod('fatal'),
+  trace: createLogMethod('trace'),
 }
 
 export { _clientLog as log }

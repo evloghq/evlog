@@ -64,6 +64,22 @@ describe('otlp adapter', () => {
       expect(record.severityText).toBe('ERROR')
     })
 
+    it('maps fatal level to severity 21', () => {
+      const event = createTestEvent({ level: 'fatal' })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.severityNumber).toBe(21)
+      expect(record.severityText).toBe('FATAL')
+    })
+
+    it('maps trace level to severity 1', () => {
+      const event = createTestEvent({ level: 'trace' })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.severityNumber).toBe(1)
+      expect(record.severityText).toBe('TRACE')
+    })
+
     it('serializes the whole event as the body by default', () => {
       const event = createTestEvent({ action: 'test', userId: '123' })
       const record = toOTLPLogRecord(event)

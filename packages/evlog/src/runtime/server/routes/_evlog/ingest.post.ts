@@ -4,7 +4,7 @@ import type { IngestPayload, WideEvent } from '../../../../types'
 import { getEnvironment, getGlobalPluginRunner } from '../../../../logger'
 import { filterSafeHeaders } from '../../../../utils'
 
-const VALID_LEVELS = ['info', 'error', 'warn', 'debug'] as const
+const VALID_LEVELS = ['info', 'error', 'warn', 'debug', 'fatal', 'trace'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

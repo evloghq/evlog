@@ -2,15 +2,17 @@
 import type { LogLevel } from 'evlog'
 import { log, setMinLevel } from 'evlog/client'
 
-const levels: LogLevel[] = ['debug', 'info', 'warn', 'error']
+const levels: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal']
 
 const minLevel = ref<LogLevel>('debug')
 
 const order: Record<LogLevel, number> = {
+  trace: 0,
   debug: 0,
   info: 1,
   warn: 2,
   error: 3,
+  fatal: 4,
 }
 
 function passes(level: LogLevel): boolean {
@@ -24,14 +26,18 @@ function applyMinLevel(level: LogLevel) {
 
 function emitAt(level: LogLevel) {
   const payload = { panel: 'min-level', ts: Date.now() }
-  if (level === 'debug') {
+  if (level === 'trace') {
+    log.trace(payload)
+  } else if (level === 'debug') {
     log.debug(payload)
   } else if (level === 'info') {
     log.info(payload)
   } else if (level === 'warn') {
     log.warn('playground', 'warn sample')
-  } else {
+  } else if (level === 'error') {
     log.error('playground', 'error sample')
+  } else {
+    log.fatal('playground', 'fatal sample')
   }
 }
 
@@ -94,7 +100,7 @@ onMounted(() => {
             :key="`emit-${lvl}`"
             size="sm"
             variant="soft"
-            :color="lvl === 'error' ? 'error' : lvl === 'warn' ? 'warning' : lvl === 'info' ? 'primary' : 'neutral'"
+            :color="lvl === 'error' || lvl === 'fatal' ? 'error' : lvl === 'warn' ? 'warning' : lvl === 'info' ? 'primary' : 'neutral'"
             @click="emitAt(lvl)"
           >
             log.{{ lvl }}()

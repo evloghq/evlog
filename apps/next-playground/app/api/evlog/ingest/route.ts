@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 
-const VALID_LEVELS = ['info', 'error', 'warn', 'debug'] as const
+const VALID_LEVELS = ['info', 'error', 'warn', 'debug', 'fatal', 'trace'] as const
 
 export async function POST(request: NextRequest) {
   // Validate origin

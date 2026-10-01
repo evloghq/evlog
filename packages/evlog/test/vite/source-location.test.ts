@@ -37,7 +37,7 @@ describe('vite source-location plugin', () => {
   })
 
   it('handles all log levels', async () => {
-    const levels = ['info', 'error', 'warn', 'debug']
+    const levels = ['info', 'error', 'warn', 'debug', 'fatal', 'trace']
     for (const level of levels) {
       const code = `log.${level}({ action: 'test' })`
       const result = defined(await sourceLocationTransform(code), 'source-location result')

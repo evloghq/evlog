@@ -88,7 +88,7 @@ export interface TransportConfig {
  */
 export interface IngestPayload {
   timestamp: string
-  level: 'info' | 'error' | 'warn' | 'debug'
+  level: 'info' | 'error' | 'warn' | 'debug' | 'fatal' | 'trace'
   [key: string]: unknown
 }
 
@@ -223,6 +223,8 @@ export interface SamplingRates {
   debug?: number
   /** Percentage of error logs to keep (0-100). Default: 100 */
   error?: number
+  /** Percentage of trace logs to keep (0-100). Default: 0 (opt-in) */
+  trace?: number
 }
 
 /**
@@ -306,8 +308,9 @@ export interface SamplingConfig {
   /**
    * Sampling rates per log level (head sampling).
    * Values are percentages from 0 to 100.
-   * Default: 100 for all levels (log everything).
+   * Default: 100 for all levels except trace (log everything).
    * Error defaults to 100 even if not specified.
+   * Trace defaults to 0 (opt-in). Fatal is always kept, regardless of rates.
    *
    * @example
    * ```ts
@@ -317,6 +320,7 @@ export interface SamplingConfig {
    *     warn: 50,    // Keep 50% of warning logs
    *     debug: 5,    // Keep 5% of debug logs
    *     error: 100,  // Always keep errors (default)
+   *     trace: 100,  // Trace defaults to 0: opt in explicitly
    *   }
    * }
    * ```
@@ -391,7 +395,7 @@ export interface LoggerConfig {
   /**
    * Minimum severity for the global `log` API (tagged and object form).
    * Does not apply to `createLogger().emit()` / request wide events (use `sampling` for volume).
-   * Order: debug < info < warn < error.
+   * Order: trace < debug < info < warn < error < fatal.
    * @default 'debug' (all levels)
    */
   minLevel?: LogLevel
@@ -633,7 +637,7 @@ export interface AuditFields {
  */
 export interface BaseWideEvent {
   timestamp: string
-  level: 'info' | 'error' | 'warn' | 'debug'
+  level: 'info' | 'error' | 'warn' | 'debug' | 'fatal' | 'trace'
   service: string
   environment: string
   version?: string
@@ -679,7 +683,7 @@ export interface InternalFields {
  * Request-scoped log entry captured during a request lifecycle.
  */
 export interface RequestLogEntry {
-  level: 'info' | 'warn'
+  level: 'info' | 'warn' | 'fatal' | 'trace'
   message: string
   timestamp: string
 }
@@ -697,7 +701,7 @@ export type FieldContext<T extends object = Record<string, unknown>> =
  * Request-scoped logger for building wide events
  *
  * After {@link RequestLogger.emit} runs (including when head sampling drops the event),
- * the logger is **sealed**: further `set`, `error`, `info`, and `warn` calls log a
+ * the logger is **sealed**: further `set`, `error`, `fatal`, `info`, `warn`, and `trace` calls log a
  * console warning and do not mutate the wide event. A second `emit` is ignored with
  * a warning. Use {@link RequestLogger.fork} on supported integrations for intentional
  * background work that needs its own wide event.
@@ -768,6 +772,16 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
   error: (error: Error | string, context?: FieldContext<T>) => void
 
   /**
+   * Capture a fatal message inside the request wide event.
+   *
+   * Escalates the event level to `fatal`; fatal events are always kept,
+   * regardless of the sampling configuration.
+   *
+   * No-ops with a console warning after the wide event has been emitted.
+   */
+  fatal: (message: string, context?: FieldContext<T>) => void
+
+  /**
    * Capture an informational message inside the request wide event.
    *
    * No-ops with a console warning after the wide event has been emitted.
@@ -780,6 +794,16 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * No-ops with a console warning after the wide event has been emitted.
    */
   warn: (message: string, context?: FieldContext<T>) => void
+
+  /**
+   * Capture a trace message inside the request wide event.
+   *
+   * Events whose most severe entry is `trace` are dropped by head sampling
+   * unless `sampling.rates.trace` is configured.
+   *
+   * No-ops with a console warning after the wide event has been emitted.
+   */
+  trace: (message: string, context?: FieldContext<T>) => void
 
   /**
    * Emit the final wide event with all accumulated context.
@@ -851,9 +875,11 @@ export interface AuditLoggerMethod {
 }
 
 /**
- * Log level type
+ * Log level type.
+ *
+ * Severity order: `trace` and `debug` < `info` < `warn` < `error` < `fatal`.
  */
-export type LogLevel = 'info' | 'error' | 'warn' | 'debug'
+export type LogLevel = 'info' | 'error' | 'warn' | 'debug' | 'fatal' | 'trace'
 
 /**
  * Simple logging API - as easy as console.log
@@ -898,6 +924,29 @@ export interface Log {
    */
   debug(tag: string, message: string): void
   debug(event: Record<string, unknown>): void
+
+  /**
+   * Log a fatal message or wide event
+   *
+   * `fatal` marks an event the process cannot recover from. Fatal events are
+   * always kept, regardless of the sampling configuration.
+   * @example log.fatal('db', 'Connection pool exhausted')
+   * @example log.fatal({ action: 'db', pool: 'exhausted' })
+   */
+  fatal(tag: string, message: string): void
+  fatal(error: Error): void
+  fatal(event: Record<string, unknown>): void
+
+  /**
+   * Log a trace message or wide event
+   *
+   * `trace` is the most verbose level. Trace events are dropped by head
+   * sampling unless `sampling.rates.trace` is configured.
+   * @example log.trace('cache', 'Lookup started')
+   * @example log.trace({ action: 'cache', key: 'user_123' })
+   */
+  trace(tag: string, message: string): void
+  trace(event: Record<string, unknown>): void
 }
 
 /**

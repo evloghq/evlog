@@ -204,6 +204,70 @@ describe('createRequestLogger', () => {
     ])
   })
 
+  it('escalates emit level to fatal and keeps the request event despite sampling', () => {
+    initLogger({ pretty: false, sampling: { rates: { info: 0 } } })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const logger = createRequestLogger({})
+
+    logger.fatal('Payment provider unreachable')
+    const result = logger.emit()
+
+    expect(result).not.toBeNull()
+    expect(result).toHaveProperty('level', 'fatal')
+    const logs = (result?.requestLogs as Array<Record<string, unknown>>)
+    expect(logs[0]?.level).toBe('fatal')
+
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    const output = errorSpy.mock.calls[0]?.[0]
+    expect(output).toContain('"level":"fatal"')
+  })
+
+  it('escalates fatal over error', () => {
+    const logger = createRequestLogger({})
+
+    logger.error(new Error('Query failed'))
+    logger.fatal('Connection pool exhausted')
+    const result = logger.emit()
+
+    expect(result).toHaveProperty('level', 'fatal')
+    expect(result).toHaveProperty('error')
+  })
+
+  it('does not escalate info events when only trace entries exist', () => {
+    initLogger({ pretty: false, sampling: { rates: { trace: 100 } } })
+    const logger = createRequestLogger({})
+
+    logger.info('Request started')
+    logger.trace('Cache lookup started')
+    const result = logger.emit()
+
+    expect(result).toHaveProperty('level', 'info')
+    const logs = (result?.requestLogs as Array<Record<string, unknown>>)
+    expect(logs.map(entry => entry.level)).toEqual(['info', 'trace'])
+  })
+
+  it('records trace entries in requestLogs without escalating the event level', () => {
+    const logger = createRequestLogger({})
+
+    logger.info('Request started')
+    logger.trace('Cache lookup started')
+    const result = logger.emit()
+
+    expect(result).not.toBeNull()
+    expect(result).toHaveProperty('level', 'info')
+    const logs = (result?.requestLogs as Array<Record<string, unknown>>)
+    expect(logs.map(entry => entry.level)).toEqual(['info', 'trace'])
+  })
+
+  it('merges context passed to trace()', () => {
+    const logger = createRequestLogger({})
+
+    logger.trace('Cache lookup started', { cache: { key: 'user:1' } })
+
+    const context = logger.getContext()
+    expect(context.cache).toEqual({ key: 'user:1' })
+  })
+
   it('merges context passed to info() and warn()', () => {
     const logger = createRequestLogger({})
 
