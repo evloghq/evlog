@@ -24,14 +24,10 @@ function isExtensionException(properties: CaptureResult['properties']): boolean 
 }
 
 /**
- * Consent-tiered analytics: while consent is pending or refused, PostHog runs
- * cookieless (nothing on the device, visitors counted from a server-side hash
- * that rotates daily), so base analytics never depends on the banner. An
- * explicit opt-in (AppConsentBanner) upgrades to cookie-based tracking, which
- * is what unlocks session replay, surveys and full heatmaps.
- *
- * Requires "Cookieless server hash mode" in the project's web analytics
- * settings.
+ * Cookie-based tracking for every visitor: session replay, surveys and full
+ * heatmaps run without a consent step. Session replay itself waits for the
+ * project's remote config, so it starts only when enabled in the PostHog
+ * project settings.
  */
 export default defineNuxtPlugin(() => {
   const key = useRuntimeConfig().public.posthogKey
@@ -41,11 +37,6 @@ export default defineNuxtPlugin(() => {
     // Ingestion through the site's own origin; blockers drop the PostHog one.
     api_host: '/_ph',
     ui_host: 'https://eu.posthog.com',
-    cookieless_mode: 'on_reject',
-    // Required with on_reject: pending consent only falls back to cookieless
-    // capture when the default is opt-out; without this flag pending visitors
-    // send nothing at all until they answer the banner.
-    opt_out_capturing_by_default: true,
     // Carries `capture_pageview: 'history_change'`, so posthog-js already
     // captures every SPA navigation. A router hook on top of it counts each
     // page twice.
