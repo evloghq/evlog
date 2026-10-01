@@ -80,6 +80,8 @@ export interface HttpDrainRequest {
   /** Caller is responsible for `Content-Type`. */
   headers: Record<string, string>
   body: string
+  /** Compress `body` before sending and set `Content-Encoding`. */
+  compression?: 'gzip'
 }
 
 /** Adapters only need to ship config + `encode()` — no manual `fetch`. */
@@ -146,6 +148,7 @@ export async function sendEncodedDrainRequest(
     url: request.url,
     headers: request.headers,
     body: request.body,
+    compression: request.compression,
     timeout: options.timeout ?? DEFAULT_HTTP_TIMEOUT,
     retries: options.retries,
     label: options.label,
@@ -194,6 +197,7 @@ export function defineHttpDrain<TConfig>(options: HttpDrainOptions<TConfig>): Dr
         url: request.url,
         headers: request.headers,
         body: request.body,
+        compression: request.compression,
         timeout,
         retries,
         label: options.label ?? options.name,

@@ -22,6 +22,11 @@ export interface HttpPostOptions {
   headers: Record<string, string>
   /** Pre-serialized request body. */
   body: string
+  /**
+   * Compress the body before sending and set `Content-Encoding` accordingly.
+   * The body is compressed once and reused across retries.
+   */
+  compression?: 'gzip'
   /** Abort the request after this many milliseconds. */
   timeout: number
   /** Prefix used in error messages. */
@@ -94,13 +99,20 @@ function isRetryable(error: unknown): boolean {
   return false
 }
 
+async function gzip(body: string): Promise<Uint8Array> {
+  const stream = new Blob([body]).stream().pipeThrough(new CompressionStream('gzip'))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
 /**
  * POST a body with timeout + retry. Throws label-prefixed errors with a
  * truncated response body. Safe to call from any drain `send()`.
  */
-export async function httpPost({ url, headers, body, timeout, label, retries = 2, userAgent, source, onResponse }: HttpPostOptions): Promise<void> {
+export async function httpPost({ url, headers, body, compression, timeout, label, retries = 2, userAgent, source, onResponse }: HttpPostOptions): Promise<void> {
   const normalizedRetries = Number.isFinite(retries) && retries >= 0 ? Math.floor(retries) : 2
   const finalHeaders = withEvlogIdentityHeaders(headers, { userAgent, source })
+  const payload = compression === 'gzip' ? await gzip(body) : body
+  if (compression === 'gzip') finalHeaders['Content-Encoding'] = 'gzip'
 
   let lastError: Error | undefined
 
@@ -112,7 +124,7 @@ export async function httpPost({ url, headers, body, timeout, label, retries = 2
       const response = await fetch(url, {
         method: 'POST',
         headers: finalHeaders,
-        body,
+        body: payload,
         signal: controller.signal,
       })
 

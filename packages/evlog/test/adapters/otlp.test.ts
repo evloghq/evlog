@@ -1,6 +1,11 @@
+import { gunzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { sendBatchToOTLP, sendToOTLP, toOTLPLogRecord, createOTLPDrain } from '../../src/adapters/otlp'
+import { EVLOG_VERSION } from '../../src/shared/http'
+
+const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
+const SPAN_ID = '00f067aa0ba902b7'
 
 describe('otlp adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -133,6 +138,50 @@ describe('otlp adapter', () => {
       expect(successAttr?.value).toEqual({ boolValue: true })
     })
 
+    it('sends non-integer numbers as doubleValue', () => {
+      const event = createTestEvent({ ai: { costUsd: 0.0042 } })
+      const record = toOTLPLogRecord(event, 'compact')
+
+      expect(record.attributes.find(a => a.key === 'ai.costUsd')?.value).toEqual({ doubleValue: 0.0042 })
+    })
+
+    it('sends non-finite numbers as strings', () => {
+      const event = createTestEvent({ ratio: Number.NaN, limit: Number.POSITIVE_INFINITY })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.attributes.find(a => a.key === 'ratio')?.value).toEqual({ stringValue: 'NaN' })
+      expect(record.attributes.find(a => a.key === 'limit')?.value).toEqual({ stringValue: 'Infinity' })
+    })
+
+    it('sends arrays of same-type primitives as OTLP arrays', () => {
+      const event = createTestEvent({ tags: ['beta', 'eu'], flags: [true, false], ids: [1, 2] })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.attributes.find(a => a.key === 'tags')?.value)
+        .toEqual({ arrayValue: { values: [{ stringValue: 'beta' }, { stringValue: 'eu' }] } })
+      expect(record.attributes.find(a => a.key === 'flags')?.value)
+        .toEqual({ arrayValue: { values: [{ boolValue: true }, { boolValue: false }] } })
+      expect(record.attributes.find(a => a.key === 'ids')?.value)
+        .toEqual({ arrayValue: { values: [{ intValue: '1' }, { intValue: '2' }] } })
+    })
+
+    it('sends a numeric array as doubles when any element is fractional', () => {
+      const event = createTestEvent({ latencies: [12, 12.5] })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.attributes.find(a => a.key === 'latencies')?.value)
+        .toEqual({ arrayValue: { values: [{ doubleValue: 12 }, { doubleValue: 12.5 }] } })
+    })
+
+    it('serializes mixed-type and empty arrays as JSON', () => {
+      const event = createTestEvent({ mixed: ['a', 1], empty: [], gaps: [1, Number.NaN] })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.attributes.find(a => a.key === 'mixed')?.value).toEqual({ stringValue: '["a",1]' })
+      expect(record.attributes.find(a => a.key === 'empty')?.value).toEqual({ stringValue: '[]' })
+      expect(record.attributes.find(a => a.key === 'gaps')?.value).toEqual({ stringValue: '[1,null]' })
+    })
+
     it('keeps a nested object as one JSON attribute by default', () => {
       const event = createTestEvent({ user: { id: '123', name: 'Alice' } })
       const record = toOTLPLogRecord(event)
@@ -183,17 +232,44 @@ describe('otlp adapter', () => {
     })
 
     it('includes traceId when present', () => {
-      const event = createTestEvent({ traceId: 'abc123' })
+      const event = createTestEvent({ traceId: TRACE_ID })
       const record = toOTLPLogRecord(event)
 
-      expect(record.traceId).toBe('abc123')
+      expect(record.traceId).toBe(TRACE_ID)
+      expect(record.attributes.find(a => a.key === 'traceId')).toBeUndefined()
     })
 
     it('includes spanId when present', () => {
-      const event = createTestEvent({ spanId: 'span456' })
+      const event = createTestEvent({ spanId: SPAN_ID })
       const record = toOTLPLogRecord(event)
 
-      expect(record.spanId).toBe('span456')
+      expect(record.spanId).toBe(SPAN_ID)
+      expect(record.attributes.find(a => a.key === 'spanId')).toBeUndefined()
+    })
+
+    it('lowercases trace context ids', () => {
+      const event = createTestEvent({ traceId: TRACE_ID.toUpperCase(), spanId: SPAN_ID.toUpperCase() })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.traceId).toBe(TRACE_ID)
+      expect(record.spanId).toBe(SPAN_ID)
+    })
+
+    it('keeps malformed trace context ids as attributes instead of record fields', () => {
+      const event = createTestEvent({ traceId: 'abc123', spanId: '0000000000000000' })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.traceId).toBeUndefined()
+      expect(record.spanId).toBeUndefined()
+      expect(record.attributes.find(a => a.key === 'traceId')?.value).toEqual({ stringValue: 'abc123' })
+      expect(record.attributes.find(a => a.key === 'spanId')?.value).toEqual({ stringValue: '0000000000000000' })
+    })
+
+    it('rejects the all-zero trace id', () => {
+      const event = createTestEvent({ traceId: '0'.repeat(32) })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.traceId).toBeUndefined()
     })
 
     it('excludes null and undefined attributes', () => {
@@ -362,7 +438,7 @@ describe('otlp adapter', () => {
       expect(resourceAttrs.find((a: { key: string }) => a.key === 'custom.bool')?.value).toEqual({ boolValue: true })
     })
 
-    it('includes scope with name evlog', async () => {
+    it('includes scope with name evlog and the package version', async () => {
       const event = createTestEvent()
 
       await sendToOTLP(event, {
@@ -373,8 +449,40 @@ describe('otlp adapter', () => {
       const payload = JSON.parse(options.body as string)
       const [{ scope }] = payload.resourceLogs[0].scopeLogs
 
-      expect(scope.name).toBe('evlog')
-      expect(scope.version).toBeUndefined()
+      expect(scope).toEqual({ name: 'evlog', version: EVLOG_VERSION })
+    })
+
+    it('lets config resource attributes replace derived ones instead of duplicating them', async () => {
+      await sendToOTLP(createTestEvent({ environment: 'production' }), {
+        endpoint: 'http://localhost:4318',
+        resourceAttributes: { 'deployment.environment': 'staging' },
+      })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      const resourceAttrs = JSON.parse(options.body as string).resourceLogs[0].resource.attributes
+      const envAttrs = resourceAttrs.filter((a: { key: string }) => a.key === 'deployment.environment')
+
+      expect(envAttrs).toEqual([{ key: 'deployment.environment', value: { stringValue: 'staging' } }])
+    })
+
+    it('gzips the body when compression is gzip', async () => {
+      await sendToOTLP(createTestEvent({ requestId: 'r1' }), {
+        endpoint: 'http://localhost:4318',
+        compression: 'gzip',
+      })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      expect(options.headers).toEqual(expect.objectContaining({ 'Content-Encoding': 'gzip' }))
+      const payload = JSON.parse(gunzipSync(options.body as Uint8Array).toString('utf8'))
+      expect(payload.resourceLogs[0].scopeLogs[0].logRecords).toHaveLength(1)
+    })
+
+    it('sends the body uncompressed by default', async () => {
+      await sendToOTLP(createTestEvent(), { endpoint: 'http://localhost:4318' })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      expect(options.headers).not.toHaveProperty('Content-Encoding')
+      expect(typeof options.body).toBe('string')
     })
 
     it('sends the record shape through the drain config', async () => {
@@ -479,6 +587,22 @@ describe('otlp adapter', () => {
       expect(payload.resourceLogs[1].scopeLogs[0].logRecords).toHaveLength(1)
     })
 
+    it('groups events by version into separate resourceLogs', async () => {
+      const events = [
+        createTestEvent({ service: 'api', version: '1.0.0' }),
+        createTestEvent({ service: 'api', version: '1.1.0' }),
+      ]
+
+      await sendBatchToOTLP(events, { endpoint: 'http://localhost:4318' })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      const payload = JSON.parse(options.body as string)
+      const versions = payload.resourceLogs.map((r: { resource: { attributes: Array<{ key: string, value: unknown }> } }) =>
+        r.resource.attributes.find(a => a.key === 'service.version')?.value)
+
+      expect(versions).toEqual([{ stringValue: '1.0.0' }, { stringValue: '1.1.0' }])
+    })
+
     it('does not send request for empty events array', async () => {
       await sendBatchToOTLP([], {
         endpoint: 'http://localhost:4318',
@@ -553,6 +677,133 @@ describe('otlp adapter', () => {
       const drain = createOTLPDrain()
       await drain(createDrainContext())
       expect(fetchSpy).toHaveBeenCalledOnce()
+    })
+
+    describe('OTEL_* environment variables', () => {
+      beforeEach(() => {
+        for (const key of [
+          'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT',
+          'OTEL_EXPORTER_OTLP_HEADERS',
+          'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
+          'OTLP_HEADERS',
+          'NUXT_OTLP_HEADERS',
+          'NUXT_OTLP_AUTH',
+          'OTEL_RESOURCE_ATTRIBUTES',
+          'OTEL_SERVICE_NAME',
+          'NUXT_OTLP_SERVICE_NAME',
+          'OTEL_EXPORTER_OTLP_COMPRESSION',
+          'OTEL_EXPORTER_OTLP_LOGS_COMPRESSION',
+        ]) {
+          vi.stubEnv(key, undefined)
+        }
+      })
+
+      afterEach(() => {
+        vi.unstubAllEnvs()
+      })
+
+      const sentPayload = () => {
+        const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+        return JSON.parse(options.body as string)
+      }
+
+      it('posts to OTEL_EXPORTER_OTLP_LOGS_ENDPOINT as-is, ahead of the generic endpoint', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://generic:4318')
+        vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'http://logs:4318/custom/logs')
+
+        await createOTLPDrain()(createDrainContext())
+
+        const [url] = fetchSpy.mock.calls[0] as [string, RequestInit]
+        expect(url).toBe('http://logs:4318/custom/logs')
+      })
+
+      it('keeps an explicit endpoint ahead of OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'http://logs:4318/custom/logs')
+
+        await createOTLPDrain({ endpoint: 'http://explicit:4318' })(createDrainContext())
+
+        const [url] = fetchSpy.mock.calls[0] as [string, RequestInit]
+        expect(url).toBe('http://explicit:4318/v1/logs')
+      })
+
+      it('merges OTEL_EXPORTER_OTLP_LOGS_HEADERS over the generic headers', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
+        vi.stubEnv('OTEL_EXPORTER_OTLP_HEADERS', 'x-team=generic,x-shared=generic')
+        vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_HEADERS', 'x-shared=logs')
+
+        await createOTLPDrain()(createDrainContext())
+
+        const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+        expect(options.headers).toEqual(expect.objectContaining({ 'x-team': 'generic', 'x-shared': 'logs' }))
+      })
+
+      it('percent-decodes each header value after splitting', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
+        vi.stubEnv('OTEL_EXPORTER_OTLP_HEADERS', 'Authorization=Basic%20abc,x-list=a%2Cb')
+
+        await createOTLPDrain()(createDrainContext())
+
+        const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+        expect(options.headers).toEqual(expect.objectContaining({ 'Authorization': 'Basic abc', 'x-list': 'a,b' }))
+      })
+
+      it('adds OTEL_RESOURCE_ATTRIBUTES to the resource without overriding evlog fields', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
+        vi.stubEnv('OTEL_RESOURCE_ATTRIBUTES', 'service.namespace=shop,host.name=web%2D1,service.name=ignored')
+
+        await createOTLPDrain()(createDrainContext({ service: 'checkout' }))
+
+        const attrs = sentPayload().resourceLogs[0].resource.attributes
+        expect(attrs).toEqual(expect.arrayContaining([
+          { key: 'service.namespace', value: { stringValue: 'shop' } },
+          { key: 'host.name', value: { stringValue: 'web-1' } },
+          { key: 'service.name', value: { stringValue: 'checkout' } },
+        ]))
+        expect(attrs.filter((a: { key: string }) => a.key === 'service.name')).toHaveLength(1)
+      })
+
+      it('lets config resource attributes override OTEL_RESOURCE_ATTRIBUTES', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
+        vi.stubEnv('OTEL_RESOURCE_ATTRIBUTES', 'service.namespace=env')
+
+        await createOTLPDrain({ resourceAttributes: { 'service.namespace': 'config' } })(createDrainContext())
+
+        const attrs = sentPayload().resourceLogs[0].resource.attributes
+        expect(attrs.filter((a: { key: string }) => a.key === 'service.namespace'))
+          .toEqual([{ key: 'service.namespace', value: { stringValue: 'config' } }])
+      })
+
+      it('gzips when OTEL_EXPORTER_OTLP_COMPRESSION is gzip', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
+        vi.stubEnv('OTEL_EXPORTER_OTLP_COMPRESSION', 'gzip')
+
+        await createOTLPDrain()(createDrainContext())
+
+        const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+        expect(options.headers).toEqual(expect.objectContaining({ 'Content-Encoding': 'gzip' }))
+      })
+
+      it('lets OTEL_EXPORTER_OTLP_LOGS_COMPRESSION override the generic compression', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
+        vi.stubEnv('OTEL_EXPORTER_OTLP_COMPRESSION', 'gzip')
+        vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_COMPRESSION', 'none')
+
+        await createOTLPDrain()(createDrainContext())
+
+        const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+        expect(options.headers).not.toHaveProperty('Content-Encoding')
+      })
+
+      it('logs an error and skips fetch on an unsupported compression', async () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
+        vi.stubEnv('OTEL_EXPORTER_OTLP_COMPRESSION', 'brotli')
+
+        await createOTLPDrain()(createDrainContext())
+
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[evlog/otlp] Unsupported compression "brotli"'))
+        expect(fetchSpy).not.toHaveBeenCalled()
+      })
     })
 
     it('logs error and skips fetch when endpoint is missing', async () => {
