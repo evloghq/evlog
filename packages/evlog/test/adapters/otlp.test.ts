@@ -726,6 +726,15 @@ describe('otlp adapter', () => {
         expect(url).toBe('http://explicit:4318/v1/logs')
       })
 
+      it('appends /v1/logs to an explicit endpoint equal to OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'http://collector:4318')
+
+        await createOTLPDrain({ endpoint: 'http://collector:4318' })(createDrainContext())
+
+        const [url] = fetchSpy.mock.calls[0] as [string, RequestInit]
+        expect(url).toBe('http://collector:4318/v1/logs')
+      })
+
       it('merges OTEL_EXPORTER_OTLP_LOGS_HEADERS over the generic headers', async () => {
         vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
         vi.stubEnv('OTEL_EXPORTER_OTLP_HEADERS', 'x-team=generic,x-shared=generic')
@@ -745,6 +754,19 @@ describe('otlp adapter', () => {
 
         const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
         expect(options.headers).toEqual(expect.objectContaining({ 'Authorization': 'Basic abc', 'x-list': 'a,b' }))
+      })
+
+      it('keeps a value with a malformed percent escape as written', async () => {
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
+        vi.stubEnv('OTEL_EXPORTER_OTLP_HEADERS', 'Authorization=Bearer ab%zz')
+        vi.stubEnv('OTEL_RESOURCE_ATTRIBUTES', 'discount=50%')
+
+        await createOTLPDrain()(createDrainContext())
+
+        const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+        expect(options.headers).toEqual(expect.objectContaining({ Authorization: 'Bearer ab%zz' }))
+        expect(sentPayload().resourceLogs[0].resource.attributes)
+          .toContainEqual({ key: 'discount', value: { stringValue: '50%' } })
       })
 
       it('adds OTEL_RESOURCE_ATTRIBUTES to the resource without overriding evlog fields', async () => {

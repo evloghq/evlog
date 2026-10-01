@@ -87,7 +87,7 @@ interface ExportLogsServiceRequest {
 const ENDPOINT_ENV = ['NUXT_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTLP_ENDPOINT']
 
 const OTLP_FIELDS: ConfigField<OTLPConfig>[] = [
-  { key: 'endpoint', env: ENDPOINT_ENV },
+  { key: 'endpoint', env: ['NUXT_OTLP_ENDPOINT'] },
   { key: 'recordShape' },
   { key: 'serviceName', env: ['NUXT_OTLP_SERVICE_NAME', 'OTEL_SERVICE_NAME'] },
   { key: 'headers' },
@@ -229,10 +229,19 @@ function parseOtelKeyValueList(list: string | undefined): Record<string, string>
     const eqIndex = pair.indexOf('=')
     if (eqIndex <= 0) continue
     const key = pair.slice(0, eqIndex).trim()
-    const value = decodeURIComponent(pair.slice(eqIndex + 1).trim())
+    const value = decodePercentEncoded(pair.slice(eqIndex + 1).trim())
     if (key && value) out[key] = value
   }
   return out
+}
+
+/** A `%` outside a valid escape is kept as written, as OTel SDKs do, so one value cannot disable the drain. */
+function decodePercentEncoded(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
 }
 
 /** Headers from the environment. `OTEL_EXPORTER_OTLP_LOGS_HEADERS` replaces the generic headers by key. */
@@ -286,15 +295,16 @@ export function createOTLPDrain(overrides?: Partial<OTLPConfig>) {
       }
 
       if (!config.endpoint) {
+        config.logsUrl = process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || undefined
+        config.endpoint = config.logsUrl || process.env.OTEL_EXPORTER_OTLP_ENDPOINT || process.env.OTLP_ENDPOINT
+      }
+      if (!config.endpoint) {
         console.error(`[evlog/otlp] Missing endpoint. Set ${formatPublicEnvKeys(ENDPOINT_ENV)} env var, or pass to createOTLPDrain()`)
         return null
       }
       if (config.compression !== undefined && config.compression !== 'gzip' && config.compression !== 'none') {
         console.error(`[evlog/otlp] Unsupported compression "${config.compression}". Use "gzip" or "none".`)
         return null
-      }
-      if (config.endpoint === process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
-        config.logsUrl = config.endpoint
       }
       config.envResourceAttributes = parseOtelKeyValueList(process.env.OTEL_RESOURCE_ATTRIBUTES)
       return config as ResolvedOTLPConfig
