@@ -2,7 +2,8 @@ import type { CliContext } from '../../core/context'
 import { gradientRule, HEADER_GRADIENT_WIDTH } from '../../core/brand'
 import { DOCS_URL, createStyle } from '../../core/output'
 import type { Style, StyleCode } from '../../core/output'
-import { HONO_SHORTHAND_VERBS } from './adapters/hono'
+import { getFramework } from '../frameworks'
+import { getAdapter } from './adapters/index'
 import type { BaselineComparison } from './baseline'
 import { hasRegressed } from './baseline'
 import { countSuppressed } from './directives'
@@ -12,7 +13,7 @@ import type { FixSlot, SuggestContext } from './rules/index'
 import type { ProjectFacts } from './project-facts'
 import { classifyRouteObservability, scoreGlobal } from './score'
 import type { CheckId, CheckResult, Framework, RouteEntry, ScanResult } from './types'
-import { frameworkLabel } from './utils'
+import { indent } from './utils'
 import { MAP_FILE_NAME } from './write'
 
 /* ── measuring text that contains ANSI ─────────────────────────────────── */
@@ -327,7 +328,7 @@ function scoreHeadline(style: ReportStyle, result: ScanResult): string[] {
   const prefixWidth = visibleLength(digits[0] ?? '') + 3 + HEADLINE_GAUGE_WIDTH + 2
 
   const side = [
-    style.paint('dim', `${map.projectName} · ${frameworkLabel(map.framework)}`),
+    style.paint('dim', `${map.projectName} · ${getFramework(map.framework).label}`),
     style.paint('dim', `${map.routes.length} entry points scanned`),
     skylineBar(style, map.routes, style.width - prefixWidth),
   ]
@@ -600,7 +601,7 @@ export function formatMapMatrix(ctx: CliContext, result: ScanResult): string {
   const lines: string[] = []
 
   lines.push([
-    paint('dim', `${map.projectName} · ${frameworkLabel(map.framework)} ·`),
+    paint('dim', `${map.projectName} · ${getFramework(map.framework).label} ·`),
     `${paint([scoreColor(map.score), 'bold'], String(map.score))}${paint('dim', '/100')}`,
     paint('dim', `· ${map.routes.length} entry points, worst first`),
   ].join(' '))
@@ -685,8 +686,6 @@ const EXPLAIN: Partial<Record<CheckId, { fail: string, pass: string }>> = {
   'page-error-handling': { fail: 'fetch errors are swallowed silently', pass: 'fetch errors are surfaced' },
 }
 
-const indent = (depth: number, text: string): string => (text.length > 0 ? `${'  '.repeat(depth)}${text}` : text)
-
 /**
  * The fix each failing rule asks for, in the order the rules are registered.
  *
@@ -728,32 +727,7 @@ function suggestedShape(route: RouteEntry, framework: Framework, project: Projec
      handler skeleton would suggest moving code that should not move. */
   if (route.kind === 'page') return body
 
-  switch (framework) {
-    case 'nuxt':
-    case 'nitro':
-      return ['export default defineEventHandler(async (event) => {', ...body.map(line => indent(1, line)), '})']
-    case 'next':
-      return [`export async function ${route.method ?? 'POST'}(request: Request) {`, ...body.map(line => indent(1, line)), '}']
-    case 'tanstack-start':
-      return [
-        `export const Route = createFileRoute('${route.path}')({`,
-        indent(1, 'server: { handlers: {'),
-        indent(2, `${route.method ?? 'POST'}: async () => {`),
-        ...body.map(line => indent(3, line)),
-        indent(2, '},'),
-        indent(1, '} },'),
-        '})',
-      ]
-    case 'hono': {
-      /* `app.on('PURGE', …)` routes have no `app.purge()` shorthand to suggest. */
-      const open = route.method === null || HONO_SHORTHAND_VERBS.has(route.method)
-        ? `app.${(route.method ?? 'all').toLowerCase()}('${route.path}', async (c) => {`
-        : `app.on('${route.method}', '${route.path}', async (c) => {`
-      return [open, ...body.map(line => indent(1, line)), '})']
-    }
-  }
-  /* A new Framework member fails to compile here until it has a shape. */
-  return framework satisfies never
+  return getAdapter(framework).handlerShape(route, body)
 }
 
 /**
@@ -791,7 +765,7 @@ export function formatMapInspect(ctx: CliContext, result: ScanResult, route: Rou
     `  ${miniBar(style, route.score)}`,
     `${paint([scoreColor(route.score), 'bold'], String(route.score))}${paint('dim', '/100')}`,
   ].filter(part => part.length > 0).join(' '))
-  lines.push(paint('dim', `${route.file} · ${frameworkLabel(framework)}`))
+  lines.push(paint('dim', `${route.file} · ${getFramework(framework).label}`))
   lines.push('')
 
   lines.push(paint('dim', 'WHY THIS FILE IS SCANNED'))
@@ -844,7 +818,7 @@ export function formatMapInspect(ctx: CliContext, result: ScanResult, route: Rou
 
   const shape = suggestedShape(route, framework, result.project)
   if (shape.length > 0) {
-    lines.push(paint('dim', `SUGGESTED SHAPE — ${frameworkLabel(framework)}`))
+    lines.push(paint('dim', `SUGGESTED SHAPE — ${getFramework(framework).label}`))
     for (const codeLine of shape) {
       const [indentation] = codeLine.match(/^\s*/)!
       const text = codeLine.trim()

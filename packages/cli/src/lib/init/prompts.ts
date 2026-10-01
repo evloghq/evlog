@@ -17,6 +17,7 @@ import {
 import type { CliContext } from '../../core/context'
 import { DOCS_URL, createStyle } from '../../core/output'
 import type { Framework } from '../map/types'
+import { INIT_FRAMEWORK_IDS, getFramework } from '../frameworks'
 import {
   availableExtras,
   DEFAULT_ENRICHERS,
@@ -27,7 +28,6 @@ import {
   SAMPLING_PRESETS,
 } from './catalog'
 import type { DrainId, EnricherId, ExtraGroup, ExtraId, OfferContext, SamplingProfile } from './catalog'
-import { INIT_FRAMEWORKS } from './frameworks'
 import type { FileAction, ManualStep } from './frameworks'
 
 /** Every answer `init` needs, however it was obtained. */
@@ -61,14 +61,6 @@ function required<T>(value: T | symbol): T {
   return value as T
 }
 
-const FRAMEWORK_LABELS: Record<Framework, string> = {
-  'nuxt': 'Nuxt',
-  'nitro': 'Nitro',
-  'next': 'Next.js',
-  'tanstack-start': 'TanStack Start',
-  'hono': 'Hono',
-}
-
 export interface PromptContext {
   ctx: CliContext
   detected: Framework
@@ -98,16 +90,16 @@ export async function askAnswers(input: PromptContext): Promise<InitAnswers> {
     ? required(await select<Framework>({
       message: 'Which framework is this?',
       /* Only the frameworks init can wire — map-only ones would crash the planner. */
-      options: INIT_FRAMEWORKS.map(id => ({
+      options: INIT_FRAMEWORK_IDS.map(id => ({
         value: id,
-        label: FRAMEWORK_LABELS[id],
+        label: getFramework(id).label,
       })),
       initialValue: input.detected,
     }))
     : input.detected
 
   if (!input.uncertain) {
-    clackLog.step(`Detected ${FRAMEWORK_LABELS[framework]}`)
+    clackLog.step(`Detected ${getFramework(framework).label}`)
   }
 
   const service = required(await text({
@@ -349,7 +341,7 @@ export function closeInteractive(
     return
   }
   clackLog.message(`${paint('dim', 'score')}  evlog map`)
-  outro(`${FRAMEWORK_LABELS[framework]} wired · ${DOCS_URL}${docsPath}`)
+  outro(`${getFramework(framework).label} wired · ${DOCS_URL}${docsPath}`)
 }
 
 /** Closes the `evlog agents` session — without it the run just stops mid-frame. */
@@ -375,7 +367,7 @@ export async function askWorkspaceTargets(
     options: candidates.map(candidate => ({
       value: candidate.dir,
       label: candidate.name,
-      hint: FRAMEWORK_LABELS[candidate.framework],
+      hint: getFramework(candidate.framework).label,
     })),
     initialValues: candidates.map(candidate => candidate.dir),
     required: true,

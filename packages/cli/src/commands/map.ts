@@ -2,6 +2,7 @@ import { EvlogError } from 'evlog'
 import type { CliContext } from '../core/context'
 import { EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
+import { FRAMEWORK_IDS, isFramework } from '../lib/frameworks'
 import type { CliDebug } from '../lib/debug'
 import { createNoopCliDebug } from '../lib/debug'
 import { cliErrors } from '../lib/errors'
@@ -25,12 +26,6 @@ import { recordMapRun, resolveGate } from '../lib/map/telemetry'
 import type { MapView } from '../lib/map/telemetry'
 import type { Framework, ScanContext, ScanResult } from '../lib/map/types'
 import { writeMapFile } from '../lib/map/write'
-
-const FRAMEWORKS: readonly Framework[] = ['nuxt', 'nitro', 'next', 'tanstack-start', 'hono']
-
-function isFramework(value: string): value is Framework {
-  return (FRAMEWORKS as readonly string[]).includes(value)
-}
 
 /** Typed result of `evlog map` — rendered by {@link formatMapReport}. */
 export interface MapResult {
@@ -230,7 +225,7 @@ export default defineEvlogCommand('map', {
   args: {
     entry: { type: 'positional', required: false, description: 'Inspect one entry point by route or file path' },
     cwd: { type: 'string', description: 'Project directory (default: current)' },
-    framework: { type: 'string', description: 'Override framework detection (nuxt, nitro, next, tanstack-start, hono)' },
+    framework: { type: 'string', description: `Override framework detection (${FRAMEWORK_IDS.join(', ')})` },
     all: { type: 'boolean', description: 'Every entry point, as a check matrix' },
     minScore: { type: 'string', description: 'Exit 1 if the global score is below this threshold' },
     baseline: {

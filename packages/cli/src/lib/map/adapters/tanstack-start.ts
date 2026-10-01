@@ -4,7 +4,7 @@ import { globSync } from 'tinyglobby'
 import type { ParseFn, ParseResult } from '../parse'
 import { findHandlerLocation, nodeLoc, parseFile, walkAst } from '../parse'
 import type { FrameworkAdapter, RawRouteEntry, ScanContext } from '../types'
-import { relativeFromRoot, segmentsToPath, stripExtension } from '../utils'
+import { indent, relativeFromRoot, segmentsToPath, stripExtension } from '../utils'
 
 function extractTanstackRoutes(file: string, root: string, parse: ParseFn): RawRouteEntry[] {
   const rel = relativeFromRoot(root, file)
@@ -106,6 +106,18 @@ function detectServerHandlers(parsed: ParseResult): Array<{ method: string, line
 export const tanstackStartAdapter: FrameworkAdapter = {
   framework: 'tanstack-start',
   requestLogger: 'explicit',
+  loggerCall: 'const log = useLogger()',
+  handlerShape(route, body) {
+    return [
+      `export const Route = createFileRoute('${route.path}')({`,
+      indent(1, 'server: { handlers: {'),
+      indent(2, `${route.method ?? 'POST'}: async () => {`),
+      ...body.map(line => indent(3, line)),
+      indent(2, '},'),
+      indent(1, '} },'),
+      '})',
+    ]
+  },
   // eslint-disable-next-line require-await -- satisfies the async FrameworkAdapter contract
   async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
     const routes: RawRouteEntry[] = []

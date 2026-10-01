@@ -104,13 +104,7 @@ export function lineSnippet(source: string, line: number, radius = 0): string {
   return lines.slice(start, end).join('\n').trim()
 }
 
-/** Human-readable name of a framework, for report headers. */
-export function frameworkLabel(framework: Framework): string {
-  switch (framework) {
-    case 'nuxt': return 'Nuxt'
-    case 'nitro': return 'Nitro'
-    case 'next': return 'Next.js'
-    case 'tanstack-start': return 'TanStack Start'
-    case 'hono': return 'Hono'
-  }
+/** Indent `text` by `depth` two-space steps, leaving blank lines blank. */
+export function indent(depth: number, text: string): string {
+  return text.length > 0 ? `${'  '.repeat(depth)}${text}` : text
 }

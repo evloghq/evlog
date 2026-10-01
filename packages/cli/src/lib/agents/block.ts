@@ -1,4 +1,5 @@
-import type { Framework } from '../map/types'
+import { getFramework } from '../frameworks'
+import type { Framework } from '../frameworks'
 
 /**
  * The evlog section of a project's `AGENTS.md`.
@@ -18,15 +19,6 @@ export interface BlockInput {
   hasSkills: boolean
 }
 
-/** How a request-scoped logger is obtained, per framework. */
-const ACCESSOR: Record<Framework, string> = {
-  'nuxt': '`useLogger(event)` (auto-imported) inside a `server/api` handler',
-  'nitro': '`useLogger(event)` from `evlog/nitro` inside a route handler',
-  'next': '`useLogger()` from your `lib/evlog.ts` inside a route handler',
-  'tanstack-start': '`req.context.log` inside a server route',
-  'hono': '`c.get(\'log\')` or `useLogger()` from `evlog/hono` inside a route handler',
-}
-
 const DEFAULT_ACCESSOR = '`useLogger()` inside a request handler'
 
 /**
@@ -37,7 +29,7 @@ const DEFAULT_ACCESSOR = '`useLogger()` inside a request handler'
  * only restate an example is left out.
  */
 export function renderBlock(input: BlockInput): string {
-  const accessor = input.framework ? ACCESSOR[input.framework] : DEFAULT_ACCESSOR
+  const accessor = input.framework ? getFramework(input.framework).accessor : DEFAULT_ACCESSOR
 
   /* Which directory the skills landed in is the agent's business, not ours —
      naming one would be wrong for every agent that reads a different path. */

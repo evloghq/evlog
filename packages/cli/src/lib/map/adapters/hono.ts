@@ -3,7 +3,7 @@ import { globSync } from 'tinyglobby'
 import type { ParseFn, ParseResult } from '../parse'
 import { nodeLoc, parseFile, walkAst } from '../parse'
 import type { FrameworkAdapter, RawRouteEntry, ScanContext } from '../types'
-import { relativeFromRoot } from '../utils'
+import { indent, relativeFromRoot } from '../utils'
 
 /**
  * Hono route methods → HTTP verb.
@@ -22,7 +22,7 @@ const ROUTE_METHODS: ReadonlyMap<string, string | null> = new Map([
 ])
 
 /** Verbs with an `app.<verb>()` shorthand — anything else registers via `app.on()`. */
-export const HONO_SHORTHAND_VERBS: ReadonlySet<string> = new Set(
+const SHORTHAND_VERBS: ReadonlySet<string> = new Set(
   [...ROUTE_METHODS.values()].filter((verb): verb is string => verb !== null),
 )
 
@@ -227,6 +227,14 @@ function registersEvlogMiddleware(parsed: ParseResult): boolean {
 export const honoAdapter: FrameworkAdapter = {
   framework: 'hono',
   requestLogger: 'explicit',
+  loggerCall: 'const log = useLogger()',
+  handlerShape(route, body) {
+    /* `app.on('PURGE', …)` routes have no `app.purge()` shorthand to suggest. */
+    const open = route.method === null || SHORTHAND_VERBS.has(route.method)
+      ? `app.${(route.method ?? 'all').toLowerCase()}('${route.path}', async (c) => {`
+      : `app.on('${route.method}', '${route.path}', async (c) => {`
+    return [open, ...body.map(line => indent(1, line)), '})']
+  },
   resolveRequestLogger(ctx: ScanContext): 'ambient' | 'explicit' {
     const parse = ctx.parse ?? parseFile
     for (const file of sourceFiles(ctx.projectRoot)) {

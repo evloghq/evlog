@@ -1,3 +1,4 @@
+import { getAdapter } from '../adapters/index'
 import { HANDLER_KINDS } from './types'
 import type { MapRule } from './types'
 
@@ -21,8 +22,7 @@ export const wideEventRule = {
 
   fixSlot: 'setup',
   suggest({ framework }) {
-    const ambient = framework === 'nuxt' || framework === 'nitro'
-    return [ambient ? 'const log = useLogger(event)' : 'const log = useLogger()']
+    return [getAdapter(framework).loggerCall]
   },
 
   create(context) {

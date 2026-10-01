@@ -1,4 +1,5 @@
 import { telemetry } from '@evlog/telemetry'
+import { FRAMEWORK_IDS } from '../frameworks'
 import type { BaselineComparison } from './baseline'
 import { hasRegressed } from './baseline'
 import { RULES } from './rules/index'
@@ -21,7 +22,6 @@ import type { CheckId, Framework, Grade, RouteEntry, RouteKind, ScanResult } fro
  */
 const PREFIX = 'map'
 
-const FRAMEWORKS: readonly Framework[] = ['nuxt', 'nitro', 'next', 'tanstack-start', 'hono']
 const GRADES: readonly Grade[] = ['excellent', 'good', 'needs-work', 'at-risk']
 
 /** Entry-point kinds the map can scan, a closed set, in scan order. */
@@ -41,7 +41,7 @@ export type MapView = typeof VIEWS[number]
 
 /** String fields, with the exact set of values each may take. */
 export const MAP_TELEMETRY_FIELDS = {
-  mapFramework: FRAMEWORKS,
+  mapFramework: FRAMEWORK_IDS,
   mapGrade: GRADES,
   mapGate: GATES,
   mapView: VIEWS,

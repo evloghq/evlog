@@ -4,7 +4,7 @@ import { globSync } from 'tinyglobby'
 import { detectFramework } from '../map/detect'
 import type { Framework } from '../map/types'
 import type { PackageJson, ProjectInfo } from '../project'
-import { isInitFramework } from './frameworks'
+import { isInitFramework } from '../frameworks'
 
 /** A workspace package `init` could set up. */
 export interface WorkspaceApp {

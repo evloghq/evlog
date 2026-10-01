@@ -1,6 +1,6 @@
 import { telemetry } from '@evlog/telemetry'
+import { INIT_FRAMEWORK_IDS } from '../frameworks'
 import { DESTINATIONS, ENRICHERS, EXTRAS, SAMPLING_PRESETS } from './catalog'
-import { INIT_FRAMEWORKS } from './frameworks'
 import type { InitResult } from './run'
 
 /**
@@ -13,7 +13,7 @@ const PREFIX = 'init'
 
 /** String fields, with the exact set of values each may take. */
 export const INIT_TELEMETRY_FIELDS = {
-  initFramework: INIT_FRAMEWORKS,
+  initFramework: INIT_FRAMEWORK_IDS,
   initDevDrain: DESTINATIONS.map(destination => destination.id),
   initSampling: SAMPLING_PRESETS.map(preset => preset.id),
 } as const satisfies Record<string, readonly string[]>

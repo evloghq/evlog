@@ -11,7 +11,7 @@ import {
   walkAst,
 } from '../parse'
 import type { FrameworkAdapter, RawRouteEntry, ScanContext } from '../types'
-import { relativeFromRoot, segmentsToPath } from '../utils'
+import { indent, relativeFromRoot, segmentsToPath } from '../utils'
 
 /**
  * Where the App Router lives, `app/` or `src/app/`.
@@ -43,6 +43,10 @@ function routeDirFromFile(rel: string, appDir: string): string {
 export const nextAdapter: FrameworkAdapter = {
   framework: 'next',
   requestLogger: 'explicit',
+  loggerCall: 'const log = useLogger()',
+  handlerShape(route, body) {
+    return [`export async function ${route.method ?? 'POST'}(request: Request) {`, ...body.map(line => indent(1, line)), '}']
+  },
   // eslint-disable-next-line require-await -- satisfies the async FrameworkAdapter contract
   async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
     const routes: RawRouteEntry[] = []

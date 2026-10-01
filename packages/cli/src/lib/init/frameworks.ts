@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { DOCS_URL } from '../../core/output'
-import type { Framework } from '../map/types'
+import type { InitFramework } from '../frameworks'
 import { findDestination, findEnricher, findSamplingPreset } from './catalog'
 import type { DrainId, EnricherId, ExtraId, SamplingProfile } from './catalog'
 import { auditActionName } from './insight'
@@ -45,23 +45,10 @@ export interface WiringPlan {
   already: string[]
 }
 
-/**
- * Frameworks `init` can wire — the ones with a `frameworkPlan` case.
- *
- * `map` adapters can land ahead of init wiring: every init surface (flag
- * parsing, prompt, workspace targets, telemetry) reads this list so a map-only
- * framework is refused cleanly instead of reaching the planner.
- */
-export const INIT_FRAMEWORKS = ['nuxt', 'nitro', 'next', 'tanstack-start', 'hono'] as const satisfies readonly Framework[]
-
-export function isInitFramework(framework: Framework): boolean {
-  return (INIT_FRAMEWORKS as readonly Framework[]).includes(framework)
-}
-
 export interface WiringInput {
   /** Package root — where configs live and files are written. */
   root: string
-  framework: Framework
+  framework: InitFramework
   service: string
   /** Local sink: `fs` or `none`. */
   devDrain: DrainId
@@ -1004,14 +991,16 @@ export function planWiring(input: WiringInput): WiringPlan {
   return withEnvGuidance(withCatalogs(frameworkPlan(input), input), input)
 }
 
+/* Keyed by every framework the registry marks `init: true`, so marking one
+   without writing its planner fails to compile. */
+const PLANNERS: Record<InitFramework, (input: WiringInput) => WiringPlan> = {
+  'nuxt': planNuxt,
+  'nitro': planNitro,
+  'tanstack-start': planNitro,
+  'next': planNext,
+  'hono': planHono,
+}
+
 function frameworkPlan(input: WiringInput): WiringPlan {
-  switch (input.framework) {
-    case 'nuxt': return planNuxt(input)
-    case 'nitro':
-    case 'tanstack-start': return planNitro(input)
-    case 'next': return planNext(input)
-    case 'hono': return planHono(input)
-  }
-  /* A new Framework member fails to compile here until init decides on a plan. */
-  return input.framework satisfies never
+  return PLANNERS[input.framework](input)
 }

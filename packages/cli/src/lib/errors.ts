@@ -1,4 +1,5 @@
 import { defineErrorCatalog } from 'evlog'
+import { FRAMEWORK_IDS, INIT_FRAMEWORK_IDS } from './frameworks'
 
 /**
  * Typed error catalog for `@evlog/cli`.
@@ -72,16 +73,16 @@ export const cliErrors = defineErrorCatalog('cli', {
     status: 400,
     message: ({ value }: { value: string }) =>
       `Unknown --framework "${value}"`,
-    why: 'map only ships adapters for nuxt, nitro, next, tanstack-start, and hono',
-    fix: 'Pass one of: nuxt, nitro, next, tanstack-start, hono',
+    why: `map only ships adapters for ${FRAMEWORK_IDS.join(', ')}`,
+    fix: `Pass one of: ${FRAMEWORK_IDS.join(', ')}`,
     tags: ['map'],
   },
   INIT_INVALID_FRAMEWORK: {
     status: 400,
     message: ({ value }: { value: string }) =>
       `Unknown --framework "${value}"`,
-    why: 'init only knows how to wire nuxt, nitro, next, tanstack-start, and hono',
-    fix: 'Pass one of: nuxt, nitro, next, tanstack-start, hono — or omit it and let detection decide',
+    why: `init only knows how to wire ${INIT_FRAMEWORK_IDS.join(', ')}`,
+    fix: `Pass one of: ${INIT_FRAMEWORK_IDS.join(', ')} — or omit it and let detection decide`,
     link: 'https://evlog.dev/cli/init',
     tags: ['init'],
   },

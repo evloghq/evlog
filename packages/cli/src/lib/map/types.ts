@@ -1,8 +1,8 @@
+import type { Framework } from '../frameworks'
 import type { ParseFn } from './parse'
 import type { ProjectFacts } from './project-facts'
 
-/** Frameworks the `map` command can scan (adapter selection key). */
-export type Framework = 'nuxt' | 'nitro' | 'next' | 'tanstack-start' | 'hono'
+export type { Framework }
 
 /** Route shape as detected on disk, before observability checks run. */
 export type RouteKind = 'api' | 'page' | 'middleware' | 'server-action' | 'cron' | 'websocket'
@@ -148,6 +148,10 @@ export interface FrameworkAdapter {
    * module the framework loads on its own.
    */
   resolveRequestLogger?: (ctx: ScanContext) => 'ambient' | 'explicit'
+  /** How a handler acquires its request logger, as suggested by `evlog map <file>`. */
+  loggerCall: string
+  /** Wrap suggested statements in this framework's handler declaration for `route`. */
+  handlerShape: (route: RawRouteEntry, body: readonly string[]) => string[]
 }
 
 export type Grade = 'excellent' | 'good' | 'needs-work' | 'at-risk'

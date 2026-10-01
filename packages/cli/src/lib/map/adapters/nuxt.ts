@@ -3,7 +3,7 @@ import { globSync } from 'tinyglobby'
 import type { ParseFn } from '../parse'
 import { findHandlerLocation, parseFile } from '../parse'
 import type { FrameworkAdapter, RawRouteEntry, ScanContext } from '../types'
-import { extractMethodFromFilename, relativeFromRoot, segmentsToPath, stripRouteFilename } from '../utils'
+import { extractMethodFromFilename, indent, relativeFromRoot, segmentsToPath, stripRouteFilename } from '../utils'
 
 /**
  * Extensions Nitro serves a handler from.
@@ -180,11 +180,17 @@ function extractServerRoutes(ctx: ScanContext, framework: 'nuxt' | 'nitro'): Raw
   return routes
 }
 
+function eventHandlerShape(_route: RawRouteEntry, body: readonly string[]): string[] {
+  return ['export default defineEventHandler(async (event) => {', ...body.map(line => indent(1, line)), '})']
+}
+
 /** Nuxt project: `server/api`, `server/routes`, `server/middleware`, `server/tasks` and pages. */
 export const nuxtAdapter: FrameworkAdapter = {
   framework: 'nuxt',
   evlogAutoImports: NUXT_EVLOG_AUTO_IMPORTS,
   requestLogger: 'ambient',
+  loggerCall: 'const log = useLogger(event)',
+  handlerShape: eventHandlerShape,
   // eslint-disable-next-line require-await -- satisfies the async FrameworkAdapter contract
   async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
     const routes = extractServerRoutes(ctx, 'nuxt')
@@ -212,13 +218,10 @@ export const nitroAdapter: FrameworkAdapter = {
   framework: 'nitro',
   evlogAutoImports: NUXT_EVLOG_AUTO_IMPORTS,
   requestLogger: 'ambient',
+  loggerCall: 'const log = useLogger(event)',
+  handlerShape: eventHandlerShape,
   // eslint-disable-next-line require-await -- satisfies the async FrameworkAdapter contract
   async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
     return extractServerRoutes(ctx, 'nitro')
   },
-}
-
-/** The adapter for whichever of the two Nitro-based frameworks was detected. */
-export function getNuxtOrNitroAdapter(framework: 'nuxt' | 'nitro'): FrameworkAdapter {
-  return framework === 'nitro' ? nitroAdapter : nuxtAdapter
 }

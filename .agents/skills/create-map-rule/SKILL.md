@@ -142,17 +142,18 @@ Then sanity-check on a real project: `pnpm cli:sandbox` builds disposable, uneve
 
 Teaching `evlog map` a new framework is a different, heavier change: the adapter owns route discovery and framework capabilities.
 
+Every framework starts as one entry in `packages/cli/src/lib/frameworks.ts`. The `Framework` type, `--framework` parsing and help text, detection, labels, docs links, telemetry allowlists, error messages and the `AGENTS.md` accessor all derive from it. The adapter and init planner records are keyed by those ids, so `pnpm build` lists anything still missing.
+
 | # | File | Action |
 |---|------|--------|
-| 1 | `packages/cli/src/lib/map/adapters/{framework}.ts` | Route extraction: find entry points, classify `RouteKind`, declare `FrameworkCapabilities` (`requestLogger: 'ambient' \| 'explicit'`, `evlogAutoImports`) |
-| 2 | `packages/cli/src/lib/map/adapters/index.ts` | Add the `getAdapter` switch case |
-| 3 | `packages/cli/src/lib/map/types.ts` | Extend the `Framework` union |
-| 4 | `packages/cli/src/lib/map/detect.ts` | Detect the framework from the project (`detectFramework`) |
-| 5 | `packages/cli/test/map/adapters.test.ts` + `detect.test.ts` + `fixtures/` | Route extraction + detection tests against a fixture tree |
-| 6 | `packages/cli/src/lib/init/` | Decide whether `evlog init` gains the framework too (a separate scope of work, so flag it explicitly in the PR if not) |
-| 7 | `apps/docs/content/3.cli/2.map.md` + `0.overview.md` | Update the supported-frameworks statements |
-| 8 | `skills/review-logging-patterns/SKILL.md` | Update every "Nuxt, Nitro, Next.js, and TanStack Start" list (frontmatter description + CLI section), same in `references/code-review.md` and `skills/build-audit-logs/SKILL.md` (Pass 2) and `analyze-logs/SKILL.md` (init suggestion) |
-| 9 | `scripts/cli-sandbox.mjs` | Add the framework to `APPS` (reuse the map fixture) so `pnpm cli:sandbox` covers it and `--smoke` exercises every CLI command against it |
-| 10 | `.changeset/{framework}-map-adapter.md` | Changeset for `"@evlog/cli": minor` |
+| 1 | `packages/cli/src/lib/frameworks.ts` | Add the definition: `id`, `label`, `docs`, `detect` (`deps`, `configs`, `unlessDeps`, `specificity`), `accessor`, and `init: false` until step 4 lands |
+| 2 | `packages/cli/src/lib/map/adapters/{framework}.ts` | Route extraction: find entry points, classify `RouteKind`, declare `requestLogger`, `evlogAutoImports`, `loggerCall`, and `handlerShape` (the handler skeleton `evlog map <file>` suggests) |
+| 3 | `packages/cli/src/lib/map/adapters/index.ts` | Add the adapter to `ADAPTERS` |
+| 4 | `packages/cli/src/lib/init/frameworks.ts` | Optional: write the planner, add it to `PLANNERS`, flip `init: true`. Flag it explicitly in the PR if left out |
+| 5 | `packages/cli/test/map/adapters.test.ts` + `fixtures/` | Route extraction tests against a fixture tree. `test/frameworks.test.ts` already covers detection and adapter pairing for every registry entry |
+| 6 | `apps/docs/content/3.cli/2.map.md` + `0.overview.md` | Update the supported-frameworks statements |
+| 7 | `skills/review-logging-patterns/SKILL.md` | Update every supported-frameworks list (frontmatter description + CLI section), same in `references/code-review.md` and `skills/build-audit-logs/SKILL.md` (Pass 2) and `analyze-logs/SKILL.md` (init suggestion) |
+| 8 | `scripts/cli-sandbox.mjs` | Add the framework to `APPS` (reuse the map fixture) so `pnpm cli:sandbox` covers it and `--smoke` exercises every CLI command against it |
+| 9 | `.changeset/{framework}-map-adapter.md` | Changeset for `"@evlog/cli": minor` |
 
-Reference implementations: `adapters/nuxt.ts` (shared Nuxt/Nitro), `adapters/next.ts`, `adapters/tanstack-start.ts`.
+Reference implementations: `adapters/nuxt.ts` (shared Nuxt/Nitro, file-based), `adapters/next.ts`, `adapters/tanstack-start.ts`, `adapters/hono.ts` (code-registered routes, per-project `resolveRequestLogger`).
