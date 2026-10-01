@@ -29,6 +29,7 @@ export default defineConfig({
     'workers': 'src/workers/index.ts',
     'adapters/axiom': 'src/adapters/axiom.ts',
     'adapters/otlp': 'src/adapters/otlp.ts',
+    'adapters/otlp-protobuf': 'src/adapters/otlp-protobuf.ts',
     'adapters/posthog': 'src/adapters/posthog.ts',
     'adapters/sentry': 'src/adapters/sentry.ts',
     'adapters/better-stack': 'src/adapters/better-stack.ts',

@@ -21,7 +21,7 @@ export interface HttpPostOptions {
   /** Caller is responsible for `Content-Type`. */
   headers: Record<string, string>
   /** Pre-serialized request body. */
-  body: string
+  body: string | Uint8Array<ArrayBuffer>
   /**
    * Compress the body before sending and set `Content-Encoding` accordingly.
    * The body is compressed once and reused across retries.
@@ -99,7 +99,7 @@ function isRetryable(error: unknown): boolean {
   return false
 }
 
-async function gzip(body: string): Promise<Uint8Array> {
+async function gzip(body: string | Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const stream = new Blob([body]).stream().pipeThrough(new CompressionStream('gzip'))
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }

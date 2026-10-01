@@ -79,7 +79,7 @@ export interface HttpDrainRequest {
   url: string
   /** Caller is responsible for `Content-Type`. */
   headers: Record<string, string>
-  body: string
+  body: string | Uint8Array<ArrayBuffer>
   /** Compress `body` before sending and set `Content-Encoding`. */
   compression?: 'gzip'
 }

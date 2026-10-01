@@ -20,6 +20,9 @@ import { OTEL_SEVERITY_NUMBER, OTEL_SEVERITY_TEXT } from '../shared/severity'
  */
 export type OTLPRecordShape = 'json' | 'compact'
 
+/** OTLP HTTP transport encoding. */
+export type OTLPProtocol = 'http/json' | 'http/protobuf'
+
 export interface OTLPConfig {
   /** OTLP HTTP endpoint (e.g., http://localhost:4318) */
   endpoint: string
@@ -46,6 +49,12 @@ export interface OTLPConfig {
    * `OTEL_EXPORTER_OTLP_LOGS_COMPRESSION`, then `OTEL_EXPORTER_OTLP_COMPRESSION`.
    */
   compression?: 'gzip' | 'none'
+  /**
+   * Request body encoding. Default: `'http/json'`. Falls back to
+   * `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL`, then `OTEL_EXPORTER_OTLP_PROTOCOL`.
+   * The protobuf encoder (`evlog/otlp/protobuf`) is loaded only when selected.
+   */
+  protocol?: OTLPProtocol
   /** Request timeout in milliseconds. Default: 5000 */
   timeout?: number
   /** Number of retry attempts on transient failures. Default: 2 */
@@ -80,8 +89,8 @@ interface OTLPScope {
   version?: string
 }
 
-/** OTLP ExportLogsServiceRequest structure */
-interface ExportLogsServiceRequest {
+/** OTLP `ExportLogsServiceRequest`, in its OTLP/JSON form. */
+export interface OTLPExportLogsRequest {
   resourceLogs: Array<{
     resource: OTLPResource
     scopeLogs: Array<{
@@ -101,6 +110,7 @@ const OTLP_FIELDS: ConfigField<OTLPConfig>[] = [
   { key: 'resourceAttributes' },
   { key: 'semanticConventions' },
   { key: 'compression', env: ['OTEL_EXPORTER_OTLP_LOGS_COMPRESSION', 'OTEL_EXPORTER_OTLP_COMPRESSION'] },
+  { key: 'protocol', env: ['OTEL_EXPORTER_OTLP_LOGS_PROTOCOL', 'OTEL_EXPORTER_OTLP_PROTOCOL'] },
   { key: 'timeout' },
   { key: 'retries' },
 ]
@@ -111,6 +121,14 @@ interface ResolvedOTLPConfig extends OTLPConfig {
   logsUrl?: string
   /** Parsed `OTEL_RESOURCE_ATTRIBUTES`. Attributes evlog derives and `resourceAttributes` take precedence. */
   envResourceAttributes?: Record<string, string>
+  /** Loaded when `protocol` is `'http/protobuf'`. */
+  encodeProtobuf?: (request: OTLPExportLogsRequest) => Uint8Array<ArrayBuffer>
+}
+
+async function withProtobufEncoder(config: ResolvedOTLPConfig): Promise<ResolvedOTLPConfig> {
+  if (config.protocol !== 'http/protobuf') return config
+  const { encodeOTLPLogsRequest } = await import('./otlp-protobuf')
+  return { ...config, encodeProtobuf: encodeOTLPLogsRequest }
 }
 
 const TRACE_ID_PATTERN = /^[\da-f]{32}$/i
@@ -341,7 +359,7 @@ function getHeadersFromEnv(): Record<string, string> | undefined {
  * 4. Environment variables: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT (used as the full
  *    logs URL), OTEL_EXPORTER_OTLP_ENDPOINT (or OTLP_ENDPOINT), OTEL_SERVICE_NAME,
  *    OTEL_EXPORTER_OTLP_[LOGS_]HEADERS, OTEL_EXPORTER_OTLP_[LOGS_]COMPRESSION,
- *    OTEL_RESOURCE_ATTRIBUTES
+ *    OTEL_EXPORTER_OTLP_[LOGS_]PROTOCOL, OTEL_RESOURCE_ATTRIBUTES
  *
  * @example
  * ```ts
@@ -377,8 +395,12 @@ export function createOTLPDrain(overrides?: Partial<OTLPConfig>) {
         console.error(`[evlog/otlp] Unsupported compression "${config.compression}". Use "gzip" or "none".`)
         return null
       }
+      if (config.protocol !== undefined && config.protocol !== 'http/json' && config.protocol !== 'http/protobuf') {
+        console.error(`[evlog/otlp] Unsupported protocol "${config.protocol}". Use "http/json" or "http/protobuf".`)
+        return null
+      }
       config.envResourceAttributes = parseOtelKeyValueList(process.env.OTEL_RESOURCE_ATTRIBUTES)
-      return config as ResolvedOTLPConfig
+      return withProtobufEncoder(config as ResolvedOTLPConfig)
     },
     label: 'OTLP',
     encode: (events, config) => (events.length === 0 ? null : encodeOTLPRequest(events, config)),
@@ -390,18 +412,19 @@ export function createOTLPDrain(overrides?: Partial<OTLPConfig>) {
  * {@link createOTLPDrain} and {@link sendBatchToOTLP}.
  */
 function encodeOTLPRequest(events: WideEvent[], config: ResolvedOTLPConfig): HttpDrainRequest {
+  const payload = buildOTLPPayload(events, config)
   return {
     url: config.logsUrl ?? `${config.endpoint.replace(/\/$/, '')}/v1/logs`,
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': config.encodeProtobuf ? 'application/x-protobuf' : 'application/json',
       ...config.headers,
     },
-    body: JSON.stringify(buildOTLPPayload(events, config)),
+    body: config.encodeProtobuf ? config.encodeProtobuf(payload) : JSON.stringify(payload),
     compression: config.compression === 'gzip' ? 'gzip' : undefined,
   }
 }
 
-function buildOTLPPayload(events: WideEvent[], config: ResolvedOTLPConfig): ExportLogsServiceRequest {
+function buildOTLPPayload(events: WideEvent[], config: ResolvedOTLPConfig): OTLPExportLogsRequest {
   const grouped = new Map<string, WideEvent[]>()
   for (const event of events) {
     // Every field the resource is built from, so no event borrows another's resource.
@@ -449,7 +472,7 @@ export async function sendToOTLP(event: WideEvent, config: OTLPConfig): Promise<
  */
 export async function sendBatchToOTLP(events: WideEvent[], config: OTLPConfig): Promise<void> {
   if (events.length === 0) return
-  await sendEncodedDrainRequest(encodeOTLPRequest(events, config), {
+  await sendEncodedDrainRequest(encodeOTLPRequest(events, await withProtobufEncoder(config)), {
     label: 'OTLP',
     source: 'otlp',
     timeout: config.timeout,

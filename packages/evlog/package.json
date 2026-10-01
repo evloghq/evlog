@@ -76,6 +76,11 @@
       "import": "./dist/adapters/otlp.mjs",
       "default": "./dist/adapters/otlp.mjs"
     },
+    "./otlp/protobuf": {
+      "types": "./dist/adapters/otlp-protobuf.d.mts",
+      "import": "./dist/adapters/otlp-protobuf.mjs",
+      "default": "./dist/adapters/otlp-protobuf.mjs"
+    },
     "./posthog": {
       "types": "./dist/adapters/posthog.d.mts",
       "import": "./dist/adapters/posthog.mjs",
@@ -281,6 +286,9 @@
       ],
       "otlp": [
         "./dist/adapters/otlp.d.mts"
+      ],
+      "otlp/protobuf": [
+        "./dist/adapters/otlp-protobuf.d.mts"
       ],
       "posthog": [
         "./dist/adapters/posthog.d.mts"

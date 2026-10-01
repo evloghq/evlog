@@ -145,6 +145,16 @@ describe('otlp adapter', () => {
       expect(record.attributes.find(a => a.key === 'ai.costUsd')?.value).toEqual({ doubleValue: 0.0042 })
     })
 
+    it('sends integers beyond the safe range as doubleValue', () => {
+      const event = createTestEvent({ huge: 1e21, unsafe: 2 ** 60, ids: [1, 1e21] })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.attributes.find(a => a.key === 'huge')?.value).toEqual({ doubleValue: 1e21 })
+      expect(record.attributes.find(a => a.key === 'unsafe')?.value).toEqual({ doubleValue: 2 ** 60 })
+      expect(record.attributes.find(a => a.key === 'ids')?.value)
+        .toEqual({ arrayValue: { values: [{ doubleValue: 1 }, { doubleValue: 1e21 }] } })
+    })
+
     it('sends non-finite numbers as strings', () => {
       const event = createTestEvent({ ratio: Number.NaN, limit: Number.POSITIVE_INFINITY })
       const record = toOTLPLogRecord(event)

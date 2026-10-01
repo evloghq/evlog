@@ -559,6 +559,27 @@ describe('defineHttpDrain', () => {
     expect(gunzipSync(first!.body as Uint8Array).toString()).toBe(body)
   })
 
+  it('sends a binary body unchanged, and gzipped when asked', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(null, { status: 200 }))))
+    const body = new Uint8Array([0x0A, 0x03, 0x00, 0xFF, 0x80])
+    const plain = defineHttpDrain<{ apiKey: string }>({
+      name: 'unit-test',
+      resolve: () => ({ apiKey: 'k' }),
+      encode: () => ({ url: 'https://x.test', headers: {}, body }),
+    })
+    const gzipped = defineHttpDrain<{ apiKey: string }>({
+      name: 'unit-test',
+      resolve: () => ({ apiKey: 'k' }),
+      encode: () => ({ url: 'https://x.test', headers: {}, body, compression: 'gzip' }),
+    })
+    await plain.raw(drainCtx())
+    await gzipped.raw(drainCtx())
+
+    const [first, second] = vi.mocked(fetch).mock.calls.map(([, init]) => init!)
+    expect(first!.body).toBe(body)
+    expect(new Uint8Array(gunzipSync(second!.body as Uint8Array))).toEqual(body)
+  })
+
   it('raw skips when resolve returns null', async () => {
     const drain = defineHttpDrain<{ apiKey: string }>({
       name: 'unit-test',

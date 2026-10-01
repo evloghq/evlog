@@ -219,6 +219,9 @@ exports[`public API surface > matches snapshot for all subpath exports 1`] = `
     "sendToOTLP",
     "toOTLPLogRecord",
   ],
+  "./otlp/protobuf": [
+    "encodeOTLPLogsRequest",
+  ],
   "./pipeline": [
     "createDrainPipeline",
   ],
