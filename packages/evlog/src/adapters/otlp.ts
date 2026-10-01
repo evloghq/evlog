@@ -161,12 +161,13 @@ function toNestedAttributeValue(value: unknown): OtlpAttributeValue {
   return { kvlistValue: { values } }
 }
 
-type SemanticConventionValue = 'string' | 'integer' | 'string[]'
+/** `url-path` is a string with the query and fragment removed, which OTel keeps in `url.query` and `url.fragment`. */
+type SemanticConventionValue = 'string' | 'url-path' | 'integer' | 'string[]'
 
 /** OTel semantic convention attribute, the evlog field path it reads, and the value type it requires. */
 const SEMANTIC_CONVENTIONS: ReadonlyArray<readonly [string, readonly string[], SemanticConventionValue]> = [
   ['http.request.method', ['method'], 'string'],
-  ['url.path', ['path'], 'string'],
+  ['url.path', ['path'], 'url-path'],
   ['http.response.status_code', ['status'], 'integer'],
   ['user_agent.original', ['userAgent', 'raw'], 'string'],
   ['exception.type', ['error', 'name'], 'string'],
@@ -197,7 +198,8 @@ function pushSemanticConventionAttributes(event: Record<string, unknown>, attrib
     if (present.has(key)) continue
     const value = readPath(event, path)
     if (type === 'integer' ? !Number.isInteger(value) : typeof value !== 'string') continue
-    attributes.push({ key, value: toAttributeValue(type === 'string[]' ? [value] : value) })
+    const normalized = type === 'url-path' && typeof value === 'string' ? value.split(/[?#]/, 1)[0] : value
+    attributes.push({ key, value: toAttributeValue(type === 'string[]' ? [normalized] : normalized) })
   }
 }
 

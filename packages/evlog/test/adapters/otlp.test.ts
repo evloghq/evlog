@@ -308,6 +308,14 @@ describe('otlp adapter', () => {
         })
       })
 
+      it('strips the query and fragment from url.path and keeps path as recorded', () => {
+        const event = createTestEvent({ path: '/search?q=one#results' })
+        const attributes = attributeMap(toOTLPLogRecord(event, 'compact', { semanticConventions: true }))
+
+        expect(attributes['url.path']).toEqual({ stringValue: '/search' })
+        expect(attributes.path).toEqual({ stringValue: '/search?q=one#results' })
+      })
+
       it('keeps the evlog field names alongside the semantic convention ones', () => {
         const attributes = attributeMap(toOTLPLogRecord(requestEvent, 'compact', { semanticConventions: true }))
 
