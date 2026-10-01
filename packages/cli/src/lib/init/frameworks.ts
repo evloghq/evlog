@@ -388,13 +388,26 @@ export const Route = createRootRoute({
  * Only the filesystem drain is gated on `import.meta.dev` — it writes files on
  * whatever box serves the request.
  */
+/**
+ * The server-plugin factory the generated files use.
+ *
+ * Nitro v2 auto-imports `defineNitroPlugin` (Nuxt does); Nitro v3 does not and
+ * exports `definePlugin` from `nitro` instead.
+ */
+function nitroPluginApi(input: WiringInput): { importLine: string | null, factory: string } {
+  if (input.nitroMajor === 3) return { importLine: `import { definePlugin } from 'nitro'`, factory: 'definePlugin' }
+  return { importLine: null, factory: 'defineNitroPlugin' }
+}
+
 function nitroDrainTemplate(input: WiringInput): string | null {
   const dev = input.devDrain === 'none' ? null : findDestination(input.devDrain) ?? null
   const prod = input.prodDrains.map(id => findDestination(id)).filter(Boolean) as NonNullable<ReturnType<typeof findDestination>>[]
   if (!dev && prod.length === 0) return null
 
+  const plugin = nitroPluginApi(input)
   const batched = input.extras.includes('pipeline') && prod.length > 0
   const imports: string[] = []
+  if (plugin.importLine) imports.push(plugin.importLine)
   if (batched) imports.push(`import type { DrainContext } from 'evlog'`)
   /* Deduped by id: nothing stops the same destination being the local sink and
      a production one, and importing its factory twice is a file that does not
@@ -426,7 +439,7 @@ const drains = import.meta.dev
   ? [${dev.factory}]
   : [${prodList}]
 
-export default defineNitroPlugin((nitroApp) => {
+export default ${plugin.factory}((nitroApp) => {
   nitroApp.hooks.hook('evlog:drain', async (ctx) => {
     await Promise.all(drains.map(drain => drain(ctx)))
   })
@@ -438,7 +451,7 @@ export default defineNitroPlugin((nitroApp) => {
 ${envComment(prod)} */
 const drains = [${prodList}]
 
-export default defineNitroPlugin((nitroApp) => {
+export default ${plugin.factory}((nitroApp) => {
   nitroApp.hooks.hook('evlog:drain', async (ctx) => {
     await Promise.all(drains.map(drain => drain(ctx)))
   })
@@ -450,7 +463,7 @@ export default defineNitroPlugin((nitroApp) => {
  */
 const drain = ${dev!.factory}
 
-export default defineNitroPlugin((nitroApp) => {
+export default ${plugin.factory}((nitroApp) => {
   // Local files are a development convenience — never a production sink.
   if (!import.meta.dev) return
   nitroApp.hooks.hook('evlog:drain', drain)
@@ -467,11 +480,12 @@ function envComment(destinations: { env: { name: string }[] }[]): string {
 }
 
 function nitroEnricherTemplate(input: WiringInput): string {
+  const plugin = nitroPluginApi(input)
   const chosen = input.enrichers.map(id => findEnricher(id)).filter(Boolean)
   const factories = chosen.map(enricher => enricher!.factory)
   const names = [...factories].map(factory => factory.replace('()', '')).sort()
 
-  return `import {
+  return `${plugin.importLine ? `${plugin.importLine}\n` : ''}import {
 ${names.map(name => `  ${name},`).join('\n')}
 } from 'evlog/enrichers'
 
@@ -479,7 +493,7 @@ const enrichers = [
 ${factories.map(factory => `  ${factory},`).join('\n')}
 ]
 
-export default defineNitroPlugin((nitroApp) => {
+export default ${plugin.factory}((nitroApp) => {
   nitroApp.hooks.hook('evlog:enrich', async (ctx) => {
     for (const enrich of enrichers) await enrich(ctx)
   })

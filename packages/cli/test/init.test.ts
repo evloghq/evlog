@@ -7,7 +7,7 @@ import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
 import { planWiring } from '../src/lib/init/frameworks'
 import { detectPackageManager, installCommand } from '../src/lib/init/pm'
-import { runInit } from '../src/lib/init/run'
+import { detectNitroMajor, runInit } from '../src/lib/init/run'
 
 /** Only the spawn is faked; the rest of the skills module stays real. */
 const skills = vi.hoisted(() => ({
@@ -221,6 +221,19 @@ describe('runInit', () => {
     expect(await readFile(join(cwd, 'nuxt.config.ts'), 'utf8')).toBe(afterFirst)
   })
 
+  it('uses the Nitro v3 plugin factory on Nuxt 5', async () => {
+    const cwd = await project({
+      'package.json': '{"name":"shop","dependencies":{"nuxt":"^5.0.0"}}',
+      'nuxt.config.ts': 'export default defineNuxtConfig({})\n',
+    })
+
+    await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
+
+    const plugin = await readFile(join(cwd, 'server/plugins/evlog-drain.ts'), 'utf8')
+    expect(plugin).toContain(`import { definePlugin } from 'nitro'`)
+    expect(plugin).toContain('definePlugin((nitroApp) => {')
+  })
+
   it('gates the local sink on development rather than shipping a file writer', async () => {
     const cwd = await project({
       'package.json': '{"name":"shop","dependencies":{"nuxt":"^4.0.0"}}',
@@ -255,6 +268,25 @@ describe('runInit', () => {
     const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
 
     expect(result.install).toMatchObject({ status: 'skipped', command: 'pnpm add evlog' })
+  })
+})
+
+describe('detectNitroMajor', () => {
+  const pkg = (deps: Record<string, string>) => ({ name: 'app', dependencies: deps })
+
+  it('reads the nuxt major, including npm: aliases for nightlies', () => {
+    expect(detectNitroMajor(pkg({ nuxt: '^4.4.2' }), 'nuxt')).toBe(2)
+    expect(detectNitroMajor(pkg({ nuxt: '^5.0.0' }), 'nuxt')).toBe(3)
+    expect(detectNitroMajor(pkg({ nuxt: 'npm:nuxt-nightly@5.0.0-29847385.3fde4d62' }), 'nuxt')).toBe(3)
+  })
+
+  it('lets nitropack decide for the nitro framework', () => {
+    expect(detectNitroMajor(pkg({ nitropack: '^2.11.0' }), 'nitro')).toBe(2)
+    expect(detectNitroMajor(pkg({ nitro: '^3.0.0' }), 'nitro')).toBe(3)
+  })
+
+  it('tanstack-start is always Nitro v3', () => {
+    expect(detectNitroMajor(pkg({}), 'tanstack-start')).toBe(3)
   })
 })
 
@@ -362,6 +394,36 @@ describe('detectPackageManager', () => {
 })
 
 describe('drain wiring', () => {
+  it('imports definePlugin from nitro on Nitro v3, where defineNitroPlugin is not auto-imported', async () => {
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring(), nitroMajor: 3 })
+    const drain = plan.actions.find(action => action.relative.endsWith('evlog-drain.ts'))!
+
+    expect(drain.contents).toContain(`import { definePlugin } from 'nitro'`)
+    expect(drain.contents).toContain('definePlugin((nitroApp) => {')
+  })
+
+  it('keeps the auto-imported defineNitroPlugin on Nitro v2', async () => {
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring(), nitroMajor: 2 })
+    const drain = plan.actions.find(action => action.relative.endsWith('evlog-drain.ts'))!
+
+    expect(drain.contents).toContain('defineNitroPlugin((nitroApp) => {')
+    expect(drain.contents).not.toContain(`from 'nitro'`)
+  })
+
+  it('does the same for the enricher plugin', async () => {
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring({ extras: ['enrichers'], enrichers: ['user-agent'] }), nitroMajor: 3 })
+    const enrich = plan.actions.find(action => action.relative.endsWith('evlog-enrich.ts'))!
+
+    expect(enrich.contents).toContain(`import { definePlugin } from 'nitro'`)
+    expect(enrich.contents).toContain('definePlugin((nitroApp) => {')
+  })
+
   it('leaves a hosted drain running in production', async () => {
     const root = await project({ 'package.json': '{"name":"api"}' })
 

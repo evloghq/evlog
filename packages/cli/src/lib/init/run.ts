@@ -127,11 +127,23 @@ function defaultService(project: ProjectInfo): string {
 }
 
 /** The module subpath and config factory differ per major. */
-function detectNitroMajor(pkg: PackageJson | null, framework: Framework): 2 | 3 {
+export function detectNitroMajor(pkg: PackageJson | null, framework: Framework): 2 | 3 {
   if (framework === 'tanstack-start') return 3
   const deps = { ...pkg?.dependencies, ...pkg?.devDependencies }
+  /* Nuxt 4 bundles Nitro v2 and never lists nitropack directly, so the nuxt
+     version decides, not the dependency tree. Nightlies install through an
+     npm: alias, so read the version out of the alias when there is one. */
+  if (framework === 'nuxt') {
+    const { nuxt } = deps
+    return nuxt && majorFromRange(nuxt) >= 5 ? 3 : 2
+  }
   if ('nitropack' in deps) return 2
   return 3
+}
+
+function majorFromRange(range: string): number {
+  const version = range.startsWith('npm:') ? range.slice(range.lastIndexOf('@') + 1) : range.replace(/^[^\d]*/, '')
+  return Number.parseInt(version.split('.')[0] ?? '', 10)
 }
 
 /**
