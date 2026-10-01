@@ -42,7 +42,7 @@ Apply these to a draft before any rule. They generate more than they filter.
 
 The voice is one voice, but the distance changes.
 
-- **Reference** (`7.reference/`, adapter and framework pages): closest to the machine. Short sentences, exact names, tables over prose. The opinion stays, the flourish goes.
+- **Reference** (`8.reference/`, adapter and framework pages): closest to the machine. Short sentences, exact names, tables over prose. The opinion stays, the flourish goes.
 - **Learn** (`2.learn/`, `5.use-cases/`): the reader is deciding whether a concept applies to them. This is where a concrete situation earns its place: a real request, a real cost, a real failure.
 - **Start** (`1.start/`): the reader has not committed. Highest density of "here is what this costs you and what you get".
 - **Blog**: the reader did not come for a task. The first paragraph has to earn the second, and nothing is owed a read.

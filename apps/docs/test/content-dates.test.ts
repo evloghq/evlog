@@ -6,12 +6,12 @@ describe('parseCommitDates', () => {
     const log = [
       '2026-08-15',
       '',
-      'content/6.extend/1.stream.md',
+      'content/7.extend/1.stream.md',
       'content/1.start/.navigation.yml',
     ].join('\n')
 
     expect(parseCommitDates(log)).toEqual({
-      '6.extend/1.stream': '2026-08-15',
+      '7.extend/1.stream': '2026-08-15',
       '1.start/.navigation': '2026-08-15',
     })
   })
@@ -20,13 +20,13 @@ describe('parseCommitDates', () => {
     const log = [
       '2026-08-15',
       '',
-      'content/6.extend/1.stream.md',
+      'content/7.extend/1.stream.md',
       '2026-07-26',
       '',
-      'content/6.extend/1.stream.md',
+      'content/7.extend/1.stream.md',
     ].join('\n')
 
-    expect(parseCommitDates(log)['6.extend/1.stream']).toBe('2026-08-15')
+    expect(parseCommitDates(log)['7.extend/1.stream']).toBe('2026-08-15')
   })
 
   it('ignores paths outside the content directory', () => {
