@@ -50,6 +50,7 @@ export type {
 } from './catalog'
 export { EvlogError, createError, createEvlogError } from './error'
 export { createLogger, createRequestLogger, getEnvironment, initLogger, isEnabled, log, shouldKeep } from './logger'
+export { default } from './logger'
 export { isLevelEnabled } from './utils'
 export { useLogger } from './runtime/server/useLogger'
 export { parseError } from './runtime/utils/parseError'

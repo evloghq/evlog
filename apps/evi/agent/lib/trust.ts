@@ -21,9 +21,9 @@ export const MAINTAINER_PRINCIPALS: ReadonlySet<string> = new Set(
     MAINTAINER_GITHUB_ID && `github:${MAINTAINER_GITHUB_ID}`,
     process.env.MAINTAINER_LINEAR_ID && `linear:${process.env.MAINTAINER_LINEAR_ID}`,
     MAINTAINER_PHONE && `imessage:${MAINTAINER_PHONE}`,
-    // The MCP channel only mints this principal after verifying the bearer
-    // token, so configuring the token is what admits the external harness.
-    process.env.EVI_MCP_TOKEN && 'mcp:hugo',
+    // The MCP and web channels only mint this principal after verifying the
+    // maintainer bearer token, so configuring the token is what admits them.
+    process.env.EVI_MAINTAINER_TOKEN && 'mcp:hugo',
   ].filter((principal): principal is string => Boolean(principal)),
 )
 

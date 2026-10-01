@@ -5,10 +5,11 @@ import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { eviErrors, refusal, type ToolRefusal } from '../lib/errors'
 import { repositoryToken } from '../lib/github/credentials'
-import { brokeredSandbox, isValidRefName, pushBrokerPolicy, validatePushBranch } from '../lib/github/push'
+import { isValidRefName, pushBrokerPolicy, validatePushBranch } from '../lib/github/push'
 import { cloneUrl, homeRepository, parseRepository, type Repository, repositorySlug } from '../lib/repo'
 import { isMaintainer, isScheduleAppAuth } from '../lib/trust'
 import { checkoutDir, installCommand, REPO_DIR, runOutput } from '../lib/workspace'
+import { environment } from '../sandbox'
 
 /** Maintainer and schedule-app turns ship code; nothing else reaches git over the network. */
 function canShip(auth: SessionAuthContext | null): boolean {
@@ -54,7 +55,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
           return refused
         }
         const dir = checkoutDir(repository)
-        const sandbox = brokeredSandbox(await toolCtx.getSandbox())
+        const sandbox = await toolCtx.getSandbox(environment)
         await sandbox.setNetworkPolicy(pushBrokerPolicy(token))
         try {
           const clone = await sandbox.run({ command: `test -d ${dir}/.git || (mkdir -p ${dir} && git clone --depth 50 ${cloneUrl(repository)} ${dir})` })
@@ -134,7 +135,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
         const token = await repositoryToken(repository)
         if (token === null) return refuse(notInstalled(repository))
         const dir = checkoutDir(repository)
-        const sandbox = brokeredSandbox(await toolCtx.getSandbox())
+        const sandbox = await toolCtx.getSandbox(environment)
         await sandbox.setNetworkPolicy(pushBrokerPolicy(token))
         try {
           // The URL is spelled out, never `origin`: remote config inside the
@@ -159,13 +160,8 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
   }
 }
 
-// Session scope alongside turn scope: eve rebinds only session-scoped resolvers
-// when it replays a call parked in a process that is gone, and a push is the
-// last thing a long run does. `execute` re-checks the caller, so the wider
-// scope grants nothing the per-turn gate would refuse.
 export default defineDynamic({
   events: {
-    'session.started': resolveGitTools,
     'turn.started': resolveGitTools,
   },
 })

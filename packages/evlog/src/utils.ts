@@ -63,21 +63,32 @@ export function detectEnvironment(): Partial<EnvironmentContext> {
 }
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
+  trace: 0,
   debug: 0,
   info: 1,
   warn: 2,
   error: 3,
+  fatal: 4,
 }
 
 /**
- * True if `level` is at least as severe as `minLevel` (debug < info < warn < error).
+ * True if `level` is at least as severe as `minLevel`
+ * (trace and debug < info < warn < error < fatal).
+ * Trace shares debug's rank: visibility is gated like debug, retention is the
+ * opt-in via `sampling.rates.trace` (default 0).
  */
 export function isLevelEnabled(level: LogLevel, minLevel: LogLevel): boolean {
   return LEVEL_ORDER[level] >= LEVEL_ORDER[minLevel]
 }
 
-export function getConsoleMethod(level: LogLevel): LogLevel {
-  return level
+/**
+ * Console method for a level. `console.fatal` / `console.trace` do not exist:
+ * fatal prints as error, trace prints as log (like debug).
+ */
+export function getConsoleMethod(level: LogLevel): 'log' | 'info' | 'warn' | 'error' {
+  if (level === 'fatal') return 'error'
+  if (level === 'trace') return 'log'
+  return level as 'log' | 'info' | 'warn' | 'error'
 }
 
 export const colors = {
@@ -94,7 +105,7 @@ export const colors = {
   gray: '\x1B[90m',
 } as const
 
-const levelColorMap: Record<string, string> = { error: colors.red, warn: colors.yellow, info: colors.cyan, debug: colors.gray }
+const levelColorMap: Record<string, string> = { error: colors.red, fatal: colors.red, warn: colors.yellow, info: colors.cyan, debug: colors.gray, trace: colors.gray }
 
 export function getLevelColor(level: string): string {
   return levelColorMap[level] ?? colors.white
@@ -110,7 +121,7 @@ export const cssColors = {
   reset: 'color: inherit; font-weight: normal',
 } as const
 
-const cssLevelColorMap: Record<string, string> = { error: cssColors.red, warn: cssColors.yellow, info: cssColors.cyan, debug: cssColors.gray }
+const cssLevelColorMap: Record<string, string> = { error: cssColors.red, fatal: cssColors.red, warn: cssColors.yellow, info: cssColors.cyan, debug: cssColors.gray, trace: cssColors.gray }
 
 export function getCssLevelColor(level: string): string {
   return cssLevelColorMap[level] ?? cssColors.reset

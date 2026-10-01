@@ -1,5 +1,5 @@
 import { mcpChannel } from 'eve/channels/mcp'
-import { mcpBearerAuth } from '../lib/mcp'
+import { maintainerBearerAuth } from '../lib/maintainer-auth'
 
 /**
  * Exposes Evi over the Model Context Protocol at /eve/v1/mcp, for external
@@ -8,5 +8,5 @@ import { mcpBearerAuth } from '../lib/mcp'
  * `agent_cancel`. Each start runs a task-mode session under `mcp:hugo`.
  */
 export default mcpChannel({
-  auth: mcpBearerAuth,
+  auth: maintainerBearerAuth,
 })

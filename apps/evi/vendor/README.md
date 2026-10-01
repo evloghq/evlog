@@ -2,11 +2,11 @@
 
 `eve` is pinned exactly because each release rotates the extension tool contract, and eve refuses a
 mounted extension whose manifest requires a dropped contract (the build then fails with
-`Selected module binding "extensions/<name>.ts" has no compile or runtime usage`). eve 0.64.1
-accepts contract 54; the tarball here is built against it, and `@github-tools/eve-extension` 0.7.4 on
-the registry is too. When bumping eve, rebuild the tarball against the same version and check every
-extension manifest (`dist/extension/_manifest.json`) against `EXTENSION_CAPABILITY_CONTRACTS` in
-`eve/dist/src/compiler/extension-compatibility.js`.
+`Selected module binding "extensions/<name>.ts" has no compile or runtime usage`). The tarball here
+and `@github-tools/eve-extension` 0.8.0 on the registry are built against tool contract 54, which
+eve 0.69.0 still accepts. When bumping eve, check every extension manifest
+(`dist/extension/_manifest.json`) against `EXTENSION_CAPABILITY_CONTRACTS` in
+`eve/dist/src/compiler/extension-compatibility.js`, and rebuild the tarball when its contract is dropped.
 
 ## `agent-browser-eve-0.38.1-eve0.64.1.tgz`
 

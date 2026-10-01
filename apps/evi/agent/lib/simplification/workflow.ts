@@ -1,4 +1,4 @@
-import type { WorkflowToolContext } from 'eve/tools'
+import type { AgentSendOptions, WorkflowToolContext } from 'eve/tools'
 import { z } from 'zod'
 
 export const simplificationInputSchema = z.object({
@@ -128,9 +128,9 @@ type VerificationResult = z.infer<typeof verificationResultSchema>
 type VerifiedFinding = FindingResult & Omit<VerdictResult, 'id'>
 
 /**
- * A subagent under a schedule can settle with prose when background tasks are
- * still pending, even though an output schema was requested. Recover the
- * structured result when the prose carries one; otherwise fail the parse.
+ * A subagent turn can settle with prose instead of the requested structured
+ * result. Recover the structured result when the prose carries one; otherwise
+ * fail the parse.
  */
 export function parseStructuredResult<T>(schema: z.ZodType<T>, output: unknown): T {
   if (typeof output === 'string') {
@@ -287,16 +287,29 @@ export function summarizeSimplificationSweep(
   } as const
 }
 
+/** Rejects on a failed turn, so each caller's fallback sees the reason. */
+async function askAgent(
+  ctx: Pick<WorkflowToolContext, 'agent'>,
+  name: string,
+  message: string,
+  outputSchema: AgentSendOptions['outputSchema'],
+): Promise<unknown> {
+  const response = await ctx.agent(name).send(message, { outputSchema })
+  const result = await response.result()
+  if (result.status === 'failed') throw new Error(result.error?.message ?? `${name} failed`)
+  return result.data ?? result.message
+}
+
 export async function runSimplificationSweep(
   input: SimplificationSweepInput,
   ctx: Pick<WorkflowToolContext, 'agent'>,
 ) {
   'use workflow'
 
-  const checkout = parseStructuredResult(revisionResultSchema, await ctx.agent('finding_verifier', {
-    message: revisionMessage(input.revision),
-    outputSchema: revisionOutputSchema,
-  }))
+  const checkout = parseStructuredResult(
+    revisionResultSchema,
+    await askAgent(ctx, 'finding_verifier', revisionMessage(input.revision), revisionOutputSchema),
+  )
   if (checkout.revision !== input.revision) {
     throw new Error(`Shared checkout revision ${checkout.revision} does not match requested revision ${input.revision}.`)
   }
@@ -311,10 +324,10 @@ export async function runSimplificationSweep(
   const reviews = await Promise.all(
     assignments.map(async (assignment): Promise<ReviewResult> => {
       try {
-        const review = parseStructuredResult(reviewResultSchema, await ctx.agent(assignment.agent, {
-          message: reviewMessage(checkout.revision, assignment, input.priorDecisions),
-          outputSchema: reviewOutputSchema,
-        }))
+        const review = parseStructuredResult(
+          reviewResultSchema,
+          await askAgent(ctx, assignment.agent, reviewMessage(checkout.revision, assignment, input.priorDecisions), reviewOutputSchema),
+        )
 
         return { agent: assignment.agent, category: assignment.category, ...review }
       } catch (error) {
@@ -335,10 +348,10 @@ export async function runSimplificationSweep(
 
   let verification: { findings: VerifiedFinding[], summary: string }
   try {
-    const verdicts = parseStructuredResult(verificationResultSchema, await ctx.agent('finding_verifier', {
-      message: verificationMessage(checkout.revision, identified, input.priorDecisions),
-      outputSchema: verificationOutputSchema,
-    }))
+    const verdicts = parseStructuredResult(
+      verificationResultSchema,
+      await askAgent(ctx, 'finding_verifier', verificationMessage(checkout.revision, identified, input.priorDecisions), verificationOutputSchema),
+    )
     const assembled = assembleVerification(identified, verdicts)
     verification = assembled
     recordVerificationGap(identified, assembled.limitations)

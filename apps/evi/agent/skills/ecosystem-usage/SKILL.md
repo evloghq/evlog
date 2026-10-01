@@ -7,7 +7,7 @@ Use this skill when asked about MCP adoption, AI-agent traffic, raw Markdown con
 
 ## Source of truth
 
-Use the read-only `vercel__create_observability_query` tool directly.
+Use the read-only `vercel__create_observability_query` tool, called through `connection_execute`.
 
 - Metric: `vercel.request.count`, aggregation `sum`.
 - Scope: `type: 'project'`, `ownerId`: the evlog team id, `projectIds`: the docs site project id (both pre-scoped in the connection description).

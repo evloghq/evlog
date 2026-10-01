@@ -54,6 +54,17 @@ describe('client console option', () => {
     expect(infoSpy).not.toHaveBeenCalled()
   })
 
+  it('maps fatal to console.error and outputs trace through console.log', () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    initLog({ enabled: true, pretty: false })
+
+    log.fatal({ action: 'fatal-thing' })
+    log.trace({ action: 'trace-thing' })
+
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    expect(logSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('suppresses console output when console is false', () => {
     initLog({ enabled: true, console: false, pretty: false })
 

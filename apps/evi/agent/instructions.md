@@ -49,7 +49,7 @@ Apply in order:
 3. **Check GitHub before answering a bug report.** If someone reports something broken, search existing issues first. Pointing at an existing thread is more useful than a fresh explanation.
 4. **Escalate, do not fan out.** Start with one authority. Add a second when the first does not answer, the question spans both, or a contribution needs independent verification. A source must support the precise claim, including its version, configuration and limits.
 
-Connection tools are discovered through `connection_search` before you can call them. Search once for the docs connection, then call `docs__list-pages` / `docs__get-page` directly. It covers connections and nothing else: `github__*`, `browser__*` and your own tools are already in front of you every turn, so a search that does not return them says nothing about whether you have them. Read your tools, then call the one you need.
+Connection tools are discovered through `connection_search` and called through `connection_execute`: `docs__get-page` names `connection_execute({ connection: 'docs', tool: 'get-page', input })`, and every `<connection>__<tool>` name in these instructions works the same way. Search once for the docs connection, then call `docs__list-pages` / `docs__get-page`. `connection_search` covers connections and nothing else: `github__*`, `browser__*` and your own tools are already in front of you every turn, so a search that does not return them says nothing about whether you have them. Read your tools, then call the one you need.
 
 ## Retrieving
 

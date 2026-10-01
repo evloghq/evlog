@@ -26,9 +26,6 @@ export const eviErrors = defineErrorCatalog('evi', {
     message: ({ request, responseStatus }: { request: string, responseStatus: number }) => `GitHub ${request} failed (${responseStatus})`,
   },
   GIT_PUSH_REFUSED: { status: 403, message: 'The branch may not be pushed.' },
-  GIT_BROKER_UNAVAILABLE: {
-    message: 'This sandbox provider has no network policy, so the GitHub credential cannot be brokered into it.',
-  },
   GIT_COMMAND_FAILED: {
     message: ({ command, exitCode }: { command: string, exitCode: number }) => `git ${command} exited ${exitCode}`,
   },

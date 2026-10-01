@@ -6,7 +6,7 @@ import type { AutoImportsOptions } from './types'
 import { TRANSFORM_FILTER, shouldTransform, walk } from './utils'
 
 const DEFAULT_IMPORTS = ['log', 'createEvlogError', 'parseError']
-const LOG_METHODS = ['info', 'error', 'warn', 'debug']
+const LOG_METHODS = ['info', 'error', 'warn', 'debug', 'fatal', 'trace']
 
 const IMPORT_SOURCES: Record<string, string> = {
   log: 'evlog',

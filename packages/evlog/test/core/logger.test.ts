@@ -688,6 +688,42 @@ describe('sampling', () => {
     expect(errorSpy).toHaveBeenCalledTimes(1)
   })
 
+  it('drops trace by default even when sampling is not configured', () => {
+    initLogger({ pretty: false })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    log.trace('test', 'trace message')
+
+    expect(logSpy).toHaveBeenCalledTimes(0)
+  })
+
+  it('keeps trace when sampling.rates.trace is set', () => {
+    initLogger({
+      pretty: false,
+      sampling: {
+        rates: { trace: 100 },
+      },
+    })
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    log.trace('test', 'trace message')
+
+    expect(logSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('always logs fatal even when every other level is sampled out', () => {
+    initLogger({
+      pretty: false,
+      sampling: {
+        rates: { info: 0, warn: 0, debug: 0, error: 0, trace: 100 },
+      },
+    })
+
+    log.fatal('test', 'fatal message')
+
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('applies sampling to request logger emit', () => {
     initLogger({
       pretty: false,
@@ -1551,5 +1587,52 @@ describe('printf interpolation', () => {
     const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
     expect(output).toContain('user alice plan pro')
     expect(output).not.toContain('%s')
+  })
+})
+
+describe('fatal and trace levels', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('emits fatal as an error-level console call', () => {
+    initLogger({ pretty: false })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    log.fatal('payments', 'Charge failed')
+
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    const [[output]] = errorSpy.mock.calls
+    expect(output).toContain('"level":"fatal"')
+    expect(output).toContain('"message":"Charge failed"')
+  })
+
+  it('emits fatal wide events through the drain and force-keeps them', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ silent: true, drain, sampling: { rates: { error: 0 } } })
+
+    log.fatal({ action: 'checkout.crash' })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'fatal'))
+    expect(event.action).toBe('checkout.crash')
+  })
+
+  it('emits trace wide events when opted in via sampling.rates.trace', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ silent: true, drain, sampling: { rates: { trace: 100 } } })
+
+    log.trace({ action: 'cache.miss' })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'trace'))
+    expect(event.action).toBe('cache.miss')
+  })
+
+  it('drops trace wide events by default', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ silent: true, drain })
+
+    log.trace({ action: 'cache.miss' })
+
+    expect(drain).not.toHaveBeenCalled()
   })
 })

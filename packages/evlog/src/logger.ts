@@ -191,18 +191,26 @@ export function getGlobalDrain(): ((ctx: DrainContext) => void | Promise<void>) 
 
 /**
  * Determine if a log at the given level should be emitted based on sampling config.
- * Error level defaults to 100% (always logged) unless explicitly configured otherwise.
+ * Error defaults to 100% unless explicitly configured otherwise.
+ * Trace defaults to 0% (opt-in via `sampling.rates.trace`).
+ * Fatal is force-kept regardless of the sampling configuration.
  */
 function shouldSample(level: LogLevel): boolean {
-  const { rates } = state.sampling
-  if (!rates) {
-    return true // No sampling configured, log everything
+  if (level === 'fatal') {
+    return true
   }
 
-  // Error defaults to 100% unless explicitly set
+  const { rates } = state.sampling
+  if (!rates) {
+    return level !== 'trace' // No sampling configured, log everything except trace
+  }
+
+  // Error defaults to 100% and trace to 0% unless explicitly set
   const percentage = level === 'error' && rates.error === undefined
     ? 100
-    : rates[level] ?? 100
+    : level === 'trace' && rates.trace === undefined
+      ? 0
+      : rates[level] ?? 100
 
   // 0% = never log, 100% = always log
   if (percentage <= 0) return false
@@ -233,6 +241,20 @@ export function shouldKeep(ctx: TailSamplingContext): boolean {
   })
 }
 
+/**
+ * Production without `initLogger()` still emits (the defaults are safe to run),
+ * but the events carry no redaction, the default service/environment and no
+ * drain. Warn once per process so the misconfiguration is visible instead of
+ * silent; `noopLogger` stays reserved for the explicit `enabled: false`.
+ */
+function warnOnceUninitializedProduction(): void {
+  if (state.initialized || isDev() || state.warnedUninitialized) return
+  state.warnedUninitialized = true
+  console.warn(
+    '[evlog] running in production without initLogger(). Events are emitted with the default service and environment, without redaction, and no drain is configured so nothing reaches observability. Call initLogger({ drain }) once at startup, or wire a framework hook (evlog:drain).',
+  )
+}
+
 interface EmitWideEventOptions {
   deferDrain?: boolean
   ownsEvent?: boolean
@@ -246,6 +268,7 @@ function emitWideEvent(
 ): WideEvent | null {
   const { deferDrain = false, ownsEvent = false, waitUntil } = options
   if (!state.enabled) return null
+  warnOnceUninitializedProduction()
 
   if (!ownsEvent) {
     if (!isLevelEnabled(level, state.minLevel)) {
@@ -821,9 +844,21 @@ const _log: Log = {
   error: createLogMethod('error'),
   warn: createLogMethod('warn'),
   debug: createLogMethod('debug'),
+  fatal: createLogMethod('fatal'),
+  trace: createLogMethod('trace'),
 }
 
 export { _log as log }
+
+/**
+ * Drop-in default export for projects migrating from pino or consola:
+ * `import logger from 'evlog'` prints immediately, with no `initLogger()` call.
+ *
+ * This is the bare {@link log} API, not a `createLogger` scope: every call
+ * outputs right away and there is no accumulation or `emit()`. For wide events
+ * with drains and sampling, keep `initLogger()` + `createLogger()`.
+ */
+export default _log
 
 const noopAudit = Object.assign(() => {}, { deny: () => {} }) as AuditMethod
 /** @internal Accepts every call and emits nothing; reused wherever logging must not fail the caller. */
@@ -831,8 +866,10 @@ export const noopLogger: AuditableLogger = {
   set() {},
   setLevel() {},
   error() {},
+  fatal() {},
   info() {},
   warn() {},
+  trace() {},
   emit() {
     return null
   },
@@ -880,12 +917,13 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
   const startTime = Date.now()
   const context: Record<string, unknown> = { ...initialContext }
   let hasError = false
+  let hasFatal = false
   let hasWarn = false
   let manualLevel: LogLevel | undefined
   let emitted = false
   let pendingWideEvent: WideEvent | null = null
 
-  function addLog(level: 'info' | 'warn', message: string): void {
+  function addLog(level: 'info' | 'warn' | 'fatal' | 'trace', message: string): void {
     if (!Array.isArray(context.requestLogs)) {
       context.requestLogs = []
     }
@@ -968,6 +1006,22 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       }
     },
 
+    fatal(message: string, fatalContext?: FieldContext<T>): void {
+      if (emitted) {
+        const keys = fatalContext
+          ? ['message', ...Object.keys(fatalContext as Record<string, unknown>).filter(k => k !== 'requestLogs')]
+          : ['message']
+        warnPostEmit('log.fatal()', `Keys dropped: ${keys.join(', ')}.`)
+        return
+      }
+      hasFatal = true
+      addLog('fatal', message)
+      if (fatalContext) {
+        const { requestLogs: _, ...rest } = fatalContext as Record<string, unknown>
+        mergeInto(context, rest)
+      }
+    },
+
     info(message: string, infoContext?: FieldContext<T>): void {
       if (emitted) {
         const keys = infoContext
@@ -999,6 +1053,21 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       }
     },
 
+    trace(message: string, traceContext?: FieldContext<T>): void {
+      if (emitted) {
+        const keys = traceContext
+          ? ['message', ...Object.keys(traceContext as Record<string, unknown>).filter(k => k !== 'requestLogs')]
+          : ['message']
+        warnPostEmit('log.trace()', `Keys dropped: ${keys.join(', ')}.`)
+        return
+      }
+      addLog('trace', message)
+      if (traceContext) {
+        const { requestLogs: _, ...rest } = traceContext as Record<string, unknown>
+        mergeInto(context, rest)
+      }
+    },
+
     emit(overrides?: FieldContext<T> & { _forceKeep?: boolean }): WideEvent | null {
       if (emitted) {
         warnPostEmit('log.emit()', 'Ignoring duplicate emit.')
@@ -1006,7 +1075,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       }
 
       const durationMs = elapsedMs(startTime)
-      const level: LogLevel = manualLevel ?? (hasError ? 'error' : hasWarn ? 'warn' : 'info')
+      const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
       let forceKeep = false
       const auditForceKeep = consumeAuditForceKeep(context)

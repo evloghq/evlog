@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { brokeredSandbox, isValidRefName, mintInstallationToken, pushBrokerPolicy, validatePushBranch } from './push'
+import { describe, expect, it } from 'vitest'
+import { isValidRefName, mintInstallationToken, pushBrokerPolicy, validatePushBranch } from './push'
 
 describe('isValidRefName', () => {
   it('accepts branch names and commit shas', () => {
@@ -87,16 +87,5 @@ describe('mintInstallationToken', () => {
 
   it('throws when the connector exposes no token', async () => {
     await expect(mintInstallationToken({})).rejects.toThrow('no installation token')
-  })
-})
-
-describe('brokeredSandbox', () => {
-  it('returns the session once it can take a network policy', () => {
-    const sandbox = { setNetworkPolicy: vi.fn(async () => {}) }
-    expect(brokeredSandbox(sandbox)).toBe(sandbox)
-  })
-
-  it('refuses a provider without a firewall to broker through', () => {
-    expect(() => brokeredSandbox({})).toThrow(expect.objectContaining({ code: 'evi.GIT_BROKER_UNAVAILABLE' }))
   })
 })

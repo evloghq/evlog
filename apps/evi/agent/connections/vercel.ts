@@ -49,7 +49,7 @@ const VERCEL_MCP_INSTRUCTIONS = [
   '**Vercel MCP connection (vercel__*, admin only): read-only, use judiciously.**',
   '',
   `- Scoped to the evlog team (${ TEAM_ID }), ${ ROUTE }. The connection covers several evlog projects, so pass the project id when the tool takes one; find ids with \`list_teams\` and \`list_projects\`.`,
-  '- Discover exact schemas via `connection_search`, then call `vercel__<tool>`.',
+  '- Discover exact schemas via `connection_search`, then call each tool with `connection_execute` and `connection: \'vercel\'`.',
   '',
   '**Self-diagnosis (deployments and builds):**',
   '- `list_deployments` per project filtered by `state` and `sha`, `get_deployment` for one deployment, `get_deployment_build_logs` for the build output of a failed deploy (`errorsOnly: true` returns only the failing lines). Read the logs before proposing a fix.',

@@ -1,0 +1,42 @@
+{
+  "bundler": {
+    "name": "esbuild",
+    "version": "0.25.12"
+  },
+  "options": {
+    "platform": "node",
+    "format": "esm",
+    "target": "node18",
+    "minify": true
+  },
+  "entries": [
+    {
+      "library": "evlog",
+      "version": "2.29.0",
+      "raw": 31918,
+      "gzip": 12083,
+      "modules": 24
+    },
+    {
+      "library": "pino",
+      "version": "10.3.1",
+      "raw": 61382,
+      "gzip": 20531,
+      "modules": 30
+    },
+    {
+      "library": "consola",
+      "version": "3.4.2",
+      "raw": 76523,
+      "gzip": 23155,
+      "modules": 6
+    },
+    {
+      "library": "winston",
+      "version": "3.19.0",
+      "raw": 147599,
+      "gzip": 48560,
+      "modules": 116
+    }
+  ]
+}

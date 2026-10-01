@@ -5,9 +5,10 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
+import { formatInitReport } from '../src/lib/init/report'
 import { planWiring } from '../src/lib/init/frameworks'
 import { detectPackageManager, installCommand } from '../src/lib/init/pm'
-import { runInit } from '../src/lib/init/run'
+import { detectNitroMajor, runInit } from '../src/lib/init/run'
 
 /** Only the spawn is faked; the rest of the skills module stays real. */
 const skills = vi.hoisted(() => ({
@@ -69,6 +70,7 @@ function wiring(overrides: Partial<Parameters<typeof planWiring>[0]> = {}) {
 
 afterEach(async () => {
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
   skills.spawnResult = null
   skills.calls = 0
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
@@ -89,7 +91,7 @@ describe('planWiring — nuxt', () => {
     )
   })
 
-  it('adds the modules key when the config has none', async () => {
+  it('adds the modules key when the config has none, after a last property with a trailing comma', async () => {
     const root = await project({
       'package.json': '{"name":"shop"}',
       'nuxt.config.ts': `export default defineNuxtConfig({\n  devtools: { enabled: true },\n})\n`,
@@ -97,8 +99,22 @@ describe('planWiring — nuxt', () => {
 
     const { contents } = (planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring({ devDrain: 'none' }), nitroMajor: 3 }).actions[0]!)
 
-    expect(contents).toContain(`modules: ['evlog/nuxt'],`)
-    expect(contents).toContain(`env: { service: 'shop' },`)
+    expect(contents).toBe(
+      `export default defineNuxtConfig({\n  devtools: { enabled: true },\n  modules: ['evlog/nuxt'],\n  evlog: {\n    env: { service: 'shop' },\n  },\n})\n`,
+    )
+  })
+
+  it('adds the modules key when the config has none, after a last property without a trailing comma', async () => {
+    const root = await project({
+      'package.json': '{"name":"shop"}',
+      'nuxt.config.ts': `export default defineNuxtConfig({\n  devtools: { enabled: true }\n})\n`,
+    })
+
+    const { contents } = (planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring({ devDrain: 'none' }), nitroMajor: 3 }).actions[0]!)
+
+    expect(contents).toBe(
+      `export default defineNuxtConfig({\n  devtools: { enabled: true },\n  modules: ['evlog/nuxt'],\n  evlog: {\n    env: { service: 'shop' },\n  }\n})\n`,
+    )
   })
 
   it('plans nothing when the module is already registered', async () => {
@@ -221,6 +237,19 @@ describe('runInit', () => {
     expect(await readFile(join(cwd, 'nuxt.config.ts'), 'utf8')).toBe(afterFirst)
   })
 
+  it('uses the Nitro v3 plugin factory on Nuxt 5', async () => {
+    const cwd = await project({
+      'package.json': '{"name":"shop","dependencies":{"nuxt":"^5.0.0"}}',
+      'nuxt.config.ts': 'export default defineNuxtConfig({})\n',
+    })
+
+    await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
+
+    const plugin = await readFile(join(cwd, 'server/plugins/evlog-drain.ts'), 'utf8')
+    expect(plugin).toContain(`import { definePlugin } from 'nitro'`)
+    expect(plugin).toContain('definePlugin((nitroApp) => {')
+  })
+
   it('gates the local sink on development rather than shipping a file writer', async () => {
     const cwd = await project({
       'package.json': '{"name":"shop","dependencies":{"nuxt":"^4.0.0"}}',
@@ -255,6 +284,25 @@ describe('runInit', () => {
     const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
 
     expect(result.install).toMatchObject({ status: 'skipped', command: 'pnpm add evlog' })
+  })
+})
+
+describe('detectNitroMajor', () => {
+  const pkg = (deps: Record<string, string>) => ({ name: 'app', dependencies: deps })
+
+  it('reads the nuxt major, including npm: aliases for nightlies', () => {
+    expect(detectNitroMajor(pkg({ nuxt: '^4.4.2' }), 'nuxt')).toBe(2)
+    expect(detectNitroMajor(pkg({ nuxt: '^5.0.0' }), 'nuxt')).toBe(3)
+    expect(detectNitroMajor(pkg({ nuxt: 'npm:nuxt-nightly@5.0.0-29847385.3fde4d62' }), 'nuxt')).toBe(3)
+  })
+
+  it('lets nitropack decide for the nitro framework', () => {
+    expect(detectNitroMajor(pkg({ nitropack: '^2.11.0' }), 'nitro')).toBe(2)
+    expect(detectNitroMajor(pkg({ nitro: '^3.0.0' }), 'nitro')).toBe(3)
+  })
+
+  it('tanstack-start is always Nitro v3', () => {
+    expect(detectNitroMajor(pkg({}), 'tanstack-start')).toBe(3)
   })
 })
 
@@ -362,6 +410,36 @@ describe('detectPackageManager', () => {
 })
 
 describe('drain wiring', () => {
+  it('imports definePlugin from nitro on Nitro v3, where defineNitroPlugin is not auto-imported', async () => {
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring(), nitroMajor: 3 })
+    const drain = plan.actions.find(action => action.relative.endsWith('evlog-drain.ts'))!
+
+    expect(drain.contents).toContain(`import { definePlugin } from 'nitro'`)
+    expect(drain.contents).toContain('definePlugin((nitroApp) => {')
+  })
+
+  it('keeps the auto-imported defineNitroPlugin on Nitro v2', async () => {
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring(), nitroMajor: 2 })
+    const drain = plan.actions.find(action => action.relative.endsWith('evlog-drain.ts'))!
+
+    expect(drain.contents).toContain('defineNitroPlugin((nitroApp) => {')
+    expect(drain.contents).not.toContain(`from 'nitro'`)
+  })
+
+  it('does the same for the enricher plugin', async () => {
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring({ extras: ['enrichers'], enrichers: ['user-agent'] }), nitroMajor: 3 })
+    const enrich = plan.actions.find(action => action.relative.endsWith('evlog-enrich.ts'))!
+
+    expect(enrich.contents).toContain(`import { definePlugin } from 'nitro'`)
+    expect(enrich.contents).toContain('definePlugin((nitroApp) => {')
+  })
+
   it('leaves a hosted drain running in production', async () => {
     const root = await project({ 'package.json': '{"name":"api"}' })
 
@@ -678,5 +756,76 @@ describe('runInit — hono', () => {
     expect(result.answers.framework).toBe('hono')
     expect(result.written.map(action => action.relative)).toContain(join('src', 'evlog.ts'))
     expect(await readFile(join(cwd, 'src', 'evlog.ts'), 'utf8')).toContain('export const evlogMiddleware')
+  })
+})
+
+describe('env guidance', () => {
+  it('puts the missing drain variables in front of the manual steps', async () => {
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({
+      root,
+      framework: 'nuxt',
+      service: 'shop',
+      ...wiring({ prodDrains: ['sentry'] }),
+      nitroMajor: 2,
+    })
+
+    const [step] = plan.manual
+    expect(step).toMatchObject({ title: 'Set the Sentry environment variables', file: '.env' })
+    expect(step!.snippet).toContain('SENTRY_DSN=')
+    expect(step!.reason).toContain('.env')
+    expect(step!.reason).toContain('https://evlog.dev/integrate/adapters/cloud/sentry')
+  })
+
+  it('stays out of the manual steps when every variable is set', async () => {
+    vi.stubEnv('SENTRY_DSN', 'https://example.ingest.sentry.io/1')
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({
+      root,
+      framework: 'nuxt',
+      service: 'shop',
+      ...wiring({ prodDrains: ['sentry'] }),
+      nitroMajor: 2,
+    })
+
+    expect(plan.manual.map(step => step.title)).not.toContain('Set the Sentry environment variables')
+    /* The keys are still documented, whatever the environment holds. */
+    expect(plan.actions.some(action => action.relative === '.env.example')).toBe(true)
+  })
+
+  it('reads the project .env before declaring a variable missing', async () => {
+    const root = await project({
+      'package.json': '{"name":"shop"}',
+      '.env': 'SENTRY_DSN=https://example.ingest.sentry.io/1\n',
+    })
+
+    const plan = planWiring({
+      root,
+      framework: 'nuxt',
+      service: 'shop',
+      ...wiring({ prodDrains: ['sentry'] }),
+      nitroMajor: 2,
+    })
+
+    expect(plan.manual.map(step => step.title)).not.toContain('Set the Sentry environment variables')
+  })
+
+  it('reports the run without a separate env block when a drain needs credentials', async () => {
+    const cwd = await project({ 'package.json': '{"name":"shop"}' })
+
+    const result = await runInit(fakeContext(cwd), undefined, {
+      agentGuide: false,
+      install: false,
+      yes: true,
+      framework: 'nuxt',
+      prodDrains: ['sentry'],
+    })
+    const report = formatInitReport(fakeContext(cwd), result)
+
+    expect(report).toContain('Set the Sentry environment variables')
+    expect(report).toContain('YOUR TURN')
+    expect(report).not.toContain('SET BEFORE ANYTHING IS RECEIVED')
   })
 })

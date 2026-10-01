@@ -1,4 +1,4 @@
-import type { WorkflowToolContext } from 'eve/tools'
+import type { AgentMessageResult, AgentSession, WorkflowToolContext } from 'eve/tools'
 import { describe, expect, it, vi } from 'vitest'
 import {
   assembleVerification,
@@ -12,8 +12,25 @@ import {
   verificationMessage,
 } from './workflow'
 
-type AgentResult = Awaited<ReturnType<WorkflowToolContext['agent']>>
-type AgentInput = Parameters<WorkflowToolContext['agent']>[1]
+type Reply = { data: unknown } | { message: string } | { error: string }
+
+/** Each sent message settles with the turn `reply` returns for it. */
+function agentSessions(reply: (target: string, message: string) => Reply) {
+  const sent: Array<{ target: string, message: string }> = []
+  const agent = vi.fn((target: string): AgentSession => ({
+    send: <TOutput>(message: string) => {
+      sent.push({ target, message })
+      const settled = reply(target, message)
+      const result: AgentMessageResult = 'error' in settled
+        ? { status: 'failed', data: undefined, message: undefined, error: { message: settled.error } }
+        : { status: 'waiting', data: undefined, message: undefined, ...settled }
+      return Promise.resolve({ result: () => Promise.resolve(result as AgentMessageResult<TOutput>) })
+    },
+  }))
+  return { ctx: { agent } satisfies Pick<WorkflowToolContext, 'agent'>, sent }
+}
+
+const replied = (data: unknown): Reply => ({ data })
 
 const finding = {
   id: 'code-1',
@@ -241,15 +258,15 @@ describe('simplification workflow', () => {
   })
 
   it('continues with a degraded result when one reviewer fails', async () => {
-    const agent = vi.fn((target: string, agentInput: AgentInput): Promise<AgentResult> => {
-      if (target === 'finding_verifier' && agentInput.message.includes('before any review starts'))
-        return Promise.resolve({ revision })
+    const { ctx, sent } = agentSessions((target, message) => {
+      if (target === 'finding_verifier' && message.includes('before any review starts'))
+        return replied({ revision })
 
       if (target === 'test_reviewer')
-        throw new Error('review failed')
+        return { error: 'review failed' }
 
       if (target === 'finding_verifier') {
-        return Promise.resolve({
+        return replied({
           findings: [
             {
               ...finding,
@@ -262,7 +279,7 @@ describe('simplification workflow', () => {
         })
       }
 
-      return Promise.resolve({
+      return replied({
         scope: target,
         status: 'complete',
         limitations: [],
@@ -271,7 +288,7 @@ describe('simplification workflow', () => {
       })
     })
 
-    const result = await runSimplificationSweep(input, { agent })
+    const result = await runSimplificationSweep(input, ctx)
 
     expect(result.status).toBe('degraded')
     expect(result.counts).toEqual({
@@ -289,19 +306,19 @@ describe('simplification workflow', () => {
       status: 'incomplete',
       limitations: ['Reviewer failed before returning a valid structured result: review failed'],
     })
-    expect(agent).toHaveBeenCalledTimes(6)
-    expect(agent.mock.calls[5]?.[1]?.message).toContain('Reviewer failed before returning a valid structured result: review failed')
+    expect(sent).toHaveLength(6)
+    expect(sent[5]?.message).toContain('Reviewer failed before returning a valid structured result: review failed')
   })
 
   it('degrades instead of failing when verification returns prose', async () => {
-    const agent = vi.fn((target: string, agentInput: AgentInput): Promise<AgentResult> => {
-      if (target === 'finding_verifier' && agentInput.message.includes('before any review starts'))
-        return Promise.resolve({ revision })
+    const { ctx } = agentSessions((target, message) => {
+      if (target === 'finding_verifier' && message.includes('before any review starts'))
+        return replied({ revision })
 
       if (target === 'finding_verifier')
-        return Promise.resolve('Verification complete, but no structured result was produced.')
+        return { message: 'Verification complete, but no structured result was produced.' }
 
-      return Promise.resolve({
+      return replied({
         scope: target,
         status: 'complete',
         limitations: [],
@@ -310,7 +327,7 @@ describe('simplification workflow', () => {
       })
     })
 
-    const result = await runSimplificationSweep(input, { agent })
+    const result = await runSimplificationSweep(input, ctx)
 
     expect(result.status).toBe('degraded')
     expect(result.verification.findings).toEqual([
@@ -330,11 +347,11 @@ describe('simplification workflow', () => {
 
   it('stops before dispatching specialists when the checkout revision differs', async () => {
     const checkoutRevision = 'b'.repeat(40)
-    const agent = vi.fn((): Promise<AgentResult> => Promise.resolve({ revision: checkoutRevision }))
+    const { ctx, sent } = agentSessions(() => replied({ revision: checkoutRevision }))
 
-    await expect(runSimplificationSweep(input, { agent })).rejects.toThrow(
+    await expect(runSimplificationSweep(input, ctx)).rejects.toThrow(
       `Shared checkout revision ${checkoutRevision} does not match requested revision ${revision}.`,
     )
-    expect(agent).toHaveBeenCalledOnce()
+    expect(sent).toHaveLength(1)
   })
 })

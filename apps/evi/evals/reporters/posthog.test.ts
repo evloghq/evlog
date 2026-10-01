@@ -23,7 +23,7 @@ function evalResult(overrides: Partial<EveEvalResult> = {}): EveEvalResult {
 }
 
 function assertion(name: string, passed: boolean) {
-  return { name, score: passed ? 1 : 0, severity: 'gate', passed } as const
+  return { name, score: passed ? 1 : 0, severity: 'gate', passed, errored: false } as const
 }
 
 describe('toEvalEvent', () => {

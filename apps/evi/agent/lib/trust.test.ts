@@ -114,9 +114,9 @@ describe('local dev grant', () => {
 
 describe('mcp principal', () => {
   it('is trusted only while the mcp token is configured', async () => {
-    const withToken = await loadTrust({ EVI_MCP_TOKEN: 'tok' })
+    const withToken = await loadTrust({ EVI_MAINTAINER_TOKEN: 'tok' })
     expect(withToken.isMaintainer(auth({ principalId: 'mcp:hugo' }))).toBe(true)
-    const without = await loadTrust({ EVI_MCP_TOKEN: undefined })
+    const without = await loadTrust({ EVI_MAINTAINER_TOKEN: undefined })
     expect(without.isMaintainer(auth({ principalId: 'mcp:hugo' }))).toBe(false)
   })
 })

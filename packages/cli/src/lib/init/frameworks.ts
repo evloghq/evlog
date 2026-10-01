@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { DOCS_URL } from '../../core/output'
 import type { Framework } from '../map/types'
 import { findDestination, findEnricher, findSamplingPreset } from './catalog'
 import type { DrainId, EnricherId, ExtraId, SamplingProfile } from './catalog'
@@ -388,13 +389,26 @@ export const Route = createRootRoute({
  * Only the filesystem drain is gated on `import.meta.dev` — it writes files on
  * whatever box serves the request.
  */
+/**
+ * The server-plugin factory the generated files use.
+ *
+ * Nitro v2 auto-imports `defineNitroPlugin` (Nuxt does); Nitro v3 does not and
+ * exports `definePlugin` from `nitro` instead.
+ */
+function nitroPluginApi(input: WiringInput): { importLine: string | null, factory: string } {
+  if (input.nitroMajor === 3) return { importLine: `import { definePlugin } from 'nitro'`, factory: 'definePlugin' }
+  return { importLine: null, factory: 'defineNitroPlugin' }
+}
+
 function nitroDrainTemplate(input: WiringInput): string | null {
   const dev = input.devDrain === 'none' ? null : findDestination(input.devDrain) ?? null
   const prod = input.prodDrains.map(id => findDestination(id)).filter(Boolean) as NonNullable<ReturnType<typeof findDestination>>[]
   if (!dev && prod.length === 0) return null
 
+  const plugin = nitroPluginApi(input)
   const batched = input.extras.includes('pipeline') && prod.length > 0
   const imports: string[] = []
+  if (plugin.importLine) imports.push(plugin.importLine)
   if (batched) imports.push(`import type { DrainContext } from 'evlog'`)
   /* Deduped by id: nothing stops the same destination being the local sink and
      a production one, and importing its factory twice is a file that does not
@@ -426,7 +440,7 @@ const drains = import.meta.dev
   ? [${dev.factory}]
   : [${prodList}]
 
-export default defineNitroPlugin((nitroApp) => {
+export default ${plugin.factory}((nitroApp) => {
   nitroApp.hooks.hook('evlog:drain', async (ctx) => {
     await Promise.all(drains.map(drain => drain(ctx)))
   })
@@ -438,7 +452,7 @@ export default defineNitroPlugin((nitroApp) => {
 ${envComment(prod)} */
 const drains = [${prodList}]
 
-export default defineNitroPlugin((nitroApp) => {
+export default ${plugin.factory}((nitroApp) => {
   nitroApp.hooks.hook('evlog:drain', async (ctx) => {
     await Promise.all(drains.map(drain => drain(ctx)))
   })
@@ -450,7 +464,7 @@ export default defineNitroPlugin((nitroApp) => {
  */
 const drain = ${dev!.factory}
 
-export default defineNitroPlugin((nitroApp) => {
+export default ${plugin.factory}((nitroApp) => {
   // Local files are a development convenience — never a production sink.
   if (!import.meta.dev) return
   nitroApp.hooks.hook('evlog:drain', drain)
@@ -467,11 +481,12 @@ function envComment(destinations: { env: { name: string }[] }[]): string {
 }
 
 function nitroEnricherTemplate(input: WiringInput): string {
+  const plugin = nitroPluginApi(input)
   const chosen = input.enrichers.map(id => findEnricher(id)).filter(Boolean)
   const factories = chosen.map(enricher => enricher!.factory)
   const names = [...factories].map(factory => factory.replace('()', '')).sort()
 
-  return `import {
+  return `${plugin.importLine ? `${plugin.importLine}\n` : ''}import {
 ${names.map(name => `  ${name},`).join('\n')}
 } from 'evlog/enrichers'
 
@@ -479,7 +494,7 @@ const enrichers = [
 ${factories.map(factory => `  ${factory},`).join('\n')}
 ]
 
-export default defineNitroPlugin((nitroApp) => {
+export default ${plugin.factory}((nitroApp) => {
   nitroApp.hooks.hook('evlog:enrich', async (ctx) => {
     for (const enrich of enrichers) await enrich(ctx)
   })
@@ -673,8 +688,6 @@ function patchNextLib(plan: WiringPlan, input: WiringInput, path: string, relati
 
   const splices: Splice[] = [appendProperty(config.source, call, options.map(line => line.trim()).join('\n  ').replace(/,$/, ''))]
 
-  /* One splice, not two: at the same offset the order between them is whatever
-     the sort happens to do. */
   const missing = imports.filter((statement) => {
     const specifier = statement.match(/from '([^']+)'/)?.[1]
     return specifier && !hasImportFrom(config.program, specifier)
@@ -828,37 +841,66 @@ function addFile(plan: WiringPlan, input: WiringInput, relativePath: string, con
 
 /* ── environment ────────────────────────────────────────────────────────── */
 
-/** Append the adapters' variables to `.env.example` — never `.env`, which holds secrets. */
-function withEnvExample(plan: WiringPlan, input: WiringInput): WiringPlan {
-  const variables = input.prodDrains
+/** Whether the variable exists where the app runs: the process, or the project's `.env`. */
+function envHas(root: string, name: string): boolean {
+  if (process.env[name]) return true
+  try {
+    return new RegExp(`^\\s*${name}\\s*=`, 'm').test(readFileSync(join(root, '.env'), 'utf8'))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Append the adapters' variables to `.env.example` (never `.env`, which holds
+ * secrets), and put the ones that exist nowhere yet in front of the manual
+ * steps: a wired drain without its credentials sends nothing, and that is the
+ * first thing the reader has to fix.
+ */
+function withEnvGuidance(plan: WiringPlan, input: WiringInput): WiringPlan {
+  const destinations = input.prodDrains
     .map(id => findDestination(id))
-    .flatMap(destination => destination?.env ?? [])
+    .filter(destination => destination && destination.env.length > 0)
+  const variables = destinations.flatMap(destination => destination!.env)
   if (variables.length === 0) return plan
 
   const path = join(input.root, '.env.example')
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : ''
   const missing = variables.filter(variable => !new RegExp(`^\\s*${variable.name}\\s*=`, 'm').test(existing))
 
-  if (missing.length === 0) {
+  if (missing.length > 0) {
+    const width = Math.max(...missing.map(variable => variable.name.length))
+    const block = [
+      '# evlog — wide event delivery',
+      ...missing.map(variable => `${`${variable.name}=`.padEnd(width + 2)}# ${variable.hint}`),
+      '',
+    ].join('\n')
+    const contents = existing.length > 0
+      ? `${existing.replace(/\n*$/, '\n')}\n${block}`
+      : block
+
+    plan.actions.push({
+      path,
+      relative: '.env.example',
+      kind: existing.length > 0 ? 'patch' : 'create',
+      contents,
+    })
+  } else {
     plan.already.push('.env.example already lists the adapter keys')
-    return plan
   }
 
-  const width = Math.max(...missing.map(variable => variable.name.length))
-  const block = [
-    '# evlog — wide event delivery',
-    ...missing.map(variable => `${`${variable.name}=`.padEnd(width + 2)}# ${variable.hint}`),
-    '',
-  ].join('\n')
-  const contents = existing.length > 0
-    ? `${existing.replace(/\n*$/, '\n')}\n${block}`
-    : block
+  const unset = variables.filter(variable => !envHas(input.root, variable.name))
+  if (unset.length === 0) return plan
 
-  plan.actions.push({
-    path,
-    relative: '.env.example',
-    kind: existing.length > 0 ? 'patch' : 'create',
-    contents,
+  const labels = destinations.map(destination => destination!.label)
+  const subject = labels.length === 1 ? `${labels[0]} sends nothing` : `${labels.join(' and ')} send nothing`
+  const links = destinations.map(destination => `${destination!.label}: ${DOCS_URL}${destination!.docs}`).join(' · ')
+  const width = Math.max(...unset.map(variable => variable.name.length))
+  plan.manual.unshift({
+    title: labels.length === 1 ? `Set the ${labels[0]} environment variables` : 'Set the drain environment variables',
+    file: '.env',
+    snippet: unset.map(variable => `${`${variable.name}=`.padEnd(width + 2)}# ${variable.hint}`).join('\n'),
+    reason: `${subject} until these exist. Put the values in .env, or your hosting provider's environment settings (${links})`,
   })
   return plan
 }
@@ -959,7 +1001,7 @@ app.use(evlogMiddleware)`,
 /** Build the file plan for a framework. Pure: reads the project, writes nothing. */
 export function planWiring(input: WiringInput): WiringPlan {
   // Applied once here rather than in each planner, where one would be forgotten.
-  return withEnvExample(withCatalogs(frameworkPlan(input), input), input)
+  return withEnvGuidance(withCatalogs(frameworkPlan(input), input), input)
 }
 
 function frameworkPlan(input: WiringInput): WiringPlan {

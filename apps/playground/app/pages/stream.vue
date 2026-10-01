@@ -28,7 +28,7 @@ const status = ref<'discovering' | 'connecting' | 'connected' | 'error' | 'unava
 const helloPayload = ref<{ evlogVersion: string; bufferSize?: number; heartbeatMs?: number } | null>(null)
 const streamUrl = ref<string | null>(null)
 const search = ref('')
-const levelFilter = ref<'' | 'info' | 'warn' | 'error' | 'debug'>('')
+const levelFilter = ref<'' | 'info' | 'warn' | 'error' | 'debug' | 'fatal' | 'trace'>('')
 const paused = ref(false)
 const droppedWhilePaused = ref(0)
 const selected = ref<WideEvent | null>(null)
@@ -357,6 +357,12 @@ onBeforeUnmount(() => {
           <option value="debug">
             debug
           </option>
+          <option value="fatal">
+            fatal
+          </option>
+          <option value="trace">
+            trace
+          </option>
         </select>
         <button
           class="px-2 py-1 text-[12px] border border-default rounded hover:bg-elevated"
@@ -412,8 +418,8 @@ onBeforeUnmount(() => {
                     :class="{
                       'bg-blue-500/10 text-blue-500': event.level === 'info',
                       'bg-yellow-500/10 text-yellow-500': event.level === 'warn',
-                      'bg-red-500/10 text-red-500': event.level === 'error',
-                      'bg-purple-500/10 text-purple-500': event.level === 'debug',
+                      'bg-red-500/10 text-red-500': event.level === 'error' || event.level === 'fatal',
+                      'bg-purple-500/10 text-purple-500': event.level === 'debug' || event.level === 'trace',
                     }"
                   >
                     {{ event.level }}

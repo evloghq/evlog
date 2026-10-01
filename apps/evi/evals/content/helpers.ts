@@ -43,7 +43,7 @@ export type EvalEvents = EveEvalSession['events']
 
 export async function expectReviewedSnapshot(t: EveEvalContext, session: EveEvalSession, path: string): Promise<void> {
   // Parent streams contain delegation events, not the child's tool calls.
-  const children = session.events.flatMap(event => event.type === 'subagent.called' && event.data.name === 'content_review' ? [event.data.childSessionId] : [])
+  const children = session.events.flatMap(event => event.type === 'agent.started' && event.data.name === 'content_review' ? [event.data.sessionId] : [])
   for (const child of new Set(children)) await t.target.attachSession(child)
   t.calledTool('content_load', { input: fixtureSnapshot(path).snapshot })
 }
@@ -56,7 +56,7 @@ export type Verdict = typeof VERDICTS[number]
 export function reviewerReport(events: EvalEvents): string | null {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
-    if (event?.type === 'subagent.completed' && event.data.subagentName === 'content_review' && !event.data.backgroundTask) {
+    if (event?.type === 'task.settled' && event.data.name === 'content_review' && event.data.status === 'completed' && typeof event.data.output === 'string') {
       return event.data.output
     }
   }
@@ -88,13 +88,13 @@ export function expectVerdictIn(t: EveEvalContext, session: EveEvalSession, allo
 
 /**
  * Gate that a subagent was never dispatched. `calledSubagent` has no negative
- * form, and delegations surface as `subagent.called` stream events.
+ * form, and delegations surface as `task.started` stream events.
  */
 export function expectNoSubagent(t: EveEvalContext, name: string) {
   return t.eventsSatisfy(`never dispatched ${name}`, events =>
     !events.some((event) => {
       const candidate = event as { type?: string, data?: { name?: unknown } }
-      return candidate.type === 'subagent.called' && candidate.data?.name === name
+      return candidate.type === 'task.started' && candidate.data?.name === name
     }))
 }
 
