@@ -52,7 +52,7 @@ export function create{Name}Enricher(options: EnricherOptions = {}): (ctx: Enric
 4. **Return `undefined` to skip**: `compute` returning `undefined` makes the enricher a no-op for that event (no field merge, no errors).
 5. **Factory pattern**: always wrap `defineEnricher` in a `create{Name}Enricher(options?)` factory and return its result (directly, or through the closure wrapper of rule 7 when pinning top-level fields).
 6. **No try/catch**: `defineEnricher` already isolates errors (logs as `[evlog/{name}] enrich failed:` and never throws to the pipeline).
-7. **No mutation outside `compute`**: let `defineEnricher` handle the merge via `mergeEventField`. The one sanctioned exception: pinning top-level fields in addition to the enricher's own field, done by wrapping the `defineEnricher` result in a closure (see `createTraceContextEnricher`, which also sets `event.traceId` / `event.spanId`).
+7. **No mutation outside `compute`**: let `defineEnricher` handle the merge via `mergeEventField`. The one sanctioned exception: pinning top-level fields in addition to the enricher's own field, done by wrapping the `defineEnricher` result in a closure (see `createTraceContextEnricher`, which also sets `event.traceId` / `event.parentSpanId`).
 8. **Composition**: to combine several enrichers into one callback, use `composeEnrichers` from `../shared/compose` (that's how `createDefaultEnrichers()` is built) instead of a manual loop.
 
 ## Available Helpers

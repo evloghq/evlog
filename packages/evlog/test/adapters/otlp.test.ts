@@ -182,12 +182,45 @@ describe('otlp adapter', () => {
       expect(record.attributes.find(a => a.key === 'gaps')?.value).toEqual({ stringValue: '[1,null]' })
     })
 
-    it('keeps a nested object as one JSON attribute by default', () => {
-      const event = createTestEvent({ user: { id: '123', name: 'Alice' } })
+    it('sends a nested object as one kvlist attribute by default', () => {
+      const event = createTestEvent({ user: { id: '123', name: 'Alice', plan: { seats: 3, trial: false } } })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.attributes.find(a => a.key === 'user')?.value).toEqual({
+        kvlistValue: {
+          values: [
+            { key: 'id', value: { stringValue: '123' } },
+            { key: 'name', value: { stringValue: 'Alice' } },
+            {
+              key: 'plan',
+              value: {
+                kvlistValue: {
+                  values: [
+                    { key: 'seats', value: { intValue: '3' } },
+                    { key: 'trial', value: { boolValue: false } },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      })
+    })
+
+    it('drops null and undefined entries inside a kvlist', () => {
+      const event = createTestEvent({ user: { id: '123', email: null, name: undefined } })
       const record = toOTLPLogRecord(event)
 
       expect(record.attributes.find(a => a.key === 'user')?.value)
-        .toEqual({ stringValue: '{"id":"123","name":"Alice"}' })
+        .toEqual({ kvlistValue: { values: [{ key: 'id', value: { stringValue: '123' } }] } })
+    })
+
+    it('keeps empty and non-plain objects as JSON strings in the default shape', () => {
+      const event = createTestEvent({ meta: {}, at: new Date('2024-01-01T00:00:00.000Z') })
+      const record = toOTLPLogRecord(event)
+
+      expect(record.attributes.find(a => a.key === 'meta')?.value).toEqual({ stringValue: '{}' })
+      expect(record.attributes.find(a => a.key === 'at')?.value).toEqual({ stringValue: '"2024-01-01T00:00:00.000Z"' })
     })
 
     it('flattens nested objects into dotted attributes in compact shape', () => {
@@ -229,6 +262,88 @@ describe('otlp adapter', () => {
 
       expect(record.attributes.find(a => a.key === 'startedAt')?.value)
         .toEqual({ stringValue: '"2024-01-01T12:00:00.000Z"' })
+    })
+
+    describe('semantic conventions', () => {
+      const requestEvent = createTestEvent({
+        method: 'POST',
+        path: '/api/checkout',
+        status: 500,
+        userAgent: { raw: 'Mozilla/5.0' },
+        error: { name: 'PaymentError', message: 'Card declined', stack: 'PaymentError: Card declined\n    at pay' },
+        ai: {
+          model: 'claude-sonnet-4.6',
+          provider: 'anthropic',
+          responseId: 'msg_1',
+          inputTokens: 1200,
+          outputTokens: 300,
+          cacheReadTokens: 800,
+          cacheWriteTokens: 100,
+          finishReason: 'stop',
+        },
+      })
+
+      const attributeMap = (record: ReturnType<typeof toOTLPLogRecord>) =>
+        Object.fromEntries(record.attributes.map(a => [a.key, a.value]))
+
+      it('adds OTel semantic convention attributes when enabled', () => {
+        const attributes = attributeMap(toOTLPLogRecord(requestEvent, 'compact', { semanticConventions: true }))
+
+        expect(attributes).toMatchObject({
+          'http.request.method': { stringValue: 'POST' },
+          'url.path': { stringValue: '/api/checkout' },
+          'http.response.status_code': { intValue: '500' },
+          'user_agent.original': { stringValue: 'Mozilla/5.0' },
+          'exception.type': { stringValue: 'PaymentError' },
+          'exception.message': { stringValue: 'Card declined' },
+          'exception.stacktrace': { stringValue: 'PaymentError: Card declined\n    at pay' },
+          'gen_ai.request.model': { stringValue: 'claude-sonnet-4.6' },
+          'gen_ai.provider.name': { stringValue: 'anthropic' },
+          'gen_ai.response.id': { stringValue: 'msg_1' },
+          'gen_ai.usage.input_tokens': { intValue: '1200' },
+          'gen_ai.usage.output_tokens': { intValue: '300' },
+          'gen_ai.usage.cache_read.input_tokens': { intValue: '800' },
+          'gen_ai.usage.cache_creation.input_tokens': { intValue: '100' },
+          'gen_ai.response.finish_reasons': { arrayValue: { values: [{ stringValue: 'stop' }] } },
+        })
+      })
+
+      it('keeps the evlog field names alongside the semantic convention ones', () => {
+        const attributes = attributeMap(toOTLPLogRecord(requestEvent, 'compact', { semanticConventions: true }))
+
+        expect(attributes.method).toEqual({ stringValue: 'POST' })
+        expect(attributes['ai.inputTokens']).toEqual({ intValue: '1200' })
+      })
+
+      it('adds them in the json shape too', () => {
+        const attributes = attributeMap(toOTLPLogRecord(requestEvent, 'json', { semanticConventions: true }))
+
+        expect(attributes['http.request.method']).toEqual({ stringValue: 'POST' })
+        expect(attributes['gen_ai.usage.input_tokens']).toEqual({ intValue: '1200' })
+      })
+
+      it('adds none of them by default', () => {
+        const attributes = attributeMap(toOTLPLogRecord(requestEvent, 'compact'))
+
+        expect(Object.keys(attributes).filter(key => key.startsWith('http.') || key.startsWith('gen_ai.'))).toEqual([])
+      })
+
+      it('skips fields with the wrong type for the convention', () => {
+        const event = createTestEvent({ method: 'GET', status: 'ok', error: 'boom' })
+        const attributes = attributeMap(toOTLPLogRecord(event, 'compact', { semanticConventions: true }))
+
+        expect(attributes['http.request.method']).toEqual({ stringValue: 'GET' })
+        expect(attributes['http.response.status_code']).toBeUndefined()
+        expect(attributes['exception.message']).toBeUndefined()
+      })
+
+      it('does not duplicate a key the event already sets', () => {
+        const event = createTestEvent({ method: 'GET', 'http.request.method': 'PATCH' })
+        const record = toOTLPLogRecord(event, 'compact', { semanticConventions: true })
+
+        const matches = record.attributes.filter(a => a.key === 'http.request.method')
+        expect(matches).toEqual([{ key: 'http.request.method', value: { stringValue: 'PATCH' } }])
+      })
     })
 
     it('includes traceId when present', () => {
@@ -415,6 +530,21 @@ describe('otlp adapter', () => {
 
       const envAttr = resourceAttrs.find((a: { key: string }) => a.key === 'deployment.environment')
       expect(envAttr?.value).toEqual({ stringValue: 'production' })
+    })
+
+    it('adds deployment.environment.name to the resource with semantic conventions', async () => {
+      const event = createTestEvent({ environment: 'production', method: 'GET' })
+
+      await sendToOTLP(event, { endpoint: 'http://localhost:4318', semanticConventions: true })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      const payload = JSON.parse(options.body as string)
+      const resourceAttrs: Array<{ key: string, value: unknown }> = payload.resourceLogs[0].resource.attributes
+      const recordAttrs: Array<{ key: string, value: unknown }> = payload.resourceLogs[0].scopeLogs[0].logRecords[0].attributes
+
+      expect(resourceAttrs.find(a => a.key === 'deployment.environment.name')?.value).toEqual({ stringValue: 'production' })
+      expect(resourceAttrs.find(a => a.key === 'deployment.environment')?.value).toEqual({ stringValue: 'production' })
+      expect(recordAttrs.find(a => a.key === 'http.request.method')?.value).toEqual({ stringValue: 'GET' })
     })
 
     it('includes custom resource attributes from config', async () => {

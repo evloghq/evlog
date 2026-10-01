@@ -60,7 +60,7 @@ The contract is `defineEnricher<T>({ name, field, compute }, options?)`. You onl
 Key rules:
 
 - **Use the toolkit helpers**: `getHeader()` for case-insensitive header lookup, `normalizeNumber()` for numeric strings. Both from `../shared/headers` (re-exported by `evlog/toolkit`).
-- **Single event field**: each enricher writes one top-level field on `ctx.event`. If the enricher must additionally pin top-level fields (like `createTraceContextEnricher` does for `event.traceId` / `event.spanId`), wrap the `defineEnricher` result in a closure, see that enricher for the pattern.
+- **Single event field**: each enricher writes one top-level field on `ctx.event`. If the enricher must additionally pin top-level fields (like `createTraceContextEnricher` does for `event.traceId` / `event.parentSpanId`), wrap the `defineEnricher` result in a closure, see that enricher for the pattern.
 - **Factory pattern**: `create{Name}Enricher(options: EnricherOptions = {})` returns the result of `defineEnricher(...)`, directly in the normal case, or through the thin closure wrapper when the enricher also pins top-level fields (see the single-event-field rule above).
 - **No side effects**: never throw, never log; rely on `defineEnricher`'s built-in error handling if something goes wrong.
 - **Export the Info type**: `{Name}Info` describing the field shape, exported alongside the factory.

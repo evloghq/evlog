@@ -12,7 +12,7 @@ import { OTEL_SEVERITY_NUMBER, OTEL_SEVERITY_TEXT } from '../shared/severity'
  * Shape of the emitted log record.
  *
  * - `'json'` — body carries the serialized event; each top-level field becomes
- *   one attribute, nested ones as a JSON string.
+ *   one attribute, nested objects as an OTLP key-value list.
  * - `'compact'` — body is a one-line summary; nested fields flatten to dotted
  *   attributes (`user.id`), which is what backends facet and filter on.
  *
@@ -32,6 +32,13 @@ export interface OTLPConfig {
   serviceName?: string
   /** Additional resource attributes */
   resourceAttributes?: Record<string, string | number | boolean>
+  /**
+   * Also emit OpenTelemetry semantic convention attributes (`http.request.method`,
+   * `url.path`, `http.response.status_code`, `exception.*`, `gen_ai.*`) and the
+   * `deployment.environment.name` resource attribute, next to the evlog field names.
+   * Default: `false`. Becomes the default in the next major.
+   */
+  semanticConventions?: boolean
   /** Custom headers (e.g., for authentication) */
   headers?: Record<string, string>
   /**
@@ -92,6 +99,7 @@ const OTLP_FIELDS: ConfigField<OTLPConfig>[] = [
   { key: 'serviceName', env: ['NUXT_OTLP_SERVICE_NAME', 'OTEL_SERVICE_NAME'] },
   { key: 'headers' },
   { key: 'resourceAttributes' },
+  { key: 'semanticConventions' },
   { key: 'compression', env: ['OTEL_EXPORTER_OTLP_LOGS_COMPRESSION', 'OTEL_EXPORTER_OTLP_COMPRESSION'] },
   { key: 'timeout' },
   { key: 'retries' },
@@ -142,12 +150,69 @@ function collectAttributes(
   }
 }
 
+/** A nested plain object as an OTLP key-value list; anything else through the shared encoder. */
+function toNestedAttributeValue(value: unknown): OtlpAttributeValue {
+  if (!isPlainObject(value) || Object.keys(value).length === 0) return toAttributeValue(value)
+  const values: Array<{ key: string, value: OtlpAttributeValue }> = []
+  for (const [key, child] of Object.entries(value)) {
+    if (child === undefined || child === null) continue
+    values.push({ key, value: toNestedAttributeValue(child) })
+  }
+  return { kvlistValue: { values } }
+}
+
+type SemanticConventionValue = 'string' | 'integer' | 'string[]'
+
+/** OTel semantic convention attribute, the evlog field path it reads, and the value type it requires. */
+const SEMANTIC_CONVENTIONS: ReadonlyArray<readonly [string, readonly string[], SemanticConventionValue]> = [
+  ['http.request.method', ['method'], 'string'],
+  ['url.path', ['path'], 'string'],
+  ['http.response.status_code', ['status'], 'integer'],
+  ['user_agent.original', ['userAgent', 'raw'], 'string'],
+  ['exception.type', ['error', 'name'], 'string'],
+  ['exception.message', ['error', 'message'], 'string'],
+  ['exception.stacktrace', ['error', 'stack'], 'string'],
+  ['gen_ai.request.model', ['ai', 'model'], 'string'],
+  ['gen_ai.provider.name', ['ai', 'provider'], 'string'],
+  ['gen_ai.response.id', ['ai', 'responseId'], 'string'],
+  ['gen_ai.usage.input_tokens', ['ai', 'inputTokens'], 'integer'],
+  ['gen_ai.usage.output_tokens', ['ai', 'outputTokens'], 'integer'],
+  ['gen_ai.usage.cache_read.input_tokens', ['ai', 'cacheReadTokens'], 'integer'],
+  ['gen_ai.usage.cache_creation.input_tokens', ['ai', 'cacheWriteTokens'], 'integer'],
+  ['gen_ai.response.finish_reasons', ['ai', 'finishReason'], 'string[]'],
+]
+
+function readPath(event: Record<string, unknown>, path: readonly string[]): unknown {
+  let current: unknown = event
+  for (const segment of path) {
+    if (!isPlainObject(current)) return undefined
+    current = current[segment]
+  }
+  return current
+}
+
+function pushSemanticConventionAttributes(event: Record<string, unknown>, attributes: OTLPLogRecord['attributes']): void {
+  const present = new Set(attributes.map(attribute => attribute.key))
+  for (const [key, path, type] of SEMANTIC_CONVENTIONS) {
+    if (present.has(key)) continue
+    const value = readPath(event, path)
+    if (type === 'integer' ? !Number.isInteger(value) : typeof value !== 'string') continue
+    attributes.push({ key, value: toAttributeValue(type === 'string[]' ? [value] : value) })
+  }
+}
+
+/** Options for {@link toOTLPLogRecord}. */
+export interface OTLPLogRecordOptions {
+  /** @see {@link OTLPConfig.semanticConventions} */
+  semanticConventions?: boolean
+}
+
 /**
  * Convert an evlog WideEvent to an OTLP LogRecord.
  *
  * @param shape See {@link OTLPRecordShape}. Defaults to `'json'`.
  */
-export function toOTLPLogRecord(event: WideEvent, shape: OTLPRecordShape = 'json'): OTLPLogRecord {
+export function toOTLPLogRecord(event: WideEvent, shape: OTLPRecordShape = 'json', options: OTLPLogRecordOptions = {}): OTLPLogRecord {
   const timestamp = new Date(event.timestamp).getTime() * 1_000_000 // Convert to nanoseconds
 
   const { level, ...rest } = event
@@ -170,10 +235,11 @@ export function toOTLPLogRecord(event: WideEvent, shape: OTLPRecordShape = 'json
   } else {
     for (const [key, value] of Object.entries(rest)) {
       if (value !== undefined && value !== null) {
-        attributes.push({ key, value: toAttributeValue(value) })
+        attributes.push({ key, value: toNestedAttributeValue(value) })
       }
     }
   }
+  if (options.semanticConventions) pushSemanticConventionAttributes(event, attributes)
 
   const record: OTLPLogRecord = {
     timeUnixNano: String(timestamp),
@@ -205,7 +271,10 @@ function buildResourceAttributes(
   const attributes = new Map<string, string | number | boolean>(Object.entries(config.envResourceAttributes ?? {}))
 
   attributes.set('service.name', config.serviceName ?? event.service)
-  if (event.environment) attributes.set('deployment.environment', event.environment)
+  if (event.environment) {
+    attributes.set('deployment.environment', event.environment)
+    if (config.semanticConventions) attributes.set('deployment.environment.name', event.environment)
+  }
   if (event.version) attributes.set('service.version', event.version)
   if (event.region) attributes.set('cloud.region', event.region)
   if (event.commitHash) attributes.set('vcs.commit.id', event.commitHash)
@@ -345,7 +414,7 @@ function buildOTLPPayload(events: WideEvent[], config: ResolvedOTLPConfig): Expo
       scopeLogs: [
         {
           scope: { name: 'evlog', version: EVLOG_VERSION },
-          logRecords: groupEvents.map(event => toOTLPLogRecord(event, config.recordShape)),
+          logRecords: groupEvents.map(event => toOTLPLogRecord(event, config.recordShape, { semanticConventions: config.semanticConventions })),
         },
       ],
     })),

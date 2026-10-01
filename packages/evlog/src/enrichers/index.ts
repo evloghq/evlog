@@ -30,7 +30,10 @@ export interface TraceContextInfo {
   traceparent?: string
   tracestate?: string
   traceId?: string
+  /** Span of the current request, when an instrumentation already set `event.spanId`. */
   spanId?: string
+  /** Caller span from the incoming `traceparent`. */
+  parentSpanId?: string
 }
 
 function parseUserAgent(ua: string): UserAgentInfo {
@@ -88,10 +91,10 @@ function parseUserAgent(ua: string): UserAgentInfo {
   }
 }
 
-function parseTraceparent(traceparent: string): Pick<TraceContextInfo, 'traceId' | 'spanId'> | undefined {
+function parseTraceparent(traceparent: string): Pick<TraceContextInfo, 'traceId' | 'parentSpanId'> | undefined {
   const match = traceparent.match(/^[\da-f]{2}-([\da-f]{32})-([\da-f]{16})-[\da-f]{2}$/i)
   if (!match) return undefined
-  return { traceId: match[1], spanId: match[2] }
+  return { traceId: match[1], parentSpanId: match[2] }
 }
 
 /**
@@ -159,8 +162,11 @@ export function createRequestSizeEnricher(options: EnricherOptions = {}): (ctx: 
 
 /**
  * Enrich events with W3C trace context data.
- * Sets `event.traceContext` with `TraceContextInfo` shape: `{ traceparent?, tracestate?, traceId?, spanId? }`.
- * Also sets `event.traceId` and `event.spanId` at the top level.
+ * Sets `event.traceContext` with `TraceContextInfo` shape: `{ traceparent?, tracestate?, traceId?, spanId?, parentSpanId? }`.
+ * Also sets `event.traceId` and `event.parentSpanId` at the top level.
+ *
+ * The span id in an incoming `traceparent` belongs to the caller, so it is recorded as
+ * `parentSpanId`. `event.spanId` is left to whatever creates the server span.
  */
 export function createTraceContextEnricher(options: EnricherOptions = {}): (ctx: EnrichContext) => void {
   const enricher = defineEnricher<TraceContextInfo>({
@@ -175,12 +181,13 @@ export function createTraceContextEnricher(options: EnricherOptions = {}): (ctx:
         traceparent,
         tracestate,
         traceId: parsed?.traceId ?? (event.traceId as string | undefined),
-        spanId: parsed?.spanId ?? (event.spanId as string | undefined),
+        spanId: event.spanId as string | undefined,
+        parentSpanId: parsed?.parentSpanId ?? (event.parentSpanId as string | undefined),
       }
     },
   }, options)
 
-  // Trace context also pins traceId/spanId at the top level for transports that
+  // Trace context also pins traceId/parentSpanId at the top level for transports that
   // expect them outside the nested object.
   return (ctx) => {
     enricher(ctx)
@@ -189,8 +196,8 @@ export function createTraceContextEnricher(options: EnricherOptions = {}): (ctx:
     if (merged.traceId && (options.overwrite || ctx.event.traceId === undefined)) {
       ctx.event.traceId = merged.traceId
     }
-    if (merged.spanId && (options.overwrite || ctx.event.spanId === undefined)) {
-      ctx.event.spanId = merged.spanId
+    if (merged.parentSpanId && (options.overwrite || ctx.event.parentSpanId === undefined)) {
+      ctx.event.parentSpanId = merged.parentSpanId
     }
   }
 }

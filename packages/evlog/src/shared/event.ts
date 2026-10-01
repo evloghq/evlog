@@ -92,13 +92,14 @@ export function toTypedAttributeValue(value: unknown): TypedAttributeValue | und
   return { value: JSON.stringify(value), type: 'string' }
 }
 
-/** OTLP `AnyValue` subset evlog emits: primitives and homogeneous primitive arrays. */
+/** OTLP `AnyValue` subset evlog emits: primitives, homogeneous primitive arrays, and key-value lists. */
 export type OtlpAttributeValue =
   | { stringValue: string }
   | { boolValue: boolean }
   | { intValue: string }
   | { doubleValue: number }
   | { arrayValue: { values: OtlpAttributeValue[] } }
+  | { kvlistValue: { values: Array<{ key: string, value: OtlpAttributeValue }> } }
 
 function toOtlpArrayValue(values: unknown[]): OtlpAttributeValue | undefined {
   if (values.length === 0) return undefined

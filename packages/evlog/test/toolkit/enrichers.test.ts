@@ -71,11 +71,36 @@ describe('enrichers', () => {
     createTraceContextEnricher()(ctx)
 
     expect(ctx.event.traceId).toBe('0af7651916cd43dd8448eb211c80319c')
-    expect(ctx.event.spanId).toBe('b7ad6b7169203331')
+    expect(ctx.event.parentSpanId).toBe('b7ad6b7169203331')
     expect(ctx.event.traceContext).toMatchObject({
       traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
       tracestate: 'congo=t61rcWkgMzE',
+      parentSpanId: 'b7ad6b7169203331',
     })
+  })
+
+  it('does not attribute the caller span to the current request', () => {
+    const ctx = createContext({
+      traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+    })
+
+    createTraceContextEnricher()(ctx)
+
+    expect(ctx.event.spanId).toBeUndefined()
+    expect(ctx.event.traceContext).toMatchObject({ spanId: undefined })
+  })
+
+  it('keeps a span id already set on the event', () => {
+    const ctx = createContext({
+      traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+    })
+    ctx.event.spanId = '00f067aa0ba902b7'
+
+    createTraceContextEnricher()(ctx)
+
+    expect(ctx.event.spanId).toBe('00f067aa0ba902b7')
+    expect(ctx.event.parentSpanId).toBe('b7ad6b7169203331')
+    expect(ctx.event.traceContext).toMatchObject({ spanId: '00f067aa0ba902b7' })
   })
 })
 
