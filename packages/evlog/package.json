@@ -39,6 +39,9 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "bin": {
+    "evlog": "./bin/evlog.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
@@ -401,6 +404,7 @@
     }
   },
   "files": [
+    "bin",
     "dist",
     "README.md"
   ],

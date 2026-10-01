@@ -957,9 +957,6 @@ importers:
       citty:
         specifier: ^0.2.2
         version: 0.2.2
-      evlog:
-        specifier: workspace:*
-        version: link:../evlog
       oxc-parser:
         specifier: ^0.149.0
         version: 0.149.0
@@ -967,6 +964,9 @@ importers:
         specifier: ^0.2.17
         version: 0.2.17
     devDependencies:
+      evlog:
+        specifier: workspace:*
+        version: link:../evlog
       tsdown:
         specifier: ^0.23.0
         version: 0.23.0(@volar/typescript@2.4.28(typescript@6.0.3))(tsx@4.23.13)(typescript@6.0.3)(unrun@0.2.37)(vue-tsc@3.3.11(typescript@6.0.3))

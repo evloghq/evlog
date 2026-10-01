@@ -58,11 +58,14 @@
     "@clack/prompts": "^1.8.0",
     "@evlog/telemetry": "workspace:*",
     "citty": "^0.2.2",
-    "evlog": "workspace:*",
     "oxc-parser": "^0.149.0",
     "tinyglobby": "^0.2.17"
   },
+  "peerDependencies": {
+    "evlog": ">=2.29.0"
+  },
   "devDependencies": {
+    "evlog": "workspace:*",
     "tsdown": "^0.23.0",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
