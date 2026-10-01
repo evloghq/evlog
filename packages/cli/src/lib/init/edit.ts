@@ -125,11 +125,12 @@ function afterLast(source: string, lastEnd: number, containerEnd: number): { at:
     : { at: lastEnd, needsComma: true }
 }
 
-/** Apply splices to a source string, right to left so offsets stay valid. */
+/** Apply splices right to left so offsets stay valid; splices that share an offset apply in reverse, so the given order survives. */
 export function applySplices(source: string, splices: Splice[]): string {
-  return [...splices]
-    .sort((a, b) => b.at - a.at)
-    .reduce((text, splice) => text.slice(0, splice.at) + splice.text + text.slice(splice.at), source)
+  return splices
+    .map((splice, index) => ({ splice, index }))
+    .sort((a, b) => b.splice.at - a.splice.at || b.index - a.index)
+    .reduce((text, { splice }) => text.slice(0, splice.at) + splice.text + text.slice(splice.at), source)
 }
 
 /** Splice that appends `entry` as the last element of `array`. */
@@ -169,7 +170,8 @@ export function appendProperty(source: string, object: ObjectNode, text: string)
   }
 
   const { at, needsComma } = afterLast(source, offsets(last).end, end)
-  return { at, text: `${needsComma ? ',' : ''}\n${indent}${text},` }
+  // Exactly one comma: the splice that follows a missing trailing comma owes the separator.
+  return { at, text: needsComma ? `,\n${indent}${text}` : `\n${indent}${text},` }
 }
 
 /** Splice that adds an import statement after the last existing one. */

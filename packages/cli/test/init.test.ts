@@ -89,7 +89,7 @@ describe('planWiring — nuxt', () => {
     )
   })
 
-  it('adds the modules key when the config has none', async () => {
+  it('adds the modules key when the config has none, after a last property with a trailing comma', async () => {
     const root = await project({
       'package.json': '{"name":"shop"}',
       'nuxt.config.ts': `export default defineNuxtConfig({\n  devtools: { enabled: true },\n})\n`,
@@ -97,8 +97,22 @@ describe('planWiring — nuxt', () => {
 
     const { contents } = (planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring({ devDrain: 'none' }), nitroMajor: 3 }).actions[0]!)
 
-    expect(contents).toContain(`modules: ['evlog/nuxt'],`)
-    expect(contents).toContain(`env: { service: 'shop' },`)
+    expect(contents).toBe(
+      `export default defineNuxtConfig({\n  devtools: { enabled: true },\n  modules: ['evlog/nuxt'],\n  evlog: {\n    env: { service: 'shop' },\n  },\n})\n`,
+    )
+  })
+
+  it('adds the modules key when the config has none, after a last property without a trailing comma', async () => {
+    const root = await project({
+      'package.json': '{"name":"shop"}',
+      'nuxt.config.ts': `export default defineNuxtConfig({\n  devtools: { enabled: true }\n})\n`,
+    })
+
+    const { contents } = (planWiring({ root, framework: 'nuxt', service: 'shop', ...wiring({ devDrain: 'none' }), nitroMajor: 3 }).actions[0]!)
+
+    expect(contents).toBe(
+      `export default defineNuxtConfig({\n  devtools: { enabled: true },\n  modules: ['evlog/nuxt'],\n  evlog: {\n    env: { service: 'shop' },\n  }\n})\n`,
+    )
   })
 
   it('plans nothing when the module is already registered', async () => {

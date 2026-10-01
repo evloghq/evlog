@@ -673,8 +673,6 @@ function patchNextLib(plan: WiringPlan, input: WiringInput, path: string, relati
 
   const splices: Splice[] = [appendProperty(config.source, call, options.map(line => line.trim()).join('\n  ').replace(/,$/, ''))]
 
-  /* One splice, not two: at the same offset the order between them is whatever
-     the sort happens to do. */
   const missing = imports.filter((statement) => {
     const specifier = statement.match(/from '([^']+)'/)?.[1]
     return specifier && !hasImportFrom(config.program, specifier)
