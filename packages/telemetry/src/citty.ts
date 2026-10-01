@@ -1,10 +1,9 @@
-import type { ArgsDef, CommandDef } from 'citty'
+import type { ArgsDef, CommandDef, Resolvable, SubCommandsDef } from 'citty'
 import { createTelemetry } from './create'
-import type { CollectFields, CollectFlags, FlagDefinitions, TelemetryOptions } from './types'
+import type { CollectFields, CollectFlags, FlagDefinitions, TelemetryHandle, TelemetryOptions } from './types'
 
-type AnyCommand = CommandDef<ArgsDef> & {
-  subCommands?: Record<string, AnyCommand>
-}
+type AnyCommand = CommandDef<ArgsDef>
+type Runner = Pick<TelemetryHandle, 'run'>
 
 /** citty allows `args` to be lazy; only a plain object can be read synchronously. */
 function syncArgs(args: AnyCommand['args']): FlagDefinitions | undefined {
@@ -13,31 +12,46 @@ function syncArgs(args: AnyCommand['args']): FlagDefinitions | undefined {
     : undefined
 }
 
+async function resolve<T>(value: Resolvable<T>): Promise<T> {
+  return typeof value === 'function' ? await (value as () => T | Promise<T>)() : await value
+}
+
+/** Plain objects are wrapped now; lazy ones when citty resolves them, so unused commands never load. */
+function wrapSubCommands(
+  subCommands: Resolvable<SubCommandsDef>,
+  telemetry: Runner,
+  path: string[],
+): Resolvable<SubCommandsDef> {
+  const wrapAll = (subs: SubCommandsDef): SubCommandsDef => Object.fromEntries(
+    Object.entries(subs).map(([key, sub]) => [
+      key,
+      typeof sub === 'function' || sub instanceof Promise
+        ? async () => wrapCommand(await resolve(sub), telemetry, path)
+        : wrapCommand(sub, telemetry, path),
+    ]),
+  )
+  return typeof subCommands === 'function' || subCommands instanceof Promise
+    ? async () => wrapAll(await resolve(subCommands))
+    : wrapAll(subCommands)
+}
+
 function wrapCommand(
   command: AnyCommand,
-  telemetry: ReturnType<typeof createTelemetry>,
+  telemetry: Runner,
   path: string[],
   isRoot = false,
 ): AnyCommand {
-  const segment = command.meta?.name
+  const meta = command.meta && typeof command.meta === 'object' && !('then' in command.meta) ? command.meta : undefined
+  const segment = meta?.name
   const commandPath = isRoot && command.subCommands
     ? path
     : segment
       ? [...path, segment]
       : path
 
-  const wrappedSub = command.subCommands
-    ? Object.fromEntries(
-      Object.entries(command.subCommands).map(([key, sub]) => [
-        key,
-        wrapCommand(sub, telemetry, commandPath, false),
-      ]),
-    )
-    : undefined
-
   return {
     ...command,
-    subCommands: wrappedSub,
+    subCommands: command.subCommands ? wrapSubCommands(command.subCommands, telemetry, commandPath) : undefined,
     run: command.run
       ? (ctx) => {
         const name = commandPath.join(' ') || segment || 'run'
@@ -52,6 +66,7 @@ function wrapCommand(
 
 /**
  * Wrap a citty command tree with telemetry — one wide event per command execution.
+ * Lazily loaded subcommands (`() => import('./cmd')`) stay lazy.
  * Returns the wrapped command for `runMain()`.
  */
 export function withTelemetry<

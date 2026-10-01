@@ -1,4 +1,4 @@
-import type { ArgsDef, CommandDef } from 'citty'
+import type { ArgsDef, CommandDef, Resolvable } from 'citty'
 import { formatBanner } from './brand'
 import { createContext } from './context'
 import { createStyle, writeHuman } from './output'
@@ -48,7 +48,7 @@ export async function showUsage(cmd: CommandDef<any>, parent?: CommandDef<any>):
   if (hasCommands) {
     const rows: Row[] = []
     for (const [name, sub] of Object.entries(subCommands)) {
-      const subMeta = await resolve((sub as CommandDef).meta)
+      const subMeta = await resolve((await resolve(sub as Resolvable<CommandDef>))?.meta)
       rows.push({ name, description: subMeta?.description ?? '' })
     }
     sections.push(formatSection('COMMANDS', rows, paint))

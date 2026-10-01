@@ -5,7 +5,7 @@ import { COMMON_ARGS } from './lib/command'
 import { TELEMETRY_ENDPOINT, TOOL_NAME, VERSION } from './lib/constants'
 import { resolveCliEnvironment } from './lib/environment'
 import { INIT_TELEMETRY_FIELDS } from './lib/init/telemetry'
-import { MAP_TELEMETRY_FIELDS } from './lib/map/telemetry'
+import { MAP_TELEMETRY_FIELDS } from './lib/map/telemetry-fields'
 
 /**
  * The evlog CLI command tree, telemetry-wrapped and ready for `runMain()`.

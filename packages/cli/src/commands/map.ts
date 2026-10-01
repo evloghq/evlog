@@ -23,7 +23,7 @@ import {
 } from '../lib/map/report'
 import { scan } from '../lib/map/scan'
 import { recordMapRun, resolveGate } from '../lib/map/telemetry'
-import type { MapView } from '../lib/map/telemetry'
+import type { MapView } from '../lib/map/telemetry-fields'
 import type { Framework, ScanContext, ScanResult } from '../lib/map/types'
 import { writeMapFile } from '../lib/map/write'
 

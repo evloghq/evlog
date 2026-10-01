@@ -401,4 +401,30 @@ describe('citty flag capture', () => {
     const event = await runWrapped(['server/api/checkout.ts'])
     expect(event.flags).toEqual({ entry: FLAG_VALUE_SET })
   })
+
+  it('wraps lazily loaded subcommands without loading the others', async () => {
+    let loadedOther = false
+    const command = withTelemetry(
+      defineCommand({
+        meta: { name: 'tool' },
+        subCommands: {
+          scan: () => Promise.resolve(defineCommand({
+            meta: { name: 'scan' },
+            args: { all: { type: 'boolean' } },
+            run: () => {},
+          })),
+          other: () => {
+            loadedOther = true
+            return defineCommand({ meta: { name: 'other' }, run: () => {} })
+          },
+        },
+      }),
+      { name: TOOL, version: '0.0.0' },
+    )
+    await runCommand(command, { rawArgs: ['scan', '--all'] })
+    const [event] = await new TelemetryOutbox({ toolName: TOOL }).readAll()
+    expect(event!.command).toBe('scan')
+    expect(event!.flags).toEqual({ all: true })
+    expect(loadedOther).toBe(false)
+  })
 })

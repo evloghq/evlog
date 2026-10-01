@@ -1,11 +1,14 @@
 import { telemetry } from '@evlog/telemetry'
-import { FRAMEWORK_IDS } from '../frameworks'
 import type { BaselineComparison } from './baseline'
 import { hasRegressed } from './baseline'
 import { RULES } from './rules/index'
 import { classifyRouteObservability } from './score'
 import { sensitivityLabel } from './sensitivity'
+import type { MapGate, MapView } from './telemetry-fields'
 import type { CheckId, Framework, Grade, RouteEntry, RouteKind, ScanResult } from './types'
+
+export { MAP_TELEMETRY_FIELDS } from './telemetry-fields'
+export type { MapGate, MapView } from './telemetry-fields'
 
 /**
  * What `evlog map` reports about a scan.
@@ -22,30 +25,12 @@ import type { CheckId, Framework, Grade, RouteEntry, RouteKind, ScanResult } fro
  */
 const PREFIX = 'map'
 
-const GRADES: readonly Grade[] = ['excellent', 'good', 'needs-work', 'at-risk']
-
 /** Entry-point kinds the map can scan, a closed set, in scan order. */
 const KINDS: readonly RouteKind[] = ['api', 'page', 'middleware', 'server-action', 'cron', 'websocket']
 
 /** Sensitivity labels the classifier can assign, in precedence order. */
 const SENSITIVITIES = ['money', 'auth', 'pii'] as const
 type SensitivityLabel = typeof SENSITIVITIES[number]
-
-/** Which gate the run asked for — `--min-score`, `--baseline`, both, neither. */
-const GATES = ['none', 'min-score', 'baseline', 'both'] as const
-export type MapGate = typeof GATES[number]
-
-/** Which of the three renderers the run asked for. */
-const VIEWS = ['summary', 'all', 'inspect'] as const
-export type MapView = typeof VIEWS[number]
-
-/** String fields, with the exact set of values each may take. */
-export const MAP_TELEMETRY_FIELDS = {
-  mapFramework: FRAMEWORK_IDS,
-  mapGrade: GRADES,
-  mapGate: GATES,
-  mapView: VIEWS,
-} as const satisfies Record<string, readonly string[]>
 
 /** `wide-event` → `WideEvent`. */
 function pascal(id: string): string {
