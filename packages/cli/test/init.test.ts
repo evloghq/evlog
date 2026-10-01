@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
+import { formatInitReport } from '../src/lib/init/report'
 import { planWiring } from '../src/lib/init/frameworks'
 import { detectPackageManager, installCommand } from '../src/lib/init/pm'
 import { runInit } from '../src/lib/init/run'
@@ -69,6 +70,7 @@ function wiring(overrides: Partial<Parameters<typeof planWiring>[0]> = {}) {
 
 afterEach(async () => {
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
   skills.spawnResult = null
   skills.calls = 0
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
@@ -678,5 +680,76 @@ describe('runInit — hono', () => {
     expect(result.answers.framework).toBe('hono')
     expect(result.written.map(action => action.relative)).toContain(join('src', 'evlog.ts'))
     expect(await readFile(join(cwd, 'src', 'evlog.ts'), 'utf8')).toContain('export const evlogMiddleware')
+  })
+})
+
+describe('env guidance', () => {
+  it('puts the missing drain variables in front of the manual steps', async () => {
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({
+      root,
+      framework: 'nuxt',
+      service: 'shop',
+      ...wiring({ prodDrains: ['sentry'] }),
+      nitroMajor: 2,
+    })
+
+    const [step] = plan.manual
+    expect(step).toMatchObject({ title: 'Set the Sentry environment variables', file: '.env' })
+    expect(step!.snippet).toContain('SENTRY_DSN=')
+    expect(step!.reason).toContain('.env')
+    expect(step!.reason).toContain('https://evlog.dev/integrate/adapters/cloud/sentry')
+  })
+
+  it('stays out of the manual steps when every variable is set', async () => {
+    vi.stubEnv('SENTRY_DSN', 'https://example.ingest.sentry.io/1')
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+
+    const plan = planWiring({
+      root,
+      framework: 'nuxt',
+      service: 'shop',
+      ...wiring({ prodDrains: ['sentry'] }),
+      nitroMajor: 2,
+    })
+
+    expect(plan.manual.map(step => step.title)).not.toContain('Set the Sentry environment variables')
+    /* The keys are still documented, whatever the environment holds. */
+    expect(plan.actions.some(action => action.relative === '.env.example')).toBe(true)
+  })
+
+  it('reads the project .env before declaring a variable missing', async () => {
+    const root = await project({
+      'package.json': '{"name":"shop"}',
+      '.env': 'SENTRY_DSN=https://example.ingest.sentry.io/1\n',
+    })
+
+    const plan = planWiring({
+      root,
+      framework: 'nuxt',
+      service: 'shop',
+      ...wiring({ prodDrains: ['sentry'] }),
+      nitroMajor: 2,
+    })
+
+    expect(plan.manual.map(step => step.title)).not.toContain('Set the Sentry environment variables')
+  })
+
+  it('reports the run without a separate env block when a drain needs credentials', async () => {
+    const cwd = await project({ 'package.json': '{"name":"shop"}' })
+
+    const result = await runInit(fakeContext(cwd), undefined, {
+      agentGuide: false,
+      install: false,
+      yes: true,
+      framework: 'nuxt',
+      prodDrains: ['sentry'],
+    })
+    const report = formatInitReport(fakeContext(cwd), result)
+
+    expect(report).toContain('Set the Sentry environment variables')
+    expect(report).toContain('YOUR TURN')
+    expect(report).not.toContain('SET BEFORE ANYTHING IS RECEIVED')
   })
 })

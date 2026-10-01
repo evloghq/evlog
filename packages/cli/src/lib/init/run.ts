@@ -26,7 +26,6 @@ import {
   confirmPlan,
   showPlan,
   InitCancelled,
-  noteEnvironment,
   noteManual,
   noteSkills,
   noteSkillsStarting,
@@ -383,7 +382,6 @@ export async function runInit(
 
   if (interactive) {
     if (agentGuide) noteSkills(ctx, agentGuide)
-    noteEnvironment(answers.prodDrains)
     noteManual(plan.manual)
     closeInteractive(ctx, answers.framework, frameworkDocs(answers.framework), dryRun)
   }

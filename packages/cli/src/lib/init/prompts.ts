@@ -22,7 +22,6 @@ import {
   DEFAULT_ENRICHERS,
   DEV_DESTINATIONS,
   ENRICHERS,
-  findDestination,
   offerEvidence,
   PROD_DESTINATIONS,
   SAMPLING_PRESETS,
@@ -259,21 +258,6 @@ export async function confirmPlan(
   if (!showPlan(actions, already, runs)) return false
 
   return required(await confirm({ message: 'Apply?', initialValue: true }))
-}
-
-/** Environment variables the chosen destinations read, printed once at the end. */
-export function noteEnvironment(prodDrains: DrainId[]): void {
-  const variables = prodDrains
-    .map(id => findDestination(id))
-    .flatMap(destination => destination?.env.map(variable => ({ ...variable, label: destination.label })) ?? [])
-  if (variables.length === 0) return
-
-  // Never prompted for: a token typed here lands in a file we chose and in shell history.
-  const width = Math.max(...variables.map(variable => variable.name.length))
-  note(
-    variables.map(variable => `${variable.name.padEnd(width)}  ${variable.hint}`).join('\n'),
-    'Set these before anything is received',
-  )
 }
 
 /** How the agent skills ended up, for a run that is drawing its own frame. */

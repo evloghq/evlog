@@ -96,18 +96,6 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
     lines.push(`${glyph} ${paint('dim', `doctor: ${ok} ok · ${warn} warn · ${fail} fail`)}`)
   }
 
-  const envVariables = answers.prodDrains
-    .map(id => findDestination(id))
-    .flatMap(destination => destination?.env ?? [])
-  if (envVariables.length > 0) {
-    lines.push('')
-    lines.push(paint('dim', 'SET BEFORE ANYTHING IS RECEIVED'))
-    const width = Math.max(...envVariables.map(variable => variable.name.length))
-    for (const variable of envVariables) {
-      lines.push(`${paint('cyan', variable.name.padEnd(width))} ${paint('dim', `— ${variable.hint}`)}`)
-    }
-  }
-
   if (result.manual.length > 0) {
     lines.push('')
     lines.push(paint('dim', 'YOUR TURN'))
