@@ -141,7 +141,7 @@ A workflow-confirmed candidate marked `pull_request` becomes PR-ready only when 
 - a matching test covers the change, or a test-only reduction proves the remaining coverage is equivalent;
 - `pnpm run lint`, `pnpm run typecheck`, `pnpm run test`, and affected content checks exit 0;
 - required changesets, skill updates, API snapshot review, and visual evidence are present;
-- the pull request body states the problem, change, preserved behavior, verification, and the reviewed revision.
+- the pull request body shows the change (a snippet, captured output, or capture, not prose alone) and states the problem, preserved behavior, verification, and the reviewed revision.
 
 Immediately before pushing or opening the pull request, run `git merge-base HEAD <reviewed-revision>` and require the output to equal the full reviewed SHA. Inspect `git diff <reviewed-revision>...HEAD` and require it to contain only the verified candidate. If either check fails, do not deliver the branch; restart it from the reviewed revision.
 
@@ -176,7 +176,7 @@ Useful eval coverage includes:
 
 - community answers that lead with the answer and explain the relevant why;
 - maintainer replies that stay direct without deleting necessary context;
-- pull request bodies that state problem, change, preserved behavior, and verification;
+- pull request bodies that show the change and state problem, preserved behavior, and verification;
 - no repeated conclusion or repeated link;
 - internal implementation detail translated into an action the reader can take;
 - uncertainty preserved instead of polished away.

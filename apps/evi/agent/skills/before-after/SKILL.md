@@ -1,6 +1,6 @@
 ---
 name: before-after
-description: Produce a before/after visual comparison of an evlog surface (landing, docs, telemetry, playgrounds) and share it as public Blob URLs. Load when a change is visual, when someone asks for screenshots, a recording, or a visual diff, or when a shipped PR touches apps/docs or apps/telemetry and deserves visual evidence.
+description: Produce a before/after visual comparison of an evlog surface (landing, docs, telemetry, playgrounds) and share it as public Blob URLs. Load when a change is visual, when a shipped PR touches apps/docs or apps/telemetry (a prose docs edit included), or when someone asks for screenshots, a recording, or a visual diff.
 ---
 
 # Before/after captures
@@ -14,7 +14,7 @@ When "after" needs a dev server, start it in the background **as soon as the bra
 ## 1. Decide what "before" and "after" are
 
 - The current state of the code is **after**. Never switch branches, stash, or revert to fabricate a "before".
-- **A pure addition has no before.** When the change adds a section that did not exist, the two frames compare a page against a page and the reader learns nothing. Capture the new thing alone and say what it replaces in prose. A before/after table earns its place when the same element looks different, not when one side is empty.
+- **A pure addition has no before.** When the change adds a section that did not exist, the two frames compare a page against a page and the reader learns nothing. Capture the new thing alone. Do not describe it in prose and call that the evidence: a new thing gets shown (a snippet for an API, real terminal output for a CLI change) even when there is no second frame. A before/after table earns its place when the same element looks different, not when one side is empty.
 - **Before** is the deployed production page (`evlog.dev`, `evlog.dev/docs/...`) or the last merged preview.
 - **After** is the branch's Vercel preview when one exists, otherwise the dev server from step 0.
 - A `*.vercel.app` URL can be protected: probe it with `curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --connect-timeout 5 --max-time 15 '<url>'` (single quotes; refuse a URL containing a single quote, backslash, whitespace, `$`, or backtick). 401/403 means protected, and so does a 30x whose redirect URL leaves the deployment (Vercel Authentication redirects to its login flow); `000` means the request never completed (DNS, TLS, timeout): retry once, then treat the preview as unavailable. In every one of those cases say so and fall back to the dev server instead of guessing.

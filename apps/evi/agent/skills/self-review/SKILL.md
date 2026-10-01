@@ -123,7 +123,7 @@ Before filing anything: `linear__list_issues` on the evlog team, and `github__se
 
 ## Deliver
 
-**Mechanical fix, readiness gate complete, no judgement needed → ready PR.** One per finding, never bundled. Follow `contributing`: branch off `main` in `/workspace/repo`, run `pnpm run lint`, `pnpm run typecheck` and `pnpm run test`, add a changeset when the change touches a published package (an `apps/evi` change never needs one), read CI, then request `hugorcd` as reviewer. If the gate cannot be completed, report the blocker instead of opening a draft. The PR body names the guide or declared capability the code contradicted.
+**Mechanical fix, readiness gate complete, no judgement needed → ready PR.** One per finding, never bundled. Follow `contributing`: branch off `main` in `/workspace/repo`, run `pnpm run lint`, `pnpm run typecheck` and `pnpm run test`, add a changeset when the change touches a published package (an `apps/evi` change never needs one), read CI, then request `hugorcd` as reviewer. If the gate cannot be completed, report the blocker instead of opening a draft. The PR body shows the change (a snippet, captured output, or capture, not prose alone) and names the guide or declared capability the code contradicted.
 
 **Everything else → Linear issue** via `linear__save_issue` on the evlog team. A finding states the problem, what it contradicts, where it is, and the decision to make. A proposal states the observation that triggered it, what the capability would do, the rung of `capability-placement.md` it lands on, and what it costs. Label the two apart so the backlog stays readable.
 

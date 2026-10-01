@@ -176,6 +176,7 @@ Default: anything that stays on the local clone is fine, anything that touches t
 - `git push --force-with-lease origin <feature-branch>`: only on a feature branch you authored, after a clean rebase
 - `gh pr create --base main --head <feature-branch>`: open a PR
 - Write a **PR title** (Conventional Commits, see above) and a **PR body**: keep the body factual, mirror the changeset, reference the issue (`Closes #X`); no marketing copy
+- Show the change in the PR body: a code snippet or captured output is evidence, not filler. A new API gets a usage snippet, a bug fix its before/after output, a CLI change its real terminal output, a rendered change a capture. Keep the prose short, not the proof
 
 **Never (no exceptions, even when asked):**
 - Push directly to `main` (or `master`): protected, always goes through a PR

@@ -70,6 +70,19 @@ A pull request is not finished when it is open. Before you report it and request
 
 `pnpm --filter @evlog/cli exec evlog map --json --no-write` scores an entry point's observability and is built for exactly this: it is the fastest way to ground a "should this be logged" answer in the tree you are working in. Run the workspace copy rather than `npx @evlog/cli`, which would fetch and execute whatever version the registry currently serves.
 
+## The PR body shows the change
+
+A body that only describes its change in prose is not finished, whatever kind of PR it carries. Show it:
+
+| Change | Evidence in the body |
+| --- | --- |
+| New or changed public API | A usage snippet, even for a one-line addition |
+| Bug fix | The input and output before and after, in a fenced or `diff` block |
+| CLI change | The real terminal output, captured while running it |
+| Anything rendered, docs edits included | A `before-after` capture |
+
+Prose alone is only for cases where none of these is possible, and the body says so plainly when that is the case. A snippet or captured output is evidence, not filler: the style rule keeps the prose short, not the proof.
+
 ## Tests
 
 `packages/evlog/test/` mirrors `src/` and uses Vitest. `packages/evlog/test/README.md` has the file layout, the framework runtime fidelity matrix, and the helper decision table; read it before answering a testing question. Framework tests must drive the framework's real request driver (supertest, `app.inject`, `app.handle`, ...), never a hand-rolled stand-in.
