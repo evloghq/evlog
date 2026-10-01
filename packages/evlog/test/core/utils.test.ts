@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { colors, elapsedMs, formatDuration, getLevelColor, isBrowser, isClient, isDev, isLevelEnabled, isServer, isoNow, matchesPattern } from '../../src/utils'
+import { colors, elapsedMs, formatDuration, formatMessage, getLevelColor, hasMessageSpecifiers, isBrowser, isClient, isDev, isLevelEnabled, isServer, isoNow, matchesPattern } from '../../src/utils'
 import { shouldLog } from '../../src/shared/routes'
 
 describe('elapsedMs', () => {
@@ -420,5 +420,81 @@ describe('shouldLog', () => {
       expect(shouldLog('/api/_content/query', include, exclude)).toBe(false)
       expect(shouldLog('/api/_nuxt_icon/foo', include, exclude)).toBe(false)
     })
+  })
+})
+
+describe('formatMessage', () => {
+  it('returns the message unchanged without arguments', () => {
+    expect(formatMessage('user %s plan %s', [])).toBe('user %s plan %s')
+    expect(formatMessage('100% done', [])).toBe('100% done')
+  })
+
+  it('interpolates %s with strings and primitives', () => {
+    expect(formatMessage('user %s plan %s', ['alice', 'pro'])).toBe('user alice plan pro')
+    expect(formatMessage('%s', [null])).toBe('null')
+    expect(formatMessage('%s', [undefined])).toBe('undefined')
+    expect(formatMessage('%s', [10n])).toBe('10n')
+    expect(formatMessage('%s', [true])).toBe('true')
+  })
+
+  it('renders %s objects and arrays as JSON', () => {
+    expect(formatMessage('user %s', [{ id: 7 }])).toBe('user {"id":7}')
+    expect(formatMessage('%s', [[1, 2]])).toBe('[1,2]')
+  })
+
+  it('coerces %d with Number like util.format', () => {
+    expect(formatMessage('retries %d', [3])).toBe('retries 3')
+    expect(formatMessage('%d', ['abc'])).toBe('NaN')
+    expect(formatMessage('%d', [1.5])).toBe('1.5')
+    expect(formatMessage('%d', [true])).toBe('1')
+    expect(formatMessage('%d', [null])).toBe('0')
+    expect(formatMessage('%d', [10n])).toBe('10n')
+  })
+
+  it('serializes %j as JSON with a string fallback for unserializable values', () => {
+    expect(formatMessage('%j', [{ ok: true }])).toBe('{"ok":true}')
+    expect(formatMessage('%j', [[1, 2]])).toBe('[1,2]')
+    expect(formatMessage('%j', ['hi'])).toBe('"hi"')
+    expect(formatMessage('%j', [undefined])).toBe('undefined')
+  })
+
+  it('keeps cyclic arguments from crashing the log call', () => {
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    expect(formatMessage('%s', [cyclic])).toBe('[object Object]')
+    expect(formatMessage('%j', [cyclic])).toBe('[object Object]')
+  })
+
+  it('turns %% into a literal percent without consuming an argument', () => {
+    expect(formatMessage('100%% done', ['x'])).toBe('100% done x')
+  })
+
+  it('leaves unknown specifiers literal without consuming an argument', () => {
+    expect(formatMessage('%q %s', ['x'])).toBe('%q x')
+    expect(formatMessage('trailing %', ['x'])).toBe('trailing % x')
+  })
+
+  it('leaves specifiers past the last argument literal', () => {
+    expect(formatMessage('%s%s', ['a'])).toBe('a%s')
+    expect(formatMessage('%d %d', [1])).toBe('1 %d')
+  })
+
+  it('appends surplus arguments space-separated', () => {
+    expect(formatMessage('no specifiers', ['x', 1])).toBe('no specifiers x 1')
+    expect(formatMessage('user %s', ['alice', { id: 1 }])).toBe('user alice {"id":1}')
+  })
+})
+
+describe('hasMessageSpecifiers', () => {
+  it('detects interpolation specifiers', () => {
+    expect(hasMessageSpecifiers('user %s')).toBe(true)
+    expect(hasMessageSpecifiers('count %d')).toBe(true)
+    expect(hasMessageSpecifiers('obj %j')).toBe(true)
+  })
+
+  it('does not treat literal percents or %% as specifiers', () => {
+    expect(hasMessageSpecifiers('100% done')).toBe(false)
+    expect(hasMessageSpecifiers('100%% done')).toBe(false)
+    expect(hasMessageSpecifiers('plain message')).toBe(false)
   })
 })

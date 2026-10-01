@@ -9,7 +9,7 @@ import { resolveDevTerminal } from './shared/dev-terminal'
 import { globalConfig } from './shared/globalRegistry'
 import { publishWideEvent } from './shared/wideEventChannel'
 import { EvlogError } from './error'
-import { colors, cssColors, detectEnvironment, elapsedMs, escapeFormatString, formatDuration, getConsoleMethod, getCssLevelColor, getLevelColor, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern } from './utils'
+import { colors, cssColors, detectEnvironment, elapsedMs, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern } from './utils'
 
 const nativeStdoutWrite =
   typeof process !== 'undefined' && typeof process.stdout?.write === 'function'
@@ -786,9 +786,17 @@ function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<s
 }
 
 function createLogMethod(level: LogLevel) {
-  return function logMethod(tagOrEvent: string | Error | Record<string, unknown>, message?: string): void {
-    if (typeof tagOrEvent === 'string' && message !== undefined) {
-      emitTaggedLog(level, tagOrEvent, message)
+  return function logMethod(tagOrEvent: string | Error | Record<string, unknown>, message?: string, ...args: unknown[]): void {
+    if (typeof tagOrEvent === 'string') {
+      if (message === undefined) {
+        emitTaggedLog(level, 'log', formatMessage(tagOrEvent, args))
+      } else if (hasMessageSpecifiers(tagOrEvent)) {
+        // A specifier in the first string marks a pino-style format string,
+        // not a tag: `log.info('user %s', name)` must not log the name as a tag.
+        emitTaggedLog(level, 'log', formatMessage(tagOrEvent, [message, ...args]))
+      } else {
+        emitTaggedLog(level, tagOrEvent, formatMessage(message, args))
+      }
     } else if (tagOrEvent instanceof Error) {
       emitWideEvent(level, { error: serializeError(tagOrEvent) })
     } else if (typeof tagOrEvent === 'object') {

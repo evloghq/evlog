@@ -3,6 +3,7 @@ import { createError } from '../../src/error'
 import { createLogger, createRequestLogger, getEnvironment, initLogger, isEnabled, log } from '../../src/logger'
 import { withFakeTimers } from '../helpers/timers'
 import { defined } from '../helpers/defined'
+import type { LogLevel, WideEvent } from '../../src/types'
 import { createPipelineSpies, findEventViaDrain } from '../helpers/framework'
 
 describe('initLogger', () => {
@@ -1484,5 +1485,71 @@ describe('pretty-print array field values', () => {
 
     expect(output).not.toContain('[object Object]')
     expect(output).toContain('["a","b","c"]')
+  })
+})
+
+describe('printf interpolation', () => {
+  function loggedEvent(level: LogLevel, emit: () => void): WideEvent {
+    const { drain } = createPipelineSpies()
+    initLogger({ silent: true, redact: false, drain })
+    emit()
+    return defined(findEventViaDrain(drain, e => e.level === level))
+  }
+
+  it('interpolates extra args into a tagged message', () => {
+    const event = loggedEvent('info', () => log.info('auth', 'user %s plan %s', 'alice', 'pro'))
+
+    expect(event.tag).toBe('auth')
+    expect(event.message).toBe('user alice plan pro')
+  })
+
+  it('treats a first string with a specifier as a pino-style format string', () => {
+    const event = loggedEvent('info', () => log.info('user %s logged in', 'alice'))
+
+    expect(event.tag).toBe('log')
+    expect(event.message).toBe('user alice logged in')
+  })
+
+  it('interpolates %d and %j specifiers', () => {
+    const event = loggedEvent('warn', () => log.warn('api', 'quota %d used for %j', 42, { plan: 'pro' }))
+
+    expect(event.tag).toBe('api')
+    expect(event.message).toBe('quota 42 used for {"plan":"pro"}')
+  })
+
+  it('appends surplus arguments to the message', () => {
+    const event = loggedEvent('debug', () => log.debug('cache', 'importing', { key: 'user_123' }))
+
+    expect(event.tag).toBe('cache')
+    expect(event.message).toBe('importing {"key":"user_123"}')
+  })
+
+  it('leaves a message without arguments untouched, including literal percents', () => {
+    const event = loggedEvent('info', () => log.info('auth', '100% done'))
+
+    expect(event.message).toBe('100% done')
+  })
+
+  it('leaves specifiers literal when no argument is provided', () => {
+    const event = loggedEvent('info', () => log.info('auth', 'plan %s'))
+
+    expect(event.message).toBe('plan %s')
+  })
+
+  it('keeps tagged messages working without extra args', () => {
+    const event = loggedEvent('error', () => log.error('payment', 'Payment failed'))
+
+    expect(event.tag).toBe('payment')
+    expect(event.message).toBe('Payment failed')
+  })
+
+  it('prints the interpolated message in pretty output', () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    initLogger({ pretty: true })
+    log.info('auth', 'user %s plan %s', 'alice', 'pro')
+
+    const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
+    expect(output).toContain('user alice plan pro')
+    expect(output).not.toContain('%s')
   })
 })

@@ -1,5 +1,5 @@
 import type { Log, LogLevel, TransportConfig } from '../../types'
-import { cssColors, escapeFormatString, getCssLevelColor, isBrowser, isLevelEnabled, isoNow } from '../../utils'
+import { cssColors, escapeFormatString, formatMessage, getCssLevelColor, hasMessageSpecifiers, isBrowser, isLevelEnabled, isoNow } from '../../utils'
 
 /**
  * Browser DevTools often hide or bucket `console.debug` under "Verbose" in a way that looks like
@@ -140,14 +140,22 @@ function serializeError(error: Error, seen = new Set<unknown>()): Record<string,
 }
 
 function createLogMethod(level: LogLevel) {
-  return function logMethod(tagOrEvent: string | Error | Record<string, unknown>, message?: string): void {
+  return function logMethod(tagOrEvent: string | Error | Record<string, unknown>, message?: string, ...args: unknown[]): void {
     // Call-time check: avoid relying on import.meta.client (can be false in some mixed bundles).
     if (!isBrowser()) {
       return
     }
 
-    if (typeof tagOrEvent === 'string' && message !== undefined) {
-      emitTaggedLog(level, tagOrEvent, message)
+    if (typeof tagOrEvent === 'string') {
+      if (message === undefined) {
+        emitTaggedLog(level, 'log', formatMessage(tagOrEvent, args))
+      } else if (hasMessageSpecifiers(tagOrEvent)) {
+        // A specifier in the first string marks a pino-style format string,
+        // not a tag: `log.info('user %s', name)` must not log the name as a tag.
+        emitTaggedLog(level, 'log', formatMessage(tagOrEvent, [message, ...args]))
+      } else {
+        emitTaggedLog(level, tagOrEvent, formatMessage(message, args))
+      }
     } else if (tagOrEvent instanceof Error) {
       emitLog(level, { error: serializeError(tagOrEvent) })
     } else if (typeof tagOrEvent === 'object') {

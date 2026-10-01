@@ -20,6 +20,24 @@ describe('client console option', () => {
     vi.restoreAllMocks()
   })
 
+  it('interpolates printf-style args into tagged client messages', () => {
+    initLog({ enabled: true, pretty: true })
+
+    log.warn('api', 'quota %d% used for user %s', 80, 'alice')
+
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('[api]%c quota 80%% used for user alice')
+  })
+
+  it('treats a first string with a specifier as a pino-style format string', () => {
+    initLog({ enabled: true, pretty: true })
+
+    log.info('user %s logged in', 'alice')
+
+    expect(infoSpy).toHaveBeenCalledTimes(1)
+    expect(infoSpy.mock.calls[0]?.[0]).toContain('[log]%c user alice logged in')
+  })
+
   it('outputs to console by default', () => {
     initLog({ enabled: true, pretty: false })
 

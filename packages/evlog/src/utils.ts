@@ -125,6 +125,63 @@ export function escapeFormatString(str: string): string {
   return str.replace(/%/g, '%%')
 }
 
+/**
+ * True when a message string contains a `%s`, `%d` or `%j` specifier, so
+ * trailing log arguments have something to interpolate into.
+ */
+export function hasMessageSpecifiers(format: string): boolean {
+  return /%[sdj]/.test(format)
+}
+
+/**
+ * Interpolate trailing log arguments into a message with the printf subset
+ * pino and consola call sites rely on: `%s`, `%d`, `%j` and `%%`. Unknown
+ * specifiers and specifiers past the last argument stay literal, surplus
+ * arguments are appended space-separated, and a message without arguments is
+ * returned unchanged. Objects and arrays render as JSON instead of node's
+ * `util.inspect` to keep the formatter free of bundle weight.
+ *
+ * @param format - Message possibly containing format specifiers
+ * @param args - Values for the specifiers
+ */
+export function formatMessage(format: string, args: unknown[]): string {
+  if (args.length === 0) return format
+
+  let argIndex = 0
+  const interpolated = format.replace(/%(.)/g, (specifier, char: string): string => {
+    if (char === '%') return '%'
+    if (char !== 's' && char !== 'd' && char !== 'j') return specifier
+    if (argIndex >= args.length) return specifier
+    return renderMessageValue(char, args[argIndex++])
+  })
+
+  if (argIndex >= args.length) return interpolated
+
+  const extras: string[] = []
+  while (argIndex < args.length) {
+    extras.push(renderMessageValue('s', args[argIndex++]))
+  }
+  return `${interpolated} ${extras.join(' ')}`
+}
+
+function renderMessageValue(specifier: 's' | 'd' | 'j', value: unknown): string {
+  if (specifier === 'j') return renderMessageJson(value)
+  if (typeof value === 'bigint') return `${value}n`
+  if (specifier === 'd') return String(Number(value))
+  if (typeof value === 'string') return value
+  if (value === null || typeof value !== 'object') return String(value)
+  return renderMessageJson(value)
+}
+
+function renderMessageJson(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    // A cyclic or BigInt-containing argument must not crash the log call.
+    return String(value)
+  }
+}
+
 /** Headers that should never be passed to hooks for security */
 export const SENSITIVE_HEADERS = [
   'authorization',

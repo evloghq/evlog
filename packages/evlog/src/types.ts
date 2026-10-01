@@ -858,9 +858,16 @@ export type LogLevel = 'info' | 'error' | 'warn' | 'debug'
 /**
  * Simple logging API - as easy as console.log
  *
+ * Messages accept printf-style interpolation with the `util.format` subset
+ * pino and consola call sites rely on: `%s`, `%d`, `%j` and `%%`. When the
+ * first string contains a specifier and more arguments follow, it is treated
+ * as the format string rather than a tag, so pino-style call sites keep working.
+ *
  * @example
  * ```ts
  * log.info('auth', 'User logged in')
+ * log.info('auth', 'user %s plan %s', name, plan)
+ * log.info('user %s logged in', name)
  * log.error({ action: 'payment', error: 'failed' })
  * ```
  */
@@ -868,35 +875,40 @@ export interface Log {
   /**
    * Log an info message or wide event
    * @example log.info('auth', 'User logged in')
+   * @example log.info('auth', 'user %s plan %s', name, plan)
    * @example log.info({ action: 'login', userId: '123' })
    */
-  info(tag: string, message: string): void
+  info(tag: string, message: string, ...args: unknown[]): void
+  info(message: string, ...args: unknown[]): void
   info(event: Record<string, unknown>): void
 
   /**
    * Log an error message or wide event
    * @example log.error('payment', 'Payment failed')
+   * @example log.error('payment', 'declined for user %s', userId)
    * @example log.error({ action: 'payment', error: 'declined' })
    * @example log.error(new Error('Payment declined'))
    */
-  error(tag: string, message: string): void
+  error(tag: string, message: string, ...args: unknown[]): void
   error(error: Error): void
   error(event: Record<string, unknown>): void
 
   /**
    * Log a warning message or wide event
    * @example log.warn('api', 'Rate limit approaching')
+   * @example log.warn('api', 'quota %d% used', usage)
    * @example log.warn({ action: 'api', remaining: 10 })
    */
-  warn(tag: string, message: string): void
+  warn(tag: string, message: string, ...args: unknown[]): void
   warn(event: Record<string, unknown>): void
 
   /**
    * Log a debug message or wide event
    * @example log.debug('cache', 'Cache miss')
+   * @example log.debug('cache', 'miss for key %s', key)
    * @example log.debug({ action: 'cache', key: 'user_123' })
    */
-  debug(tag: string, message: string): void
+  debug(tag: string, message: string, ...args: unknown[]): void
   debug(event: Record<string, unknown>): void
 }
 
