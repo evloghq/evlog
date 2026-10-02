@@ -86,13 +86,7 @@ export async function callEnrichAndDrain(
   } catch (err) {
     console.error('[evlog] enrich failed:', err)
   }
-  if (runner.hasEnrich) {
-    try {
-      await runner.runEnrich(enrichCtx)
-    } catch (err) {
-      console.error('[evlog] enrich failed:', err)
-    }
-  }
+  await runner.runEnrich(enrichCtx)
 
   const drainCtx = {
     event: emittedEvent,
@@ -103,14 +97,8 @@ export async function callEnrichAndDrain(
     nitroApp.hooks.callHook('evlog:drain', drainCtx).catch((err) => {
       console.error('[evlog] drain failed:', err)
     }),
+    runner.runDrain(drainCtx),
   ]
-  if (runner.hasDrain) {
-    drainTasks.push(
-      runner.runDrain(drainCtx).catch((err) => {
-        console.error('[evlog] drain failed:', err)
-      }),
-    )
-  }
   const drainPromise = Promise.all(drainTasks)
 
   // deferDrain: never block the HTTP error response on Nitro Node (h3 2.13+ waitUntil

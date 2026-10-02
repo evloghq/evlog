@@ -17,6 +17,7 @@ describe('nitro modules avoid backslash paths', () => {
         errorHandler: undefined as string | string[] | undefined,
         noExternals: undefined as undefined | true | string[],
         runtimeConfig: {} as Record<string, unknown>,
+        replace: {} as Record<string, string>,
       },
     }
   }

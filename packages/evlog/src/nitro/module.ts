@@ -22,7 +22,6 @@ export default function evlog(options?: NitroModuleOptions) {
     name: 'evlog',
     setup(nitro: Nitro) {
       // Push the plugin (no extension — Nitro's bundler resolves it)
-      nitro.options.plugins = nitro.options.plugins || []
       nitro.options.plugins.push(resolveModulePath('plugin'))
 
       // Prepend so evlog runs before any framework handler (Nuxt registers its own).
@@ -44,7 +43,6 @@ export default function evlog(options?: NitroModuleOptions) {
       // Inject config into runtimeConfig — works in production where the
       // plugin is bundled through Nitro's builder and the virtual
       // runtime-config module resolves correctly.
-      nitro.options.runtimeConfig = nitro.options.runtimeConfig || {}
       nitro.options.runtimeConfig.evlog = options || {}
 
       // Bake the config into the bundle as a literal so the plugin never has
@@ -52,7 +50,6 @@ export default function evlog(options?: NitroModuleOptions) {
       // discover it. The dynamic probe transitively imports a build-only
       // virtual module; on Vercel + Bun the missing virtual triggers Bun's
       // auto-installer and crashes with `ReadOnlyFileSystem` (issue #312).
-      nitro.options.replace = nitro.options.replace || {}
       nitro.options.replace.__EVLOG_CONFIG__ = JSON.stringify(options || {})
 
       // In dev mode, Nitro loads plugins externally (not bundled), so the
