@@ -19,7 +19,7 @@ Optional: the one thing they need to know to use it: the import, the option, the
 - **Written from the consumer's side.** What they can do, not what was implemented. "Adds `createLokiDrain` for Grafana Loki", not "implements the Loki adapter".
 - **Present tense, no narrative.** No paragraph about how the change came about. That belongs in the PR body.
 - **Breaking changes name the migration**, in one line, with the before and the after.
-- **No changeset for `apps/*` or `examples/*`**, docs included. For a published-package change that genuinely needs no note, `pnpm changeset add --empty`.
+- **No changeset when the consumer would not notice**, wherever the diff lives: `apps/*` and `examples/*` never, and refactors, dedupes, comment or test changes under `packages/*` neither. Never an empty changeset.
 - Bump type: `patch` for fixes, `minor` for features, `major` for breaking.
 
 ## The tell that shows up here

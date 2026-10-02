@@ -86,11 +86,11 @@ skills/                     Published skills (analyze-logs, build-audit-logs, re
 **Every user-facing change must include a changeset.** Before opening a PR for features, bug fixes, or breaking changes, run `pnpm changeset` and commit the generated `.changeset/*.md` file alongside the code.
 
 - **When to add a changeset:** any change that affects the public API, adds a feature, fixes a bug, or introduces a breaking change. If a consumer of evlog would notice the difference, it needs a changeset.
-- **When you can skip:** internal-only changes (CI config, docs typos, test refactors, devDeps bumps) that don't touch the published package.
+- **When to skip:** anything a consumer would not notice, even inside `packages/*`: refactors, dedupes, dead-code removal, comment changes, test changes, type-only tidying, CI config, devDeps bumps. No changeset at all, and never an empty one: an empty changeset is noise in the version PR and says nothing.
 - **Bump type:** `patch` for fixes, `minor` for features, `major` for breaking changes.
 - **Description:** write from the consumer's perspective: what changed and how to use it. See existing changesets in `.changeset/` for tone and level of detail.
 
-A PR without a changeset for a user-facing change will not be merged. Changes confined to `apps/*` or `examples/*`, docs included, never need one. For the rare published-package change that genuinely needs no release note, run `pnpm changeset add --empty`.
+A PR without a changeset for a user-facing change will not be merged. Changes confined to `apps/*` or `examples/*`, docs included, never need one. The test is the consumer, not the path: a diff under `packages/evlog/src/` with no observable change gets no changeset.
 
 ### Commits & PR titles
 
@@ -177,11 +177,13 @@ Default: anything that stays on the local clone is fine, anything that touches t
 - `gh pr create --base main --head <feature-branch>`: open a PR
 - Write a **PR title** (Conventional Commits, see above) and a **PR body**: keep the body factual, mirror the changeset, reference the issue (`Closes #X`); no marketing copy
 - Show the change in the PR body: a code snippet or captured output is evidence, not filler. A new API gets a usage snippet, a bug fix its before/after output, a CLI change its real terminal output, a rendered change a capture. Keep the prose short, not the proof
+- `gh pr merge <number>`: only for PRs the maintainer named in the current task, after reading the diff and confirming CI is green and there is no unresolved review thread. Use `--squash`. Never merge a PR the maintainer did not point at, and never merge `changeset-release/*` (the version-packages PR) or a PR that deletes tests without the maintainer saying so for that PR
 
 **Never (no exceptions, even when asked):**
 - Push directly to `main` (or `master`): protected, always goes through a PR
 - `git push --force` without `--with-lease`, `git push --tags`
-- `gh pr merge`, `gh pr close`, `gh pr review`, `gh issue create`, `gh issue edit`, `gh release create`
+- `gh pr close`, `gh pr review`, `gh issue create`, `gh issue edit`, `gh release create`
+- `gh pr merge` without an explicit instruction naming the PR (see above)
 - Write a changelog entry, release note, or commit message **body** with multi-paragraph narrative. The changeset is the source of truth; commit subjects stay single-line, PR bodies stay short
 - Add a `Co-authored-by`, `Signed-off-by`, "Generated with…", "🤖", or any signature/attribution that names an agent, model, or tool: **the work is the maintainer's, full stop**
 
