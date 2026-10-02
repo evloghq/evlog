@@ -5,7 +5,7 @@ import type { EnrichContext, ServerEvent, WideEvent } from '../types'
 import { filterSafeHeaders } from '../utils'
 import { extendDeferredDrain } from './deferred-drain'
 
-function getSafeHeaders(event: ServerEvent): Record<string, string> {
+export function getSafeHeaders(event: ServerEvent): Record<string, string> {
   const allHeaders = getHeaders(event as Parameters<typeof getHeaders>[0])
   return filterSafeHeaders(allHeaders)
 }
@@ -31,7 +31,7 @@ function getSafeResponseHeaders(event: ServerEvent): Record<string, string> | un
   return filterSafeHeaders(headers)
 }
 
-function getResponseStatus(event: ServerEvent): number {
+export function getResponseStatus(event: ServerEvent): number {
   if (event.node?.res?.statusCode) {
     return event.node.res.statusCode
   }

@@ -3,8 +3,8 @@
 // modules that only exist inside rollup builds and crash when loaded externally
 // (nitropack dev loads plugins outside the bundle via Worker threads).
 import { defineNitroPlugin } from 'nitropack/runtime/internal/plugin'
-import { getHeaders } from 'h3'
-import { createRequestLogger, getGlobalPluginRunner, initLogger, isEnabled, markWideEventDrainStarted } from '../logger'
+import type { NitroApp } from 'nitropack/types'
+import { createRequestLogger, getGlobalPluginRunner, initLogger, isEnabled } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
@@ -13,34 +13,47 @@ import { normalizeRedactConfig } from '../redact'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import { bindStreamingResponseLifecycle, shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { startStreamServer, type StreamServerOptions } from '../stream'
-import type { RequestLogger, ServerEvent, TailSamplingContext } from '../types'
-import { elapsedMs, filterSafeHeaders } from '../utils'
-import { callEnrichAndDrain } from './enrich-drain'
+import type { RequestLogger, ServerEvent, TailSamplingContext, WideEvent } from '../types'
+import { elapsedMs } from '../utils'
+import { callEnrichAndDrain, getSafeHeaders, getResponseStatus } from './enrich-drain'
 
-function getSafeHeaders(event: ServerEvent): Record<string, string> {
-  const allHeaders = getHeaders(event as Parameters<typeof getHeaders>[0])
-  return filterSafeHeaders(allHeaders)
+function createDeferredRequestLogger(e: ServerEvent): RequestLogger {
+  let requestIdOverride: string | undefined
+  if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
+    const cfRay = getSafeHeaders(e)?.['cf-ray']
+    if (cfRay) requestIdOverride = cfRay
+  }
+  return createRequestLogger({
+    method: e.method,
+    path: e.path,
+    requestId: requestIdOverride || e.context.requestId || crypto.randomUUID(),
+  }, { _deferDrain: true })
 }
 
-function getResponseStatus(event: ServerEvent): number {
-  // Node.js style
-  if (event.node?.res?.statusCode) {
-    return event.node.res.statusCode
+async function emitWithTailSampling(
+  nitroApp: NitroApp,
+  requestLog: RequestLogger,
+  e: ServerEvent,
+  status: number,
+): Promise<WideEvent | null> {
+  const startTime = e.context._evlogStartTime as number | undefined
+  const durationMs = startTime ? elapsedMs(startTime) : undefined
+
+  const tailCtx: TailSamplingContext = {
+    status,
+    duration: durationMs,
+    path: e.path,
+    method: e.method,
+    context: requestLog.getContext(),
+    shouldKeep: false,
   }
 
-  // Web Standard
-  if (event.response?.status) {
-    return event.response.status
-  }
+  await nitroApp.hooks.callHook('evlog:emit:keep', tailCtx)
+  const runner = getGlobalPluginRunner()
+  if (runner.hasKeep) await runner.runKeep(tailCtx)
 
-  // Context-based
-  if (typeof event.context.status === 'number') {
-    return event.context.status
-  }
-
-  return 200
+  return requestLog.emit({ _forceKeep: tailCtx.shouldKeep })
 }
-
 
 export default defineNitroPlugin(async (nitroApp) => {
   setActiveNitroRuntime('v2')
@@ -82,16 +95,7 @@ export default defineNitroPlugin(async (nitroApp) => {
   if (!isEnabled()) {
     nitroApp.hooks.hook('request', (event) => {
       const e = event as ServerEvent
-      let requestIdOverride: string | undefined
-      if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
-        const cfRay = getSafeHeaders(e)?.['cf-ray']
-        if (cfRay) requestIdOverride = cfRay
-      }
-      e.context.log = createRequestLogger({
-        method: e.method,
-        path: e.path,
-        requestId: requestIdOverride || e.context.requestId || crypto.randomUUID(),
-      }, { _deferDrain: true })
+      e.context.log = createDeferredRequestLogger(e)
     })
     return
   }
@@ -107,17 +111,7 @@ export default defineNitroPlugin(async (nitroApp) => {
     // Store start time for duration calculation in tail sampling
     e.context._evlogStartTime = Date.now()
 
-    let requestIdOverride: string | undefined = undefined
-    if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
-      const cfRay = getSafeHeaders(e)?.['cf-ray']
-      if (cfRay) requestIdOverride = cfRay
-    }
-
-    const requestLog = createRequestLogger({
-      method: e.method,
-      path: e.path,
-      requestId: requestIdOverride || e.context.requestId || crypto.randomUUID(),
-    }, { _deferDrain: true })
+    const requestLog = createDeferredRequestLogger(e)
 
     // Apply route-based service configuration if a matching route is found
     const routeService = getServiceForPath(e.path, evlogConfig?.routes)
@@ -145,23 +139,7 @@ export default defineNitroPlugin(async (nitroApp) => {
       const errorStatus = extractErrorStatus(error)
       requestLog.set({ status: errorStatus })
 
-      const startTime = e.context._evlogStartTime as number | undefined
-      const durationMs = startTime ? elapsedMs(startTime) : undefined
-
-      const tailCtx: TailSamplingContext = {
-        status: errorStatus,
-        duration: durationMs,
-        path: e.path,
-        method: e.method,
-        context: requestLog.getContext(),
-        shouldKeep: false,
-      }
-
-      await nitroApp.hooks.callHook('evlog:emit:keep', tailCtx)
-      const runner = getGlobalPluginRunner()
-      if (runner.hasKeep) await runner.runKeep(tailCtx)
-
-      const emittedEvent = requestLog.emit({ _forceKeep: tailCtx.shouldKeep })
+      const emittedEvent = await emitWithTailSampling(nitroApp, requestLog, e, errorStatus)
       if (emittedEvent) {
         e.context._evlogEmitted = true
         void callEnrichAndDrain(nitroApp, emittedEvent, e, { deferDrain: true }).catch((err) => {
@@ -184,23 +162,7 @@ export default defineNitroPlugin(async (nitroApp) => {
       const status = getResponseStatus(e)
       requestLog.set({ status })
 
-      const startTime = e.context._evlogStartTime as number | undefined
-      const durationMs = startTime ? elapsedMs(startTime) : undefined
-
-      const tailCtx: TailSamplingContext = {
-        status,
-        duration: durationMs,
-        path: e.path,
-        method: e.method,
-        context: requestLog.getContext(),
-        shouldKeep: false,
-      }
-
-      await nitroApp.hooks.callHook('evlog:emit:keep', tailCtx)
-      const runner = getGlobalPluginRunner()
-      if (runner.hasKeep) await runner.runKeep(tailCtx)
-
-      const emittedEvent = requestLog.emit({ _forceKeep: tailCtx.shouldKeep })
+      const emittedEvent = await emitWithTailSampling(nitroApp, requestLog, e, status)
       await callEnrichAndDrain(nitroApp, emittedEvent, e)
     }
 
