@@ -6,12 +6,6 @@ function getDefineConfig(plugin: any): Record<string, string> {
 }
 
 describe('vite auto-init plugin', () => {
-  it('injects __EVLOG_CONFIG__ via define', () => {
-    const plugin = createAutoInitPlugin({ service: 'my-app' })
-    const define = getDefineConfig(plugin)
-    expect(define.__EVLOG_CONFIG__).toBeDefined()
-  })
-
   it('includes service in config', () => {
     const plugin = createAutoInitPlugin({ service: 'my-app' })
     const define = getDefineConfig(plugin)

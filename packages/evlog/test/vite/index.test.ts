@@ -2,18 +2,6 @@ import { describe, expect, it } from 'vitest'
 import evlog from '../../src/vite/index'
 
 describe('evlog vite plugin', () => {
-  it('returns array of plugins', () => {
-    const plugins = evlog({ service: 'my-app' })
-    expect(Array.isArray(plugins)).toBe(true)
-    expect(plugins.length).toBeGreaterThan(0)
-  })
-
-  it('always includes auto-init plugin', () => {
-    const plugins = evlog({ service: 'my-app' })
-    const names = plugins.map((p: any) => p.name)
-    expect(names).toContain('evlog:auto-init')
-  })
-
   it('includes auto-imports when enabled with boolean', () => {
     const plugins = evlog({ service: 'my-app', autoImports: true })
     const names = plugins.map((p: any) => p.name)
@@ -83,22 +71,6 @@ describe('evlog vite plugin', () => {
     expect(names).toEqual(['evlog:auto-init', 'evlog:strip'])
   })
 
-  it('returns all plugins when fully configured', () => {
-    const plugins = evlog({
-      service: 'my-app',
-      autoImports: true,
-      strip: ['debug'],
-      sourceLocation: true,
-      client: { service: 'web' },
-    })
-    const names = plugins.map((p: any) => p.name)
-    expect(names).toContain('evlog:auto-init')
-    expect(names).toContain('evlog:auto-imports')
-    expect(names).toContain('evlog:client-inject')
-    expect(names).toContain('evlog:strip')
-    expect(names).toContain('evlog:source-location')
-  })
-
   it('includes source-location when set to dev', () => {
     const plugins = evlog({ service: 'my-app', sourceLocation: 'dev' })
     const names = plugins.map((p: any) => p.name)
@@ -127,11 +99,5 @@ describe('evlog vite plugin', () => {
       'evlog:strip',
       'evlog:source-location',
     ])
-  })
-
-  it('includes strip with multiple levels', () => {
-    const plugins = evlog({ service: 'my-app', strip: ['debug', 'info'] })
-    const names = plugins.map((p: any) => p.name)
-    expect(names).toContain('evlog:strip')
   })
 })

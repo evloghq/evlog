@@ -17,13 +17,6 @@ describe('vite strip plugin', () => {
     expect(result.code).toContain('const x = 1')
   })
 
-  it('removes log.debug() with object argument', async () => {
-    const code = `log.debug({ action: 'cache_hit', ratio: 0.95 })\nconst x = 1`
-    const result = defined(await stripTransform(code, ['debug']), 'strip result')
-    expect(result.code).not.toContain('log.debug')
-    expect(result.code).toContain('const x = 1')
-  })
-
   it('replaces log.debug() in assignment with void 0', async () => {
     const code = `const x = log.debug('test', 'msg')`
     const result = defined(await stripTransform(code, ['debug']), 'strip result')

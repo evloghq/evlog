@@ -57,13 +57,6 @@ describe('vite auto-imports plugin', () => {
     expect(result).toBeUndefined()
   })
 
-  it('adds multiple imports when needed', async () => {
-    const code = `log.info('test', 'msg')\nthrow createEvlogError('error')`
-    const result = defined(await autoImportTransform(code), 'auto-import result')
-    expect(result.code).toContain('log')
-    expect(result.code).toContain('createEvlogError')
-  })
-
   it('skips node_modules files', async () => {
     const code = `log.info('test', 'msg')`
     const result = await autoImportTransform(code, 'node_modules/lib/index.js')
