@@ -92,11 +92,8 @@ export function parseError(error: unknown): ParsedError {
     const payload = pickRecord(data?.data) ?? payloadFromBody(pickRecord(data))
 
     return {
-      // Prefer statusText, then statusMessage (or message) for the error message
       message: data?.statusText || data?.statusMessage || data?.message || fetchMessage || 'An error occurred',
-      // Prefer status, then statusCode for the status value
       status: data?.status || data?.statusCode || fetchStatus || fetchStatusCode || 500,
-      // Prefer the structured `data.code`, then `data.code` directly, then a top-level `error.code`
       code: pickCode(payload) ?? pickCode(data) ?? pickCode(error),
       why: pickString(payload, 'why'),
       fix: pickString(payload, 'fix'),
