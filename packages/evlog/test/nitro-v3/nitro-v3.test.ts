@@ -34,11 +34,13 @@ describe.sequential('Nitro v3 Server with evlog', () => {
     devServer = createDevServer(nitro)
     server = devServer.listen({})
     await prepare(nitro)
-    const ready = new Promise<void>((resolve) => {
+    const reloaded = new Promise<void>((resolve) => {
       nitro.hooks.hook('dev:reload', () => resolve())
     })
     await build(nitro)
-    await ready
+    await reloaded
+    // srvx binds asynchronously: `server.url` stays undefined until the listener is up.
+    await server.ready()
   })
 
   afterAll(async () => {
