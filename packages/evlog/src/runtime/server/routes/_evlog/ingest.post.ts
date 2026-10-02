@@ -4,6 +4,8 @@ import type { IngestPayload, WideEvent } from '../../../../types'
 import { getEnvironment, getGlobalPluginRunner } from '../../../../logger'
 import { filterSafeHeaders } from '../../../../utils'
 
+type IngestEvent = Parameters<typeof defineEventHandler>[0] extends (e: infer E) => unknown ? E : never
+
 const VALID_LEVELS = ['info', 'error', 'warn', 'debug', 'fatal', 'trace'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -14,7 +16,7 @@ function isLogLevel(value: string): value is IngestPayload['level'] {
   return (VALID_LEVELS as readonly string[]).includes(value)
 }
 
-function validateOrigin(event: Parameters<typeof defineEventHandler>[0] extends (e: infer E) => unknown ? E : never): void {
+function validateOrigin(event: IngestEvent): void {
   const origin = getHeader(event, 'origin')
   const referer = getHeader(event, 'referer')
   const host = getRequestHost(event)
@@ -38,7 +40,7 @@ function validateOrigin(event: Parameters<typeof defineEventHandler>[0] extends 
  */
 const MAX_BODY_BYTES = 32 * 1024
 
-async function readJsonBody(event: Parameters<typeof defineEventHandler>[0] extends (e: infer E) => unknown ? E : never): Promise<unknown> {
+async function readJsonBody(event: IngestEvent): Promise<unknown> {
   const contentLength = Number(getHeader(event, 'content-length'))
   if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
     throw createError({ statusCode: 413, message: 'Payload too large' })
@@ -111,17 +113,13 @@ function validatePayload(body: unknown): IngestPayload {
   }
 }
 
-function getSafeHeaders(event: Parameters<typeof defineEventHandler>[0] extends (e: infer E) => unknown ? E : never): Record<string, string> {
+function getSafeHeaders(event: IngestEvent): Record<string, string> {
   const allHeaders = getHeaders(event as Parameters<typeof getHeaders>[0])
   return filterSafeHeaders(allHeaders)
 }
 
 interface WaitUntilHost {
   waitUntil?: (promise: Promise<unknown>) => void
-}
-
-function hasWaitUntil(value: unknown): value is WaitUntilHost & { waitUntil: (promise: Promise<unknown>) => void } {
-  return isRecord(value) && typeof value.waitUntil === 'function'
 }
 
 /** Resolve platform waitUntil from Nitro event context (Cloudflare Workers, Vercel Edge). */
@@ -204,7 +202,7 @@ export default defineEventHandler(async (event) => {
   // Use waitUntil if available (Cloudflare Workers, Vercel Edge)
   // Otherwise, await the drain to prevent lost logs in serverless environments
   const waitUntilCtx = resolveWaitUntilContext(event)
-  if (waitUntilCtx && hasWaitUntil(waitUntilCtx)) {
+  if (typeof waitUntilCtx?.waitUntil === 'function') {
     waitUntilCtx.waitUntil(drainPromise)
   } else {
     await drainPromise
