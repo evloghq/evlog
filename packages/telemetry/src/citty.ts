@@ -66,7 +66,7 @@ function wrapCommand(
 
 /**
  * Wrap a citty command tree with telemetry — one wide event per command execution.
- * Lazily loaded subcommands (`() => import('./cmd')`) stay lazy.
+ * Lazily loaded subcommands (`() => import('./cmd').then(m => m.default)`) stay lazy.
  * Returns the wrapped command for `runMain()`.
  */
 export function withTelemetry<
