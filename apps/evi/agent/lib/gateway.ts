@@ -18,6 +18,30 @@ export async function gatewayToken(): Promise<string> {
   }
 }
 
+const BASE_URL = 'https://ai-gateway.vercel.sh/v1'
+const FETCH_TIMEOUT_MS = 10_000
+
+/**
+ * The reporting API call behind every gateway tool: builds the URL, sends the
+ * bearer token from {@link gatewayToken}, and maps a non-ok response to an
+ * AI_GATEWAY_REQUEST_FAILED error that keeps the body in `internal`, which
+ * never reaches a drain or a tool result.
+ */
+export async function gatewayFetch(path: string, params: Record<string, string | undefined> = {}): Promise<unknown> {
+  const url = new URL(`${BASE_URL}${path}`)
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) url.searchParams.set(key, value)
+  }
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${await gatewayToken()}` },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw eviErrors.AI_GATEWAY_REQUEST_FAILED({ responseStatus: response.status, internal: { body: await response.text() } })
+  }
+  return await response.json()
+}
+
 /**
  * Routing shared by every gateway call. Schedule turns answer to nobody in
  * real time, so they sort on cost; every other surface has someone waiting and

@@ -1,4 +1,3 @@
-import type { SessionAuthContext } from 'eve/context'
 import { useLogger } from 'evlog/eve'
 import type { DynamicResolveContext } from 'eve/tools'
 import { defineDynamic, defineTool } from 'eve/tools'
@@ -7,14 +6,9 @@ import { eviErrors, refusal, type ToolRefusal } from '../lib/errors'
 import { repositoryToken } from '../lib/github/credentials'
 import { isValidRefName, pushBrokerPolicy, validatePushBranch } from '../lib/github/push'
 import { cloneUrl, homeRepository, parseRepository, type Repository, repositorySlug } from '../lib/repo'
-import { isMaintainer, isScheduleAppAuth } from '../lib/trust'
+import { canAccessAdminTools } from '../lib/trust'
 import { checkoutDir, installCommand, REPO_DIR, runOutput } from '../lib/workspace'
 import { environment } from '../sandbox'
-
-/** Maintainer and schedule-app turns ship code; nothing else reaches git over the network. */
-function canShip(auth: SessionAuthContext | null): boolean {
-  return isMaintainer(auth) || isScheduleAppAuth(auth)
-}
 
 function notAllowed(tool: string) {
   return refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool, message: 'Only maintainer and schedule-app sessions may use git over the network.' }))
@@ -29,8 +23,9 @@ function notInstalled(repository: Repository) {
 }
 
 // Executes stay inline in the resolver (docs/notes.md).
+// Maintainer and schedule-app turns ship code; nothing else reaches git over the network.
 const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
-  if (!canShip(ctx.session.auth.current)) return null
+  if (!canAccessAdminTools(ctx.session.auth.current)) return null
   const home = repositorySlug(homeRepository())
   return {
     git__checkout: defineTool({
@@ -40,7 +35,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
         ref: z.string().optional().describe('Branch or commit to check out'),
       }),
       async execute(input, toolCtx) {
-        if (!canShip(toolCtx.session.auth.current)) return notAllowed('git__checkout')
+        if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAllowed('git__checkout')
         const log = useLogger(toolCtx)
         const repository = parseRepository(input.repository)
         if (repository === null) return notSlug(input.repository)
@@ -92,7 +87,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
         repository: z.string().min(1).describe('owner/repo already checked out'),
       }),
       async execute(input, toolCtx) {
-        if (!canShip(toolCtx.session.auth.current)) return notAllowed('git__install')
+        if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAllowed('git__install')
         const log = useLogger(toolCtx)
         const repository = parseRepository(input.repository)
         if (repository === null) return notSlug(input.repository)
@@ -116,7 +111,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
         repository: z.string().optional().describe(`owner/repo to push to; defaults to ${home}`),
       }),
       async execute(input, toolCtx) {
-        if (!canShip(toolCtx.session.auth.current)) return notAllowed('git__push')
+        if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAllowed('git__push')
         const log = useLogger(toolCtx)
         const refuse = (refused: ToolRefusal) => {
           log.set({ git: { branch: input.branch, pushed: false, reason: refused.code } })

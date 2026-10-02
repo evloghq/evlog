@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { browserContext, browserSandbox, CAPTURE_MARK, captureAttestation, captureMarkdown, describeTarget, escapeInline, markdownUrl, readTargetProbe, resolveTargetExpression, sensitiveCaptureReason, unresolvedTargetMessage, validateCaptureUrl } from './capture'
+import { browserContext, browserSandbox, captureAttestation, captureFrame, SCREENSHOT_DIR, CAPTURE_MARK, captureMarkdown, describeTarget, escapeInline, markdownUrl, readTargetProbe, resolveTargetExpression, sensitiveCaptureReason, unresolvedTargetMessage, validateCaptureUrl } from './capture'
 
 describe('validateCaptureUrl', () => {
   it('accepts evlog surfaces, previews, and local dev servers', () => {
@@ -233,5 +233,67 @@ describe('browserSandbox', () => {
     const first = await ctx.getSandbox()
     expect(await ctx.getSandbox()).toBe(first)
     expect(first).toMatchObject({ id: 'sess_1' })
+  })
+})
+
+describe('captureFrame', () => {
+  function fakeRun(evalPayload: unknown) {
+    return vi.fn(async ({ command }: { command: string }) => ({
+      exitCode: 0,
+      stdout: /\beval\b/.test(command) ? JSON.stringify(evalPayload) : '',
+      stderr: '',
+    }))
+  }
+
+  it('drives the browser through viewport, open, settle, probe, scroll, and screenshot', async () => {
+    const run = fakeRun({ data: { found: true, how: 'selector', hooks: [], headings: [] } })
+    const frame = await captureFrame(browserContext({ run }, 'sess_1'), {
+      side: 'before',
+      target: { selector: '.hero' },
+      url: 'http://localhost:3000',
+      viewport: 'desktop',
+    })
+
+    expect(frame.how).toBe('selector')
+    expect(frame.path).toMatch(/^\/workspace\/screenshots\/before-\d+\.png$/)
+
+    const commands = run.mock.calls.map(([arg]) => arg.command)
+    expect(commands[0]).toContain('set viewport 1280 800')
+    expect(commands[1]).toContain('open http://localhost:3000')
+    expect(commands[2]).toContain('wait 5000')
+    expect(commands.some(c => /\beval\b/.test(c))).toBe(true)
+    expect(commands.at(-3)).toContain('scrollintoview')
+    expect(commands.at(-3)).toContain(`[${CAPTURE_MARK}]`)
+    expect(commands.at(-1)).toContain(`screenshot ${frame.path}`)
+  })
+
+  it('captures the full viewport when no target is given', async () => {
+    const run = fakeRun({ data: { found: false, how: null, hooks: [], headings: [] } })
+    const frame = await captureFrame(browserContext({ run }, 'sess_1'), {
+      side: 'after',
+      target: null,
+      url: 'https://evlog.dev',
+      viewport: 'mobile',
+    })
+
+    expect(frame.how).toBeNull()
+    const commands = run.mock.calls.map(([arg]) => arg.command)
+    expect(commands[0]).toContain('set viewport 375 812')
+    expect(commands.some(c => /\beval\b/.test(c))).toBe(false)
+    expect(commands.at(-1)).toContain(`screenshot ${frame.path}`)
+  })
+
+  it('rejects with the page hooks and headings when the target matches nothing', async () => {
+    const run = fakeRun({ data: { found: false, how: null, hooks: ['landing-faq'], headings: ['FAQ'] } })
+    await expect(captureFrame(browserContext({ run }, 'sess_1'), {
+      side: 'before',
+      target: { text: 'missing copy' },
+      url: 'https://evlog.dev',
+      viewport: 'desktop',
+    })).rejects.toMatchObject({ code: 'evi.CAPTURE_TARGET_UNRESOLVED' })
+  })
+
+  it('frames land in SCREENSHOT_DIR', () => {
+    expect(SCREENSHOT_DIR).toBe('/workspace/screenshots')
   })
 })

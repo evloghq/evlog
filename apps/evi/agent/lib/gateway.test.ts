@@ -11,6 +11,7 @@ async function loadGateway(env: Record<string, string>) {
 
 beforeEach(() => {
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
   getVercelOidcToken.mockReset()
 })
 
@@ -144,5 +145,26 @@ describe('scopedReport', () => {
     const report = scopedReport({ results: [] }, reportQuery({}))
     expect(report.results).toEqual([])
     expect(report.scope.note).toContain('Do not quote account-wide totals')
+  })
+})
+
+describe('gatewayFetch', () => {
+  it('sends the query params and the bearer token, and returns the parsed body', async () => {
+    const fetchMock = vi.fn(async (_url: URL, _init: RequestInit) => new Response(JSON.stringify({ balance: 1 }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { gatewayFetch } = await loadGateway({ AI_GATEWAY_API_KEY: ' vck_key ' })
+    await expect(gatewayFetch('/report', { start_date: '2026-01-01', group_by: undefined })).resolves.toEqual({ balance: 1 })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toBe('https://ai-gateway.vercel.sh/v1/report?start_date=2026-01-01')
+    expect(init.headers).toEqual({ Authorization: 'Bearer vck_key' })
+  })
+
+  it('maps a non-ok response to AI_GATEWAY_REQUEST_FAILED with the body in internal', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('boom', { status: 500 }))))
+    const { gatewayFetch } = await loadGateway({ AI_GATEWAY_API_KEY: 'key' })
+    await expect(gatewayFetch('/credits')).rejects.toMatchObject({
+      code: 'evi.AI_GATEWAY_REQUEST_FAILED',
+      internal: { body: 'boom' },
+    })
   })
 })

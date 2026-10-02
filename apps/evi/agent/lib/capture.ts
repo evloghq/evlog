@@ -1,4 +1,4 @@
-import type { EveSandboxSession, EveToolContext } from '@agent-browser/eve/sandbox'
+import { runAgentBrowser, type EveSandboxSession, type EveToolContext } from '@agent-browser/eve/sandbox'
 import type { SandboxSession } from 'eve/sandbox'
 import { eviErrors } from './errors'
 
@@ -197,6 +197,43 @@ interface AttestationInput {
 /** Human-readable receipt embedded under the comparison table. */
 export function captureAttestation(input: AttestationInput): string {
   return `captured by agent-browser · ${markdownUrl(input.beforeUrl)} → ${markdownUrl(input.afterUrl)} · ${input.viewport} · ${escapeInline(input.frame)} · ${input.capturedAt}`
+}
+
+/** Frames land here before the Blob upload reads them back. */
+export const SCREENSHOT_DIR = '/workspace/screenshots'
+
+interface FrameRequest {
+  readonly side: 'before' | 'after'
+  readonly target: CaptureTarget | null
+  readonly url: string
+  readonly viewport: CaptureViewport
+}
+
+/**
+ * The per-frame capture sequence: set the viewport, open the page, settle,
+ * resolve the target, scroll it into view, screenshot. Raises
+ * CAPTURE_TARGET_UNRESOLVED with the page's own hooks and headings when the
+ * target matches nothing, so the next attempt is a correction.
+ */
+export async function captureFrame(
+  ctx: EveToolContext,
+  { side, target, url, viewport }: FrameRequest,
+): Promise<{ path: string, how: 'selector' | 'text' | null }> {
+  const { width, height } = CAPTURE_VIEWPORTS[viewport]
+  const path = `${SCREENSHOT_DIR}/${side}-${Date.now()}.png`
+  await runAgentBrowser(ctx, ['set', 'viewport', String(width), String(height)])
+  await runAgentBrowser(ctx, ['open', url])
+  await runAgentBrowser(ctx, ['wait', String(CAPTURE_SETTLE_MS)])
+  if (target === null) {
+    await runAgentBrowser(ctx, ['screenshot', path])
+    return { path, how: null }
+  }
+  const probe = readTargetProbe((await runAgentBrowser(ctx, ['eval', resolveTargetExpression(target)])).json)
+  if (!probe.found) throw eviErrors.CAPTURE_TARGET_UNRESOLVED({ message: unresolvedTargetMessage(target, probe) })
+  await runAgentBrowser(ctx, ['scrollintoview', `[${CAPTURE_MARK}]`])
+  await runAgentBrowser(ctx, ['wait', '500'])
+  await runAgentBrowser(ctx, ['screenshot', path])
+  return { path, how: probe.how }
 }
 
 /**

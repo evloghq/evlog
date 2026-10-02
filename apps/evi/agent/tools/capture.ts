@@ -1,42 +1,11 @@
-import { runAgentBrowser, type EveToolContext } from '@agent-browser/eve/sandbox'
 import type { EvlogError } from 'evlog'
 import { useLogger } from 'evlog/eve'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { missingBlobTokenError, uploadSandboxImage } from '../lib/blob'
-import { browserContext, CAPTURE_MARK, CAPTURE_SETTLE_MS, CAPTURE_VIEWPORTS, captureMarkdown, describeTarget, readTargetProbe, resolveTargetExpression, sensitiveCaptureReason, unresolvedTargetMessage, validateCaptureUrl, type CaptureTarget, type CaptureViewport } from '../lib/capture'
+import { browserContext, captureFrame, SCREENSHOT_DIR, captureMarkdown, describeTarget, sensitiveCaptureReason, validateCaptureUrl, type CaptureTarget } from '../lib/capture'
 import { eviErrors, refusal } from '../lib/errors'
 import { canAccessAdminTools } from '../lib/trust'
-
-const SCREENSHOT_DIR = '/workspace/screenshots'
-
-interface FrameRequest {
-  readonly side: 'before' | 'after'
-  readonly target: CaptureTarget | null
-  readonly url: string
-  readonly viewport: CaptureViewport
-}
-
-async function captureFrame(
-  ctx: EveToolContext,
-  { side, target, url, viewport }: FrameRequest,
-): Promise<{ path: string, how: 'selector' | 'text' | null }> {
-  const { width, height } = CAPTURE_VIEWPORTS[viewport]
-  const path = `${SCREENSHOT_DIR}/${side}-${Date.now()}.png`
-  await runAgentBrowser(ctx, ['set', 'viewport', String(width), String(height)])
-  await runAgentBrowser(ctx, ['open', url])
-  await runAgentBrowser(ctx, ['wait', String(CAPTURE_SETTLE_MS)])
-  if (target === null) {
-    await runAgentBrowser(ctx, ['screenshot', path])
-    return { path, how: null }
-  }
-  const probe = readTargetProbe((await runAgentBrowser(ctx, ['eval', resolveTargetExpression(target)])).json)
-  if (!probe.found) throw eviErrors.CAPTURE_TARGET_UNRESOLVED({ message: unresolvedTargetMessage(target, probe) })
-  await runAgentBrowser(ctx, ['scrollintoview', `[${CAPTURE_MARK}]`])
-  await runAgentBrowser(ctx, ['wait', '500'])
-  await runAgentBrowser(ctx, ['screenshot', path])
-  return { path, how: probe.how }
-}
 
 // Frames publish to public URLs the moment the tool runs: autonomous turns
 // never see it. Keep executes inline in the resolver (docs/notes.md).
