@@ -158,7 +158,7 @@ Adapter docs live in three categories under `apps/docs/content/4.integrate/adapt
 
 Create `{NN}.{name}.md` in the right category with the next available number. Use the Loki page (`hybrid/01.loki.md`) as a reference for frontmatter, tone, and sections. Key sections: intro, quick setup, configuration (env vars table + priority), advanced usage, querying in the target service, troubleshooting, direct API usage, next steps.
 
-**Important: multi-framework examples.** The Quick Start section must include a `::code-group` with tabs for the supported frameworks (Nuxt/Nitro, Hono, Express, Fastify, Elysia, NestJS, Standalone). Do not only show Nitro examples.
+**Important: multi-framework examples.** The Quick Start section must include a `::framework-tabs` group with one fence per supported framework (Nuxt, Nitro, Next.js, SvelteKit, TanStack Start, React Router, Hono, Express, Fastify, Elysia, NestJS, oRPC, Cloudflare Workers, Standalone), the framework in the bracket label. Copy the Axiom page's group and swap the drain factory. Do not only show Nitro examples, and put nothing but fences inside the group.
 
 ## Step 7: Update Adapters Overview Page
 
