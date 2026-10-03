@@ -109,7 +109,7 @@ const selected = computed({
         aria-label="Framework"
         class="ml-auto -my-1 -mr-2"
         :content="{ align: 'end' }"
-        :ui="{ base: 'text-xs/5 shrink-0 rounded-md text-muted hover:text-default', content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default', trailingIcon: 'size-3.5' }"
+        :ui="{ base: 'text-xs/5 font-medium shrink-0 rounded-md text-default', content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default', trailingIcon: 'size-3.5' }"
       />
     </div>
 
