@@ -1,5 +1,24 @@
 # @evlog/cli
 
+## 0.7.0
+
+### Minor Changes
+
+- [#754](https://github.com/evloghq/evlog/pull/754) [`aebed60`](https://github.com/evloghq/evlog/commit/aebed601afce00aeeb4250cf1b075d4504067f5d) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog` now ships the `evlog` executable: once evlog is installed, `npx evlog init`, `npx evlog map`, `npx evlog doctor` and `npx evlog agents` are available without adding anything. The executable runs `@evlog/cli` when it is installed and otherwise fetches it with the package manager that launched it (`npx`, `pnpm dlx`, `bunx`, `yarn dlx`), so `evlog` gains no dependency. Add `@evlog/cli` as a dev dependency for a pinned, instant run in CI. `@evlog/cli` now declares `evlog` as a peer dependency instead of a dependency, so a project carries one copy of the logger.
+
+- [#747](https://github.com/evloghq/evlog/pull/747) [`6d7a6e5`](https://github.com/evloghq/evlog/commit/6d7a6e5d2bf556507c94024c74291b47ed97f40a) Thanks [@evlogai](https://github.com/apps/evlogai)! - `evlog init` now puts the drain credentials where they cannot be missed: when a chosen production destination reads environment variables that are set nowhere (neither the process nor the project's `.env`), the variable list becomes the first manual step, with what each variable is, where to put the value, and a link to the adapter docs. Variables that already exist are left out, and the separate `Set these before anything is received` note (interactive) and `SET BEFORE ANYTHING IS RECEIVED` block (non-interactive) are gone.
+
+### Patch Changes
+
+- [#754](https://github.com/evloghq/evlog/pull/754) [`aebed60`](https://github.com/evloghq/evlog/commit/aebed601afce00aeeb4250cf1b075d4504067f5d) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog` now loads only the command it runs, so `evlog doctor` and `evlog telemetry` no longer load the source parser that `evlog map` and `evlog init` use. `withTelemetry` in `@evlog/telemetry` accepts lazy citty subcommands (`() => import('./cmd').then(m => m.default)`) and wraps them when citty resolves them, without loading the other commands.
+
+- [#744](https://github.com/evloghq/evlog/pull/744) [`76ec0b1`](https://github.com/evloghq/evlog/commit/76ec0b1d3d7a092efe92b5b17ad01d4ef6ef9222) Thanks [@evlogai](https://github.com/apps/evlogai)! - Fix `evlog init` writing invalid config for Nuxt (and TanStack Start) when the last property of the config object has no trailing comma: two appended properties each added their own separator, producing `},,` that fails `nuxt prepare`. Properties appended at the same spot also landed in reverse order.
+
+- [#745](https://github.com/evloghq/evlog/pull/745) [`ccd7063`](https://github.com/evloghq/evlog/commit/ccd70633f2774fc00a26bae355b4a75c7dfe4aa3) Thanks [@evlogai](https://github.com/apps/evlogai)! - On Nuxt 5 and Nitro v3 targets, `evlog init` now generates server plugins with `import { definePlugin } from 'nitro'` instead of relying on the auto-imported `defineNitroPlugin`, which no longer exists there and crashed generated apps with `ReferenceError: defineNitroPlugin is not defined`. Nuxt 4 and Nitro v2 keep the previous form.
+
+- Updated dependencies [[`aebed60`](https://github.com/evloghq/evlog/commit/aebed601afce00aeeb4250cf1b075d4504067f5d)]:
+  - @evlog/telemetry@0.3.2
+
 ## 0.6.3
 
 ### Patch Changes

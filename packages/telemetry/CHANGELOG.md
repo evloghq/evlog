@@ -1,5 +1,11 @@
 # @evlog/telemetry
 
+## 0.3.2
+
+### Patch Changes
+
+- [#754](https://github.com/evloghq/evlog/pull/754) [`aebed60`](https://github.com/evloghq/evlog/commit/aebed601afce00aeeb4250cf1b075d4504067f5d) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog` now loads only the command it runs, so `evlog doctor` and `evlog telemetry` no longer load the source parser that `evlog map` and `evlog init` use. `withTelemetry` in `@evlog/telemetry` accepts lazy citty subcommands (`() => import('./cmd').then(m => m.default)`) and wraps them when citty resolves them, without loading the other commands.
+
 ## 0.3.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@evlog/signals",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Typed model judgments on evlog wide events, built on the AI SDK evaluate contract",
   "author": "HugoRCD <contact@evlog.dev>",
   "homepage": "https://evlog.dev",

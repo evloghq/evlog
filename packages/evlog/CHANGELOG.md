@@ -1,5 +1,43 @@
 # evlog
 
+## 2.30.0
+
+### Minor Changes
+
+- [#743](https://github.com/evloghq/evlog/pull/743) [`9000215`](https://github.com/evloghq/evlog/commit/9000215b8053c4cbabf36d9b40205b299abf9184) Thanks [@evlogai](https://github.com/apps/evlogai)! - Add a default export so `import logger from 'evlog'` works like pino and consola: every call prints immediately, with no `initLogger()` needed. It is the bare `log` API under the default slot, so `logger.info('tag', 'message')`, `logger.info('message')` and `logger.info({ event })` all output right away. For wide events with drains and sampling, `initLogger()` and `createLogger()` stay the documented path.
+
+  Running in production without `initLogger()` now warns once on the first emitted event, pointing at `initLogger({ drain })`: without it events carry the default service and environment, skip redaction, and reach no drain. Apps that already call `initLogger()` see no change.
+
+- [#731](https://github.com/evloghq/evlog/pull/731) [`46cad75`](https://github.com/evloghq/evlog/commit/46cad756f1c15bdd6580f53e86b21980242e368a) Thanks [@evlogai](https://github.com/apps/evlogai)! - Add an `enrichTurn` option to `defineEvlogHook()` in `evlog/eve`. It runs once per turn where the turn logger is created, with the eve session in scope, so enrichers can reach `ctx.session.auth` and the session lineage instead of only HTTP-shaped context. Returned fields merge onto the turn event over the built-in `eve`, `agent` and `channel` fields, and stay turn-scoped: they are not carried across turns of the same session. The existing `enrich` option keeps its HTTP-shaped context.
+
+- [#754](https://github.com/evloghq/evlog/pull/754) [`aebed60`](https://github.com/evloghq/evlog/commit/aebed601afce00aeeb4250cf1b075d4504067f5d) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog` now ships the `evlog` executable: once evlog is installed, `npx evlog init`, `npx evlog map`, `npx evlog doctor` and `npx evlog agents` are available without adding anything. The executable runs `@evlog/cli` when it is installed and otherwise fetches it with the package manager that launched it (`npx`, `pnpm dlx`, `bunx`, `yarn dlx`), so `evlog` gains no dependency. Add `@evlog/cli` as a dev dependency for a pinned, instant run in CI. `@evlog/cli` now declares `evlog` as a peer dependency instead of a dependency, so a project carries one copy of the logger.
+
+- [#742](https://github.com/evloghq/evlog/pull/742) [`3fc8c1f`](https://github.com/evloghq/evlog/commit/3fc8c1fa7d938c3c504d77061d59c1f84b2765f2) Thanks [@evlogai](https://github.com/apps/evlogai)! - Add `fatal` and `trace` log levels. `log.fatal()` emits an error-level event that sampling always keeps, and `log.trace()` emits a debug-level event that is dropped by default; opt in with `sampling.rates.trace`. Both levels flow through console output, colors, OTLP severity mapping, Datadog status mapping and the ingest validation, and the request logger accepts `fatal()` and `trace()` entries (`trace` never raises the event level, `fatal` escalates it above `error`).
+
+- [#748](https://github.com/evloghq/evlog/pull/748) [`7af9caf`](https://github.com/evloghq/evlog/commit/7af9caf4d3f01328f8056e3218dbb0bdf652c086) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Align the OTLP adapter with the OpenTelemetry exporter specification. `createOTLPDrain()` now reads `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` (used as the full logs URL, without appending `/v1/logs`), `OTEL_EXPORTER_OTLP_LOGS_HEADERS` (merged over `OTEL_EXPORTER_OTLP_HEADERS`) and `OTEL_RESOURCE_ATTRIBUTES`, so a deployment already configured for an OTel SDK needs no evlog-specific variables. A new `compression: 'gzip'` option, also read from `OTEL_EXPORTER_OTLP_[LOGS_]COMPRESSION`, gzips the request body.
+
+  Fix attribute encoding in the OTLP, HyperDX and PostHog adapters: non-integer numbers are sent as `doubleValue` instead of strings, and arrays of a single primitive type as `arrayValue`, so backends can aggregate and filter on them. Malformed or all-zero `traceId` / `spanId` values are kept as attributes instead of being placed in the record's trace fields, where collectors reject them. Events that differ in `version`, `region` or `commitHash` no longer share a resource, and the instrumentation scope carries the evlog version.
+
+- [#750](https://github.com/evloghq/evlog/pull/750) [`5e0d543`](https://github.com/evloghq/evlog/commit/5e0d5437db3db92ba663f26f7a6a11c29376b1e2) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Add `protocol: 'http/protobuf'` to the OTLP adapter for collectors and gateways that only accept protobuf. The protocol is also read from `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` and `OTEL_EXPORTER_OTLP_PROTOCOL`. The encoder has no dependencies and is loaded only when selected; it is also exported as `encodeOTLPLogsRequest()` from `evlog/otlp/protobuf`. Integers outside the safe integer range are now sent as `doubleValue` instead of a rounded `intValue`.
+
+- [#749](https://github.com/evloghq/evlog/pull/749) [`11e1d4f`](https://github.com/evloghq/evlog/commit/11e1d4f0c7e3be5d3f3da4a695e3ba713efdbaad) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `createTraceContextEnricher()` no longer sets `event.spanId` from an incoming `traceparent`. That span belongs to the caller, so linking the event to it pointed log-to-span correlation one level too high. The id is now recorded as `event.parentSpanId` (and `traceContext.parentSpanId`), and `event.spanId` is left for your tracer to set from the active server span, for example `trace.getActiveSpan()?.spanContext().spanId` with OpenTelemetry. If you relied on the enricher for `spanId` in the OTLP or Datadog adapters, set it from the active span.
+
+  The OTLP adapter's default `json` record shape now sends nested objects as OTLP key-value lists (`kvlistValue`) instead of JSON strings, so collectors and backends can read their fields. The `compact` shape is unchanged.
+
+  A new `semanticConventions: true` option on `createOTLPDrain()` adds OpenTelemetry semantic convention attributes next to the evlog field names: `http.request.method`, `url.path`, `http.response.status_code`, `user_agent.original`, `exception.*` and `gen_ai.*` (model, provider, response id, token usage, finish reasons), plus the `deployment.environment.name` resource attribute. It becomes the default in the next major.
+
+### Patch Changes
+
+- [#725](https://github.com/evloghq/evlog/pull/725) [`543b00f`](https://github.com/evloghq/evlog/commit/543b00fd7410ac3a11783e127ea30f89d4262baf) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Allow Eve agents to disable subagent lifecycle subscriptions with `subagentEvents: false` when those events do not carry hook session context.
+
+- [#764](https://github.com/evloghq/evlog/pull/764) [`24ffe06`](https://github.com/evloghq/evlog/commit/24ffe064e67a9ac46a86f4960ee9015226604457) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Measure `durationMs` before tail-sampling `keep` hooks run, so a hook that awaits I/O no longer inflates the request duration on the emitted event.
+
+- [#741](https://github.com/evloghq/evlog/pull/741) [`fe75141`](https://github.com/evloghq/evlog/commit/fe7514179827cac062a96527d58c651bc1ee4e89) Thanks [@evlogai](https://github.com/apps/evlogai)! - Support printf-style interpolation in `log` messages: `%s`, `%d`, and `%j` in a message string are formatted with the extra arguments, matching node's `util.format` semantics for the supported specifiers. Interpolation applies to the message only, never to field values, and the formatter stays tree-shakeable.
+
+- [#738](https://github.com/evloghq/evlog/pull/738) [`5b4a493`](https://github.com/evloghq/evlog/commit/5b4a49387936a64c5ed7c5ff5b036d9bb0587d7b) Thanks [@jamalkamaladdin](https://github.com/jamalkamaladdin)! - Serialize an `Error` in `error.cause` the same way as the top-level error, with `name`, `message`, `stack` and its metadata fields. A wrapped driver error such as the `pg` error inside a `DrizzleQueryError` no longer reaches drains as `{}`, and a cause chain that loops back emits `[Circular]`.
+
+- [#764](https://github.com/evloghq/evlog/pull/764) [`24ffe06`](https://github.com/evloghq/evlog/commit/24ffe064e67a9ac46a86f4960ee9015226604457) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Write the console line after enrichers run. Fields added in `enrich` (UserAgent, Geo, TraceContext, `@evlog/signals` verdicts, your own plugins) now appear in stdout and in platform logs such as Vercel, not only in drains. Events that neither enrich nor drain are printed as before.
+
 ## 2.29.0
 
 ### Minor Changes
