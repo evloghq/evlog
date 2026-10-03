@@ -7,8 +7,8 @@ const GRADES: readonly Grade[] = ['excellent', 'good', 'needs-work', 'at-risk']
 const GATES = ['none', 'min-score', 'baseline', 'both'] as const
 export type MapGate = typeof GATES[number]
 
-/** Which of the three renderers the run asked for. */
-const VIEWS = ['summary', 'all', 'inspect'] as const
+/** Which renderer the run asked for: the three human views, or a machine format. */
+const VIEWS = ['summary', 'all', 'inspect', 'github', 'sarif'] as const
 export type MapView = typeof VIEWS[number]
 
 /**

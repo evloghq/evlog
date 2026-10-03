@@ -140,6 +140,11 @@ export function setExitCode(code: number): void {
   process.exitCode = code
 }
 
+/** Write a payload that follows someone else's contract to stdout, without the evlog envelope. */
+export function writeStdout(text: string): void {
+  process.stdout.write(`${text}\n`)
+}
+
 /** Write human-readable output to stderr (stdout is reserved for `--json`). */
 export function writeHuman(text: string): void {
   process.stderr.write(`${text}\n`)
