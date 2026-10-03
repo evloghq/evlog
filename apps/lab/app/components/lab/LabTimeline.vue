@@ -18,7 +18,7 @@
  */
 
 import { effectRampMs } from '~/utils/lab/effects'
-import { canJoin, layerEnd } from '~/utils/lab/layers'
+import { canChangeLayerSpeed, canJoin, layerEnd, layerSpeed } from '~/utils/lab/layers'
 import type { Layer } from '~/utils/lab/layers'
 
 const props = defineProps<{
@@ -414,7 +414,9 @@ function applyDrag(event: PointerEvent) {
     const start = snap(raw - current.offset, layer.id)
     updated.start = Math.max(0, Math.min(start, content.value - layer.duration))
   } else if (current.grab === 'start') {
-    const start = Math.max(0, Math.min(snap(raw, layer.id), layerEnd(layer) - MIN_SEGMENT))
+    const earliest = layer.start - (layer.trim ?? 0) / layerSpeed(layer)
+    const start = Math.max(0, earliest, Math.min(snap(raw, layer.id), layerEnd(layer) - MIN_SEGMENT))
+    updated.trim = (layer.trim ?? 0) + (start - layer.start) * layerSpeed(layer)
     updated.duration = layerEnd(layer) - start
     updated.start = start
   } else {
@@ -815,6 +817,9 @@ const seconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`
                   name="i-lucide-sparkles"
                   class="ml-auto size-2.5 shrink-0 opacity-60"
                 />
+                <span v-if="canChangeLayerSpeed(layer) && layerSpeed(layer) !== 1" class="shrink-0 tabular-nums opacity-60">
+                  {{ Number(layerSpeed(layer).toFixed(2)) }}×
+                </span>
                 <!-- Only once the clip is wide enough that a number reads as a
                      number rather than as noise crowding the name. -->
                 <span

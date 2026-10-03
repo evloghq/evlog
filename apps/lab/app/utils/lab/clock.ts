@@ -152,8 +152,7 @@ export function createClock(): Clock {
    * The stage subtree is marked in the DOM; anything running outside it is the
    * lab's own interface and keeps its real timeline.
    */
-  function isStaged(animation: Animation): boolean {
-    const target = (animation.effect as KeyframeEffect | null)?.target
+  function isStaged(target: unknown): target is Element {
     return target instanceof Element && !!target.closest('[data-lab-stage]')
   }
 
@@ -163,7 +162,8 @@ export function createClock(): Clock {
       // own transitions too, and pausing those froze the interface at whatever
       // opacity it happened to be mid-fade — a panel that had just opened stayed
       // invisible while still taking clicks.
-      if (!isStaged(animation)) continue
+      const target = (animation.effect as KeyframeEffect | null)?.target
+      if (!isStaged(target)) continue
       if (!captured.has(animation)) {
         captured.add(animation)
         try {
@@ -177,11 +177,13 @@ export function createClock(): Clock {
       }
       try {
         const start = (animation as Animation & { __labStart?: number }).__labStart
+        const declaredSpeed = Number(target.closest<HTMLElement>('[data-stage-speed]')?.dataset.stageSpeed)
+        const speed = Number.isFinite(declaredSpeed) && declaredSpeed > 0 ? declaredSpeed : 1
         if (start === undefined) {
           Object.assign(animation, { __labStart: virtualTime })
           animation.currentTime = 0
         } else {
-          animation.currentTime = virtualTime - start
+          animation.currentTime = (virtualTime - start) * speed
         }
       } catch {
         // Same — a detached animation throws on assignment.

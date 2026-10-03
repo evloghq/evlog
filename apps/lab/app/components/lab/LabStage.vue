@@ -8,11 +8,12 @@
  * mounting.
  */
 
-import { LAB_STAGE_LAYER } from '~/utils/lab/sequence'
+import { LAB_STAGE_LAYER, LAB_STAGE_SPEED } from '~/utils/lab/sequence'
 
-const props = defineProps<{ layerId: string }>()
+const props = defineProps<{ layerId: string, speed: number }>()
 
 provide(LAB_STAGE_LAYER, props.layerId)
+provide(LAB_STAGE_SPEED, () => props.speed)
 </script>
 
 <template>

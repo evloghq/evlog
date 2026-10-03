@@ -6,6 +6,7 @@
     "dev": "nuxt dev",
     "dev:prepare": "nuxt prepare",
     "build": "nuxt build",
+    "test": "vitest run",
     "brand:assets": "node scripts/generate-brand-assets.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
