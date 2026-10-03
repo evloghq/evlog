@@ -520,7 +520,7 @@ FIX FIRST
 
 Same code in, same verdict out, with the file and line for every finding, which also makes it something you can hand to an agent: run it, fix the list, run it again.
 
-> **Early days:** the CLI is tested and safe to run on any project, but it is young: five framework adapters today, rules still being refined. Expect verdicts and scores to move between releases. The executable runs [`@evlog/cli`](https://npmjs.com/package/@evlog/cli) when it is installed and fetches it with your package manager otherwise, so `evlog` itself adds no dependency; add `@evlog/cli` as a dev dependency for a pinned, instant run when you gate CI on the number.
+> **Early days:** the CLI is tested and safe to run on any project, but it is young: seven framework adapters today, rules still being refined. Expect verdicts and scores to move between releases. The executable runs [`@evlog/cli`](https://npmjs.com/package/@evlog/cli) when it is installed and fetches it with your package manager otherwise, so `evlog` itself adds no dependency; add `@evlog/cli` as a dev dependency for a pinned, instant run when you gate CI on the number.
 
 Docs: [CLI](https://www.evlog.dev/cli/overview) · [`evlog map`](https://www.evlog.dev/cli/map) · [Rules](https://www.evlog.dev/cli/rules) · [Scoring](https://www.evlog.dev/cli/scoring) · [CI](https://www.evlog.dev/cli/ci)
 

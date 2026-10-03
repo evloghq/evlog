@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { planWiring } from '../src/lib/init/frameworks'
+import { planWiring } from '../src/lib/init/wiring'
 import { auditActionName, readProject } from '../src/lib/init/insight'
 import { findWorkspaceApps, isWorkspaceRoot, parsePnpmPackages } from '../src/lib/init/workspace'
 import { resolveProject } from '../src/lib/project'
@@ -102,7 +102,7 @@ describe('generated catalogs', () => {
   it('writes the project\'s own errors, not a template', async () => {
     const root = await project({ 'package.json': '{"name":"shop"}' })
 
-    const plan = planWiring({
+    const plan = await planWiring({
       root,
       framework: 'nuxt',
       service: 'shop',
@@ -128,7 +128,7 @@ describe('generated catalogs', () => {
   it('writes no catalog when the scan found nothing to seed it with', async () => {
     const root = await project({ 'package.json': '{"name":"shop"}' })
 
-    const plan = planWiring({
+    const plan = await planWiring({
       root,
       framework: 'nuxt',
       service: 'shop',

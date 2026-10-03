@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { getAdapter } from '../../src/lib/map/adapters/index'
+import { getFramework } from '../../src/lib/frameworks'
 import type { Framework, RawRouteEntry, ScanContext } from '../../src/lib/map/types'
 
 const tempDirs: string[] = []
@@ -19,14 +19,15 @@ async function project(files: Record<string, string>): Promise<string> {
   return root
 }
 
-function routesOf(framework: Framework, root: string): Promise<RawRouteEntry[]> {
-  return getAdapter(framework).extractRoutes(scanContext(framework, root))
+async function routesOf(framework: Framework, root: string): Promise<RawRouteEntry[]> {
+  const adapter = await getFramework(framework).map()
+  return adapter.extractRoutes(scanContext(framework, root))
 }
 
 /** The capability `scan` would use: the per-project override, else the static one. */
-function requestLoggerOf(framework: Framework, root: string): 'ambient' | 'explicit' {
-  const adapter = getAdapter(framework)
-  return adapter.resolveRequestLogger?.(scanContext(framework, root)) ?? adapter.requestLogger
+async function requestLoggerOf(framework: Framework, root: string): Promise<'ambient' | 'explicit'> {
+  const adapter = await getFramework(framework).map()
+  return adapter.resolveRequestLogger?.(scanContext(framework, root)) ?? getFramework(framework).requestLogger
 }
 
 function scanContext(framework: Framework, root: string): ScanContext {
@@ -346,7 +347,7 @@ describe('hono adapter', () => {
       ].join('\n'),
     })
 
-    expect(requestLoggerOf('hono', root)).toBe('ambient')
+    expect(await requestLoggerOf('hono', root)).toBe('ambient')
   })
 
   it('resolves the request logger to explicit when the middleware is never registered', async () => {
@@ -359,7 +360,7 @@ describe('hono adapter', () => {
       ].join('\n'),
     })
 
-    expect(requestLoggerOf('hono', root)).toBe('explicit')
+    expect(await requestLoggerOf('hono', root)).toBe('explicit')
   })
 
   it('does not credit an evlog() call that is not evlog/hono\'s middleware', async () => {
@@ -373,6 +374,80 @@ describe('hono adapter', () => {
       ].join('\n'),
     })
 
-    expect(requestLoggerOf('hono', root)).toBe('explicit')
+    expect(await requestLoggerOf('hono', root)).toBe('explicit')
+  })
+})
+
+describe('express adapter', () => {
+  it('reads routes off the app and off a Router, with middleware before the handler', async () => {
+    const root = await project({
+      'src/index.ts': `import express from 'express'
+const app = express()
+app.get('/health', (req, res) => res.json({ ok: true }))
+app.post('/orders', auth, async (req, res) => res.json({}))
+app.use('/api', router)
+app.get('view engine')`,
+      'src/users.ts': `import { Router } from 'express'
+const router = Router()
+router.delete('/users/:id', handler)`,
+    })
+
+    const routes = await routesOf('express', root)
+
+    expect(routes.map(route => `${route.method} ${route.path}`).sort()).toEqual([
+      'DELETE /users/:id',
+      'GET /health',
+      'POST /orders',
+    ])
+  })
+
+  it('resolves the request logger to ambient once app.use(evlog()) is registered', async () => {
+    const root = await project({
+      'src/index.ts': `import express from 'express'
+import { evlog } from 'evlog/express'
+const app = express()
+app.use(evlog())`,
+    })
+    expect(await requestLoggerOf('express', root)).toBe('ambient')
+  })
+
+  it('stays explicit when the middleware is never registered', async () => {
+    const root = await project({
+      'src/index.ts': `import express from 'express'
+const app = express()
+app.get('/', (req, res) => res.end())`,
+    })
+    expect(await requestLoggerOf('express', root)).toBe('explicit')
+  })
+})
+
+describe('fastify adapter', () => {
+  it('reads shorthand routes with an options object and the route() object form', async () => {
+    const root = await project({
+      'src/index.ts': `import Fastify from 'fastify'
+const app = Fastify()
+app.get('/health', { schema }, async () => ({ ok: true }))
+app.route({ method: ['PUT', 'PATCH'], url: '/users/:id', handler })
+app.route({ method: 'DELETE', url: '/users/:id', handler: async () => {} })`,
+    })
+
+    const routes = await routesOf('fastify', root)
+
+    expect(routes.map(route => `${route.method} ${route.path}`).sort()).toEqual([
+      'DELETE /users/:id',
+      'GET /health',
+      'PATCH /users/:id',
+      'PUT /users/:id',
+    ])
+  })
+
+  it('resolves the request logger to ambient once app.register(evlog) is called', async () => {
+    const root = await project({
+      'src/index.ts': `import Fastify from 'fastify'
+import { evlog } from 'evlog/fastify'
+const app = Fastify()
+await app.register(evlog, { drain })`,
+    })
+    expect(await requestLoggerOf('fastify', root)).toBe('ambient')
   })
 })

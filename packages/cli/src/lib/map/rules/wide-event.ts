@@ -1,4 +1,4 @@
-import { getAdapter } from '../adapters/index'
+import { getFramework } from '../../frameworks'
 import { HANDLER_KINDS } from './types'
 import type { MapRule } from './types'
 
@@ -22,7 +22,7 @@ export const wideEventRule = {
 
   fixSlot: 'setup',
   suggest({ framework }) {
-    return [getAdapter(framework).loggerCall]
+    return [getFramework(framework).shape.loggerCall]
   },
 
   create(context) {

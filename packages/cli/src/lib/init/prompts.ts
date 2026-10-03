@@ -28,7 +28,7 @@ import {
   SAMPLING_PRESETS,
 } from './catalog'
 import type { DrainId, EnricherId, ExtraGroup, ExtraId, OfferContext, SamplingProfile } from './catalog'
-import type { FileAction, ManualStep } from './frameworks'
+import type { FileAction, ManualStep } from './wiring'
 
 /** Every answer `init` needs, however it was obtained. */
 export interface InitAnswers {
