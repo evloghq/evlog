@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { VNode } from 'vue'
 import { tv } from '@nuxt/ui/utils/tv'
+import UCodeIcon from '@nuxt/ui/components/prose/CodeIcon.vue'
 import theme from '#build/ui/prose/code-group'
 import { frameworks, resolveFramework } from '~/utils/frameworks'
 import type { Framework } from '~/utils/frameworks'
@@ -88,7 +89,14 @@ const selected = computed({
 
 <template>
   <div :class="ui.root()" data-section="framework-tabs">
-    <div :class="ui.list({ class: 'gap-2.5 overflow-visible px-2 py-1.5' })">
+    <div :class="ui.list({ class: 'gap-1.5 overflow-visible px-4 py-2' })">
+      <template v-if="active.path">
+        <UCodeIcon :filename="active.path" class="size-4 shrink-0" />
+        <span class="truncate text-sm/6 text-default">{{ active.path }}</span>
+      </template>
+      <span v-if="missing" class="truncate text-xs text-dimmed">
+        No {{ missing.label }} example here
+      </span>
       <USelectMenu
         v-model="selected"
         :items="options"
@@ -96,16 +104,13 @@ const selected = computed({
         :search-input="false"
         :icon="active.framework?.icon"
         color="neutral"
-        variant="soft"
+        variant="ghost"
         size="xs"
         aria-label="Framework"
-        :content="{ align: 'start' }"
-        :ui="{ base: 'text-xs/5 shrink-0 rounded-md', content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default', trailingIcon: 'size-3.5' }"
+        class="ml-auto -my-1 -mr-2"
+        :content="{ align: 'end' }"
+        :ui="{ base: 'text-xs/5 shrink-0 rounded-md text-muted hover:text-default', content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default', trailingIcon: 'size-3.5' }"
       />
-      <span v-if="active.path" class="truncate text-xs/5 text-default">{{ active.path }}</span>
-      <span v-if="missing" class="ml-auto truncate pr-2 text-xs text-dimmed">
-        No {{ missing.label }} example here
-      </span>
     </div>
 
     <component :is="active.component" :key="activeIndex" hide-header tabindex="-1" />
