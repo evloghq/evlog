@@ -88,7 +88,7 @@ const selected = computed({
 
 <template>
   <div :class="ui.root()" data-section="framework-tabs">
-    <div :class="ui.list({ class: 'gap-3 overflow-visible' })">
+    <div :class="ui.list({ class: 'gap-2.5 overflow-visible px-2 py-1.5' })">
       <USelectMenu
         v-model="selected"
         :items="options"
@@ -96,13 +96,13 @@ const selected = computed({
         :search-input="false"
         :icon="active.framework?.icon"
         color="neutral"
-        variant="subtle"
-        size="sm"
+        variant="soft"
+        size="xs"
         aria-label="Framework"
         :content="{ align: 'start' }"
-        :ui="{ base: 'text-sm/5 md:text-sm/5 font-medium shrink-0', content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default' }"
+        :ui="{ base: 'text-xs/5 shrink-0 rounded-md', content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default', trailingIcon: 'size-3.5' }"
       />
-      <span v-if="active.path" class="truncate text-sm/5 text-default">{{ active.path }}</span>
+      <span v-if="active.path" class="truncate text-xs/5 text-default">{{ active.path }}</span>
       <span v-if="missing" class="ml-auto truncate pr-2 text-xs text-dimmed">
         No {{ missing.label }} example here
       </span>
