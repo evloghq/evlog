@@ -123,7 +123,7 @@ const stats = computed(() => {
 })
 
 const headline = computed(() => {
-  if (!started.value) return 'idle'
+  if (!started.value && !prefersReducedMotion.value) return 'idle'
   if (resolvedRows.value.length === requests.length) return `${stats.value.back} requests back from the floor`
   return 'one question per request'
 })

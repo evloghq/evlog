@@ -44,6 +44,24 @@ afterEach(() => {
 })
 
 describe('createSignals enrich', () => {
+  it('keeps the verdicts it got when the response omits one question', async () => {
+    const scripted = fakeEvaluate(yes)
+    const plugin = createSignals({
+      signals: [fault, severity],
+      evaluate: async (request) => {
+        const response = await scripted.evaluate(request)
+        const { severity: _dropped, ...answers } = response.answers
+        return { ...response, answers }
+      },
+    })
+
+    const ctx = enrichCtx({ status: 503, path: '/api/pay' })
+    await plugin.enrich!(ctx)
+
+    expect(ctx.event.signals).toEqual({ fault: { value: 'upstream', confidence: 0.9 } })
+    expect(plugin.stats()).toMatchObject({ calls: 1, errors: 0 })
+  })
+
   it('batches every due signal into one call and writes typed columns', async () => {
     const { evaluate, calls } = fakeEvaluate(yes, 'jev-1.13.0')
     const plugin = createSignals({ signals: [fault, silentFailure, severity], evaluate })

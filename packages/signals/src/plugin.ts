@@ -154,7 +154,9 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       stats.calls++
       stats.inputTokens += response.inputTokens ?? 0
       for (const [signal, key] of toAsk) {
-        const verdict = toVerdict(signal, response.answers[signal.name]!)
+        const answer = response.answers[signal.name]
+        if (!answer) continue
+        const verdict = toVerdict(signal, answer)
         verdicts.set(signal.name, verdict)
         if (key !== undefined) cache.set(`${signal.name}\0${key}`, verdict)
       }
