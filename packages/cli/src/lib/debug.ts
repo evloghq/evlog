@@ -2,6 +2,7 @@ import { createLogger, EvlogError, initLogger } from 'evlog'
 import type { RequestLogger } from 'evlog'
 import type { CliContext } from '../core/context'
 import type { CheckStatus } from '../core/output'
+import { writeHuman } from '../core/output'
 import { VERSION } from './constants'
 import { formatDebugReport } from './debug-report'
 import { resolveCliEnvironment } from './environment'
@@ -185,11 +186,7 @@ export function ensureCliDebugLogger(options: { json?: boolean, color?: boolean 
     minLevel: 'debug',
     _suppressDrainWarning: true,
     drain: ({ event }) => {
-      if (json) {
-        process.stderr.write(`${JSON.stringify(event)}\n`)
-        return
-      }
-      process.stderr.write(formatDebugReport(event as Record<string, unknown>, { color }))
+      writeHuman(json ? JSON.stringify(event) : formatDebugReport(event as Record<string, unknown>, { color }))
     },
   })
 }

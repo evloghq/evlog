@@ -135,6 +135,11 @@ export function writeJson(payload: Record<string, unknown>): void {
   })}\n`)
 }
 
+/** Set the process exit code without ending the run, so pending output still flushes. */
+export function setExitCode(code: number): void {
+  process.exitCode = code
+}
+
 /** Write human-readable output to stderr (stdout is reserved for `--json`). */
 export function writeHuman(text: string): void {
   process.stderr.write(`${text}\n`)

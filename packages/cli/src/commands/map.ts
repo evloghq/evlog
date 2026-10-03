@@ -221,10 +221,9 @@ function parseBaselineArg(value: unknown): string | true | undefined {
  * Logic lives in {@link runMap}; this file owns the citty surface.
  */
 export default defineEvlogCommand('map', {
-  meta: { name: 'map', description: 'Static observability map — Lighthouse for wide events' },
+  meta: { name: 'map' },
   args: {
     entry: { type: 'positional', required: false, description: 'Inspect one entry point by route or file path' },
-    cwd: { type: 'string', description: 'Project directory (default: current)' },
     framework: { type: 'string', description: `Override framework detection (${FRAMEWORK_IDS.join(', ')})` },
     all: { type: 'boolean', description: 'Every entry point, as a check matrix' },
     minScore: { type: 'string', description: 'Exit 1 if the global score is below this threshold' },
@@ -239,9 +238,6 @@ export default defineEvlogCommand('map', {
     verbose: { type: 'boolean', description: 'Show per-file parse warnings' },
   },
   async run({ args, cli, log, ui }) {
-    const cwd = typeof args.cwd === 'string' && args.cwd.length > 0 ? args.cwd : undefined
-    const ctx = cwd ? { ...cli, cwd } : cli
-
     const entry = typeof args.entry === 'string' && args.entry.length > 0 ? args.entry : undefined
     const view: MapView = entry ? 'inspect' : args.all ? 'all' : 'summary'
 
@@ -254,7 +250,7 @@ export default defineEvlogCommand('map', {
          and writes evlog.map.json before admitting it cannot gate on it. */
       threshold = parseMinScoreArg(args.minScore)
       framework = parseFrameworkArg(args.framework)
-      result = await runMap(ctx, log, {
+      result = await runMap(cli, log, {
         framework,
         noWrite: !args.write,
         verbose: args.verbose,
@@ -294,7 +290,7 @@ export default defineEvlogCommand('map', {
         mapPath: result.mapPath,
         ...(result.baseline ? { baseline: result.baseline } : {}),
       },
-      human: formatMapReport(ctx, result, { all: args.all, entry, minScore: threshold }),
+      human: formatMapReport(cli, result, { all: args.all, entry, minScore: threshold }),
     })
 
     if (threshold !== undefined && result.scan.map.score < threshold) {

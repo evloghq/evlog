@@ -1,9 +1,9 @@
 import type { Node } from 'oxc-parser'
-import { globSync } from 'tinyglobby'
 import type { ParseFn, ParseResult } from '../parse'
 import { nodeLoc, parseFile, walkAst } from '../parse'
 import type { FrameworkAdapter, RawRouteEntry, ScanContext } from '../types'
 import { indent, relativeFromRoot } from '../utils'
+import { glob } from '../../glob'
 
 /**
  * Hono route methods → HTTP verb.
@@ -41,7 +41,7 @@ const SOURCE_GLOBS = [
 
 /** Every file the adapter reads — the globs overlap, so deduplicate. */
 function sourceFiles(root: string): string[] {
-  return [...new Set(globSync([...SOURCE_GLOBS], { cwd: root, absolute: true }))]
+  return [...new Set(glob([...SOURCE_GLOBS], root))]
 }
 
 interface FoundRoute {

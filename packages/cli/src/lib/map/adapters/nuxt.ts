@@ -1,9 +1,9 @@
 import { basename } from 'node:path'
-import { globSync } from 'tinyglobby'
 import type { ParseFn } from '../parse'
 import { findHandlerLocation, parseFile } from '../parse'
 import type { FrameworkAdapter, RawRouteEntry, ScanContext } from '../types'
 import { extractMethodFromFilename, indent, relativeFromRoot, segmentsToPath, stripRouteFilename } from '../utils'
+import { glob } from '../../glob'
 
 /**
  * Extensions Nitro serves a handler from.
@@ -68,7 +68,7 @@ interface PageRoot {
 function resolvePageRoots(root: string): readonly PageRoot[] {
   const found: PageRoot[] = []
   for (const dir of PAGE_DIRS) {
-    const files = globSync(`${dir}/**/*.vue`, { cwd: root, absolute: true })
+    const files = glob(`${dir}/**/*.vue`, root)
     if (files.length > 0) found.push({ dir, files })
   }
   return found.length > 0 ? found : [{ dir: 'pages', files: [] }]
@@ -168,12 +168,12 @@ function extractServerRoutes(ctx: ScanContext, framework: 'nuxt' | 'nitro'): Raw
   const extract: ExtractContext = { root, parse: ctx.parse ?? parseFile, framework }
 
   for (const apiRoot of API_ROOTS[framework]) {
-    for (const file of globSync(`${apiRoot.dir}/**/*.${HANDLER_EXT}`, { cwd: root, absolute: true })) {
+    for (const file of glob(`${apiRoot.dir}/**/*.${HANDLER_EXT}`, root)) {
       routes.push(fileToApiRoute(file, apiRoot, extract))
     }
   }
 
-  for (const file of globSync(`${MIDDLEWARE_DIR[framework]}/**/*.${HANDLER_EXT}`, { cwd: root, absolute: true })) {
+  for (const file of glob(`${MIDDLEWARE_DIR[framework]}/**/*.${HANDLER_EXT}`, root)) {
     routes.push(fileToMiddlewareRoute(file, extract))
   }
 
@@ -204,7 +204,7 @@ export const nuxtAdapter: FrameworkAdapter = {
     }
 
     for (const pattern of CRON_GLOBS) {
-      for (const file of globSync(pattern, { cwd: root, absolute: true })) {
+      for (const file of glob(pattern, root)) {
         routes.push(fileToCronRoute(file, root, parse))
       }
     }

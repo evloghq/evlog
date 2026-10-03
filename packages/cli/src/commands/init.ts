@@ -43,11 +43,10 @@ function parseServiceArg(value: unknown): string | undefined {
  * skips any file that already exists, and shows the plan before applying it.
  */
 export default defineEvlogCommand('init', {
-  meta: { name: 'init', description: 'Wire evlog into this project — install, config, drains' },
+  meta: { name: 'init' },
   /* The clack session draws its own intro; two banners read as two programs. */
   skipHeader: (ctx, args) => args.json !== true && args.yes !== true && canPrompt(ctx),
   args: {
-    cwd: { type: 'string', description: 'Project directory (default: current)' },
     framework: { type: 'string', description: `Override framework detection (${INIT_FRAMEWORK_IDS.join(', ')})` },
     service: { type: 'string', description: 'Service name on every wide event (default: package name)' },
     drain: { type: 'string', description: 'Development sink: fs (default) or none' },
@@ -63,9 +62,6 @@ export default defineEvlogCommand('init', {
     agents: { type: 'boolean', default: true, description: 'Write the AGENTS.md block and install the skills (--no-agents to skip)' },
   },
   async run({ args, cli, log, ui }) {
-    const cwd = typeof args.cwd === 'string' && args.cwd.length > 0 ? args.cwd : undefined
-    const ctx = cwd ? { ...cli, cwd } : cli
-
     let options: InitOptions
     try {
       options = {
@@ -90,7 +86,7 @@ export default defineEvlogCommand('init', {
 
     /* A monorepo root has no entry points of its own, so `init` there means
        "set up the apps", not "wire this package". */
-    const project = await resolveProject(ctx.cwd)
+    const project = await resolveProject(cli.cwd)
     const targets = isWorkspaceRoot(project) ? findWorkspaceApps(project) : []
 
     if (targets.length > 0) {
@@ -121,7 +117,7 @@ export default defineEvlogCommand('init', {
       /* Without `--apps`, a terminal gets to choose. Setting up every package in
          a monorepo because the command was run from the root is the kind of
          helpfulness that produces a revert. */
-      if (!requested && args.json !== true && args.yes !== true && canPrompt(ctx)) {
+      if (!requested && args.json !== true && args.yes !== true && canPrompt(cli)) {
         try {
           const chosen = await askWorkspaceTargets(targets)
           selected = targets.filter(app => chosen.includes(app.dir))
@@ -143,11 +139,11 @@ export default defineEvlogCommand('init', {
 
       const results: InitResult[] = []
       for (const app of selected) {
-        if (!args.json) ui.human(formatWorkspaceHeading(ctx, app.label))
+        if (!args.json) ui.human(formatWorkspaceHeading(cli, app.label))
         try {
-          const result = await runInit({ ...ctx, cwd: app.dir }, log, { ...options, framework: app.framework })
+          const result = await runInit({ ...cli, cwd: app.dir }, log, { ...options, framework: app.framework })
           results.push(result)
-          if (!args.json && !result.interactive) ui.human(formatInitReport(ctx, result))
+          if (!args.json && !result.interactive) ui.human(formatInitReport(cli, result))
         } catch (error) {
           /* Ctrl-C in the middle of a workspace run stops the loop rather than
              throwing past it: the apps already set up keep what they got, and
@@ -170,7 +166,7 @@ export default defineEvlogCommand('init', {
 
     let result: InitResult
     try {
-      result = await runInit(ctx, log, options)
+      result = await runInit(cli, log, options)
     } catch (error) {
       return failWith(error, { args, log, ui })
     }
@@ -180,7 +176,7 @@ export default defineEvlogCommand('init', {
       json: toJson(result),
       /* The interactive flow already narrated itself; printing the report after
          it would repeat the whole run under the outro. */
-      human: result.interactive ? undefined : formatInitReport(ctx, result),
+      human: result.interactive ? undefined : formatInitReport(cli, result),
     })
 
     if (result.install.status === 'failed') {

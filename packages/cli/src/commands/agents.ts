@@ -24,11 +24,10 @@ function parseSkillsArg(value: unknown): { skills: string[], noSkills: boolean }
  * ourselves would produce a second set nothing could update.
  */
 export default defineEvlogCommand('agents', {
-  meta: { name: 'agents', description: 'Write evlog conventions into AGENTS.md and install the agent skills' },
+  meta: { name: 'agents' },
   /* The clack session draws its own intro; two banners read as two programs. */
   skipHeader: (ctx, args) => args.json !== true && args.yes !== true && canPrompt(ctx),
   args: {
-    cwd: { type: 'string', description: 'Project directory (default: current)' },
     // citty negations: declared positive so `--no-skills` works.
     skills: { type: 'string', default: '', description: 'Skills to install, comma-separated (--no-skills for the AGENTS.md block alone)' },
     global: { type: 'boolean', alias: 'g', description: 'Install the skills for every project instead of this one' },
@@ -37,8 +36,6 @@ export default defineEvlogCommand('agents', {
     dryRun: { type: 'boolean', description: 'Show what would change without writing anything' },
   },
   async run({ args, cli, log, ui }) {
-    const cwd = typeof args.cwd === 'string' && args.cwd.length > 0 ? args.cwd : undefined
-    const ctx = cwd ? { ...cli, cwd } : cli
     const { skills, noSkills } = parseSkillsArg(args.skills)
 
     const options: AgentsOptions = {
@@ -55,7 +52,7 @@ export default defineEvlogCommand('agents', {
 
     let result: AgentsResult
     try {
-      result = await runAgents(ctx, log, options)
+      result = await runAgents(cli, log, options)
     } catch (error) {
       return failWith(error, { args, log, ui })
     }
@@ -64,7 +61,7 @@ export default defineEvlogCommand('agents', {
       jsonMode: args.json,
       json: toJson(result),
       /* The interactive flow already narrated itself through clack. */
-      human: result.interactive ? undefined : formatAgentsReport(ctx, result),
+      human: result.interactive ? undefined : formatAgentsReport(cli, result),
     })
 
     if (result.skills.status === 'failed') {
