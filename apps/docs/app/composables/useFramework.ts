@@ -1,7 +1,7 @@
 /**
- * The framework the reader picked in any `::framework-tabs` group, shared by
- * every group on the site. A cookie rather than localStorage so the server
- * renders the chosen framework on first paint and hydration has nothing to fix.
+ * The framework the reader picked in any `::framework-tabs` group. A cookie so
+ * the inline head script in `plugins/framework-choice.ts` can read it before
+ * first paint; the prerendered HTML itself never depends on it.
  */
 export function useFramework() {
   return useCookie<string | undefined>('evlog-framework', {

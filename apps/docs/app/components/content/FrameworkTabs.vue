@@ -7,6 +7,7 @@ import { frameworks, resolveFramework } from '~/utils/frameworks'
 import type { Framework } from '~/utils/frameworks'
 
 interface Tab {
+  key: string
   label: string
   path?: string
   framework?: Framework
@@ -34,7 +35,8 @@ function collect(): Tab[] {
     const label = String(node.props?.filename ?? node.props?.label ?? index)
     // The fence meta carries the file path: ```ts [Nuxt] server/plugins/evlog.ts
     const path = node.props?.meta || undefined
-    return { label, path, framework: resolveFramework(label), component: node }
+    const framework = resolveFramework(label)
+    return { key: framework?.id ?? `tab-${index}`, label, path, framework, component: node }
   })
 }
 
@@ -47,29 +49,46 @@ const items = computed(() => {
   return collect()
 })
 
+// Every tab is rendered; which one shows is decided by CSS from
+// `<html data-framework>`, stamped before first paint by the head script in
+// `plugins/framework-choice.ts`. The pages are prerendered, so this is the only
+// way the first paint can already be the reader's framework. Vue state below
+// drives the menu only, and only after mount.
+const STANDALONE = 'standalone'
+const hide = (selector: string) => `${selector}{display:none}`
+const css = [
+  hide('html:not([data-framework]) .framework-tabs [data-tab]:not([data-first])'),
+  ...frameworks.flatMap(({ id }) => {
+    const own = `[data-tab="${id}"]`
+    const group = `html[data-framework="${id}"] .framework-tabs`
+    return [
+      hide(`${group}:has(${own}) [data-tab]:not(${own})`),
+      // A Standalone tab is `initLogger` config, shared by every integration.
+      hide(`${group}:not(:has(${own})):has([data-tab="${STANDALONE}"]) [data-tab]:not([data-tab="${STANDALONE}"])`),
+      hide(`${group}:not(:has(${own})):not(:has([data-tab="${STANDALONE}"])) [data-tab]:not([data-first])`),
+      `${group}:not(:has(${own})):not(:has([data-tab="${STANDALONE}"])) [data-missing="${id}"]{display:inline}`,
+    ]
+  }),
+].join('\n')
+useHead({ style: [{ key: 'framework-tabs', innerHTML: css }] })
+
 const chosen = useFramework()
+const choice = useState<string | undefined>('framework-choice', () => undefined)
+onMounted(() => {
+  choice.value = document.documentElement.dataset.framework
+})
+
 // A tab naming no framework ("Any frontend") can be viewed here without
-// becoming the site-wide choice.
+// becoming the site-wide choice. Inline styles only exist once it is picked,
+// so the server and the first client render agree.
 const local = ref<number>()
-watch(chosen, () => {
+watch(choice, () => {
   local.value = undefined
 })
-
-// A Standalone tab is `initLogger` config, which every integration shares, so
-// it stands in for a framework the group has no tab for.
-const active = computed(() => {
-  const picked = local.value !== undefined ? items.value[local.value] : undefined
-  return picked
-    ?? items.value.find(t => t.framework?.id === chosen.value)
-    ?? (chosen.value ? items.value.find(t => t.framework?.id === 'standalone') : undefined)
-    ?? items.value[0]!
-})
-const activeIndex = computed(() => items.value.indexOf(active.value))
-
-const missing = computed(() => {
-  if (!chosen.value || active.value.framework?.id === chosen.value || active.value.framework?.id === 'standalone') return
-  return frameworks.find(f => f.id === chosen.value)
-})
+function view(index: number, display: string) {
+  if (local.value === undefined) return
+  return { display: local.value === index ? display : 'none' }
+}
 
 const options = computed(() => items.value.map((tab, index) => ({
   label: tab.framework?.label ?? tab.label,
@@ -78,12 +97,20 @@ const options = computed(() => items.value.map((tab, index) => ({
 })))
 
 const selected = computed({
-  get: () => String(activeIndex.value),
+  get: () => {
+    if (local.value !== undefined) return String(local.value)
+    const index = items.value.findIndex(t => t.framework?.id === choice.value)
+    if (index !== -1) return String(index)
+    const standalone = choice.value ? items.value.findIndex(t => t.framework?.id === STANDALONE) : -1
+    return String(standalone === -1 ? 0 : standalone)
+  },
   set: (value: string) => {
     const index = Number(value)
     const framework = items.value[index]?.framework
     if (framework) {
       chosen.value = framework.id
+      choice.value = framework.id
+      document.documentElement.dataset.framework = framework.id
       local.value = undefined
     } else {
       local.value = index
@@ -93,32 +120,62 @@ const selected = computed({
 </script>
 
 <template>
-  <div :class="ui.root()" data-section="framework-tabs">
+  <div :class="ui.root({ class: 'framework-tabs [&>[data-tab]>*]:my-0! [&>[data-tab]>*]:static!' })" data-section="framework-tabs">
     <div :class="ui.list({ class: 'gap-1.5 overflow-visible px-4 py-2' })">
-      <template v-if="active.path">
-        <UCodeIcon :filename="active.path" class="size-4 shrink-0" />
-        <span class="truncate text-sm/6 text-default">{{ active.path }}</span>
+      <template v-for="(tab, index) in items" :key="tab.key">
+        <span
+          v-if="tab.path"
+          :data-tab="tab.key"
+          :data-first="index === 0 || undefined"
+          :style="view(index, 'flex')"
+          class="flex min-w-0 items-center gap-1.5"
+        >
+          <UCodeIcon :filename="tab.path" class="size-4 shrink-0" />
+          <span class="truncate text-sm/6 text-default">{{ tab.path }}</span>
+        </span>
       </template>
-      <span v-if="missing" class="truncate text-xs text-dimmed">
-        No {{ missing.label }} example here
-      </span>
+      <span
+        v-for="framework in frameworks"
+        :key="framework.id"
+        :data-missing="framework.id"
+        class="hidden truncate text-xs text-dimmed"
+      >No {{ framework.label }} example here</span>
       <USelectMenu
         v-model="selected"
         :items="options"
         value-key="value"
         :search-input="false"
-        :icon="active.framework?.icon"
         color="neutral"
         variant="ghost"
         size="sm"
         aria-label="Framework"
         class="ml-auto -my-1 -mr-2"
         :content="{ align: 'end' }"
-        :ui="{ base: 'text-sm/5 md:text-sm/5 font-medium shrink-0 rounded-md text-default', content: 'min-w-52', viewport: 'framework-picker-viewport', leadingIcon: 'size-4 text-default', itemLeadingIcon: 'text-default' }"
-      />
+        :ui="{ base: 'text-sm/5 md:text-sm/5 font-medium shrink-0 rounded-md text-default', content: 'min-w-52', viewport: 'framework-picker-viewport', itemLeadingIcon: 'text-default' }"
+      >
+        <span
+          v-for="(tab, index) in items"
+          :key="tab.key"
+          :data-tab="tab.key"
+          :data-first="index === 0 || undefined"
+          :style="view(index, 'inline-flex')"
+          class="inline-flex items-center gap-1.5 truncate"
+        >
+          <UIcon v-if="tab.framework" :name="tab.framework.icon" class="size-4 shrink-0" />
+          {{ tab.framework?.label ?? tab.label }}
+        </span>
+      </USelectMenu>
     </div>
 
-    <component :is="active.component" :key="activeIndex" hide-header tabindex="-1" />
+    <div
+      v-for="(tab, index) in items"
+      :key="tab.key"
+      :data-tab="tab.key"
+      :data-first="index === 0 || undefined"
+      :style="view(index, 'block')"
+    >
+      <component :is="tab.component" hide-header tabindex="-1" />
+    </div>
   </div>
 </template>
 
