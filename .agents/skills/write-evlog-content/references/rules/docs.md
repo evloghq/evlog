@@ -89,3 +89,19 @@ Note: the scanner reads links from prose, from table cells, and from `to:` / `hr
 Rule: every `#fragment` in a link resolves to a heading on the page it targets, whether that page is this one or another.
 Why: a renamed heading takes its anchor with it, and nothing reports the break. The link still resolves, the page still loads, and the reader lands at the top of a long page having been promised a section.
 Note: the fragment is slugged the way the renderer does it, which removes punctuation rather than collapsing it. `Drain & Enrichers` anchors as `drain--enrichers` and `The ratchet: --baseline` as `the-ratchet---baseline`, both carrying the extra dash the removed character left behind. Links to another host carry someone else's fragments and are left alone.
+
+---
+
+**D-13 · The result comes before the explanation** · `standard`
+
+Rule: the first screen of a page shows what the reader gets: an output, a query result, a number from a real run. The mechanism, the install and the options follow it. A problem is named only as the reason the result matters, never as the opening on its own.
+Bad: a page that opens with a scenario, then the API, then the options, and shows the first output in the fourth section.
+Better: the demo's output table in the second paragraph, three numbers read from it, then "Add your first signal".
+Why: a reader who does not know evlog decides on the first screen whether the page is for them. A problem they recognise keeps them reading; a result they want makes them try it. Only the second one converts.
+
+---
+
+**D-14 · One path in the core, every knob in one place** · `standard`
+
+Rule: the quick start follows a single framework and a single command. Other frameworks sit behind a `::collapsible` or a `::code-group` tab. Options, defaults, counters and env vars live on one reference page per feature, tabbed by object with `::tabs`, and the prose pages link to it once instead of carrying their own option tables.
+Why: a core path with three branches reads as three products. A reader looking for a default should know which page has it before they search, and a table repeated across three pages drifts across three pages.

@@ -122,3 +122,9 @@ Applies to: `apps/docs/content/`. `reach.mjs` now resolves every fragment agains
 Flagged: introductory claims and migration copy were rewritten as implementation constraints; two search entry pages repeated onboarding and reference material.
 Actual: keep a confident, benefit-led introduction, correct unsupported claims, and put detailed limits where the reader makes that decision. Give each guide a distinct task and contextual links from the existing documentation.
 Applies to: introductory pages, product summaries, and new documentation guides. A factual correction does not require turning marketing copy into a warning.
+
+## 2026-10-03 · D-13, D-14 · The signals pages were written from the inside
+
+Flagged: nothing. Four pages scored 100, and the maintainer read them as "a lot of information, not clear, problems without solutions".
+Actual: the pages mirrored the package (define, configure, recipes), opened on a scenario, and spread the options over three pages. The reader sees the first real output in the fourth section. Rewritten to lead with the demo's output and three numbers read from it, one quick-start path with other frameworks collapsed, and one reference page with the options tabbed. The scanner measured none of this, which is why both are rules with a model check rather than a counter.
+Applies to: every page under `apps/docs/content/`, the use-case overviews first.
