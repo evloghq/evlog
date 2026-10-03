@@ -55,14 +55,19 @@ watch(chosen, () => {
   local.value = undefined
 })
 
+// A Standalone tab is `initLogger` config, which every integration shares, so
+// it stands in for a framework the group has no tab for.
 const active = computed(() => {
   const picked = local.value !== undefined ? items.value[local.value] : undefined
-  return picked ?? items.value.find(t => t.framework?.id === chosen.value) ?? items.value[0]!
+  return picked
+    ?? items.value.find(t => t.framework?.id === chosen.value)
+    ?? items.value.find(t => t.framework?.id === 'standalone')
+    ?? items.value[0]!
 })
 const activeIndex = computed(() => items.value.indexOf(active.value))
 
 const missing = computed(() => {
-  if (!chosen.value || active.value.framework?.id === chosen.value) return
+  if (!chosen.value || active.value.framework?.id === chosen.value || active.value.framework?.id === 'standalone') return
   return frameworks.find(f => f.id === chosen.value)
 })
 
