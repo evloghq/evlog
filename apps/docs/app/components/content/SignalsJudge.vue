@@ -170,7 +170,7 @@ const headline = computed(() => {
       <div class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_88px] items-center gap-x-3 border-b border-default/30 px-4 sm:px-6 py-1.5 font-mono text-[9px] tracking-widest uppercase text-dimmed">
         <span>request · sampling</span>
         <span class="hidden sm:block">model says</span>
-        <span class="text-right">drain</span>
+        <span class="text-right">outcome</span>
       </div>
 
       <div class="px-4 sm:px-6 py-2 space-y-0.5">
@@ -228,11 +228,11 @@ const headline = computed(() => {
 
       <div class="border-t border-muted/50 px-4 py-3 grid grid-cols-3 gap-3 font-mono text-[10px]">
         <div class="flex flex-col gap-0.5">
-          <span class="text-dimmed text-[9px] tracking-widest uppercase">drained before</span>
+          <span class="text-dimmed text-[9px] tracking-widest uppercase">kept by sampling</span>
           <span class="text-muted">{{ stats.before }} <span class="text-dimmed">/ {{ requests.length }}</span></span>
         </div>
         <div class="flex flex-col gap-0.5 text-center">
-          <span class="text-dimmed text-[9px] tracking-widest uppercase">drained after</span>
+          <span class="text-dimmed text-[9px] tracking-widest uppercase">kept with signals</span>
           <span class="text-emerald-400">{{ stats.after }} <span class="text-dimmed">/ {{ requests.length }}</span></span>
         </div>
         <div class="flex flex-col gap-0.5 text-right">
