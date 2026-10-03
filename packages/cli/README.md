@@ -147,7 +147,7 @@ Maintainer notes on frictions / wishlist: [`DEBUG-DX.md`](./DEBUG-DX.md).
 ## Adding a command
 
 1. Create `src/commands/<name>.ts` with `defineEvlogCommand('name', { run({ args, cli, log, ui }) { … } })`: the header, `--json` / `--debug` / `--no-header`, and the debug file is automatic. Use `log.step` / `log.finding` for diagnostics; `ui.done` / `ui.human` / `ui.json` for output.
-2. Add one lazy entry in [`src/commands/index.ts`](src/commands/index.ts), so the command only loads when it runs.
+2. Add one `lazyCommand` entry in [`src/commands/index.ts`](src/commands/index.ts) with the description `--help` shows. The module loads only when the command runs; `--help` never loads it.
 
 `src/index.ts` stays a thin shell (meta + `withTelemetry`). Do not embed command bodies there.
 

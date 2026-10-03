@@ -1,10 +1,10 @@
 import { basename } from 'node:path'
 import type { Node } from 'oxc-parser'
-import { globSync } from 'tinyglobby'
 import type { ParseFn, ParseResult } from '../parse'
 import { findHandlerLocation, nodeLoc, parseFile, walkAst } from '../parse'
 import type { FrameworkAdapter, RawRouteEntry, ScanContext } from '../types'
 import { indent, relativeFromRoot, segmentsToPath, stripExtension } from '../utils'
+import { glob } from '../../glob'
 
 function extractTanstackRoutes(file: string, root: string, parse: ParseFn): RawRouteEntry[] {
   const rel = relativeFromRoot(root, file)
@@ -124,7 +124,7 @@ export const tanstackStartAdapter: FrameworkAdapter = {
     const root = ctx.projectRoot
     const parse = ctx.parse ?? parseFile
 
-    for (const file of globSync('src/routes/**/*.{ts,tsx}', { cwd: root, absolute: true })) {
+    for (const file of glob('src/routes/**/*.{ts,tsx}', root)) {
       routes.push(...extractTanstackRoutes(file, root, parse))
     }
 

@@ -1,4 +1,4 @@
-import type { ArgsDef, CommandDef, CommandContext, CommandMeta, ParsedArgs } from 'citty'
+import type { ArgsDef, CommandDef, CommandContext, CommandMeta, ParsedArgs, Resolvable } from 'citty'
 import { defineCommand } from 'citty'
 import { EvlogError } from 'evlog'
 import { createContext } from '../core/context'
@@ -10,8 +10,6 @@ import type { CliDebug, DebugArgs } from './debug'
 import { createUi } from './ui'
 import type { CliUi } from './ui'
 
-type AnyCommand = CommandDef<ArgsDef>
-
 /**
  * Args injected on every {@link defineEvlogCommand} leaf.
  * Commands may still declare their own; these are merged in (command wins on clash).
@@ -20,6 +18,7 @@ export const COMMON_ARGS = {
   json: { type: 'boolean', description: 'Machine-readable JSON on stdout' },
   debug: { type: 'boolean', description: 'Emit a debug case file via evlog' },
   noHeader: { type: 'boolean', description: 'Skip the branded command header' },
+  cwd: { type: 'string', description: 'Project directory (default: current)' },
 } as const satisfies ArgsDef
 
 /** Citty context plus CLI helpers injected by {@link defineEvlogCommand}. */
@@ -38,7 +37,7 @@ export type EvlogRunContext<T extends ArgsDef = ArgsDef> = CommandContext<T> & {
   ui: CliUi
 }
 
-export type EvlogCommandDef<T extends ArgsDef = ArgsDef> = Omit<CommandDef<T>, 'run' | 'args'> & {
+export type EvlogCommandDef<T extends ArgsDef = {}> = Omit<CommandDef<T>, 'run' | 'args'> & {
   args?: T
   /**
    * Suppress the branded header for this run.
@@ -51,9 +50,9 @@ export type EvlogCommandDef<T extends ArgsDef = ArgsDef> = Omit<CommandDef<T>, '
   run?: (ctx: EvlogRunContext<T & typeof COMMON_ARGS>) => ReturnType<NonNullable<CommandDef<T>['run']>>
 }
 
-function runArgs(args: unknown): DebugArgs & { noHeader?: boolean } {
-  const a = args as DebugArgs & { noHeader?: boolean }
-  return { json: a?.json, noHeader: a?.noHeader, debug: a?.debug }
+function runArgs(args: unknown): DebugArgs & { noHeader?: boolean, cwd?: string } {
+  const a = args as DebugArgs & { noHeader?: boolean, cwd?: string }
+  return { json: a?.json, noHeader: a?.noHeader, debug: a?.debug, cwd: a?.cwd || undefined }
 }
 
 function syncMeta(meta: CommandDef['meta']): CommandMeta {
@@ -85,7 +84,7 @@ function syncMeta(meta: CommandDef['meta']): CommandMeta {
  * })
  * ```
  */
-export function defineEvlogCommand<T extends ArgsDef = ArgsDef>(
+export function defineEvlogCommand<T extends ArgsDef = {}>(
   command: string,
   def: EvlogCommandDef<T>,
 ): CommandDef<T & typeof COMMON_ARGS> {
@@ -104,7 +103,7 @@ export function defineEvlogCommand<T extends ArgsDef = ArgsDef>(
     },
     async run(ctx: CommandContext<T & typeof COMMON_ARGS>) {
       const flags = runArgs(ctx.args)
-      const cli = createContext()
+      const cli = createContext(flags.cwd ? { cwd: flags.cwd } : {})
       if (wantsHeader(cli, flags) && !def.skipHeader?.(cli, ctx.args)) {
         writeHuman(formatCommandHeader(cli, { command }))
       }
@@ -140,40 +139,25 @@ export function failWith(
   io.ui.exit(EXIT_FAIL)
 }
 
+async function resolve<T>(value: Resolvable<T>): Promise<T> {
+  return typeof value === 'function' ? await (value as () => T | Promise<T>)() : await value
+}
+
 /**
- * Recursively wrap every leaf `run` handler in a command tree with the
- * branded header (and optional debug wide event). Useful for third-party
- * trees (e.g. `@evlog/telemetry`).
+ * A command whose module loads on first use.
  *
- * @param path - Command path segments already walked, e.g. `['telemetry']`.
+ * `meta` lives here so `evlog --help` can list every command without importing
+ * any of them; the module's own `meta` only needs a `name`. `args`,
+ * `subCommands` and `run` all go through citty's lazy resolution, so the import
+ * happens once, when the command is actually selected.
  */
-export function withCommandHeaders(cmd: AnyCommand, path: string[] = []): AnyCommand {
-  const wrappedSubs = cmd.subCommands
-    ? Object.fromEntries(
-      Object.entries(cmd.subCommands).map(([key, sub]) => [
-        key,
-        withCommandHeaders(sub as AnyCommand, [...path, key]),
-      ]),
-    )
-    : undefined
-
-  if (!cmd.run) {
-    return { ...cmd, subCommands: wrappedSubs }
-  }
-
-  const label = path.join(' ') || 'evlog'
-  const originalRun = cmd.run
-
+export function lazyCommand(meta: CommandMeta, load: () => Promise<{ default: CommandDef<any> }>): CommandDef<any> {
+  let pending: Promise<CommandDef<any>> | undefined
+  const command = () => (pending ??= load().then(module => module.default))
   return {
-    ...cmd,
-    subCommands: wrappedSubs,
-    async run(ctx) {
-      const flags = runArgs(ctx.args)
-      const cli = createContext()
-      if (wantsHeader(cli, flags)) {
-        writeHuman(formatCommandHeader(cli, { command: label }))
-      }
-      return await withCliDebug(cli, { command: label, ...flags }, () => originalRun(ctx))
-    },
+    meta,
+    args: async () => (await resolve((await command()).args)) ?? {},
+    subCommands: async () => (await resolve((await command()).subCommands)) ?? {},
+    run: async ctx => (await command()).run?.(ctx),
   }
 }

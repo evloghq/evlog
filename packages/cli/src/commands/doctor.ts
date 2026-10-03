@@ -38,7 +38,7 @@ export interface DoctorResult {
   summary: CheckSummary
 }
 
-const MIN_NODE_MAJOR = 20
+const MIN_NODE_MAJOR = 22
 
 function checkNode(ctx: CliContext): Check {
   const major = Number.parseInt(ctx.nodeVersion.replace(/^v/, ''), 10)
@@ -346,14 +346,9 @@ export function doctorTelemetryFieldNames(): string[] {
  * Logic lives in {@link runDoctor}; this file owns the citty surface.
  */
 export default defineEvlogCommand('doctor', {
-  meta: { name: 'doctor', description: 'Diagnose your evlog setup' },
-  args: {
-    cwd: { type: 'string', description: 'Project directory (default: current)' },
-  },
+  meta: { name: 'doctor' },
   async run({ args, cli, log, ui }) {
-    const cwd = typeof args.cwd === 'string' && args.cwd.length > 0 ? args.cwd : undefined
-    const ctx = cwd ? { ...cli, cwd } : cli
-    const result = await runDoctor(ctx, log)
+    const result = await runDoctor(cli, log)
 
     telemetry.set(doctorTelemetryFields(result))
 
@@ -364,7 +359,7 @@ export default defineEvlogCommand('doctor', {
         checks: result.checks,
         summary: result.summary,
       },
-      human: formatDoctorReport(ctx, result),
+      human: formatDoctorReport(cli, result),
       summary: result.summary,
     })
   },

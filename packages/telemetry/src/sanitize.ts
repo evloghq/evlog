@@ -1,4 +1,4 @@
-import type { CollectConfig, FlagDefinitions } from './types'
+import type { CollectConfig, CollectFields, CollectFlags, FlagDefinitions } from './types'
 
 /** Allowlisted system-injected custom keys (e.g. GitHub Actions metadata). */
 const SYSTEM_CUSTOM_KEYS = new Set(['ghaAction', 'ghaEvent'])
@@ -41,7 +41,7 @@ export function toCamelCase(key: string): string {
 /** Options for {@link sanitizeFlags}. */
 export interface SanitizeFlagsOptions {
   /** Allowlists declared by the tool author. */
-  collect?: CollectConfig
+  collect?: CollectConfig<CollectFlags, CollectFields>
   /**
    * The command's declared arguments.
    *
@@ -104,7 +104,7 @@ export function sanitizeFlags(
 export function sanitizeCustom(
   input: Record<string, unknown>,
   existing: Record<string, boolean | number | string>,
-  collect?: CollectConfig,
+  collect?: CollectConfig<CollectFlags, CollectFields>,
 ): Record<string, boolean | number | string> {
   const out = { ...existing }
   const fieldAllowlists = collect?.fields ?? {}
@@ -119,7 +119,7 @@ export function sanitizeCustom(
 
     if (typeof value === 'string') {
       const allowed = fieldAllowlists[key]
-      if (allowed && (allowed as readonly string[]).includes(value)) {
+      if (allowed?.includes(value)) {
         out[key] = value
       }
       // undeclared strings: dropped silently

@@ -1,4 +1,4 @@
-import type { CollectConfig, RunEvent } from './types'
+import type { CollectConfig, CollectFields, CollectFlags, RunEvent } from './types'
 
 const STANDARD_FIELDS: Array<{ field: string, type: string, description: string }> = [
   { field: 'event', type: 'string', description: 'Always `run`.' },
@@ -38,7 +38,7 @@ export interface DisclosureDocument {
  */
 export function generateDisclosure(
   toolName: string,
-  collect?: CollectConfig,
+  collect?: CollectConfig<CollectFlags, CollectFields>,
 ): DisclosureDocument {
   const flagExtensions: Record<string, string[]> = {}
   const fieldExtensions: Record<string, string[]> = {}

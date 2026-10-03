@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
-import { globSync } from 'tinyglobby'
 import { detectFramework } from '../map/detect'
 import type { Framework } from '../map/types'
 import type { PackageJson, ProjectInfo } from '../project'
 import { isInitFramework } from '../frameworks'
+import { glob } from '../glob'
 
 /** A workspace package `init` could set up. */
 export interface WorkspaceApp {
@@ -32,11 +32,7 @@ export function findWorkspaceApps(project: ProjectInfo): WorkspaceApp[] {
   const patterns = workspaceGlobs(project)
   if (patterns.length === 0) return []
 
-  const manifests = globSync(patterns.map(pattern => `${pattern}/package.json`), {
-    cwd: project.root,
-    absolute: true,
-    ignore: ['**/node_modules/**'],
-  })
+  const manifests = glob(patterns.map(pattern => `${pattern}/package.json`), project.root)
 
   const apps: WorkspaceApp[] = []
   for (const manifest of manifests) {
@@ -95,7 +91,7 @@ function workspaceGlobs(project: ProjectInfo): string[] {
 /**
  * Read the `packages:` list out of `pnpm-workspace.yaml`.
  *
- * Negated globs are dropped: tinyglobby takes them as patterns rather than
+ * Negated globs are dropped: a glob library takes them as patterns rather than
  * exclusions, so keeping them would search for a directory named `!docs`.
  */
 export function parsePnpmPackages(yaml: string): string[] {

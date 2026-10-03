@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { globSync } from 'tinyglobby'
+import { glob } from '../glob'
 import { buildFileFacts, moduleKey } from './facts'
 import type { FileFacts } from './facts'
 import { parseSource } from './parse'
@@ -78,20 +78,6 @@ const PAIRABLE_PACKAGES: readonly PairablePackage[] = ['ai', 'better-auth']
  * importing it would be scored as if the project had no catalog at all.
  */
 const SOURCE_GLOBS = ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,vue}']
-const IGNORED = [
-  '**/node_modules/**',
-  '**/.git/**',
-  '**/dist/**',
-  '**/build/**',
-  '**/.turbo/**',
-  '**/.nuxt/**',
-  '**/.next/**',
-  '**/.svelte-kit/**',
-  '**/.vercel/**',
-  '**/.output/**',
-  '**/coverage/**',
-  '**/*.d.ts',
-]
 
 /** Confirm a marker against the AST rather than trusting the text match. */
 function confirmFeature(feature: EvlogFeature, facts: FileFacts): boolean {
@@ -127,11 +113,7 @@ export function collectProjectFacts(
   const errors = new Map<string, { label: string, files: Set<string> }>()
   const evlogBarrels = new Map<string, Set<string>>()
 
-  const files = globSync(SOURCE_GLOBS, {
-    cwd: ctx.projectRoot,
-    absolute: true,
-    ignore: IGNORED,
-  })
+  const files = glob(SOURCE_GLOBS, ctx.projectRoot)
 
   for (const file of files) {
     let source: string

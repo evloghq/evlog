@@ -5,13 +5,6 @@ import type { CollectFields, CollectFlags, FlagDefinitions, TelemetryHandle, Tel
 type AnyCommand = CommandDef<ArgsDef>
 type Runner = Pick<TelemetryHandle, 'run'>
 
-/** citty allows `args` to be lazy; only a plain object can be read synchronously. */
-function syncArgs(args: AnyCommand['args']): FlagDefinitions | undefined {
-  return args && typeof args === 'object' && !('then' in args)
-    ? args as FlagDefinitions
-    : undefined
-}
-
 async function resolve<T>(value: Resolvable<T>): Promise<T> {
   return typeof value === 'function' ? await (value as () => T | Promise<T>)() : await value
 }
@@ -53,11 +46,11 @@ function wrapCommand(
     ...command,
     subCommands: command.subCommands ? wrapSubCommands(command.subCommands, telemetry, commandPath) : undefined,
     run: command.run
-      ? (ctx) => {
+      ? async (ctx) => {
         const name = commandPath.join(' ') || segment || 'run'
         return telemetry.run(name, () => command.run!(ctx), {
           flags: ctx.args as Record<string, unknown>,
-          args: syncArgs(command.args),
+          args: command.args ? await resolve(command.args) as FlagDefinitions : undefined,
         })
       }
       : command.run,

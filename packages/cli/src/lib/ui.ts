@@ -1,5 +1,5 @@
 import type { CheckSummary } from '../core/output'
-import { exitCodeFor, writeHuman, writeJson } from '../core/output'
+import { exitCodeFor, setExitCode, writeHuman, writeJson } from '../core/output'
 
 /**
  * Output helpers for a command run — the only place commands should write
@@ -35,9 +35,7 @@ export function createUi(options: { json?: boolean } = {}): CliUi {
     human: writeHuman,
     json: writeJson,
     exit(summaryOrCode) {
-      process.exitCode = typeof summaryOrCode === 'number'
-        ? summaryOrCode
-        : exitCodeFor(summaryOrCode)
+      setExitCode(typeof summaryOrCode === 'number' ? summaryOrCode : exitCodeFor(summaryOrCode))
     },
     done({ human, json, summary, jsonMode }) {
       const useJson = jsonMode ?? options.json === true

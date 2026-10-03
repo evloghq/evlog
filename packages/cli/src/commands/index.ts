@@ -1,6 +1,4 @@
-import type { CommandDef, SubCommandsDef } from 'citty'
-
-const load = (module: Promise<{ default: unknown }>) => module.then(m => m.default as CommandDef)
+import { lazyCommand } from '../lib/command'
 
 /**
  * Root subcommand registry.
@@ -8,15 +6,30 @@ const load = (module: Promise<{ default: unknown }>) => module.then(m => m.defau
  * Adding a command:
  * 1. Create `src/commands/<name>.ts` exporting a default citty `defineCommand`
  *    (prefer `defineEvlogCommand` from `lib/command` so the branded header is automatic)
- * 2. Add one lazy entry to {@link subCommands}
+ * 2. Add one {@link lazyCommand} entry here, with the description `--help` shows
  *
- * Entries are dynamic imports so a run only loads the command it executes:
+ * A run loads only the command it executes, and `--help` loads none of them:
  * `evlog doctor` never pulls in the parser `map` and `init` depend on.
  */
-export const subCommands: SubCommandsDef = {
-  init: () => load(import('./init')),
-  agents: () => load(import('./agents')),
-  doctor: () => load(import('./doctor')),
-  map: () => load(import('./map')),
-  telemetry: () => load(import('./telemetry')),
+export const subCommands = {
+  init: lazyCommand(
+    { name: 'init', description: 'Wire evlog into this project — install, config, drains' },
+    () => import('./init'),
+  ),
+  agents: lazyCommand(
+    { name: 'agents', description: 'Write evlog conventions into AGENTS.md and install the agent skills' },
+    () => import('./agents'),
+  ),
+  doctor: lazyCommand(
+    { name: 'doctor', description: 'Diagnose your evlog setup' },
+    () => import('./doctor'),
+  ),
+  map: lazyCommand(
+    { name: 'map', description: 'Static observability map — Lighthouse for wide events' },
+    () => import('./map'),
+  ),
+  telemetry: lazyCommand(
+    { name: 'telemetry', description: 'View or change anonymous usage telemetry settings' },
+    () => import('./telemetry'),
+  ),
 }

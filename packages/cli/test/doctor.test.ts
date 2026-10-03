@@ -203,7 +203,7 @@ export default defineNitroPlugin((nitroApp) => {
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
     await doctor.run!({
-      args: { json: true, noHeader: true, cwd, debug: false },
+      args: { _: [] as string[], json: true, noHeader: true, cwd, debug: false },
       rawArgs: [],
       cmd: doctor,
       data: {},

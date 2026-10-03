@@ -1,8 +1,8 @@
-import { globSync } from 'tinyglobby'
 import { cliErrors } from '../errors'
 import { FRAMEWORKS } from '../frameworks'
 import type { FrameworkDetection } from '../frameworks'
 import type { ProjectInfo } from '../project'
+import { glob } from '../glob'
 import type { Framework } from './types'
 
 export interface DetectionResult {
@@ -16,7 +16,7 @@ function hasDep(pkg: NonNullable<ProjectInfo['packageJson']>, names: readonly st
 }
 
 function hasConfig(root: string, patterns: readonly string[]): boolean {
-  return globSync([...patterns], { cwd: root, absolute: false }).length > 0
+  return glob([...patterns], root).length > 0
 }
 
 function matches(detect: FrameworkDetection, root: string, pkg: NonNullable<ProjectInfo['packageJson']>): boolean {

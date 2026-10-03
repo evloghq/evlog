@@ -15,7 +15,7 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "bin": {
     "evlog": "./bin/evlog.mjs"
@@ -52,14 +52,13 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "typecheck": "echo 'Typecheck handled by build'"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@clack/prompts": "^1.8.0",
     "@evlog/telemetry": "workspace:*",
     "citty": "^0.2.2",
-    "oxc-parser": "^0.149.0",
-    "tinyglobby": "^0.2.17"
+    "oxc-parser": "^0.149.0"
   },
   "peerDependencies": {
     "evlog": ">=2.29.0"

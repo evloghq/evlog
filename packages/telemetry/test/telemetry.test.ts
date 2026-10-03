@@ -333,15 +333,11 @@ describe('telemetry status command', () => {
 
     try {
       const tree = defineTelemetryCommands({ name: TOOL })
-      const status = tree.subCommands?.status
+      const subs = typeof tree.subCommands === 'function' ? await tree.subCommands() : await tree.subCommands
+      const status = subs?.status
       expect(status).toBeDefined()
       const cmd = typeof status === 'function' ? await status() : await status
-      await cmd!.run?.({
-        args: {},
-        rawArgs: [],
-        data: undefined,
-        cmd: cmd!,
-      })
+      await runCommand(cmd!, { rawArgs: [] })
       const out = writes.join('')
       expect(out).toContain(`Data directory: ${getTelemetryDir(TOOL)}`)
       expect(out).toMatch(/Telemetry: (enabled|disabled)/)
