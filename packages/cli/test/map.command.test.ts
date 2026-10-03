@@ -415,3 +415,72 @@ describe('map command', () => {
     expect(process.exitCode).toBeUndefined()
   })
 })
+
+describe('map --format', () => {
+  function captureStdout(): string[] {
+    const out: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+      out.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString())
+      return true
+    }) as typeof process.stdout.write)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    return out
+  }
+
+  it('github: one warning per failing requirement and a notice with the score', async () => {
+    const cwd = join(FIXTURES, 'hono-basic')
+    const out = captureStdout()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--no-header', '--no-write'] })
+
+    const lines = out.join('').trim().split('\n')
+    expect(lines.filter(line => line.startsWith('::warning file=src/health.ts,line=5,title=evlog map%3A wide-event::'))).toHaveLength(1)
+    expect(lines.some(line => line.startsWith('::error'))).toBe(false)
+    expect(lines.at(-1)).toMatch(/^::notice title=evlog map::score \d+\/100 \(/)
+    expect(process.exitCode).toBeUndefined()
+  })
+
+  it('github: a score under --min-score is an error and exits 1', async () => {
+    const cwd = join(FIXTURES, 'hono-basic')
+    const out = captureStdout()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--min-score', '100', '--no-header', '--no-write'] })
+
+    expect(out.join('')).toMatch(/^::error title=evlog map::score \d+\/100 .*below --min-score 100$/m)
+    expect(process.exitCode).toBe(1)
+  })
+
+  it('sarif: a 2.1.0 log naming every rule, with one result per failed check', async () => {
+    const cwd = join(FIXTURES, 'hono-basic')
+    const out = captureStdout()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'sarif', '--no-header', '--no-write'] })
+
+    const sarif = JSON.parse(out.join('')) as {
+      version: string
+      schemaVersion?: unknown
+      runs: Array<{
+        tool: { driver: { name: string, rules: Array<{ id: string }> } }
+        results: Array<{ ruleId: string, level: string, locations: Array<{ physicalLocation: { artifactLocation: { uri: string }, region: { startLine: number } } }> }>
+      }>
+    }
+    expect(sarif.version).toBe('2.1.0')
+    expect(sarif.schemaVersion).toBeUndefined()
+    const [run] = sarif.runs
+    expect(run!.tool.driver.name).toBe('evlog')
+    expect(run!.tool.driver.rules.map(rule => rule.id)).toEqual(expect.arrayContaining(REQUIREMENTS.map(rule => rule.id)))
+    const health = run!.results.find(result => result.ruleId === 'wide-event')!
+    expect(health.level).toBe('warning')
+    expect(health.locations[0]!.physicalLocation).toEqual({ artifactLocation: { uri: 'src/health.ts' }, region: { startLine: 5 } })
+  })
+
+  it('refuses --json together with another --format', async () => {
+    const cwd = join(FIXTURES, 'hono-basic')
+    const out = captureStdout()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--format', 'github', '--no-header', '--no-write'] })
+
+    expect(JSON.parse(out.join('')).error.code).toBe('cli.MAP_FORMAT_CONFLICT')
+    expect(process.exitCode).toBe(1)
+  })
+})
