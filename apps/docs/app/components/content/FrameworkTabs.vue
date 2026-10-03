@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { VNode } from 'vue'
-import { TabsContent, TabsIndicator, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
+import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import { tv } from '@nuxt/ui/utils/tv'
 import theme from '#build/ui/prose/code-group'
 import { resolveFramework } from '~/utils/frameworks'
@@ -75,14 +75,12 @@ onMounted(() => {
     :class="ui.root()"
     data-section="framework-tabs"
   >
-    <TabsList :class="ui.list()">
-      <TabsIndicator :class="ui.indicator()" />
-
+    <TabsList :class="ui.list({ class: 'flex-wrap overflow-visible' })">
       <TabsTrigger
         v-for="(item, index) of items"
         :key="index"
         :value="String(index)"
-        :class="ui.trigger()"
+        :class="ui.trigger({ class: 'data-[state=active]:bg-elevated data-[state=active]:shadow-xs' })"
       >
         <UIcon
           v-if="item.icon"

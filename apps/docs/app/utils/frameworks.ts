@@ -9,7 +9,7 @@ export interface Framework {
 
 export const frameworks: Framework[] = [
   { id: 'nuxt', label: 'Nuxt', icon: 'i-custom:nuxt', color: '#00DC82', aliases: ['nuxt / nitro', 'nuxt.config.ts'] },
-  { id: 'nitro', label: 'Nitro', icon: 'i-custom:nitro' },
+  { id: 'nitro', label: 'Nitro', icon: 'i-custom:nitro-color' },
   { id: 'next', label: 'Next.js', icon: 'i-simple-icons-nextdotjs', aliases: ['nextjs', 'next.js app router', 'instrumentation.ts'] },
   { id: 'sveltekit', label: 'SvelteKit', icon: 'i-simple-icons-svelte', color: '#FF3E00', aliases: ['svelte'] },
   { id: 'tanstack-start', label: 'TanStack Start', icon: 'i-custom:tanstack', aliases: ['tanstack'] },
