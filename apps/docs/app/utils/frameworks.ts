@@ -2,27 +2,25 @@ export interface Framework {
   id: string
   label: string
   icon: string
-  /** Brand colour applied to a monochrome icon. Omitted when the brand is black on white. */
-  color?: string
   aliases?: string[]
 }
 
 export const frameworks: Framework[] = [
-  { id: 'nuxt', label: 'Nuxt', icon: 'i-custom:nuxt', color: '#00DC82', aliases: ['nuxt / nitro', 'nuxt.config.ts'] },
+  { id: 'nuxt', label: 'Nuxt', icon: 'i-logos-nuxt-icon', aliases: ['nuxt / nitro', 'nuxt.config.ts'] },
   { id: 'nitro', label: 'Nitro', icon: 'i-custom:nitro-color' },
-  { id: 'next', label: 'Next.js', icon: 'i-simple-icons-nextdotjs', aliases: ['nextjs', 'next.js app router', 'instrumentation.ts'] },
-  { id: 'sveltekit', label: 'SvelteKit', icon: 'i-simple-icons-svelte', color: '#FF3E00', aliases: ['svelte'] },
-  { id: 'tanstack-start', label: 'TanStack Start', icon: 'i-custom:tanstack', aliases: ['tanstack'] },
-  { id: 'nestjs', label: 'NestJS', icon: 'i-simple-icons-nestjs', color: '#E0234E', aliases: ['nest'] },
-  { id: 'express', label: 'Express', icon: 'i-simple-icons-express' },
-  { id: 'hono', label: 'Hono', icon: 'i-simple-icons-hono', color: '#E36002' },
-  { id: 'fastify', label: 'Fastify', icon: 'i-simple-icons-fastify' },
+  { id: 'next', label: 'Next.js', icon: 'i-logos-nextjs-icon', aliases: ['nextjs', 'next.js app router', 'instrumentation.ts'] },
+  { id: 'sveltekit', label: 'SvelteKit', icon: 'i-logos-svelte-icon', aliases: ['svelte'] },
+  { id: 'tanstack-start', label: 'TanStack Start', icon: 'i-custom:tanstack-emblem', aliases: ['tanstack'] },
+  { id: 'react-router', label: 'React Router', icon: 'i-logos-react-router' },
+  { id: 'hono', label: 'Hono', icon: 'i-logos-hono' },
+  { id: 'express', label: 'Express', icon: 'i-logos-express' },
+  { id: 'fastify', label: 'Fastify', icon: 'i-logos-fastify-icon' },
   { id: 'elysia', label: 'Elysia', icon: 'i-custom:elysia' },
-  { id: 'react-router', label: 'React Router', icon: 'i-custom:reactrouter', color: '#F44250' },
-  { id: 'workers', label: 'Cloudflare Workers', icon: 'i-simple-icons-cloudflareworkers', color: '#F38020', aliases: ['cloudflare', 'cloudflare workers'] },
-  { id: 'astro', label: 'Astro', icon: 'i-simple-icons-astro', color: '#BC52EE' },
-  { id: 'orpc', label: 'oRPC', icon: 'i-lucide-cable' },
-  { id: 'lambda', label: 'AWS Lambda', icon: 'i-custom:lambda', color: '#FF9900', aliases: ['aws lambda', 'aws'] },
+  { id: 'nestjs', label: 'NestJS', icon: 'i-logos-nestjs', aliases: ['nest'] },
+  { id: 'orpc', label: 'oRPC', icon: 'i-custom:orpc' },
+  { id: 'workers', label: 'Cloudflare Workers', icon: 'i-logos-cloudflare-workers-icon', aliases: ['cloudflare', 'cloudflare workers'] },
+  { id: 'astro', label: 'Astro', icon: 'i-logos-astro-icon' },
+  { id: 'lambda', label: 'AWS Lambda', icon: 'i-logos-aws-lambda', aliases: ['aws lambda', 'aws'] },
   { id: 'standalone', label: 'Standalone', icon: 'i-lucide-box', aliases: ['standalone job'] },
 ]
 

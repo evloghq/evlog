@@ -50,12 +50,7 @@ function copyCode() {
 <template>
   <div :class="classes.root({ class: [props.ui?.root], filename: !!props.filename })">
     <div v-if="props.filename && !props.hideHeader" :class="classes.header({ class: props.ui?.header })">
-      <UCodeIcon
-        :icon="props.icon ?? framework?.icon"
-        :filename="props.filename"
-        :class="classes.icon({ class: props.ui?.icon })"
-        :style="framework?.color ? { color: framework.color } : undefined"
-      />
+      <UCodeIcon :icon="props.icon ?? framework?.icon" :filename="props.filename" :class="classes.icon({ class: props.ui?.icon })" />
 
       <span :class="classes.filename({ class: props.ui?.filename })">{{ props.filename }}</span>
     </div>

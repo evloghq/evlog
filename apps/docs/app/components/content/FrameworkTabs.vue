@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import type { VNode } from 'vue'
-import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import { tv } from '@nuxt/ui/utils/tv'
 import theme from '#build/ui/prose/code-group'
-import { resolveFramework } from '~/utils/frameworks'
+import { frameworks, resolveFramework } from '~/utils/frameworks'
+import type { Framework } from '~/utils/frameworks'
 
 interface Tab {
   label: string
-  framework?: string
-  icon?: string
-  color?: string
+  framework?: Framework
   component: VNode
 }
 
@@ -32,8 +30,7 @@ function flatten(node: VNode): VNode[] {
 function collect(): Tab[] {
   return (slots.default?.() ?? []).flatMap(flatten).map((node, index) => {
     const label = String(node.props?.filename ?? node.props?.label ?? index)
-    const framework = resolveFramework(label)
-    return { label, framework: framework?.id, icon: framework?.icon, color: framework?.color, component: node }
+    return { label, framework: resolveFramework(label), component: node }
   })
 }
 
@@ -46,59 +43,67 @@ const items = computed(() => {
   return collect()
 })
 
-const STORAGE_KEY = 'evlog-framework'
-const model = ref('0')
-// Shared across every FrameworkTabs on the page: picking Hono once selects it everywhere.
-const selected = useState<string | undefined>('framework-tabs', () => undefined)
+const chosen = useFramework()
+// A tab naming no framework ("Any frontend") can be viewed here without
+// becoming the site-wide choice.
+const local = ref<number>()
+watch(chosen, () => {
+  local.value = undefined
+})
 
-function select(framework: string | undefined) {
-  if (!framework || framework === selected.value) return
-  selected.value = framework
-  localStorage.setItem(STORAGE_KEY, framework)
-}
+const active = computed(() => {
+  const picked = local.value !== undefined ? items.value[local.value] : undefined
+  return picked ?? items.value.find(t => t.framework?.id === chosen.value) ?? items.value[0]!
+})
+const activeIndex = computed(() => items.value.indexOf(active.value))
 
-onMounted(() => {
-  if (!selected.value) selected.value = localStorage.getItem(STORAGE_KEY) ?? undefined
-  watch(selected, (framework) => {
-    const index = items.value.findIndex(item => item.framework === framework)
-    if (index !== -1) model.value = String(index)
-  }, { immediate: true })
-  watch(model, value => select(items.value[Number(value)]?.framework))
+const missing = computed(() => {
+  if (!chosen.value || active.value.framework?.id === chosen.value) return
+  return frameworks.find(f => f.id === chosen.value)
+})
+
+const options = computed(() => items.value.map((tab, index) => ({
+  label: tab.framework?.label ?? tab.label,
+  icon: tab.framework?.icon,
+  value: String(index),
+})))
+
+const selected = computed({
+  get: () => String(activeIndex.value),
+  set: (value: string) => {
+    const index = Number(value)
+    const framework = items.value[index]?.framework
+    if (framework) {
+      chosen.value = framework.id
+      local.value = undefined
+    } else {
+      local.value = index
+    }
+  },
 })
 </script>
 
 <template>
-  <TabsRoot
-    v-model="model"
-    default-value="0"
-    :unmount-on-hide="false"
-    :class="ui.root()"
-    data-section="framework-tabs"
-  >
-    <TabsList :class="ui.list({ class: 'flex-wrap overflow-visible' })">
-      <TabsTrigger
-        v-for="(item, index) of items"
-        :key="index"
-        :value="String(index)"
-        :class="ui.trigger({ class: 'data-[state=active]:bg-elevated data-[state=active]:shadow-xs' })"
-      >
-        <UIcon
-          v-if="item.icon"
-          :name="item.icon"
-          :class="ui.triggerIcon()"
-          :style="item.color ? { color: item.color } : undefined"
-        />
-        <span :class="ui.triggerLabel()">{{ item.label }}</span>
-      </TabsTrigger>
-    </TabsList>
+  <div :class="ui.root()" data-section="framework-tabs">
+    <div :class="ui.list({ class: 'justify-between overflow-visible' })">
+      <USelectMenu
+        v-model="selected"
+        :items="options"
+        value-key="value"
+        :search-input="false"
+        :icon="active.framework?.icon"
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        aria-label="Framework"
+        :content="{ align: 'start' }"
+        :ui="{ content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default' }"
+      />
+      <span v-if="missing" class="truncate pr-2 text-xs text-dimmed">
+        No {{ missing.label }} example here
+      </span>
+    </div>
 
-    <TabsContent
-      v-for="(item, index) of items"
-      :key="index"
-      :value="String(index)"
-      as-child
-    >
-      <component :is="item.component" hide-header tabindex="-1" />
-    </TabsContent>
-  </TabsRoot>
+    <component :is="active.component" :key="activeIndex" hide-header tabindex="-1" />
+  </div>
 </template>

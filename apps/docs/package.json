@@ -33,6 +33,7 @@
     "shaders": "^2.5.135"
   },
   "devDependencies": {
+    "@iconify-json/logos": "^1.2.15",
     "eslint": "^9.39.5",
     "nuxt-site-config": "4.2.3",
     "vitest": "^4.1.11"

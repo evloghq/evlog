@@ -5,6 +5,7 @@ describe('resolveFramework', () => {
   it.each([
     ['Nuxt', 'nuxt'],
     ['Nuxt / Nitro', 'nuxt'],
+    ['Nitro', 'nitro'],
     ['Next.js', 'next'],
     ['Hono / Express / Fastify / Elysia / NestJS', 'hono'],
     ['lib/evlog.ts (Next.js)', 'next'],

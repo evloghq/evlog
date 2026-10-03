@@ -103,7 +103,7 @@ Why: a reader who does not know evlog decides on the first screen whether the pa
 
 **D-14 · One path in the core, every knob in one place** · `standard`
 
-Rule: the quick start is one sequence of steps. Where a step differs by framework, it is one `::framework-tabs` with every supported framework as an equal tab, in a stable order (Nuxt / Nitro, Next.js, Hono, Express, Standalone); no framework is the lead and none is folded away. Options, defaults, counters and env vars live on one reference page per feature, tabbed by object with `::tabs`, and the prose pages link to it once instead of carrying their own option tables.
+Rule: the quick start is one sequence of steps. Where a step differs by framework, it is one `::framework-tabs` with every supported framework as an equal tab, in a stable order (Nuxt, Nitro, Next.js, SvelteKit, TanStack Start, React Router, Hono, Express, Fastify, Elysia, NestJS, oRPC, Cloudflare Workers, Standalone); no framework is the lead and none is folded away. Options, defaults, counters and env vars live on one reference page per feature, tabbed by object with `::tabs`, and the prose pages link to it once instead of carrying their own option tables.
 Why: evlog does not know which framework a reader runs, so a page that leads with one tells the others the feature is not for them. A table repeated across three pages drifts across three pages.
 
 ---
