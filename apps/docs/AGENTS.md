@@ -11,6 +11,14 @@ Nuxt UI ships the components this site renders inside markdown. Use them as the 
 - **Style a component through its own `ui` prop or `app.config.ts`**, never by wrapping it in a bordered box. An accordion already draws its dividers; a parent that adds a border and a background is fighting the theme and will drift from it.
 - **A component carries meaning, not texture.** An accordion holds answers the reader chooses between. Do not fold prose that already reads fine into a component, and never restate on a page something the same page says a few paragraphs above.
 
+## Framework tabs
+
+A group of snippets keyed by framework uses `::framework-tabs`, not `::code-group`. Same body: one fence per framework, the framework in the bracket label (`[Nuxt / Nitro]`, `[Hono]`, `[lib/evlog.ts (Next.js)]`), the file path as a leading `// path` comment. The component (`app/components/content/FrameworkTabs.vue`) resolves the label through `app/utils/frameworks.ts` for the brand icon and colour, and remembers the chosen framework across every group on the site. A label naming no framework still renders, without an icon. A single fence headed by a framework name (`[Nuxt (auto-imported)]`) goes through the same registry in `app/components/prose/Pre.vue`. New integration: add it to the registry; there is no `codeIcon` map to keep in step.
+
+Nothing else goes inside the group. A `::callout` between two fences closes the group at its own `::` and the fences after it fall out as loose blocks.
+
+`::code-group` stays for everything else: package managers, input/output pairs, before/after.
+
 ## Structured data
 
 JSON-LD carries the facts that are **not** already in the page text: the license, the price, the application category. Never restate the page's own prose in it. Copy is crawlable where it is written, so a second copy in a `.vue` file buys nothing and drifts.

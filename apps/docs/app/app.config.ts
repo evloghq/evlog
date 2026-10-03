@@ -74,18 +74,6 @@ export default defineAppConfig({
           base: 'whitespace-pre wrap-normal',
         },
       },
-      codeIcon: {
-        'nuxt': 'i-vscode-icons-file-type-nuxt',
-        'nuxt / nitro': 'i-vscode-icons-file-type-nuxt',
-        'next.js': 'i-simple-icons-nextdotjs',
-        'express': 'i-simple-icons-express',
-        'hono': 'i-simple-icons-hono',
-        'fastify': 'i-simple-icons-fastify',
-        'elysia': 'i-custom:elysia',
-        'nestjs': 'i-simple-icons-nestjs',
-        'standalone': 'i-lucide-box',
-        'nitro': 'i-custom:nitro',
-      },
     },
     button: {
       slots: {

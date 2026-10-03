@@ -48,7 +48,7 @@ The contract follows how the integration is built, so check the tier before flag
 ## Code blocks
 
 - Label the file: ` ```typescript [server/api/checkout.post.ts] `
-- `::code-group` when the same task differs by framework or runtime.
+- `::framework-tabs` when the same task differs by framework: one fence per framework, the framework in the bracket label, the file path as a leading `// path` comment. `::code-group` for everything else (package managers, input/output, before/after).
 - Imports are exact and public: `evlog`, `evlog/toolkit`, `evlog/http`. Never `evlog/shared`, never `evlog/browser`.
 - The sample runs. If you cannot verify it, verify it against `packages/evlog/src` or `examples/` before shipping the page.
 

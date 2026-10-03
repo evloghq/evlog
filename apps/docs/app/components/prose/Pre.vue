@@ -1,12 +1,14 @@
 <script setup lang="ts">
 // Local override of @nuxt/ui's ProsePre: identical rendering, plus a
 // `code_copied` analytics event so copied snippets show which pages and
-// languages people actually lift code from.
+// languages people actually lift code from, and framework labels resolved
+// through the same registry as FrameworkTabs.
 import { useClipboard } from '@vueuse/core'
 import { useLocale } from '@nuxt/ui/composables/useLocale'
 import { tv } from '@nuxt/ui/utils/tv'
 import UCodeIcon from '@nuxt/ui/components/prose/CodeIcon.vue'
 import theme from '#build/ui/prose/pre'
+import { resolveFramework } from '~/utils/frameworks'
 
 defineOptions({ inheritAttrs: false })
 
@@ -36,6 +38,7 @@ const baseRef = useTemplateRef('baseRef')
 
 const classes = computed(() => tv({ extend: theme, ...(appConfig.ui?.prose?.pre || {}) })())
 const copyButton = computed(() => props.copy ?? true)
+const framework = computed(() => props.filename ? resolveFramework(props.filename) : undefined)
 
 function copyCode() {
   const code = props.code ?? baseRef.value?.textContent ?? ''
@@ -47,7 +50,12 @@ function copyCode() {
 <template>
   <div :class="classes.root({ class: [props.ui?.root], filename: !!props.filename })">
     <div v-if="props.filename && !props.hideHeader" :class="classes.header({ class: props.ui?.header })">
-      <UCodeIcon :icon="props.icon" :filename="props.filename" :class="classes.icon({ class: props.ui?.icon })" />
+      <UCodeIcon
+        :icon="props.icon ?? framework?.icon"
+        :filename="props.filename"
+        :class="classes.icon({ class: props.ui?.icon })"
+        :style="framework?.color ? { color: framework.color } : undefined"
+      />
 
       <span :class="classes.filename({ class: props.ui?.filename })">{{ props.filename }}</span>
     </div>
