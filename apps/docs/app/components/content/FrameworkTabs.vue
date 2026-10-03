@@ -61,7 +61,7 @@ const active = computed(() => {
   const picked = local.value !== undefined ? items.value[local.value] : undefined
   return picked
     ?? items.value.find(t => t.framework?.id === chosen.value)
-    ?? items.value.find(t => t.framework?.id === 'standalone')
+    ?? (chosen.value ? items.value.find(t => t.framework?.id === 'standalone') : undefined)
     ?? items.value[0]!
 })
 const activeIndex = computed(() => items.value.indexOf(active.value))

@@ -39,6 +39,12 @@ describe('framework tabs', () => {
     expect(offenders.map(f => `${f.page}:${f.line}`)).toEqual([])
   })
 
+  // Nuxt keeps Nitro v2's auto-imports; a Nitro tab documents Nitro v3.
+  it('write Nitro tabs against Nitro v3', () => {
+    const offenders = all.filter(f => f.label === 'Nitro' && /defineNitroPlugin|defineEventHandler|useLogger \} from 'evlog'$/m.test(f.body))
+    expect(offenders.map(f => `${f.page}:${f.line}`)).toEqual([])
+  })
+
   it('use a meta MDC can parse', () => {
     const offenders = all.filter(f => /[[\]{}]/.test(f.meta))
     expect(offenders.map(f => `${f.page}:${f.line} ${f.meta}`)).toEqual([])
