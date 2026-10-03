@@ -13,14 +13,14 @@ describe('defineSignal', () => {
       name: 'fault',
       when: e => (e.status ?? 0) >= 400,
       ask: 'Who is responsible for this failure?',
-      choice: { user: 'Bad input', us: 'Our bug', upstream: 'A dependency failed' },
+      choice: { client: 'Bad input', app: 'Our bug', upstream: 'A dependency failed' },
       keep: (v) => {
-        expectTypeOf(v).toEqualTypeOf<ChoiceVerdict<'user' | 'us' | 'upstream'>>()
-        return v.value === 'us' && v.confidence > 0.9
+        expectTypeOf(v).toEqualTypeOf<ChoiceVerdict<'client' | 'app' | 'upstream'>>()
+        return v.value === 'app' && v.confidence > 0.9
       },
     })
     expect(signal.kind).toBe('choice')
-    expect(signal.choice).toEqual({ user: 'Bad input', us: 'Our bug', upstream: 'A dependency failed' })
+    expect(signal.choice).toEqual({ client: 'Bad input', app: 'Our bug', upstream: 'A dependency failed' })
   })
 
   it('infers score from ask + score and types keep on the levels', () => {

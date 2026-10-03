@@ -9,9 +9,9 @@ export const mock = scriptedEvaluate((name, question, state) => {
     case 'choice':
       if (name === 'fault') {
         if (status >= 500 && /econnreset|etimedout|fetch/.test(text)) return answers.choice(question, 'upstream', 0.93)
-        if (/typeerror|cannot read/.test(text)) return answers.choice(question, 'us', 0.91)
-        if (/must not contain/.test(text)) return answers.choice(question, 'us', 0.72)
-        return answers.choice(question, status < 500 ? 'user' : 'us', 0.86)
+        if (/typeerror|cannot read/.test(text)) return answers.choice(question, 'app', 0.91)
+        if (/must not contain/.test(text)) return answers.choice(question, 'app', 0.72)
+        return answers.choice(question, status < 500 ? 'client' : 'app', 0.86)
       }
       return answers.first(question)
     case 'score':

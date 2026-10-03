@@ -35,6 +35,12 @@ export interface SignalsOptions {
   providerOptions?: ProviderOptions
   /** Replace the model call. Used by tests and replay tooling. */
   evaluate?: EvaluateFn
+  /**
+   * Write the id of the model that answered on `event.signalsModel`. Off by
+   * default: one more column on every judged event, useful only while
+   * comparing models. @default false
+   */
+  stampModel?: boolean
 }
 
 export interface SignalsStats {
@@ -78,7 +84,7 @@ function defaultState(event: SignalInput): SignalState {
  * of the rate limit, whatever the number of questions.
  *
  * Keep signals run before sampling and can only promote. Verdicts land on
- * `event.signals`, the model id on `event.signalsModel`. Any failure, budget
+ * `event.signals`, and with `stampModel` the model id on `event.signalsModel`. Any failure, budget
  * exhaustion or timeout leaves the event as it was.
  *
  * @example
@@ -206,6 +212,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       if (Object.keys(columns).length === 0) return
 
       event.signals = { ...(event.signals as Record<string, SignalColumn> | undefined), ...columns }
+      if (!options.stampModel) return
       const modelId = fresh?.modelId ?? prior?.modelId
       if (modelId) event.signalsModel = modelId
     },

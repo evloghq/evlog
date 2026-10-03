@@ -127,7 +127,7 @@ export const fixtures: Fixture[] = [
     path: '/api/admin/export',
     status: 200,
     fields: {
-      audit: { action: 'users.export', actor: { type: 'user', id: 'u_support_3', role: 'support' }, target: { type: 'dataset', id: 'all-users' }, outcome: 'success', at: '03:12 UTC' },
+      audit: { action: 'users.export', actor: { type: 'client', id: 'u_support_3', role: 'support' }, target: { type: 'dataset', id: 'all-users' }, outcome: 'success', at: '03:12 UTC' },
       export: { rows: 184_220, format: 'csv', includes: ['email', 'phone', 'address'] },
     },
   },

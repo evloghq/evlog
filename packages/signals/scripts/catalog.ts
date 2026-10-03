@@ -10,8 +10,8 @@ export const fault = defineSignal({
   when: e => isError(e.status),
   ask: 'Who is responsible for this failure?',
   choice: {
-    user: 'Bad input, expired session, missing permission, client mistake',
-    us: 'A bug, a misconfiguration or a validation error in our own code',
+    client: 'Bad input, expired session, missing permission, client mistake',
+    app: 'A bug, a misconfiguration or a validation error in our own code',
     upstream: 'A third-party dependency failed, timed out or rate-limited us',
   },
   cacheKey: e => e.error ? `${e.method} ${e.path} ${e.status} ${errorName(e)}` : undefined,

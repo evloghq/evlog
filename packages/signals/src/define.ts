@@ -111,8 +111,8 @@ export interface DefineSignal {
  *   when: e => (e.status ?? 0) >= 400,
  *   ask: 'Who is responsible for this failure?',
  *   choice: {
- *     user: 'Bad input, expired session, client mistake',
- *     us: 'A bug or misconfiguration in our own code',
+ *     client: 'Bad input, expired session, client mistake',
+ *     app: 'A bug or misconfiguration in our own code',
  *     upstream: 'A third-party dependency failed',
  *   },
  * })

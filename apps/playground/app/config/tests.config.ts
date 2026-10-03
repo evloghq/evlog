@@ -708,11 +708,11 @@ export const testConfig = {
         {
           id: 'signals-signup-invalid',
           label: 'Signup: bad email',
-          description: 'A 400 on input that is wrong. fault: user, validation-bug: false.',
+          description: 'A 400 on input that is wrong. fault: client, validation-bug: false.',
           endpoint: '/api/signals/signup?email=notanemail',
           method: 'POST',
           color: 'neutral',
-          badge: { label: 'fault: user', color: 'gray' },
+          badge: { label: 'fault: client', color: 'gray' },
         },
         {
           id: 'signals-signup-bug',

@@ -29,8 +29,8 @@ export const fault = defineSignal({
   when: e => (e.status ?? 0) >= 400,
   ask: 'Who is responsible for this failure?',
   choice: {
-    user: 'Bad input, expired session, client mistake',
-    us: 'A bug or misconfiguration in our own code',
+    client: 'Bad input, expired session, client mistake',
+    app: 'A bug or misconfiguration in our own code',
     upstream: 'A third-party dependency failed',
   },
 })
@@ -77,8 +77,7 @@ Every event that passes a signal's `when` gets judged. All due signals for one e
   "payment": { "provider": "stripe", "fallback": true },
   "signals": {
     "silent-failure": { "value": true, "confidence": 0.94, "kept": true }
-  },
-  "signalsModel": "jev-1.13.0"
+  }
 }
 ```
 
@@ -107,7 +106,7 @@ Columns arrive through drains. Console output is written at emit, before enrichm
 | `keep` | `(verdict) => boolean` | Promote the event past sampling when `true`. Never drops. |
 | `cacheKey` | `(event) => string \| undefined` | Reuse the verdict for events sharing a key. |
 
-`keep` is typed on the verdict the shape produces: `v.value === 'us'` autocompletes to the options of a choice signal.
+`keep` is typed on the verdict the shape produces: `v.value === 'app'` autocompletes to the options of a choice signal.
 
 The event a signal sees is the wide event in `enrich`, or the request context plus `status`, `path`, `method` and `durationMs` in `keep`. Fields evlog sets are typed; the rest is `unknown`.
 
@@ -126,6 +125,7 @@ Returns an evlog plugin.
 | `maxStateChars` | `100000` | Larger events are skipped. |
 | `providerOptions` | | Forwarded to the call, e.g. `{ gateway: { zeroDataRetention: true } }`. |
 | `evaluate` | AI SDK `experimental_evaluate` | Replace the model call. Tests, record and replay. |
+| `stampModel` | `false` | Also write the answering model's id on `event.signalsModel`. For comparing models. |
 
 `plugin.stats()` returns `{ calls, skipped, errors, cached, inputTokens }`.
 
@@ -143,7 +143,7 @@ interface ScoreVerdict<Level> { value: Level; score: number; confidence: number 
 - Promote only. A keep signal can force an event past sampling. It cannot drop one, and baseline sampling stays deterministic. Promoted events carry `kept`, so rate-weighted counts stay valid.
 - Fails open. A timeout, a failed call, an exhausted budget or an oversized state leaves the event as it was, and counts in `stats()`.
 - One call per event. Signals are batched, so the state is billed once and takes one slot of the rate limit.
-- Typed output only. No prose on events. The model id is stamped on every judged event.
+- Typed output only. No prose on events, and no column you did not ask for: the model id is written only with `stampModel`.
 - Your key, your process. Nothing is proxied.
 - No call for what a predicate can answer. `when` runs first, always.
 

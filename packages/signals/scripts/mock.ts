@@ -19,10 +19,10 @@ export const mock = scriptedEvaluate((name, question, rawState) => {
     case 'fault': {
       const q = question as Choice
       if (/econnreset|etimedout|fetcherror|upstream|rate limit/.test(t) && (status ?? 0) >= 500) return answers.choice(q, 'upstream', 0.93)
-      if (/typeerror|referenceerror|cannot read/.test(t)) return answers.choice(q, 'us', 0.91)
-      if (/must not contain "\+"/.test(t)) return answers.choice(q, 'us', 0.72)
-      if (status === 400 || status === 401 || status === 403) return answers.choice(q, 'user', 0.9)
-      return answers.choice(q, 'us', 0.5)
+      if (/typeerror|referenceerror|cannot read/.test(t)) return answers.choice(q, 'app', 0.91)
+      if (/must not contain "\+"/.test(t)) return answers.choice(q, 'app', 0.72)
+      if (status === 400 || status === 401 || status === 403) return answers.choice(q, 'client', 0.9)
+      return answers.choice(q, 'app', 0.5)
     }
     case 'severity':
       return /typeerror|cannot read/.test(t) ? answers.score(question as Score, 2, 0.78) : answers.score(question as Score, 1, 0.6)

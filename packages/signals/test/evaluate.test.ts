@@ -5,7 +5,7 @@ import { toQuestion, toVerdict } from '../src/evaluate'
 const fault = defineSignal({
   name: 'fault',
   ask: 'Who is responsible?',
-  choice: { user: 'Bad input', us: 'Our bug', upstream: 'Dependency failed' },
+  choice: { client: 'Bad input', app: 'Our bug', upstream: 'Dependency failed' },
 })
 const severity = defineSignal({ name: 'severity', ask: 'How urgent?', score: ['noise', 'watch', 'page'] })
 const silent = defineSignal({ name: 'silent', ask: 'Left empty-handed?', criteria: { true: 'No order created' } })
@@ -15,7 +15,7 @@ describe('toQuestion', () => {
     expect(toQuestion(fault)).toEqual({
       type: 'choice',
       instructions: 'Who is responsible?',
-      criteria: { user: 'Bad input', us: 'Our bug', upstream: 'Dependency failed' },
+      criteria: { client: 'Bad input', app: 'Our bug', upstream: 'Dependency failed' },
     })
     expect(toQuestion(severity)).toEqual({ type: 'score', instructions: 'How urgent?', criteria: ['noise', 'watch', 'page'] })
     expect(toQuestion(silent)).toEqual({ type: 'boolean', instructions: 'Left empty-handed?', criteria: { true: 'No order created' } })
@@ -32,7 +32,7 @@ describe('toVerdict', () => {
     const verdict = toVerdict(fault, {
       type: 'choice',
       choice: 'upstream',
-      probabilities: { user: 0.03, us: 0.04, upstream: 0.93 },
+      probabilities: { client: 0.03, app: 0.04, upstream: 0.93 },
     }, 'jev')
     expect(verdict).toEqual({ value: 'upstream', confidence: 0.93 })
   })
@@ -47,7 +47,7 @@ describe('toVerdict', () => {
   })
 
   it('refuses a provider that returns no distribution', () => {
-    expect(() => toVerdict(fault, { type: 'choice', choice: 'us' }, 'openai/gpt')).toThrow(/no probability distribution/)
+    expect(() => toVerdict(fault, { type: 'choice', choice: 'app' }, 'openai/gpt')).toThrow(/no probability distribution/)
     expect(() => toVerdict(severity, { type: 'score', score: 1 }, 'openai/gpt')).toThrow(/no probability distribution/)
   })
 })

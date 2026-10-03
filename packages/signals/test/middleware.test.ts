@@ -17,7 +17,7 @@ const fault = defineSignal({
   name: 'fault',
   when: e => (e.status ?? 0) >= 400,
   ask: 'Who is responsible for this failure?',
-  choice: { upstream: 'A dependency failed', us: 'Our bug', user: 'Bad input' },
+  choice: { upstream: 'A dependency failed', app: 'Our bug', client: 'Bad input' },
 })
 
 beforeEach(() => {
@@ -44,7 +44,7 @@ describe('through evlog middleware', () => {
     expect(drain).toHaveBeenCalledTimes(1)
     const drained = drain.mock.calls[0]![0].event as WideEvent
     expect(drained.signals).toEqual({ 'silent-failure': { value: true, confidence: 0.94, kept: true } })
-    expect(drained.signalsModel).toBe('jev-1.13.0')
+    expect(drained).not.toHaveProperty('signalsModel')
   })
 
   it('lets sampling drop the request when the keep signal says no', async () => {

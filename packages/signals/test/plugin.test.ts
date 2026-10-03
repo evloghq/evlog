@@ -8,7 +8,7 @@ const fault = defineSignal({
   name: 'fault',
   when: e => (e.status ?? 0) >= 400,
   ask: 'Who is responsible for this failure?',
-  choice: { upstream: 'A dependency failed', us: 'Our bug', user: 'Bad input' },
+  choice: { upstream: 'A dependency failed', app: 'Our bug', client: 'Bad input' },
 })
 
 const silentFailure = defineSignal({
@@ -58,9 +58,16 @@ describe('createSignals enrich', () => {
       fault: { value: 'upstream', confidence: 0.9 },
       severity: { value: 'page', score: 1.7, confidence: 0.8 },
     })
-    expect(ctx.event.signalsModel).toBe('jev-1.13.0')
+    expect(ctx.event).not.toHaveProperty('signalsModel')
     expect(plugin.stats()).toMatchObject({ calls: 1, skipped: 0, errors: 0 })
     expect(plugin.stats().inputTokens).toBeGreaterThan(0)
+  })
+
+  it('writes the model id only when stampModel is set', async () => {
+    const { evaluate } = fakeEvaluate(yes, 'jev-1.13.0')
+    const ctx = enrichCtx({ status: 503, path: '/api/pay' })
+    await createSignals({ signals: [fault], evaluate, stampModel: true }).enrich!(ctx)
+    expect(ctx.event.signalsModel).toBe('jev-1.13.0')
   })
 
   it('makes no call when no signal is due', async () => {
@@ -90,7 +97,7 @@ describe('createSignals enrich', () => {
       name: 'fault',
       when: e => (e.status ?? 0) >= 400,
       ask: 'Who is responsible for this failure?',
-      choice: { upstream: 'A dependency failed', us: 'Our bug', user: 'Bad input' },
+      choice: { upstream: 'A dependency failed', app: 'Our bug', client: 'Bad input' },
       cacheKey: e => `${e.path}:${(e.error as { name?: string } | undefined)?.name}`,
     })
     const { evaluate, calls } = fakeEvaluate(yes)
