@@ -44,7 +44,7 @@ describe('detectFramework', () => {
 
   it('throws MAP_FRAMEWORK_NOT_DETECTED for an unsupported single-package project', async () => {
     const dir = await makeProject({
-      'package.json': JSON.stringify({ name: 'app', dependencies: { express: '^5.0.0' } }),
+      'package.json': JSON.stringify({ name: 'app', dependencies: { koa: '^5.0.0' } }),
     })
     const project = await resolveProject(dir)
     expect(() => detectFramework(project)).toThrowError(/could not detect a supported framework/i)

@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { version as CLI_VERSION } from '../../../package.json'
-import { getAdapter } from './adapters/index'
+import { getFramework } from '../frameworks'
 import { countSuppressed } from './directives'
 import { buildFileFacts } from './facts'
 import { createParseCache, parseFile } from './parse'
@@ -42,6 +42,7 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
     ? buildFileFacts(parsed, {
       evlogAutoImports: capabilities.evlogAutoImports,
       evlogBarrels: project.evlogBarrels,
+      requestLoggerMember: capabilities.requestLoggerMember,
     })
     : null
 
@@ -79,10 +80,12 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
   /* One parser for the whole run: the adapter and the analysis below read the
      same files, and Next emits one entry per exported method. */
   const ctx: ScanContext = { ...input, parse: input.parse ?? createParseCache() }
-  const adapter = getAdapter(ctx.framework)
+  const definition = getFramework(ctx.framework)
+  const adapter = await definition.map()
   const capabilities: FrameworkCapabilities = {
-    requestLogger: adapter.resolveRequestLogger?.(ctx) ?? adapter.requestLogger,
-    evlogAutoImports: adapter.evlogAutoImports ?? [],
+    requestLogger: adapter.resolveRequestLogger?.(ctx) ?? definition.requestLogger,
+    evlogAutoImports: definition.evlogAutoImports ?? [],
+    requestLoggerMember: definition.requestLoggerMember,
   }
 
   const project = collectProjectFacts(ctx, {

@@ -4,7 +4,7 @@ Use this checklist when reviewing code for logging best practices and evlog adop
 
 ## Prefer `evlog map` when you can
 
-On **Nuxt, Nitro, Next.js App Router, TanStack Start, and Hono**, start with the `evlog` CLI (it ships with the `evlog` package) if the user is open to it: one command finds dark entry points and names the fixes:
+On **Nuxt, Nitro, Next.js App Router, TanStack Start, Hono, Express, and Fastify**, start with the `evlog` CLI (it ships with the `evlog` package) if the user is open to it: one command finds dark entry points and names the fixes:
 
 ```bash
 npx evlog map --no-write

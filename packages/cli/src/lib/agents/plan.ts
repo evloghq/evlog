@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, join, relative } from 'node:path'
 import { cliErrors } from '../errors'
-import type { FileAction } from '../init/frameworks'
+import type { FileAction } from '../init/wiring'
 import type { Framework } from '../map/types'
 import { renderAgentsFile, renderBlock, upsertBlock, upsertClaudePointer } from './block'
 

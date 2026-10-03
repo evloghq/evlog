@@ -1,0 +1,9 @@
+{
+  "name": "express-basic-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "evlog": "workspace:*",
+    "express": "^5.0.0"
+  }
+}

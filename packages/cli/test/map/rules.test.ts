@@ -13,7 +13,7 @@ import { scoreRoute } from '../../src/lib/map/score'
 import type { FrameworkCapabilities, MapRule, RuleTarget } from '../../src/lib/map/rules/index'
 import { classifySensitivity } from '../../src/lib/map/sensitivity'
 import type { CheckId, CheckResult, Framework, RouteKind, ScanContext } from '../../src/lib/map/types'
-import { getAdapter } from '../../src/lib/map/adapters/index'
+import { getFramework } from '../../src/lib/frameworks'
 
 interface Case {
   name: string
@@ -75,10 +75,11 @@ function check(rule: MapRule, testCase: Case): CheckResult | undefined {
   const parsed = parseSource(file, testCase.code)
   if (!parsed) throw new Error('fixture did not parse')
 
-  const adapter = getAdapter(framework)
+  const definition = getFramework(framework)
   const capabilities: FrameworkCapabilities = {
-    requestLogger: adapter.requestLogger,
-    evlogAutoImports: adapter.evlogAutoImports ?? [],
+    requestLogger: definition.requestLogger,
+    evlogAutoImports: definition.evlogAutoImports ?? [],
+    requestLoggerMember: definition.requestLoggerMember,
   }
   const evlogBarrels = new Map(
     Object.entries(testCase.barrels ?? {}).map(([key, names]) => [key, new Set(names)]),
@@ -86,6 +87,7 @@ function check(rule: MapRule, testCase: Case): CheckResult | undefined {
   const facts = buildFileFacts(parsed, {
     evlogAutoImports: capabilities.evlogAutoImports,
     evlogBarrels,
+    requestLoggerMember: capabilities.requestLoggerMember,
   })
   const raw = {
     framework,

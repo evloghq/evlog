@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import type { Node } from 'oxc-parser'
-import type { ParseResult } from '../parse'
+import type { ParseResult } from '../../map/parse'
 import {
   findHandlerLocation,
   findHttpMethodExports,
@@ -8,9 +8,10 @@ import {
   nodeLoc,
   parseFile,
   walkAst,
-} from '../parse'
-import type { FrameworkAdapter, RawRouteEntry, ScanContext } from '../types'
-import { indent, relativeFromRoot, segmentsToPath } from '../utils'
+} from '../../map/parse'
+import type { RawRouteEntry, ScanContext } from '../../map/types'
+import type { MapAdapter } from '../types'
+import { relativeFromRoot, segmentsToPath } from '../../map/utils'
 import { glob } from '../../glob'
 
 /**
@@ -40,14 +41,8 @@ function routeDirFromFile(rel: string, appDir: string): string {
  * actions. No auto-imports — every evlog helper is imported explicitly, and
  * nothing is emitted until a handler opts in with `useLogger()` or `withEvlog()`.
  */
-export const nextAdapter: FrameworkAdapter = {
-  framework: 'next',
-  requestLogger: 'explicit',
-  loggerCall: 'const log = useLogger()',
-  handlerShape(route, body) {
-    return [`export async function ${route.method ?? 'POST'}(request: Request) {`, ...body.map(line => indent(1, line)), '}']
-  },
-  // eslint-disable-next-line require-await -- satisfies the async FrameworkAdapter contract
+export const nextAdapter: MapAdapter = {
+  // eslint-disable-next-line require-await -- satisfies the async MapAdapter contract
   async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
     const routes: RawRouteEntry[] = []
     const root = ctx.projectRoot

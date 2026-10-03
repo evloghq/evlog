@@ -48,6 +48,8 @@ const APPS = [
   { name: 'tanstack', fixture: 'tanstack-basic' },
   { name: 'nitro', generate: generateNitroApp },
   { name: 'hono', fixture: 'hono-basic' },
+  { name: 'express', fixture: 'express-basic' },
+  { name: 'fastify', fixture: 'fastify-basic' },
 ]
 
 /**

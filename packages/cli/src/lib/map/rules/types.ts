@@ -38,6 +38,8 @@ export interface RuleContext {
 export interface FrameworkCapabilities {
   requestLogger: 'ambient' | 'explicit'
   evlogAutoImports: readonly string[]
+  /** Member the integration parks the request logger under on the request object, e.g. `log` for `req.log`. */
+  requestLoggerMember?: string
 }
 
 /**

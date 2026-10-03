@@ -301,6 +301,26 @@ function hasContextLoggerPath(chain: readonly string[]): boolean {
 }
 
 /**
+ * Whether a member path ends on the logger the integration parks on the request
+ * object: `req.log` for Express, `request.log` for Fastify. Taken at face value
+ * like `context.log`, for the same asymmetry of costs.
+ */
+function endsWithRequestLogger(path: readonly string[], member: string | undefined): boolean {
+  return member !== undefined && path.length > 0 && path.at(-1) === member
+}
+
+/**
+ * Whether a call is made on that logger: `req.log.set(…)`. The member has to
+ * sit before the invoked one, so `console.log(…)` and `logger.log(…)`, where
+ * `log` is the call itself, never count.
+ */
+function callsRequestLogger(call: Pick<CallFact, 'root' | 'chain'>, member: string | undefined): boolean {
+  if (member === undefined || call.root === 'console') return false
+  const index = call.chain.indexOf(member)
+  return index !== -1 && index < call.chain.length - 1
+}
+
+/**
  * Hono's `c.get('log')` (and the same shape on any context object).
  *
  * Not a member path: the key is a call argument. Taken at face value like
@@ -474,6 +494,7 @@ export function buildFileFacts(
   options: {
     evlogAutoImports?: readonly string[]
     evlogBarrels?: ReadonlyMap<string, ReadonlySet<string>>
+    requestLoggerMember?: string
   } = {},
 ): FileFacts {
   const { lines } = parsed
@@ -568,7 +589,7 @@ export function buildFileFacts(
         if (init.type === 'MemberExpression') {
           const path = memberPath(init)
           const line = lines.lineAt((init as unknown as { start: number }).start)
-          if (hasContextLoggerPath(path)) {
+          if (hasContextLoggerPath(path) || endsWithRequestLogger(path, options.requestLoggerMember)) {
             for (const name of patternNames(declarator.id)) {
               contextLoggers.push({ binding: name, line })
             }
@@ -729,7 +750,7 @@ export function buildFileFacts(
   }
   /* `event.context.log.set({ … })` — used straight off the request, never bound. */
   if (!loggerInit) {
-    const inline = calls.find(call => hasContextLoggerPath(call.chain))
+    const inline = calls.find(call => hasContextLoggerPath(call.chain) || callsRequestLogger(call, options.requestLoggerMember))
     if (inline) loggerInit = { line: inline.line, column: 0 }
   }
 
@@ -777,7 +798,7 @@ export function buildFileFacts(
     loggerCalls: member => calls.filter((call) => {
       if (!call.chain.includes(member)) return false
       if (call.root !== null && loggerBindings.has(call.root)) return true
-      return hasContextLoggerPath(call.chain)
+      return hasContextLoggerPath(call.chain) || callsRequestLogger(call, options.requestLoggerMember)
     }),
     callsTo: name => calls.filter(call => call.member === name),
   }
