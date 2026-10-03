@@ -183,7 +183,7 @@ jobs:
         run: pnpm run build:package
 
       - name: Publish
-        run: pnpx pkg-pr-new publish --compact --no-template --pnpm './packages/evlog' './packages/nuxthub' './packages/telemetry' './packages/cli'
+        run: pnpx pkg-pr-new publish --compact --no-template --pnpm './packages/evlog' './packages/nuxthub' './packages/telemetry' './packages/cli' './packages/signals'
 
   # Single required check, so branch protection survives job renames
   ci:

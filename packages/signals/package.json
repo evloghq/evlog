@@ -66,7 +66,7 @@
   },
   "peerDependencies": {
     "ai": ">=7.0.105 <8.0.0",
-    "evlog": "^2.29.0"
+    "evlog": "^2.30.0"
   },
   "publishConfig": {
     "access": "public"

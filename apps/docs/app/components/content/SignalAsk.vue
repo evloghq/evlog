@@ -100,11 +100,11 @@ function resetState() {
 }
 
 const ENTER_AT = 300
-const ASK_AT = 1900
-const ANSWER_AT = 3600
-const COLUMN_AT = 5400
-const SCENARIO_INTERVAL = 8200
-const TAIL_HOLD = 2600
+const ASK_AT = 1500
+const ANSWER_AT = 2800
+const COLUMN_AT = 3900
+const SCENARIO_INTERVAL = 6000
+const TAIL_HOLD = 1800
 
 function show(index: number, next: number) {
   current.value = index
@@ -261,14 +261,14 @@ const headline = computed(() => HEADLINES[step.value] ?? 'idle')
               <span class="truncate" :class="field.color">{{ field.value }}</span>
             </div>
             <div
-              class="pl-3 flex whitespace-nowrap h-4 transition-all duration-700"
+              class="pl-3 flex whitespace-nowrap h-4 transition-all duration-400"
               :class="columnShown ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'"
             >
               <span class="shrink-0 text-primary">signals.{{ scenario.name }}</span>
               <span class="shrink-0 whitespace-pre text-dimmed">: </span>
             </div>
             <div
-              class="pl-6 h-4 whitespace-nowrap truncate text-primary transition-all duration-700 delay-150"
+              class="pl-6 h-4 whitespace-nowrap truncate text-primary transition-all duration-400 delay-100"
               :class="columnShown ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'"
             >
               {{ scenario.column }}
@@ -281,7 +281,7 @@ const headline = computed(() => HEADLINES[step.value] ?? 'idle')
 
         <div class="bg-default px-4 py-3 font-mono text-[10px] sm:text-[11px]">
           <div class="flex items-center gap-2 mb-2 text-[9px] tracking-widest uppercase text-dimmed">
-            <span>defineSignal</span>
+            <span>the signal</span>
             <span
               class="ml-auto transition-opacity duration-300"
               :class="askShown ? 'opacity-100' : 'opacity-0'"
