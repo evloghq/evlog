@@ -117,7 +117,7 @@ Returns an evlog plugin.
 | Option | Default | Notes |
 | --- | --- | --- |
 | `signals` | | The signals to run. Names must be unique. |
-| `model` | `'typesafe-ai/jev'` | AI SDK evaluation model. A gateway id (`'liquid/d1'`), or a provider instance such as `typeSafeAi.evaluationModel('jev-latest')` or `openai.evaluationModel('gpt-6.1-sol')`. |
+| `model` | `'typesafe-ai/jev'` | AI SDK evaluation model. A gateway id (`'liquid/d1'`), or a provider instance such as `typeSafeAi.evaluationModel('jev-latest')` or `openai.evaluationModel('gpt-6-luna')`. |
 | `budget.perMinute` | `600` | Model calls per minute, shared by all signals. |
 | `budget.cooldownMs` | `30000` | Pause after a failed call. |
 | `timeoutMs` | `2000` | Per call. |

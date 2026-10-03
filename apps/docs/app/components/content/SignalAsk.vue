@@ -95,12 +95,12 @@ function resetState() {
   phase.value = 'idle'
 }
 
-const ENTER_AT = 200
-const ASK_AT = 1000
-const ANSWER_AT = 1900
-const COLUMN_AT = 2900
-const SCENARIO_INTERVAL = 4600
-const TAIL_HOLD = 1200
+const ENTER_AT = 300
+const ASK_AT = 1900
+const ANSWER_AT = 3600
+const COLUMN_AT = 5400
+const SCENARIO_INTERVAL = 8200
+const TAIL_HOLD = 2600
 
 function show(index: number, next: Phase) {
   current.value = index
@@ -240,21 +240,26 @@ const headline = computed(() => {
             <div
               v-for="slot in FIELD_SLOTS"
               :key="`${scenario.id}-f-${slot}`"
-              class="pl-3 flex gap-1.5 transition-all duration-300 h-4"
+              class="pl-3 flex whitespace-nowrap transition-all duration-500 h-4"
               :class="reached('event') ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-1'"
-              :style="{ transitionDelay: `${(slot - 1) * 90}ms` }"
+              :style="{ transitionDelay: `${(slot - 1) * 160}ms` }"
             >
-              <span class="text-sky-400">{{ scenario.fields[slot - 1]?.key }}</span>
-              <span class="text-dimmed">:</span>
+              <span class="shrink-0 text-sky-400">{{ scenario.fields[slot - 1]?.key }}</span>
+              <span class="shrink-0 whitespace-pre text-dimmed">: </span>
               <span class="truncate" :class="scenario.fields[slot - 1]?.color ?? 'text-muted'">{{ scenario.fields[slot - 1]?.value }}</span>
             </div>
             <div
-              class="pl-3 flex gap-1.5 h-4 transition-all duration-500"
+              class="pl-3 flex whitespace-nowrap h-4 transition-all duration-700"
               :class="reached('column') ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'"
             >
-              <span class="text-primary">signals.{{ scenario.name }}</span>
-              <span class="text-dimmed">:</span>
-              <span class="text-primary truncate">{{ scenario.column }}</span>
+              <span class="shrink-0 text-primary">signals.{{ scenario.name }}</span>
+              <span class="shrink-0 whitespace-pre text-dimmed">: </span>
+            </div>
+            <div
+              class="pl-6 h-4 whitespace-nowrap truncate text-primary transition-all duration-700 delay-150"
+              :class="reached('column') ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'"
+            >
+              {{ scenario.column }}
             </div>
             <div class="text-dimmed">
               }
