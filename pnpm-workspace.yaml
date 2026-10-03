@@ -47,9 +47,6 @@ overrides:
 minimumReleaseAge: 2880
 
 minimumReleaseAgeExclude:
-  # evlog packages
-  - 'evlog'
-  - '@evlog/*'
   # Nuxt
   - '@nuxt/*'
   - '@nuxtjs/*'
