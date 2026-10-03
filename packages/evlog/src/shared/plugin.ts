@@ -60,7 +60,7 @@ export interface EvlogPlugin {
   name: string
   /** Run-once when the plugin is registered. */
   setup?: (ctx: PluginSetupContext) => void | Promise<void>
-  /** Runs before drain. */
+  /** Runs after redaction, before console output and drain. */
   enrich?: (ctx: EnrichContext) => void | Promise<void>
   /** Called for every emitted event. */
   drain?: (ctx: DrainContext) => void | Promise<void>

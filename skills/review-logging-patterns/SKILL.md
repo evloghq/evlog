@@ -917,7 +917,7 @@ All options work in Nuxt (`evlog` key), Nitro (passed to `evlog()`), Next.js (`c
 | Hook | When | Use |
 |------|------|-----|
 | `evlog:drain` | After enrichment | Send events to external services |
-| `evlog:enrich` | After emit, before drain | Add derived context |
+| `evlog:enrich` | After emit, before console output and drain | Add derived context |
 | `evlog:emit:keep` | During emit | Custom tail sampling logic |
 | `close` | Server shutdown | Flush drain pipeline buffers |
 
