@@ -57,3 +57,13 @@ Second person, present tense, the system and the reader both acting. No superlat
 ## What is missing from this file
 
 No blog sample, because there is no blog yet. The first post that passes review gets added here, and until then blog review leans on `rules/blog.md` and this register.
+
+---
+
+## Opening on the result, not the mechanism
+
+`5.use-cases/7.signals/01.overview.md`
+
+> Your logs tell you a request returned 502. A signal tells you it was Stripe, that a retry would have worked, and that it is not worth waking anyone. Your logs tell you a checkout returned 200. A signal tells you the customer left without an order.
+
+Two pairs, each one "what you have" against "what you get", on a request the reader has seen. No definition, no API name, no scenario to walk through. The next screen is a table of judged requests with three numbers read from it, and the install comes after. `D-13` in practice, and the maintainer's reference for what "make them want it" means: the reader sees the column before they see the function that produces it.

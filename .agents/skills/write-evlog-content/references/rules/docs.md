@@ -103,5 +103,13 @@ Why: a reader who does not know evlog decides on the first screen whether the pa
 
 **D-14 · One path in the core, every knob in one place** · `standard`
 
-Rule: the quick start follows a single framework and a single command. Other frameworks sit behind a `::collapsible` or a `::code-group` tab. Options, defaults, counters and env vars live on one reference page per feature, tabbed by object with `::tabs`, and the prose pages link to it once instead of carrying their own option tables.
-Why: a core path with three branches reads as three products. A reader looking for a default should know which page has it before they search, and a table repeated across three pages drifts across three pages.
+Rule: the quick start is one sequence of steps. Where a step differs by framework, it is one `::code-group` with every supported framework as an equal tab, in a stable order (Nuxt / Nitro, Next.js, Hono, Express, Standalone); no framework is the lead and none is folded away. Options, defaults, counters and env vars live on one reference page per feature, tabbed by object with `::tabs`, and the prose pages link to it once instead of carrying their own option tables.
+Why: evlog does not know which framework a reader runs, so a page that leads with one tells the others the feature is not for them. A table repeated across three pages drifts across three pages.
+
+---
+
+**D-15 · A reader never has to clone the repo** · `standard`
+
+Rule: a docs page gives no command that only works inside a checkout of evlog: no `pnpm --filter`, no `scripts/`, no demo or benchmark runner. Their output can appear as evidence, labelled for what it shows, never for how it was produced. The command itself lives on a contributor surface: the package README, `AGENTS.md`, a `scripts/` README.
+Why: the reader has an app and a terminal open in it. A command they cannot paste there is a dead end on the first screen, and it makes the page read as the maintainer's test harness instead of their product.
+Note: benchmark pages that exist to be reproduced are the exception, and they say so.

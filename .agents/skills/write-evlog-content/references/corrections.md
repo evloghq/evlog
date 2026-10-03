@@ -128,3 +128,21 @@ Applies to: introductory pages, product summaries, and new documentation guides.
 Flagged: nothing. Four pages scored 100, and the maintainer read them as "a lot of information, not clear, problems without solutions".
 Actual: the pages mirrored the package (define, configure, recipes), opened on a scenario, and spread the options over three pages. The reader sees the first real output in the fourth section. Rewritten to lead with the demo's output and three numbers read from it, one quick-start path with other frameworks collapsed, and one reference page with the options tabbed. The scanner measured none of this, which is why both are rules with a model check rather than a counter.
 Applies to: every page under `apps/docs/content/`, the use-case overviews first.
+
+## 2026-10-03 · D-15 · The demo command is not an opener
+
+Flagged: nothing. The rewritten signals overview led with its output table labelled `pnpm --filter @evlog/signals demo -- --mock`, then a "Run it yourself" line, and the reference page carried a `## Demo` section with four such commands.
+Actual: the maintainer read it as "test things we created". Nobody clones a repo to evaluate a feature. The output stayed as evidence, relabelled for what it shows, and the commands moved off the docs; the package README keeps them for contributors.
+Applies to: every page under `apps/docs/content/`. Runners under `scripts/` and `pnpm --filter` invocations are contributor tooling.
+
+## 2026-10-03 · D-14 · No lead framework in a quick start
+
+Flagged: nothing. The signals quick start showed Nuxt/Nitro inline and put Next.js, Hono and Express behind a collapsible.
+Actual: the maintainer does not know which framework most evlog users run, and singling one out tells the rest the feature is not for them. Every framework is now an equal tab in one code group, in a stable order. `D-14` rewritten; the "single framework" wording was wrong.
+Applies to: every quick start under `apps/docs/content/`.
+
+## 2026-10-03 · U-15 · Option values are column values
+
+Flagged: nothing. The `fault` signal's options were `user`, `us`, `upstream`.
+Actual: a choice option becomes a value in `GROUP BY signals.fault.value`, and `us` reads wrong there. Renamed to `client`, `app`, `upstream`. Name options as they will read in a query, not as they read in the question.
+Applies to: every signal example on docs, README and playground surfaces.
