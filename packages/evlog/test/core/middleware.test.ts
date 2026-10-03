@@ -634,4 +634,38 @@ describe('createMiddlewareLogger', () => {
       })
     })
   })
+
+  describe('console output', () => {
+    it('writes the event to stdout after enrichers ran', async () => {
+      const { logger, finish } = createMiddlewareLogger({
+        method: 'GET',
+        path: '/api/users',
+        plugins: [
+          {
+            name: 'geo',
+            enrich({ event }) {
+              event.geo = { country: 'FR' }
+            },
+          },
+        ],
+      })
+      logger.set({ user: { id: 'u1' } })
+
+      await finish({ status: 200 })
+
+      const printed = vi.mocked(console.info).mock.calls.map(call => String(call[0]))
+      const line = printed.find(text => text.includes('"path":"/api/users"'))
+      expect(line).toBeDefined()
+      expect(JSON.parse(defined(line, 'stdout line'))).toMatchObject({ geo: { country: 'FR' } })
+    })
+
+    it('still writes the event when nothing enriches or drains it', async () => {
+      const { finish } = createMiddlewareLogger({ method: 'GET', path: '/api/plain' })
+
+      await finish({ status: 200 })
+
+      const printed = vi.mocked(console.info).mock.calls.map(call => String(call[0]))
+      expect(printed.some(text => text.includes('"path":"/api/plain"'))).toBe(true)
+    })
+  })
 })

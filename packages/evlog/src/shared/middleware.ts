@@ -1,6 +1,6 @@
 import type { DrainContext, EnrichContext, RedactConfig, RequestLogger, RouteConfig, TailSamplingContext, WideEvent } from '../types'
 import type { AuditableLogger } from '../audit'
-import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, markWideEventDrainStarted, noopLogger, shouldKeep } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, markWideEventDrainStarted, noopLogger, outputWideEvent, shouldKeep } from '../logger'
 import { isGloballyRedacted, redactEvent, resolveRedactConfig } from '../redact'
 import { elapsedMs } from '../utils'
 import { extractErrorStatus } from './errors'
@@ -169,6 +169,7 @@ export async function runEnrichAndDrain(
     }
   }
 
+  outputWideEvent(emittedEvent)
   publishWideEvent(emittedEvent)
   markWideEventDrainStarted(emittedEvent)
 
@@ -317,11 +318,12 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
     const forceKeep = tailCtx.shouldKeep || shouldKeep(tailCtx)
     const emittedEvent = requestLogger.emit({ _forceKeep: forceKeep, _durationMs: durationMs })
 
-    if (
-      emittedEvent
-      && (options.enrich || options.drain || pluginRunner.hasEnrich || pluginRunner.hasDrain || getGlobalDrain() || hasWideEventPublisher())
-    ) {
-      await runEnrichAndDrain(emittedEvent, options, requestInfo, resolvedStatus, pluginRunner)
+    if (emittedEvent) {
+      if (options.enrich || options.drain || pluginRunner.hasEnrich || pluginRunner.hasDrain || getGlobalDrain() || hasWideEventPublisher()) {
+        await runEnrichAndDrain(emittedEvent, options, requestInfo, resolvedStatus, pluginRunner)
+      } else {
+        outputWideEvent(emittedEvent)
+      }
     }
 
     if (pluginRunner.hasRequestLifecycle) {

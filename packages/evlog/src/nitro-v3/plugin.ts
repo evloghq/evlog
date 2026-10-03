@@ -2,7 +2,7 @@ import { definePlugin } from 'nitro'
 import type { CaptureError } from 'nitro/types'
 import type { HTTPEvent } from 'nitro/h3'
 import { parseURL } from 'ufo'
-import { createRequestLogger, getGlobalPluginRunner, initLogger, isEnabled, markWideEventDrainStarted } from '../logger'
+import { createRequestLogger, getGlobalPluginRunner, initLogger, isEnabled, markWideEventDrainStarted, outputWideEvent } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
@@ -148,6 +148,7 @@ async function callEnrichAndDrain(
     await runner.runEnrich(enrichCtx)
   }
 
+  outputWideEvent(emittedEvent)
   markWideEventDrainStarted(emittedEvent)
 
   await callDrainHook(hooks, emittedEvent, event, hookContext, options)

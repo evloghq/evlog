@@ -1,7 +1,7 @@
 import type { AsyncLocalStorage } from 'node:async_hooks'
 import type { RequestLogger } from '../types'
 import type { AuditableLogger } from '../audit'
-import { createRequestLogger, getGlobalDrain } from '../logger'
+import { createRequestLogger, getGlobalDrain, outputWideEvent } from '../logger'
 import { extractErrorStatus } from './errors'
 import type { MiddlewareLoggerOptions } from './middleware'
 import { runEnrichAndDrain } from './middleware'
@@ -97,11 +97,12 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): void
         const ctxStatus = child.getContext().status
         const status = (emittedEvent?.status
           ?? (typeof ctxStatus === 'number' ? ctxStatus : undefined)) as number | undefined
-        if (
-          emittedEvent
-          && (middlewareOptions.enrich || middlewareOptions.drain || getGlobalDrain())
-        ) {
-          await runEnrichAndDrain(emittedEvent, middlewareOptions, childRequestInfo, status)
+        if (emittedEvent) {
+          if (middlewareOptions.enrich || middlewareOptions.drain || getGlobalDrain()) {
+            await runEnrichAndDrain(emittedEvent, middlewareOptions, childRequestInfo, status)
+          } else {
+            outputWideEvent(emittedEvent)
+          }
         }
       })
       .catch(async (err: unknown) => {
@@ -110,11 +111,12 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): void
         child.set({ status: extractErrorStatus(error) })
         const emittedEvent = child.emit()
         const status = extractErrorStatus(error)
-        if (
-          emittedEvent
-          && (middlewareOptions.enrich || middlewareOptions.drain || getGlobalDrain())
-        ) {
-          await runEnrichAndDrain(emittedEvent, middlewareOptions, childRequestInfo, status)
+        if (emittedEvent) {
+          if (middlewareOptions.enrich || middlewareOptions.drain || getGlobalDrain()) {
+            await runEnrichAndDrain(emittedEvent, middlewareOptions, childRequestInfo, status)
+          } else {
+            outputWideEvent(emittedEvent)
+          }
         }
       })
       .finally(() => {

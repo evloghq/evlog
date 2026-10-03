@@ -89,7 +89,7 @@ Every column has the same two fields. `value` is the answer, `confidence` is the
 | `ask` + `choice` | one of the option names | |
 | `ask` + `score` | one of the level names | `score: number` |
 
-Columns arrive through drains. Console output is written at emit, before enrichment, so they do not show in the dev terminal or in stdout JSON.
+Columns are written before the console line, so they show in the dev terminal, in stdout JSON, in platform logs such as Vercel, and in every drain.
 
 ## API
 

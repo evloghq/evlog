@@ -1,6 +1,6 @@
 import type { NitroApp } from 'nitropack/types'
 import { getHeaders } from 'h3'
-import { getGlobalPluginRunner } from '../logger'
+import { getGlobalPluginRunner, outputWideEvent } from '../logger'
 import type { EnrichContext, ServerEvent, WideEvent } from '../types'
 import { filterSafeHeaders } from '../utils'
 import { extendDeferredDrain } from './deferred-drain'
@@ -87,6 +87,7 @@ export async function callEnrichAndDrain(
     console.error('[evlog] enrich failed:', err)
   }
   await runner.runEnrich(enrichCtx)
+  outputWideEvent(emittedEvent)
 
   const drainCtx = {
     event: emittedEvent,

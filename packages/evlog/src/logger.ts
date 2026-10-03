@@ -305,17 +305,10 @@ function emitWideEvent(
     markGloballyRedacted(formatted)
   }
 
-  if (!state.silent) {
-    if (state.pretty) {
-      prettyPrintWideEvent(formatted)
-    } else if (state.stringify) {
-      console[getConsoleMethod(level)](JSON.stringify(formatted))
-    } else {
-      console[getConsoleMethod(level)](formatted)
-    }
-  }
-
+  // A runner that defers the drain also owns the console write: it happens
+  // after enrichers, so stdout carries the same event drains receive.
   if (!deferDrain) {
+    outputWideEvent(formatted)
     publishWideEvent(formatted)
 
     const drainPromises: Array<Promise<unknown>> = []
@@ -339,6 +332,22 @@ function emitWideEvent(
   }
 
   return formatted
+}
+
+/**
+ * Write an emitted wide event to the console, honoring `silent`, `pretty` and
+ * `stringify`. Runners call it once enrichers have run.
+ * @internal
+ */
+export function outputWideEvent(event: WideEvent): void {
+  if (state.silent) return
+  if (state.pretty) {
+    prettyPrintWideEvent(event)
+  } else if (state.stringify) {
+    console[getConsoleMethod(event.level)](JSON.stringify(event))
+  } else {
+    console[getConsoleMethod(event.level)](event)
+  }
 }
 
 function emitTaggedLog(level: LogLevel, tag: string, message: string): void {

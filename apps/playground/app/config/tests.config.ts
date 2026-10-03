@@ -675,7 +675,7 @@ export const testConfig = {
       label: 'Signals',
       icon: 'i-lucide-scan-search',
       title: 'Signals (@evlog/signals)',
-      description: 'Each request is judged by the signals in server/signals. Verdicts land on event.signals through drains, not in the console. Scripted answers unless AI_GATEWAY_API_KEY is set.',
+      description: 'Each request is judged by the signals in server/signals. Verdicts land on event.signals in the console and in every drain. Scripted answers unless AI_GATEWAY_API_KEY is set.',
       layout: 'cards',
       tests: [
         {
