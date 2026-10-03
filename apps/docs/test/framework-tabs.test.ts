@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 const contentDir = join(import.meta.dirname, '../content')
 const pages = readdirSync(contentDir, { recursive: true }).filter(file => String(file).endsWith('.md')).map(String)
 
-interface Fence { page: string, line: number, label: string, meta: string, firstLine: string }
+interface Fence { page: string, line: number, label: string, meta: string, firstLine: string, body: string }
 
 function fences(page: string): Fence[] {
   const lines = readFileSync(join(contentDir, page), 'utf8').split('\n')
@@ -23,7 +23,9 @@ function fences(page: string): Fence[] {
     }
     const fence = depth && lines[i]!.match(/^```\w*\s*\[([^\]]*)\](.*)$/)
     if (fence) {
-      out.push({ page, line: i + 1, label: fence[1]!, meta: fence[2]!.trim(), firstLine: lines[i + 1] ?? '' })
+      const end = lines.indexOf('```', i + 1)
+      const body = lines.slice(i + 1, end === -1 ? undefined : end)
+      out.push({ page, line: i + 1, label: fence[1]!, meta: fence[2]!.trim(), firstLine: body[0] ?? '', body: body.join('\n') })
     }
   }
   return out
