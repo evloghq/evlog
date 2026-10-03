@@ -102,7 +102,7 @@ const selected = computed({
         :content="{ align: 'start' }"
         :ui="{ content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default' }"
       />
-      <span v-if="active.path" class="truncate font-mono text-xs text-muted">{{ active.path }}</span>
+      <span v-if="active.path" class="truncate text-sm/6 text-default">{{ active.path }}</span>
       <span v-if="missing" class="ml-auto truncate pr-2 text-xs text-dimmed">
         No {{ missing.label }} example here
       </span>
