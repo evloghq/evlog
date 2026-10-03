@@ -96,13 +96,13 @@ const selected = computed({
         :search-input="false"
         :icon="active.framework?.icon"
         color="neutral"
-        variant="ghost"
+        variant="subtle"
         size="sm"
         aria-label="Framework"
         :content="{ align: 'start' }"
-        :ui="{ content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default' }"
+        :ui="{ base: 'text-sm/5 md:text-sm/5 font-medium shrink-0', content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default' }"
       />
-      <span v-if="active.path" class="truncate text-sm/6 text-default">{{ active.path }}</span>
+      <span v-if="active.path" class="truncate text-sm/5 text-default">{{ active.path }}</span>
       <span v-if="missing" class="ml-auto truncate pr-2 text-xs text-dimmed">
         No {{ missing.label }} example here
       </span>
