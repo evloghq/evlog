@@ -81,7 +81,7 @@ Every event that passes a signal's `when` gets judged. All due signals for one e
 }
 ```
 
-Every column has the same two fields. `value` is the answer, `confidence` is the probability of that answer. Score signals add `score`, the weighted position between levels. `kept: true` marks the signal that promoted the event past sampling.
+Every column has `value`, the answer. `confidence` is its probability: always on a yes/no, on choice and score when the model returns a distribution. Score signals add `score`, the weighted position between levels. `kept: true` marks the signal that promoted the event past sampling.
 
 | Signal shape | `value` | Extra |
 | --- | --- | --- |
@@ -133,8 +133,8 @@ Returns an evlog plugin.
 
 ```ts
 interface BooleanVerdict { value: boolean; confidence: number }
-interface ChoiceVerdict<Option> { value: Option; confidence: number }
-interface ScoreVerdict<Level> { value: Level; score: number; confidence: number }
+interface ChoiceVerdict<Option> { value: Option; confidence?: number }
+interface ScoreVerdict<Level> { value: Level; score: number; confidence?: number }
 ```
 
 ## Guarantees

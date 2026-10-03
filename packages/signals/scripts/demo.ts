@@ -36,7 +36,8 @@ function resolveModel(): { model?: EvaluationModel, label: string } {
 
 function column(value: SignalColumn): string {
   const v = typeof value.value === 'boolean' ? (value.value ? 'yes' : 'no') : value.value
-  return `${v} ${value.confidence.toFixed(2)}${value.kept ? ' kept' : ''}`
+  const confidence = value.confidence === undefined ? '' : ` ${value.confidence.toFixed(2)}`
+  return `${v}${confidence}${value.kept ? ' kept' : ''}`
 }
 
 function formatSignals(event: WideEvent): string {

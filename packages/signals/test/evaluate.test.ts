@@ -24,8 +24,8 @@ describe('toQuestion', () => {
 
 describe('toVerdict', () => {
   it('turns P(true) into a value with the probability of that value', () => {
-    expect(toVerdict(silent, { type: 'boolean', probability: 0.94 }, 'jev')).toEqual({ value: true, confidence: 0.94 })
-    expect(toVerdict(silent, { type: 'boolean', probability: 0.06 }, 'jev')).toEqual({ value: false, confidence: 0.94 })
+    expect(toVerdict(silent, { type: 'boolean', probability: 0.94 })).toEqual({ value: true, confidence: 0.94 })
+    expect(toVerdict(silent, { type: 'boolean', probability: 0.06 })).toEqual({ value: false, confidence: 0.94 })
   })
 
   it('reads choice confidence from the distribution', () => {
@@ -33,7 +33,7 @@ describe('toVerdict', () => {
       type: 'choice',
       choice: 'upstream',
       probabilities: { client: 0.03, app: 0.04, upstream: 0.93 },
-    }, 'jev')
+    })
     expect(verdict).toEqual({ value: 'upstream', confidence: 0.93 })
   })
 
@@ -42,12 +42,17 @@ describe('toVerdict', () => {
       type: 'score',
       score: 1.3,
       probabilities: { 0: 0.1, 1: 0.5, 2: 0.4 },
-    }, 'jev')
+    })
     expect(verdict).toEqual({ value: 'watch', score: 1.3, confidence: 0.5 })
   })
 
-  it('refuses a provider that returns no distribution', () => {
-    expect(() => toVerdict(fault, { type: 'choice', choice: 'app' }, 'openai/gpt')).toThrow(/no probability distribution/)
-    expect(() => toVerdict(severity, { type: 'score', score: 1 }, 'openai/gpt')).toThrow(/no probability distribution/)
+  it('omits confidence when the model returns no distribution', () => {
+    expect(toVerdict(fault, { type: 'choice', choice: 'app' })).toEqual({ value: 'app' })
+    expect(toVerdict(severity, { type: 'score', score: 1.4 })).toEqual({ value: 'watch', score: 1.4 })
+  })
+
+  it('clamps a distribution-less score to the level range', () => {
+    expect(toVerdict(severity, { type: 'score', score: 7 })).toEqual({ value: 'page', score: 7 })
+    expect(toVerdict(severity, { type: 'score', score: -1 })).toEqual({ value: 'noise', score: -1 })
   })
 })

@@ -16,7 +16,7 @@ describe('defineSignal', () => {
       choice: { client: 'Bad input', app: 'Our bug', upstream: 'A dependency failed' },
       keep: (v) => {
         expectTypeOf(v).toEqualTypeOf<ChoiceVerdict<'client' | 'app' | 'upstream'>>()
-        return v.value === 'app' && v.confidence > 0.9
+        return v.value === 'app' && (v.confidence ?? 0) > 0.9
       },
     })
     expect(signal.kind).toBe('choice')

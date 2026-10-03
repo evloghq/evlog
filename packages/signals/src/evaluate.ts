@@ -59,10 +59,6 @@ export function toQuestion(signal: Signal): EvaluationQuestion {
   }
 }
 
-function noDistribution(signal: Signal, modelId: string): Error {
-  return new Error(`[evlog/signals] model "${modelId}" returned no probability distribution for "${signal.name}"; signals need a decision model such as typesafe-ai/jev`)
-}
-
 function argmax(probabilities: Record<string, number>): [key: string, probability: number] {
   let best: [string, number] | undefined
   for (const key in probabilities) {
@@ -72,20 +68,28 @@ function argmax(probabilities: Record<string, number>): [key: string, probabilit
   return best!
 }
 
-export function toVerdict(signal: Signal, answer: EvaluationAnswer, modelId: string): Verdict {
+/**
+ * Map an AI SDK answer to a column. `confidence` is set from the probability
+ * distribution; a prompted model that returns none yields `value` alone.
+ */
+export function toVerdict(signal: Signal, answer: EvaluationAnswer): Verdict {
   switch (answer.type) {
     case 'boolean': {
       const value = answer.probability >= 0.5
       return { value, confidence: value ? answer.probability : 1 - answer.probability }
     }
     case 'choice': {
-      if (!answer.probabilities) throw noDistribution(signal, modelId)
-      return { value: answer.choice, confidence: answer.probabilities[answer.choice]! }
+      const confidence = answer.probabilities?.[answer.choice]
+      return confidence === undefined ? { value: answer.choice } : { value: answer.choice, confidence }
     }
     case 'score': {
-      if (!answer.probabilities) throw noDistribution(signal, modelId)
+      const levels = signal.score!
+      if (!answer.probabilities) {
+        const index = Math.min(levels.length - 1, Math.max(0, Math.round(answer.score)))
+        return { value: levels[index]!, score: answer.score }
+      }
       const [index, confidence] = argmax(answer.probabilities)
-      return { value: signal.score![Number(index)]!, score: answer.score, confidence }
+      return { value: levels[Number(index)]!, score: answer.score, confidence }
     }
   }
 }

@@ -17,20 +17,25 @@ export interface BooleanVerdict {
   confidence: number
 }
 
-/** Answer to a pick-one question. `confidence` is the probability of the chosen option. */
+/**
+ * Answer to a pick-one question. `confidence` is the probability of the chosen
+ * option, present when the model returns a distribution.
+ */
 export interface ChoiceVerdict<TOption extends string = string> {
   value: TOption
-  confidence: number
+  confidence?: number
 }
 
 /**
  * Answer to a rubric question. `value` is the most likely level, `score` the
  * probability-weighted position between levels (`0` to `levels - 1`).
+ * `confidence` is the probability of `value`, present when the model returns a
+ * distribution.
  */
 export interface ScoreVerdict<TLevel extends string = string> {
   value: TLevel
   score: number
-  confidence: number
+  confidence?: number
 }
 
 export type Verdict = BooleanVerdict | ChoiceVerdict | ScoreVerdict
