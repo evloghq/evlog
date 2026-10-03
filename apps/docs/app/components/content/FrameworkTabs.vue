@@ -105,14 +105,49 @@ const selected = computed({
         :icon="active.framework?.icon"
         color="neutral"
         variant="ghost"
-        size="xs"
+        size="sm"
         aria-label="Framework"
         class="ml-auto -my-1 -mr-2"
         :content="{ align: 'end' }"
-        :ui="{ base: 'text-xs/5 font-medium shrink-0 rounded-md text-default', content: 'min-w-52', leadingIcon: 'size-3.5 text-default', itemLeadingIcon: 'text-default', trailingIcon: 'size-3.5' }"
+        :ui="{ base: 'text-sm/5 md:text-sm/5 font-medium shrink-0 rounded-md text-default', content: 'min-w-52', viewport: 'framework-picker-viewport', leadingIcon: 'size-4 text-default', itemLeadingIcon: 'text-default' }"
       />
     </div>
 
     <component :is="active.component" :key="activeIndex" hide-header tabindex="-1" />
   </div>
 </template>
+
+<style>
+/* The menu renders in a portal, so this cannot be scoped. The fades follow the
+   scroll position: none at the top edge until the list has scrolled, none at
+   the bottom once it reaches the end. */
+@property --fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+.framework-picker-viewport {
+  mask-image: linear-gradient(to bottom, transparent, black var(--fade-top), black calc(100% - var(--fade-bottom)), transparent);
+}
+
+@supports (animation-timeline: scroll()) {
+  .framework-picker-viewport {
+    animation: framework-picker-fade linear both;
+    animation-timeline: scroll(self);
+  }
+
+  @keyframes framework-picker-fade {
+    0% { --fade-top: 0px; --fade-bottom: 20px; }
+    10% { --fade-top: 20px; }
+    90% { --fade-bottom: 20px; }
+    100% { --fade-top: 20px; --fade-bottom: 0px; }
+  }
+}
+</style>

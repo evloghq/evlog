@@ -14,7 +14,7 @@ export const frameworks: Framework[] = [
   { id: 'react-router', label: 'React Router', icon: 'i-logos-react-router' },
   { id: 'hono', label: 'Hono', icon: 'i-logos-hono' },
   { id: 'express', label: 'Express', icon: 'i-simple-icons-express' },
-  { id: 'fastify', label: 'Fastify', icon: 'i-logos-fastify-icon' },
+  { id: 'fastify', label: 'Fastify', icon: 'i-simple-icons-fastify' },
   { id: 'elysia', label: 'Elysia', icon: 'i-custom:elysia' },
   { id: 'nestjs', label: 'NestJS', icon: 'i-logos-nestjs', aliases: ['nest'] },
   { id: 'orpc', label: 'oRPC', icon: 'i-custom:orpc' },
