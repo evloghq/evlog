@@ -140,20 +140,28 @@ Then sanity-check on a real project: `pnpm cli:sandbox` builds disposable, uneve
 
 ## Variant: New Framework Adapter
 
-Teaching `evlog map` a new framework is a different, heavier change: the adapter owns route discovery and framework capabilities.
+Teaching `evlog map` a new framework is a different, heavier change: the adapter owns route discovery and the framework's capabilities.
 
-Every framework starts as one entry in `packages/cli/src/lib/frameworks.ts`. The `Framework` type, `--framework` parsing and help text, detection, labels, docs links, telemetry allowlists, error messages and the `AGENTS.md` accessor all derive from it. The adapter and init planner records are keyed by those ids, so `pnpm build` lists anything still missing.
+A framework is one directory under `packages/cli/src/lib/frameworks/<id>/`:
+
+| File | Role |
+|------|------|
+| `index.ts` | The definition: `defineFramework({ id, label, docs, detect, accessor, requestLogger, evlogAutoImports?, requestLoggerMember?, shape, map, init? })`. Stays free of parser and template code; `map` and `init` are `() => import(...)` loaders so `evlog doctor` never pays for a scanner |
+| `map.ts` | Route discovery (`MapAdapter`: `extractRoutes`, optional `resolveRequestLogger`). Code-first frameworks build it from `shared/code-routes.ts` with a method table (`hono`, `express`, `fastify` are each a dozen lines) |
+| `init.ts` | Optional: the `evlog init` planner (`InitPlanner`), default export. Code-first frameworks use `middlewareModuleTemplate` from `init/wiring.ts` |
+
+The `Framework` type, `--framework` parsing and help text, detection, labels, docs links, telemetry allowlists, error messages and the `AGENTS.md` accessor all derive from the registry in `frameworks/index.ts`; adding the definition to `DEFINITIONS` is the only registration step.
 
 | # | File | Action |
 |---|------|--------|
-| 1 | `packages/cli/src/lib/frameworks.ts` | Add the definition: `id`, `label`, `docs`, `detect` (`deps`, `configs`, `unlessDeps`, `specificity`), `accessor`, and `init: false` until step 4 lands |
-| 2 | `packages/cli/src/lib/map/adapters/{framework}.ts` | Route extraction: find entry points, classify `RouteKind`, declare `requestLogger`, `evlogAutoImports`, `loggerCall`, and `handlerShape` (the handler skeleton `evlog map <file>` suggests) |
-| 3 | `packages/cli/src/lib/map/adapters/index.ts` | Add the adapter to `ADAPTERS` |
-| 4 | `packages/cli/src/lib/init/frameworks.ts` | Optional: write the planner, add it to `PLANNERS`, flip `init: true`. Flag it explicitly in the PR if left out |
-| 5 | `packages/cli/test/map/adapters.test.ts` + `fixtures/` | Route extraction tests against a fixture tree. `test/frameworks.test.ts` already covers detection and adapter pairing for every registry entry |
-| 6 | `apps/docs/content/3.cli/2.map.md` + `0.overview.md` | Update the supported-frameworks statements |
-| 7 | `skills/review-logging-patterns/SKILL.md` | Update every supported-frameworks list (frontmatter description + CLI section), same in `references/code-review.md` and `skills/build-audit-logs/SKILL.md` (Pass 2) and `analyze-logs/SKILL.md` (init suggestion) |
+| 1 | `packages/cli/src/lib/frameworks/{id}/index.ts` | Write the definition. `shape.loggerCall` and `shape.handler` are what `evlog map <file>` suggests; `requestLoggerMember` (e.g. `log` for `req.log`) is how `facts.ts` credits a handler that never names `useLogger` |
+| 2 | `packages/cli/src/lib/frameworks/{id}/map.ts` | Route discovery. File-based routers: see `nuxt/map.ts`, `next/map.ts`, `tanstack-start/map.ts`. Code-registered routes: `codeRoutesAdapter({ framework, methods, on?, routeObject?, middleware })` |
+| 3 | `packages/cli/src/lib/frameworks/{id}/init.ts` | Optional. Leave `init` out of the definition when `evlog init` cannot wire the framework yet, and say so in the PR |
+| 4 | `packages/cli/src/lib/frameworks/index.ts` | Add the definition to `DEFINITIONS` |
+| 5 | `packages/cli/test/map/fixtures/{id}-basic/` + `test/map/scan.test.ts` + `test/map/adapters.test.ts` | A fixture with one instrumented and one dark route; detection, extraction and `wide-event` credit against it. `test/frameworks.test.ts` already checks every registry entry detects and loads |
+| 6 | `apps/docs/content/3.cli/2.map.md` + `0.overview.md` + `9.observability-score.md` + `0.landing.md` + `7.reference/6.agent-skills.md` | Update the supported-frameworks statements |
+| 7 | `skills/review-logging-patterns/SKILL.md` | Update every supported-frameworks list (frontmatter description, CLI section, `--framework` flag), same in `references/code-review.md`, `skills/build-audit-logs/SKILL.md` (Pass 2) and `skills/analyze-logs/SKILL.md` (init suggestion) |
 | 8 | `scripts/cli-sandbox.mjs` | Add the framework to `APPS` (reuse the map fixture) so `pnpm cli:sandbox` covers it and `--smoke` exercises every CLI command against it |
-| 9 | `.changeset/{framework}-map-adapter.md` | Changeset for `"@evlog/cli": minor` |
+| 9 | `.changeset/{id}-framework.md` | Changeset for `"@evlog/cli": minor` |
 
-Reference implementations: `adapters/nuxt.ts` (shared Nuxt/Nitro, file-based), `adapters/next.ts`, `adapters/tanstack-start.ts`, `adapters/hono.ts` (code-registered routes, per-project `resolveRequestLogger`).
+Reference implementations: `nuxt/` (file-based, shared with `nitro/`), `next/`, `tanstack-start/`, and `hono/`, `express/`, `fastify/` for code-registered routes with a per-project `resolveRequestLogger`.

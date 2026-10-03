@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { getAdapter } from '../../src/lib/map/adapters/index'
+import { getFramework } from '../../src/lib/frameworks'
 import { detectFramework } from '../../src/lib/map/detect'
 import { scan } from '../../src/lib/map/scan'
 import type { ScanContext, ScanResult } from '../../src/lib/map/types'
@@ -74,12 +74,40 @@ describe('detect', () => {
     const result = detectFramework(project)
     expect(result.framework).toBe('hono')
   })
+
+  it.each(['express', 'fastify'] as const)('detects %s in fixture', async (framework) => {
+    const project = await resolveProject(join(FIXTURES, `${framework}-basic`))
+    expect(detectFramework(project).framework).toBe(framework)
+  })
+})
+
+describe('code-first extraction', () => {
+  it.each(['express', 'fastify'] as const)('extracts all routes from the %s-basic fixture', async (framework) => {
+    const root = join(FIXTURES, `${framework}-basic`)
+    const adapter = await getFramework(framework).map()
+    const routes = await adapter.extractRoutes(await ctx(root, framework))
+
+    const paths = routes.map(r => `${r.method ?? '*'} ${r.path} (${r.kind})`).sort()
+    expect(paths).toEqual([
+      'GET /health (api)',
+      'POST /checkout (api)',
+    ])
+  })
+
+  it.each(['express', 'fastify'] as const)('credits the %s request logger and finds the dark health route', async (framework) => {
+    const root = join(FIXTURES, `${framework}-basic`)
+    const result = await scan(await ctx(root, framework))
+    const byPath = Object.fromEntries(result.map.routes.map(route => [route.path, route]))
+    expect(byPath['/checkout']!.checks['wide-event']!.status).toBe('pass')
+    expect(byPath['/checkout']!.checks.audit!.status).toBe('pass')
+    expect(byPath['/health']!.checks['wide-event']!.status).toBe('fail')
+  })
 })
 
 describe('nuxt extraction', () => {
   it('extracts all routes from nuxt-basic fixture', async () => {
     const root = join(FIXTURES, 'nuxt-basic')
-    const adapter = getAdapter('nuxt')
+    const adapter = await getFramework('nuxt').map()
     const routes = await adapter.extractRoutes(await ctx(root, 'nuxt'))
 
     const paths = routes.map(r => `${r.method ?? '*'} ${r.path} (${r.kind})`).sort()
@@ -105,7 +133,7 @@ describe('nuxt extraction', () => {
 describe('next extraction', () => {
   it('extracts all routes from next-app-router fixture', async () => {
     const root = join(FIXTURES, 'next-app-router')
-    const adapter = getAdapter('next')
+    const adapter = await getFramework('next').map()
     const routes = await adapter.extractRoutes(await ctx(root, 'next'))
 
     const paths = routes.map(r => `${r.method ?? '*'} ${r.path} (${r.kind})`).sort()
@@ -122,7 +150,7 @@ describe('next extraction', () => {
 describe('tanstack extraction', () => {
   it('extracts routes from tanstack-basic fixture', async () => {
     const root = join(FIXTURES, 'tanstack-basic')
-    const adapter = getAdapter('tanstack-start')
+    const adapter = await getFramework('tanstack-start').map()
     const routes = await adapter.extractRoutes(await ctx(root, 'tanstack-start'))
 
     const paths = routes.map(r => `${r.method ?? '*'} ${r.path} (${r.kind})`).sort()
@@ -136,7 +164,7 @@ describe('tanstack extraction', () => {
 describe('hono extraction', () => {
   it('extracts all routes from hono-basic fixture', async () => {
     const root = join(FIXTURES, 'hono-basic')
-    const adapter = getAdapter('hono')
+    const adapter = await getFramework('hono').map()
     const routes = await adapter.extractRoutes(await ctx(root, 'hono'))
 
     const paths = routes.map(r => `${r.method ?? '*'} ${r.path} (${r.kind})`).sort()

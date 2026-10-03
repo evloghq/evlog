@@ -17,7 +17,7 @@ The command line behind the `evlog` executable. [`evlog`](https://npmjs.com/pack
 
 Score what your app can tell you when something goes wrong. Diagnose your install when nothing shows up.
 
-> **Early days.** Safe to run on any project, since it reads your source and writes a single `evlog.map.json` at the root (`--no-write` to skip), and it is covered by tests, but young. `evlog map` has adapters for five frameworks today, its rules are still being refined, and both will grow. Expect verdicts and scores to move between releases: install it as a dev dependency when you gate CI on the number.
+> **Early days.** Safe to run on any project, since it reads your source and writes a single `evlog.map.json` at the root (`--no-write` to skip), and it is covered by tests, but young. `evlog map` has adapters for seven frameworks today, its rules are still being refined, and both will grow. Expect verdicts and scores to move between releases: install it as a dev dependency when you gate CI on the number.
 
 ## Usage
 
@@ -59,7 +59,7 @@ pnpm evlog map
 | `evlog map` | Static observability score for the current app — Lighthouse for wide events |
 | `evlog map <route-or-file>` | Explain one entry point: why it was scanned, each verdict, the shape it could take |
 | `evlog map --all` | Every entry point as a check matrix, grouped by directory |
-| `evlog map --framework <name>` | Override framework detection (`nuxt`, `nitro`, `next`, `tanstack-start`, `hono`) |
+| `evlog map --framework <name>` | Override framework detection (`nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`) |
 | `evlog map --min-score <n>` | Exit 1 if the global score is below `n` |
 | `evlog map --baseline [ref]` | Exit 1 on a regression against the committed `evlog.map.json` (path, or `git:<ref>`) |
 | `evlog map --no-write` | Skip writing `evlog.map.json` to the project root |

@@ -4,7 +4,7 @@ import { telemetry } from '@evlog/telemetry'
 import type { CliContext } from '../../core/context'
 import type { CliDebug } from '../debug'
 import { createNoopCliDebug } from '../debug'
-import type { FileAction } from '../init/frameworks'
+import type { FileAction } from '../init/wiring'
 import {
   canPrompt,
   closeAgents,

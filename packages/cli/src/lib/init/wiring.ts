@@ -1,26 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { DOCS_URL } from '../../core/output'
+import { getFramework } from '../frameworks'
 import type { InitFramework } from '../frameworks'
 import { findDestination, findEnricher, findSamplingPreset } from './catalog'
 import type { DrainId, EnricherId, ExtraId, SamplingProfile } from './catalog'
 import { auditActionName } from './insight'
 import type { AuditGap, RepeatedErrorSeed } from './insight'
-import {
-  addImport,
-  appendProperty,
-  appendToArray,
-  applySplices,
-  arrayMentions,
-  findConfigObject,
-  findCreateEvlogCall,
-  getProperty,
-  importsEnd,
-  hasImportFrom,
-  hasProperty,
-  readConfig,
-} from './edit'
-import type { ArrayNode, ObjectNode, Splice } from './edit'
 
 /** A file `init` will write — always the full new contents, never a patch. */
 export interface FileAction {
@@ -102,7 +88,7 @@ function describeDrains(input: WiringInput): string {
   return labels.length > 0 ? labels.join(' and ') : 'the console'
 }
 
-function firstExisting(root: string, names: string[]): string | null {
+export function firstExisting(root: string, names: string[]): string | null {
   for (const name of names) {
     if (existsSync(join(root, name))) return join(root, name)
   }
@@ -111,263 +97,8 @@ function firstExisting(root: string, names: string[]): string | null {
 
 const CONFIG_EXTENSIONS = ['ts', 'mts', 'js', 'mjs']
 
-function configCandidates(base: string): string[] {
+export function configCandidates(base: string): string[] {
   return CONFIG_EXTENSIONS.map(ext => `${base}.${ext}`)
-}
-
-/* ── nuxt ───────────────────────────────────────────────────────────────── */
-
-function nuxtConfigTemplate(input: WiringInput): string {
-  const sampling = samplingProperty(input)
-  return `export default defineNuxtConfig({
-  modules: ['evlog/nuxt'],
-  evlog: {
-    env: { service: '${input.service}' },${sampling ? `\n    ${sampling},` : ''}
-  },
-})
-`
-}
-
-function planNuxt(input: WiringInput): WiringPlan {
-  const plan: WiringPlan = { actions: [], manual: [], already: [] }
-  const configPath = firstExisting(input.root, configCandidates('nuxt.config'))
-
-  if (!configPath) {
-    const path = join(input.root, 'nuxt.config.ts')
-    plan.actions.push({ path, relative: 'nuxt.config.ts', kind: 'create', contents: nuxtConfigTemplate(input) })
-    return withNitroPlugins(plan, input)
-  }
-
-  const relativePath = relative(input.root, configPath)
-  const config = readConfig(configPath)
-  const object = config ? findConfigObject(config.program) : null
-
-  if (!config || !object) {
-    plan.manual.push({
-      title: 'Register the Nuxt module',
-      file: relativePath,
-      snippet: `modules: ['evlog/nuxt'],\nevlog: {\n  env: { service: '${input.service}' },\n},`,
-      reason: config ? 'the config does not export a plain object literal' : 'the config could not be parsed',
-    })
-    return withNitroPlugins(plan, input)
-  }
-
-  const splices: Splice[] = []
-  const modules = getProperty(object, 'modules')
-
-  if (modules?.type === 'ArrayExpression') {
-    if (arrayMentions(config.source, modules as ArrayNode, 'evlog/nuxt')) plan.already.push(`${relativePath} already registers evlog/nuxt`)
-    else splices.push(appendToArray(config.source, modules as ArrayNode, `'evlog/nuxt'`))
-  } else if (modules) {
-    plan.manual.push({
-      title: 'Register the Nuxt module',
-      file: relativePath,
-      snippet: `'evlog/nuxt'`,
-      reason: '`modules` is computed rather than an array literal',
-    })
-  } else {
-    splices.push(appendProperty(config.source, object, `modules: ['evlog/nuxt']`))
-  }
-
-  if (hasProperty(object, 'evlog')) {
-    plan.already.push(`${relativePath} already has an evlog block`)
-    const sampling = samplingProperty(input)
-    const block = getProperty(object, 'evlog')
-    if (sampling && block?.type === 'ObjectExpression') {
-      if (hasProperty(block as ObjectNode, 'sampling')) {
-        plan.manual.push({
-          title: 'Reconcile the sampling rates',
-          file: relativePath,
-          snippet: `${sampling},`,
-          reason: 'the evlog block already sets sampling — replacing rates you chose is not init\'s call',
-        })
-      } else {
-        splices.push(appendProperty(config.source, block as ObjectNode, sampling))
-      }
-    } else if (sampling) {
-      plan.manual.push({
-        title: 'Add sampling to the evlog block',
-        file: relativePath,
-        snippet: `${sampling},`,
-        reason: 'the evlog block is not a plain object literal',
-      })
-    }
-  } else {
-    const sampling = samplingProperty(input)
-    splices.push(appendProperty(
-      config.source,
-      object,
-      `evlog: {\n    env: { service: '${input.service}' },${sampling ? `\n    ${sampling},` : ''}\n  }`,
-    ))
-  }
-
-  if (splices.length > 0) {
-    plan.actions.push({
-      path: configPath,
-      relative: relativePath,
-      kind: 'patch',
-      contents: applySplices(config.source, splices),
-    })
-  }
-
-  return withNitroPlugins(plan, input)
-}
-
-/* ── nitro / tanstack start ─────────────────────────────────────────────── */
-
-function nitroModuleSpecifier(major: 2 | 3): string {
-  return major === 3 ? 'evlog/nitro/v3' : 'evlog/nitro'
-}
-
-function nitroConfigTemplate(input: WiringInput): string {
-  const sampling = samplingProperty(input)
-  const asyncContext = input.framework === 'tanstack-start'
-    ? '  experimental: {\n    asyncContext: true,\n  },\n'
-    : ''
-
-  if (input.nitroMajor === 3) {
-    return `import { defineConfig } from 'nitro'
-import evlog from 'evlog/nitro/v3'
-
-export default defineConfig({
-${asyncContext}  modules: [
-    evlog({
-      env: { service: '${input.service}' },${sampling ? `\n      ${sampling},` : ''}
-    }),
-  ],
-})
-`
-  }
-
-  return `import { defineNitroConfig } from 'nitropack/config'
-import evlog from 'evlog/nitro'
-
-export default defineNitroConfig({
-  modules: [
-    evlog({
-      env: { service: '${input.service}' },${sampling ? `\n      ${sampling},` : ''}
-    }),
-  ],
-})
-`
-}
-
-function planNitro(input: WiringInput): WiringPlan {
-  const plan: WiringPlan = { actions: [], manual: [], already: [] }
-  const specifier = nitroModuleSpecifier(input.nitroMajor)
-  const configPath = firstExisting(input.root, configCandidates('nitro.config'))
-
-  if (!configPath) {
-    const path = join(input.root, 'nitro.config.ts')
-    plan.actions.push({ path, relative: 'nitro.config.ts', kind: 'create', contents: nitroConfigTemplate(input) })
-    return withTanstackNotes(withNitroPlugins(plan, input), input)
-  }
-
-  const relativePath = relative(input.root, configPath)
-  const config = readConfig(configPath)
-  const object = config ? findConfigObject(config.program) : null
-  const sampling = samplingProperty(input)
-  const moduleCall = `evlog({\n      env: { service: '${input.service}' },${sampling ? `\n      ${sampling},` : ''}\n    })`
-
-  if (!config || !object) {
-    plan.manual.push({
-      title: 'Register the Nitro module',
-      file: relativePath,
-      snippet: `import evlog from '${specifier}'\n\n// inside the config:\nmodules: [\n  ${moduleCall},\n],`,
-      reason: config ? 'the config does not export a plain object literal' : 'the config could not be parsed',
-    })
-    return withTanstackNotes(withNitroPlugins(plan, input), input)
-  }
-
-  const splices: Splice[] = []
-  const modules = getProperty(object, 'modules')
-  let needsImport = false
-
-  if (modules?.type === 'ArrayExpression') {
-    if (arrayMentions(config.source, modules as ArrayNode, 'evlog')) {
-      plan.already.push(`${relativePath} already registers the evlog module`)
-    } else {
-      splices.push(appendToArray(config.source, modules as ArrayNode, moduleCall))
-      needsImport = true
-    }
-  } else if (modules) {
-    plan.manual.push({
-      title: 'Register the Nitro module',
-      file: relativePath,
-      snippet: moduleCall,
-      reason: '`modules` is computed rather than an array literal',
-    })
-  } else {
-    splices.push(appendProperty(config.source, object, `modules: [\n    ${moduleCall},\n  ]`))
-    needsImport = true
-  }
-
-  if (needsImport && !hasImportFrom(config.program, specifier)) {
-    splices.push(addImport(config.source, config.program, `import evlog from '${specifier}'`))
-  }
-
-  if (input.framework === 'tanstack-start') {
-    /* `useRequest()` is how TanStack Start route handlers reach the logger, and
-       it returns nothing without async context — wiring the module without this
-       flag produces an install that looks complete and logs no business
-       context. */
-    const experimental = getProperty(object, 'experimental')
-    if (!experimental) {
-      splices.push(appendProperty(config.source, object, `experimental: {\n    asyncContext: true,\n  }`))
-    } else if (experimental.type === 'ObjectExpression' && !hasProperty(experimental as ObjectNode, 'asyncContext')) {
-      splices.push(appendProperty(config.source, experimental as ObjectNode, 'asyncContext: true'))
-    }
-  }
-
-  if (splices.length > 0) {
-    plan.actions.push({
-      path: configPath,
-      relative: relativePath,
-      kind: 'patch',
-      contents: applySplices(config.source, splices),
-    })
-  }
-
-  return withTanstackNotes(withNitroPlugins(plan, input), input)
-}
-
-/** The root route is a component file — splicing a middleware into it is guesswork. */
-function withTanstackNotes(plan: WiringPlan, input: WiringInput): WiringPlan {
-  if (input.framework !== 'tanstack-start') return plan
-
-  if (input.extras.includes('vite')) {
-    // The plugin order in vite.config.ts varies per template — cheaper to paste than to guess.
-    const viteConfig = firstExisting(input.root, configCandidates('vite.config'))
-    plan.manual.push({
-      title: 'Add the evlog Vite plugin',
-      file: viteConfig ? relative(input.root, viteConfig) : 'vite.config.ts',
-      snippet: `import evlog from 'evlog/vite'
-
-export default defineConfig({
-  plugins: [
-    evlog(),
-    // …your existing plugins
-  ],
-})`,
-      reason: 'strips log.debug() from production builds and injects source locations',
-    })
-  }
-
-  const rootRoute = firstExisting(input.root, ['src/routes/__root.tsx', 'app/routes/__root.tsx'])
-  plan.manual.push({
-    title: 'Return structured errors from the root route',
-    file: rootRoute ? relative(input.root, rootRoute) : 'src/routes/__root.tsx',
-    snippet: `import { createMiddleware } from '@tanstack/react-start'
-import { evlogErrorHandler } from 'evlog/nitro/v3'
-
-export const Route = createRootRoute({
-  server: {
-    middleware: [createMiddleware().server(evlogErrorHandler)],
-  },
-})`,
-    reason: 'TanStack Start handles errors before Nitro, so createError() needs this middleware to keep why / fix / link',
-  })
-  return plan
 }
 
 /**
@@ -495,7 +226,7 @@ export default ${plugin.factory}((nitroApp) => {
  * An existing drain file is never rewritten; a destination it does not already
  * wire goes beside it under a name of its own.
  */
-function withNitroPlugins(plan: WiringPlan, input: WiringInput): WiringPlan {
+export function withNitroPlugins(plan: WiringPlan, input: WiringInput): WiringPlan {
   const drain = nitroDrainTemplate(input)
   if (drain) {
     const preferred = join('server', 'plugins', 'evlog-drain.ts')
@@ -530,7 +261,7 @@ function withNitroPlugins(plan: WiringPlan, input: WiringInput): WiringPlan {
 }
 
 /** The `sampling` block for a module config, when the extra was selected. */
-function samplingProperty(input: WiringInput): string | null {
+export function samplingProperty(input: WiringInput): string | null {
   if (!input.extras.includes('sampling')) return null
   const preset = findSamplingPreset(input.sampling)
   if (!preset?.rates) return null
@@ -540,18 +271,6 @@ function samplingProperty(input: WiringInput): string | null {
   return `sampling: {
       rates: { info: ${info}, warn: ${warn}, error: 100 },
     }`
-}
-
-/* ── next ───────────────────────────────────────────────────────────────── */
-
-function nextInstrumentationTemplate(service: string): string {
-  return `import { defineNodeInstrumentation } from 'evlog/next/instrumentation'
-
-export const { register, onRequestError } = defineNodeInstrumentation({
-  service: '${service}',
-  captureOutput: true,
-})
-`
 }
 
 /**
@@ -567,7 +286,7 @@ interface FactoryParts {
   options: string[]
 }
 
-function factoryParts(input: WiringInput): FactoryParts {
+export function factoryParts(input: WiringInput): FactoryParts {
   const dev = input.devDrain === 'none' ? null : findDestination(input.devDrain) ?? null
   const prod = input.prodDrains.map(id => findDestination(id)).filter(Boolean) as NonNullable<ReturnType<typeof findDestination>>[]
   const batched = input.extras.includes('pipeline') && prod.length > 0
@@ -623,81 +342,6 @@ function factoryParts(input: WiringInput): FactoryParts {
 
   return { imports, preamble: blocks.length > 0 ? `\n${blocks.join('\n\n')}\n` : '', options }
 }
-
-function nextLibTemplate(input: WiringInput): string {
-  const { imports, preamble, options } = factoryParts(input)
-  const all = [`import { createEvlog } from 'evlog/next'`, ...imports]
-
-  return `${all.join('\n')}
-${preamble}
-export const { withEvlog, useLogger, log, createError } = createEvlog({
-  service: '${input.service}',
-${options.join('\n')}${options.length > 0 ? '\n' : ''}})
-`
-}
-
-/**
- * Splice the chosen options into a `lib/evlog.ts` that is already there.
- *
- * Only works when the file actually calls `createEvlog({ … })`; a re-export
- * barrel or a computed config gets the snippet to paste instead.
- */
-function patchNextLib(plan: WiringPlan, input: WiringInput, path: string, relativePath: string): void {
-  const { imports, preamble, options } = factoryParts(input)
-  if (options.length === 0) {
-    plan.already.push(`${relativePath} already exists`)
-    return
-  }
-
-  const config = readConfig(path)
-  const call = config ? findCreateEvlogCall(config.program) : null
-
-  if (!config || !call) {
-    plan.manual.push({
-      title: 'Wire the destinations into your evlog factory',
-      file: relativePath,
-      snippet: `${imports.join('\n')}\n${preamble}\ncreateEvlog({\n${options.join('\n')}\n})`,
-      reason: `${relativePath} exists but does not call createEvlog({ … }) here — splicing into it would be guesswork`,
-    })
-    return
-  }
-
-  const present = ['drain', 'enrich', 'sampling'].filter(key => hasProperty(call, key))
-  if (present.length > 0) {
-    plan.manual.push({
-      title: 'Reconcile your evlog factory options',
-      file: relativePath,
-      snippet: options.join('\n'),
-      reason: `${relativePath} already sets ${present.join(', ')} — replacing what you wrote is not init's call`,
-    })
-    return
-  }
-
-  const splices: Splice[] = [appendProperty(config.source, call, options.map(line => line.trim()).join('\n  ').replace(/,$/, ''))]
-
-  const missing = imports.filter((statement) => {
-    const specifier = statement.match(/from '([^']+)'/)?.[1]
-    return specifier && !hasImportFrom(config.program, specifier)
-  })
-
-  const head = [
-    missing.length > 0 ? `\n${missing.join('\n')}` : '',
-    preamble.trim().length > 0 ? `\n\n${preamble.trim()}` : '',
-  ].join('')
-
-  if (head.length > 0) {
-    splices.push({ at: importsEnd(config.source, config.program), text: head })
-  }
-
-  plan.actions.push({
-    path,
-    relative: relativePath,
-    kind: 'patch',
-    contents: applySplices(config.source, splices),
-  })
-}
-
-/* ── catalogs, seeded from the scan ─────────────────────────────────────── */
 
 /** An error catalog built from the project's own repeated errors. */
 function errorCatalogTemplate(input: WiringInput): string {
@@ -817,7 +461,7 @@ function withCatalogs(plan: WiringPlan, input: WiringInput): WiringPlan {
 }
 
 /** Queue a file, or report it as already present. Never overwrites. */
-function addFile(plan: WiringPlan, input: WiringInput, relativePath: string, contents: string): void {
+export function addFile(plan: WiringPlan, input: WiringInput, relativePath: string, contents: string): void {
   const path = join(input.root, relativePath)
   if (existsSync(path)) {
     plan.already.push(`${relativePath} already exists`)
@@ -825,8 +469,6 @@ function addFile(plan: WiringPlan, input: WiringInput, relativePath: string, con
   }
   plan.actions.push({ path, relative: relativePath, kind: 'create', contents })
 }
-
-/* ── environment ────────────────────────────────────────────────────────── */
 
 /** Whether the variable exists where the app runs: the process, or the project's `.env`. */
 function envHas(root: string, name: string): boolean {
@@ -892,65 +534,20 @@ function withEnvGuidance(plan: WiringPlan, input: WiringInput): WiringPlan {
   return plan
 }
 
-function planNext(input: WiringInput): WiringPlan {
-  const plan: WiringPlan = { actions: [], manual: [], already: [] }
-  /* Next resolves both `instrumentation.ts` and `src/instrumentation.ts`, but
-     only the one that matches the app directory — putting it at the root of a
-     `src/` project makes a file that is never loaded. */
-  const useSrc = existsSync(join(input.root, 'src', 'app')) || existsSync(join(input.root, 'src', 'pages'))
-  const base = useSrc ? join(input.root, 'src') : input.root
-
-  const instrumentation = firstExisting(base, configCandidates('instrumentation'))
-  if (instrumentation) {
-    plan.already.push(`${relative(input.root, instrumentation)} already exists`)
-  } else {
-    const path = join(base, 'instrumentation.ts')
-    plan.actions.push({
-      path,
-      relative: relative(input.root, path),
-      kind: 'create',
-      contents: nextInstrumentationTemplate(input.service),
-    })
-  }
-
-  const lib = firstExisting(base, ['lib/evlog.ts', 'lib/evlog.tsx', 'app/lib/evlog.ts'])
-  if (lib) {
-    patchNextLib(plan, input, lib, relative(input.root, lib))
-  } else {
-    const path = join(base, 'lib', 'evlog.ts')
-    plan.actions.push({
-      path,
-      relative: relative(input.root, path),
-      kind: 'create',
-      contents: nextLibTemplate(input),
-    })
-  }
-
-  plan.manual.push({
-    title: 'Wrap a route handler',
-    file: relative(input.root, join(base, 'app', 'api', '<route>', 'route.ts')),
-    snippet: `import { withEvlog, useLogger } from '@/lib/evlog'
-
-export const GET = withEvlog(async () => {
-  const log = useLogger()
-  log.set({ action: 'hello' })
-  return Response.json({ ok: true })
-})`,
-    reason: 'Next has no ambient request logger — each handler opts in with withEvlog()',
-  })
-
-  return plan
-}
-
-/* ── hono ───────────────────────────────────────────────────────────────── */
-
-function honoEvlogTemplate(input: WiringInput): string {
+/**
+ * The module `init` writes for a code-first framework: `initLogger` with the
+ * sampling preset, then whatever the integration exports, built from the
+ * middleware options. Sampling belongs to `initLogger`; drains and enrichers are
+ * middleware options, so the two halves are split here once.
+ */
+export function middlewareModuleTemplate(
+  input: WiringInput,
+  integration: { source: string, imports?: readonly string[], declare: (options: string | null) => string },
+): string {
   const { imports, preamble, options } = factoryParts(input)
-  /* Hono splits the surface: sampling belongs to `initLogger`, drains and
-     enrichers are middleware options. */
   const sampling = options.filter(option => option.trimStart().startsWith('sampling:'))
   const middleware = options.filter(option => !sampling.includes(option))
-  const head = [`import { initLogger } from 'evlog'`, `import { evlog } from 'evlog/hono'`, ...imports]
+  const head = [`import { initLogger } from 'evlog'`, `import { evlog } from '${integration.source}'`, ...(integration.imports ?? []), ...imports]
 
   return `${head.join('\n')}
 
@@ -958,49 +555,13 @@ initLogger({
   env: { service: '${input.service}' },
 ${sampling.join('\n')}${sampling.length > 0 ? '\n' : ''}})
 ${preamble}
-/** Register once, before your routes: \`app.use(evlogMiddleware)\`. */
-export const evlogMiddleware = evlog(${middleware.length > 0 ? `{\n${middleware.join('\n')}\n}` : ''})
+${integration.declare(middleware.length > 0 ? `{\n${middleware.join('\n')}\n}` : null)}
 `
 }
 
-function planHono(input: WiringInput): WiringPlan {
-  const plan: WiringPlan = { actions: [], manual: [], already: [] }
-  const useSrc = existsSync(join(input.root, 'src'))
-  const relativePath = useSrc ? join('src', 'evlog.ts') : 'evlog.ts'
-  addFile(plan, input, relativePath, honoEvlogTemplate(input))
-
-  const entry = useSrc ? join('src', 'index.ts') : 'index.ts'
-  plan.manual.push({
-    title: 'Register the middleware on your app',
-    file: entry,
-    snippet: `import { Hono } from 'hono'
-import type { EvlogVariables } from 'evlog/hono'
-import { evlogMiddleware } from './evlog'
-
-const app = new Hono<EvlogVariables>()
-app.use(evlogMiddleware)`,
-    reason: `${entry} is your application file, and splicing a middleware into it is guesswork`,
-  })
-
-  return plan
-}
-
 /** Build the file plan for a framework. Pure: reads the project, writes nothing. */
-export function planWiring(input: WiringInput): WiringPlan {
+export async function planWiring(input: WiringInput): Promise<WiringPlan> {
+  const plan = await getFramework(input.framework).init!()
   // Applied once here rather than in each planner, where one would be forgotten.
-  return withEnvGuidance(withCatalogs(frameworkPlan(input), input), input)
-}
-
-/* Keyed by every framework the registry marks `init: true`, so marking one
-   without writing its planner fails to compile. */
-const PLANNERS: Record<InitFramework, (input: WiringInput) => WiringPlan> = {
-  'nuxt': planNuxt,
-  'nitro': planNitro,
-  'tanstack-start': planNitro,
-  'next': planNext,
-  'hono': planHono,
-}
-
-function frameworkPlan(input: WiringInput): WiringPlan {
-  return PLANNERS[input.framework](input)
+  return withEnvGuidance(withCatalogs(plan(input), input), input)
 }

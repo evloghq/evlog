@@ -4,6 +4,7 @@ import { availableExtras, DESTINATIONS, EXTRAS, findDestination } from '../src/l
 import type { DrainId } from '../src/lib/init/catalog'
 import { canPrompt } from '../src/lib/init/prompts'
 import { droppedExtras, parseDrainArg, parseExtrasArg, parseProdDrainsArg, resolveAnswers } from '../src/lib/init/resolve'
+import type { Framework } from '../src/lib/frameworks'
 
 describe('parseDrainArg', () => {
   it('accepts every id the catalog advertises', () => {
@@ -54,7 +55,7 @@ describe('parseExtrasArg', () => {
 describe('resolveAnswers', () => {
   /* No scan ran, so evidence-gated offers are unavailable — which is exactly
      what a caller passing flags against an unreadable project gets. */
-  const offers = (prodDrains: DrainId[], framework: 'nuxt' | 'nitro' | 'next' | 'tanstack-start' | 'hono') => ({
+  const offers = (prodDrains: DrainId[], framework: Framework) => ({
     framework,
     prodDrains,
     facts: null,

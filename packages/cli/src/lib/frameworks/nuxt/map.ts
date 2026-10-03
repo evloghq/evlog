@@ -1,8 +1,9 @@
 import { basename } from 'node:path'
-import type { ParseFn } from '../parse'
-import { findHandlerLocation, parseFile } from '../parse'
-import type { FrameworkAdapter, RawRouteEntry, ScanContext } from '../types'
-import { extractMethodFromFilename, indent, relativeFromRoot, segmentsToPath, stripRouteFilename } from '../utils'
+import type { ParseFn } from '../../map/parse'
+import { findHandlerLocation, parseFile } from '../../map/parse'
+import type { RawRouteEntry, ScanContext } from '../../map/types'
+import type { MapAdapter } from '../types'
+import { extractMethodFromFilename, relativeFromRoot, segmentsToPath, stripRouteFilename } from '../../map/utils'
 import { glob } from '../../glob'
 
 /**
@@ -149,18 +150,6 @@ function fileToCronRoute(file: string, root: string, parse: ParseFn): RawRouteEn
   }
 }
 
-/**
- * What evlog's Nuxt module auto-imports (`addImports` / `addServerImports`).
- *
- * An un-imported `useLogger()` or `log` is evlog's here, as long as the file
- * does not declare one itself.
- */
-const NUXT_EVLOG_AUTO_IMPORTS = [
-  'useLogger',
-  'log',
-  'createEvlogError',
-] as const
-
 /** Handlers and middleware, in whichever directories this framework serves them from. */
 function extractServerRoutes(ctx: ScanContext, framework: 'nuxt' | 'nitro'): RawRouteEntry[] {
   const routes: RawRouteEntry[] = []
@@ -180,18 +169,9 @@ function extractServerRoutes(ctx: ScanContext, framework: 'nuxt' | 'nitro'): Raw
   return routes
 }
 
-function eventHandlerShape(_route: RawRouteEntry, body: readonly string[]): string[] {
-  return ['export default defineEventHandler(async (event) => {', ...body.map(line => indent(1, line)), '})']
-}
-
 /** Nuxt project: `server/api`, `server/routes`, `server/middleware`, `server/tasks` and pages. */
-export const nuxtAdapter: FrameworkAdapter = {
-  framework: 'nuxt',
-  evlogAutoImports: NUXT_EVLOG_AUTO_IMPORTS,
-  requestLogger: 'ambient',
-  loggerCall: 'const log = useLogger(event)',
-  handlerShape: eventHandlerShape,
-  // eslint-disable-next-line require-await -- satisfies the async FrameworkAdapter contract
+export const nuxtAdapter: MapAdapter = {
+  // eslint-disable-next-line require-await -- satisfies the async MapAdapter contract
   async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
     const routes = extractServerRoutes(ctx, 'nuxt')
     const root = ctx.projectRoot
@@ -214,13 +194,8 @@ export const nuxtAdapter: FrameworkAdapter = {
 }
 
 /** Raw Nitro project (no Nuxt): the same handlers, one directory level up. */
-export const nitroAdapter: FrameworkAdapter = {
-  framework: 'nitro',
-  evlogAutoImports: NUXT_EVLOG_AUTO_IMPORTS,
-  requestLogger: 'ambient',
-  loggerCall: 'const log = useLogger(event)',
-  handlerShape: eventHandlerShape,
-  // eslint-disable-next-line require-await -- satisfies the async FrameworkAdapter contract
+export const nitroAdapter: MapAdapter = {
+  // eslint-disable-next-line require-await -- satisfies the async MapAdapter contract
   async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
     return extractServerRoutes(ctx, 'nitro')
   },

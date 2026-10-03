@@ -3,7 +3,6 @@ import { gradientRule, HEADER_GRADIENT_WIDTH } from '../../core/brand'
 import { DOCS_URL, createStyle } from '../../core/output'
 import type { Style, StyleCode } from '../../core/output'
 import { getFramework } from '../frameworks'
-import { getAdapter } from './adapters/index'
 import type { BaselineComparison } from './baseline'
 import { hasRegressed } from './baseline'
 import { countSuppressed } from './directives'
@@ -727,7 +726,7 @@ function suggestedShape(route: RouteEntry, framework: Framework, project: Projec
      handler skeleton would suggest moving code that should not move. */
   if (route.kind === 'page') return body
 
-  return getAdapter(framework).handlerShape(route, body)
+  return getFramework(framework).shape.handler(route, body)
 }
 
 /**
