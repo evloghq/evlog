@@ -81,10 +81,14 @@ const scenarios: Scenario[] = [
   },
 ]
 
-type Phase = 'idle' | 'event' | 'ask' | 'answer' | 'column'
+const STEP_IDLE = 0
+const STEP_EVENT = 1
+const STEP_ASK = 2
+const STEP_ANSWER = 3
+const STEP_COLUMN = 4
 
 const current = ref(0)
-const phase = ref<Phase>('idle')
+const step = ref(STEP_IDLE)
 const prefersReducedMotion = ref(false)
 const wrapperRef = ref<HTMLElement>()
 
@@ -92,7 +96,7 @@ const scenario = computed(() => scenarios[current.value]!)
 
 function resetState() {
   current.value = 0
-  phase.value = 'idle'
+  step.value = STEP_IDLE
 }
 
 const ENTER_AT = 300
@@ -102,19 +106,19 @@ const COLUMN_AT = 5400
 const SCENARIO_INTERVAL = 8200
 const TAIL_HOLD = 2600
 
-function show(index: number, next: Phase) {
+function show(index: number, next: number) {
   current.value = index
-  phase.value = next
+  step.value = next
 }
 
 function buildEvents(): TimedEvent[] {
   const events: TimedEvent[] = []
   scenarios.forEach((_, i) => {
     const base = ENTER_AT + i * SCENARIO_INTERVAL
-    events.push({ at: base, run: () => show(i, 'event') })
-    events.push({ at: base + ASK_AT, run: () => show(i, 'ask') })
-    events.push({ at: base + ANSWER_AT, run: () => show(i, 'answer') })
-    events.push({ at: base + COLUMN_AT, run: () => show(i, 'column') })
+    events.push({ at: base, run: () => show(i, STEP_EVENT) })
+    events.push({ at: base + ASK_AT, run: () => show(i, STEP_ASK) })
+    events.push({ at: base + ANSWER_AT, run: () => show(i, STEP_ANSWER) })
+    events.push({ at: base + COLUMN_AT, run: () => show(i, STEP_COLUMN) })
   })
   return events
 }
@@ -134,8 +138,7 @@ let observer: IntersectionObserver | undefined
 onMounted(() => {
   prefersReducedMotion.value = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   if (prefersReducedMotion.value) {
-    current.value = 0
-    phase.value = 'column'
+    show(0, STEP_COLUMN)
     return
   }
   if (!wrapperRef.value) {
@@ -158,32 +161,41 @@ onBeforeUnmount(() => {
   observer?.disconnect()
 })
 
-const ORDER: Phase[] = ['idle', 'event', 'ask', 'answer', 'column']
+const eventShown = computed(() => step.value >= STEP_EVENT)
+const askShown = computed(() => step.value >= STEP_ASK)
+const answerShown = computed(() => step.value >= STEP_ANSWER)
+const columnShown = computed(() => step.value >= STEP_COLUMN)
 
-function reached(target: Phase) {
-  return ORDER.indexOf(phase.value) >= ORDER.indexOf(target)
-}
+const fieldRows = computed(() => Array.from({ length: FIELD_SLOTS }, (_, i) => {
+  const field = scenario.value.fields[i]
+  return { key: field?.key ?? '', value: field?.value ?? '', color: field?.color ?? 'text-muted' }
+}))
 
-const winner = computed(() => {
-  let best = scenario.value.options[0]!
-  for (const option of scenario.value.options) if (option.probability > best.probability) best = option
-  return best.label
+const optionRows = computed(() => {
+  const { options } = scenario.value
+  let winner = options[0]!
+  for (const option of options) if (option.probability > winner.probability) winner = option
+  return Array.from({ length: OPTION_SLOTS }, (_, i) => {
+    const option = options[i]
+    return {
+      present: option !== undefined,
+      label: option?.label ?? '',
+      probability: option?.probability ?? 0,
+      width: answerShown.value ? `${(option?.probability ?? 0) * 100}%` : '0%',
+      isWinner: option !== undefined && option.label === winner.label,
+    }
+  })
 })
 
 const SHAPE_LABELS: Record<Scenario['shape'], string> = { choice: 'pick one', boolean: 'yes / no', score: 'rubric' }
 
 const shapeLabel = computed(() => SHAPE_LABELS[scenario.value.shape])
 
-const headline = computed(() => {
-  if (!started.value && !prefersReducedMotion.value) return 'idle'
-  switch (phase.value) {
-    case 'event': return 'event matches `when`'
-    case 'ask': return 'one question, in English'
-    case 'answer': return 'model answers with probabilities'
-    case 'column': return 'answer lands as a column'
-    default: return 'idle'
-  }
-})
+const requestLabel = computed(() => `POST · ${scenario.value.fields[0]?.value.replace(/"/g, '') ?? ''}`)
+
+const HEADLINES = ['idle', 'event matches `when`', 'one question, in English', 'model answers with probabilities', 'answer lands as a column']
+
+const headline = computed(() => HEADLINES[step.value] ?? 'idle')
 </script>
 
 <template>
@@ -195,7 +207,7 @@ const headline = computed(() => {
         <span class="text-dimmed">·</span>
         <span
           class="font-mono text-[10px] tracking-widest uppercase transition-colors duration-300 truncate"
-          :class="phase === 'column' ? 'text-primary' : 'text-amber-400'"
+          :class="columnShown ? 'text-primary' : 'text-amber-400'"
         >
           {{ headline }}
         </span>
@@ -230,34 +242,34 @@ const headline = computed(() => {
             <span>wide event</span>
             <span
               class="ml-auto transition-opacity duration-300"
-              :class="reached('event') ? 'opacity-100' : 'opacity-0'"
-            >POST · {{ scenario.fields[0]?.value.replace(/"/g, '') }}</span>
+              :class="eventShown ? 'opacity-100' : 'opacity-0'"
+            >{{ requestLabel }}</span>
           </div>
           <div class="space-y-0.5 leading-snug">
             <div class="text-dimmed">
               {
             </div>
             <div
-              v-for="slot in FIELD_SLOTS"
-              :key="`${scenario.id}-f-${slot}`"
+              v-for="(field, i) in fieldRows"
+              :key="`field-${i}`"
               class="pl-3 flex whitespace-nowrap transition-all duration-500 h-4"
-              :class="reached('event') ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-1'"
-              :style="{ transitionDelay: `${(slot - 1) * 160}ms` }"
+              :class="eventShown ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-1'"
+              :style="{ transitionDelay: `${i * 160}ms` }"
             >
-              <span class="shrink-0 text-sky-400">{{ scenario.fields[slot - 1]?.key }}</span>
+              <span class="shrink-0 text-sky-400">{{ field.key }}</span>
               <span class="shrink-0 whitespace-pre text-dimmed">: </span>
-              <span class="truncate" :class="scenario.fields[slot - 1]?.color ?? 'text-muted'">{{ scenario.fields[slot - 1]?.value }}</span>
+              <span class="truncate" :class="field.color">{{ field.value }}</span>
             </div>
             <div
               class="pl-3 flex whitespace-nowrap h-4 transition-all duration-700"
-              :class="reached('column') ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'"
+              :class="columnShown ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'"
             >
               <span class="shrink-0 text-primary">signals.{{ scenario.name }}</span>
               <span class="shrink-0 whitespace-pre text-dimmed">: </span>
             </div>
             <div
               class="pl-6 h-4 whitespace-nowrap truncate text-primary transition-all duration-700 delay-150"
-              :class="reached('column') ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'"
+              :class="columnShown ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'"
             >
               {{ scenario.column }}
             </div>
@@ -272,56 +284,60 @@ const headline = computed(() => {
             <span>defineSignal</span>
             <span
               class="ml-auto transition-opacity duration-300"
-              :class="reached('ask') ? 'opacity-100' : 'opacity-0'"
+              :class="askShown ? 'opacity-100' : 'opacity-0'"
             >{{ shapeLabel }}</span>
           </div>
           <div
-            class="h-9 leading-snug text-default transition-all duration-400 line-clamp-2"
-            :class="reached('ask') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'"
+            class="h-9 leading-snug text-default transition-all duration-500 line-clamp-2"
+            :class="askShown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'"
           >
             <span class="text-dimmed">ask: </span>"{{ scenario.ask }}"
           </div>
           <div class="mt-2 space-y-1">
             <div
-              v-for="slot in OPTION_SLOTS"
-              :key="`${scenario.id}-o-${slot}`"
+              v-for="(option, i) in optionRows"
+              :key="`option-${i}`"
               class="grid grid-cols-[64px_minmax(0,1fr)_32px] items-center gap-2 h-4 transition-opacity duration-300"
               :class="[
-                reached('ask') ? 'opacity-100' : 'opacity-0',
-                scenario.options[slot - 1] ? '' : 'invisible',
+                askShown ? 'opacity-100' : 'opacity-0',
+                option.present ? '' : 'invisible',
               ]"
             >
-              <span
+              <div
                 class="truncate transition-colors duration-300"
-                :class="reached('answer') && scenario.options[slot - 1]?.label === winner ? 'text-primary' : 'text-muted'"
-              >{{ scenario.options[slot - 1]?.label ?? '' }}</span>
-              <span class="h-1.5 bg-muted/40 overflow-hidden">
-                <span
-                  class="block h-full transition-[width] duration-700 ease-out"
-                  :class="scenario.options[slot - 1]?.label === winner ? 'bg-primary' : 'bg-muted'"
-                  :style="{ width: reached('answer') ? `${(scenario.options[slot - 1]?.probability ?? 0) * 100}%` : '0%' }"
+                :class="answerShown && option.isWinner ? 'text-primary' : 'text-muted'"
+              >
+                {{ option.label }}
+              </div>
+              <div class="h-1.5 w-full bg-muted/40 overflow-hidden">
+                <div
+                  class="h-1.5 transition-[width] duration-700 ease-out"
+                  :class="option.isWinner ? 'bg-primary' : 'bg-muted'"
+                  :style="{ width: option.width }"
                 />
-              </span>
-              <span
+              </div>
+              <div
                 class="text-right tabular-nums transition-opacity duration-300"
                 :class="[
-                  reached('answer') ? 'opacity-100' : 'opacity-0',
-                  scenario.options[slot - 1]?.label === winner ? 'text-primary' : 'text-dimmed',
+                  answerShown ? 'opacity-100' : 'opacity-0',
+                  option.isWinner ? 'text-primary' : 'text-dimmed',
                 ]"
-              >{{ scenario.options[slot - 1]?.probability.toFixed(2) ?? '' }}</span>
+              >
+                {{ option.probability.toFixed(2) }}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <div class="border-t border-muted/50 px-4 py-2.5 flex items-center gap-2 font-mono text-[9px] tracking-widest uppercase">
-        <span :class="reached('event') ? 'text-default' : 'text-dimmed'">event</span>
+        <span :class="eventShown ? 'text-default' : 'text-dimmed'">event</span>
         <UIcon name="i-lucide-arrow-right" class="size-3 text-dimmed" />
-        <span :class="reached('ask') ? 'text-default' : 'text-dimmed'">question</span>
+        <span :class="askShown ? 'text-default' : 'text-dimmed'">question</span>
         <UIcon name="i-lucide-arrow-right" class="size-3 text-dimmed" />
-        <span :class="reached('answer') ? 'text-default' : 'text-dimmed'">probabilities</span>
+        <span :class="answerShown ? 'text-default' : 'text-dimmed'">probabilities</span>
         <UIcon name="i-lucide-arrow-right" class="size-3 text-dimmed" />
-        <span :class="reached('column') ? 'text-primary' : 'text-dimmed'">column</span>
+        <span :class="columnShown ? 'text-primary' : 'text-dimmed'">column</span>
         <span class="ml-auto hidden sm:inline text-dimmed normal-case tracking-normal">one model call per event, every due signal in it</span>
       </div>
     </div>
