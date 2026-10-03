@@ -13,7 +13,7 @@ export const frameworks: Framework[] = [
   { id: 'tanstack-start', label: 'TanStack Start', icon: 'i-custom:tanstack-emblem', aliases: ['tanstack'] },
   { id: 'react-router', label: 'React Router', icon: 'i-logos-react-router' },
   { id: 'hono', label: 'Hono', icon: 'i-logos-hono' },
-  { id: 'express', label: 'Express', icon: 'i-logos-express' },
+  { id: 'express', label: 'Express', icon: 'i-simple-icons-express' },
   { id: 'fastify', label: 'Fastify', icon: 'i-logos-fastify-icon' },
   { id: 'elysia', label: 'Elysia', icon: 'i-custom:elysia' },
   { id: 'nestjs', label: 'NestJS', icon: 'i-logos-nestjs', aliases: ['nest'] },

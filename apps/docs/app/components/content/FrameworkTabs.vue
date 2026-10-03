@@ -7,6 +7,7 @@ import type { Framework } from '~/utils/frameworks'
 
 interface Tab {
   label: string
+  path?: string
   framework?: Framework
   component: VNode
 }
@@ -30,7 +31,9 @@ function flatten(node: VNode): VNode[] {
 function collect(): Tab[] {
   return (slots.default?.() ?? []).flatMap(flatten).map((node, index) => {
     const label = String(node.props?.filename ?? node.props?.label ?? index)
-    return { label, framework: resolveFramework(label), component: node }
+    // The fence meta carries the file path: ```ts [Nuxt] server/plugins/evlog.ts
+    const path = node.props?.meta || undefined
+    return { label, path, framework: resolveFramework(label), component: node }
   })
 }
 
@@ -85,7 +88,7 @@ const selected = computed({
 
 <template>
   <div :class="ui.root()" data-section="framework-tabs">
-    <div :class="ui.list({ class: 'justify-between overflow-visible' })">
+    <div :class="ui.list({ class: 'gap-3 overflow-visible' })">
       <USelectMenu
         v-model="selected"
         :items="options"
@@ -99,7 +102,8 @@ const selected = computed({
         :content="{ align: 'start' }"
         :ui="{ content: 'min-w-52', leadingIcon: 'text-default', itemLeadingIcon: 'text-default' }"
       />
-      <span v-if="missing" class="truncate pr-2 text-xs text-dimmed">
+      <span v-if="active.path" class="truncate font-mono text-xs text-muted">{{ active.path }}</span>
+      <span v-if="missing" class="ml-auto truncate pr-2 text-xs text-dimmed">
         No {{ missing.label }} example here
       </span>
     </div>
