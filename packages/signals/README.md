@@ -155,7 +155,7 @@ The binding limit is rate: 1,200 requests per minute per TypeSafe account, about
 
 The default `state` is the whole event. A keep signal runs before redaction, so use `state` to pick fields if the request context holds anything you would not send to a model.
 
-A keep signal's latency is added to the event's `durationMs` today, because evlog measures the duration at emit. Until the middleware passes the pre-keep duration to emit, read `durationMs` on events with a `kept` signal accordingly.
+A keep signal waits for the model before the sampling decision, up to `timeoutMs`. The response is already sent, so the client never waits, and `durationMs` is measured before keep hooks run, so the event carries the request's duration, not the judgment's.
 
 ## Use cases
 

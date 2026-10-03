@@ -42,6 +42,7 @@ packages/evlog/            Main package
   test/                    Tests
 packages/cli/              @evlog/cli — the CLI behind the `evlog` executable that `evlog` ships (`pnpm cli` runs it from source)
 packages/nuxthub/          @evlog/nuxthub
+packages/signals/          @evlog/signals — model judgments on wide events (`defineSignal`, `createSignals`); `scripts/` holds the demo catalog and `pnpm --filter @evlog/signals demo`
 packages/telemetry/        @evlog/telemetry
 apps/playground/           Main dev environment (`pnpm dev`)
 apps/docs/                 Docus documentation site — has its own AGENTS.md

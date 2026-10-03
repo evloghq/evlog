@@ -34,7 +34,7 @@ export function loadApiSurface(repoRoot) {
   const symbols = new Set()
   const entries = new Set()
 
-  for (const packageDir of ['packages/evlog', 'packages/cli', 'packages/nuxthub', 'packages/telemetry']) {
+  for (const packageDir of ['packages/evlog', 'packages/cli', 'packages/nuxthub', 'packages/signals', 'packages/telemetry']) {
     const root = join(repoRoot, packageDir)
     if (!exists(root)) continue
 
