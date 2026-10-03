@@ -26,6 +26,8 @@ import { recordMapRun, resolveGate } from '../lib/map/telemetry'
 import type { MapView } from '../lib/map/telemetry-fields'
 import type { Framework, ScanContext, ScanResult } from '../lib/map/types'
 import { writeMapFile } from '../lib/map/write'
+import { formatGithubAnnotations, toSarif } from '../lib/map/formats'
+import { VERSION } from '../lib/constants'
 
 /** Typed result of `evlog map` — rendered by {@link formatMapReport}. */
 export interface MapResult {
@@ -202,6 +204,21 @@ function parseMinScoreArg(value: unknown): number | undefined {
   return threshold
 }
 
+const FORMATS = ['human', 'json', 'github', 'sarif'] as const
+type MapFormat = typeof FORMATS[number]
+
+/**
+ * Read `--format`, with `--json` as the long-standing spelling of `--format json`.
+ * Two formats cannot share stdout, so asking for both is refused rather than
+ * letting one silently win.
+ */
+function parseFormatArg(value: unknown, json: boolean | undefined): MapFormat {
+  if (typeof value !== 'string' || value.length === 0) return json ? 'json' : 'human'
+  if (!(FORMATS as readonly string[]).includes(value)) throw cliErrors.MAP_INVALID_FORMAT({ value })
+  if (json && value !== 'json') throw cliErrors.MAP_FORMAT_CONFLICT({ format: value })
+  return value as MapFormat
+}
+
 /**
  * Read `--baseline`, which is a flag and an option at once.
  *
@@ -236,18 +253,20 @@ export default defineEvlogCommand('map', {
     // `x`, not as setting `noX` (see `wantsHeader`'s `--no-header` argv fallback).
     write: { type: 'boolean', default: true, description: 'Write evlog.map.json (--no-write to skip)' },
     verbose: { type: 'boolean', description: 'Show per-file parse warnings' },
+    format: { type: 'string', description: 'Output: human (default), json, github (workflow annotations), sarif' },
   },
   async run({ args, cli, log, ui }) {
     const entry = typeof args.entry === 'string' && args.entry.length > 0 ? args.entry : undefined
-    const view: MapView = entry ? 'inspect' : args.all ? 'all' : 'summary'
 
     let result: MapResult
     let threshold: number | undefined
     let framework: Framework | undefined
+    let format: MapFormat = 'human'
     try {
       /* Before the scan, not after: an unusable threshold should cost nothing,
          and validating it afterwards means the command reads the whole project
          and writes evlog.map.json before admitting it cannot gate on it. */
+      format = parseFormatArg(args.format, args.json)
       threshold = parseMinScoreArg(args.minScore)
       framework = parseFrameworkArg(args.framework)
       result = await runMap(cli, log, {
@@ -272,6 +291,7 @@ export default defineEvlogCommand('map', {
       throw error
     }
 
+    const view: MapView = format === 'github' || format === 'sarif' ? format : entry ? 'inspect' : args.all ? 'all' : 'summary'
     recordMapRun({
       scan: result.scan,
       frameworkForced: framework !== undefined,
@@ -282,16 +302,26 @@ export default defineEvlogCommand('map', {
       wrote: result.mapPath !== null,
     })
 
-    ui.done({
-      jsonMode: args.json,
-      json: {
-        map: result.scan.map,
-        summary: result.scan.summary,
-        mapPath: result.mapPath,
-        ...(result.baseline ? { baseline: result.baseline } : {}),
-      },
-      human: formatMapReport(cli, result, { all: args.all, entry, minScore: threshold }),
-    })
+    const human = formatMapReport(cli, result, { all: args.all, entry, minScore: threshold })
+    if (format === 'sarif') {
+      ui.stdout(JSON.stringify(toSarif(result.scan, result.baseline, VERSION), null, 2))
+    } else if (format === 'github') {
+      /* Annotations are the stdout contract; the report still goes to stderr so
+         the job log reads the same as a local run. */
+      ui.stdout(formatGithubAnnotations(result.scan, result.baseline, { minScore: threshold }))
+      ui.human(human)
+    } else {
+      ui.done({
+        jsonMode: format === 'json',
+        json: {
+          map: result.scan.map,
+          summary: result.scan.summary,
+          mapPath: result.mapPath,
+          ...(result.baseline ? { baseline: result.baseline } : {}),
+        },
+        human,
+      })
+    }
 
     if (threshold !== undefined && result.scan.map.score < threshold) {
       ui.exit(EXIT_FAIL)

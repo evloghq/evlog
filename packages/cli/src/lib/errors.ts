@@ -222,6 +222,22 @@ export const cliErrors = defineErrorCatalog('cli', {
     fix: 'Pass a whole number between 0 and 100, e.g. --min-score 80',
     tags: ['map'],
   },
+  MAP_INVALID_FORMAT: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      `Unknown --format "${value}"`,
+    why: 'map renders human, json, github (workflow annotations) and sarif',
+    fix: 'Pass one of: human, json, github, sarif',
+    tags: ['map'],
+  },
+  MAP_FORMAT_CONFLICT: {
+    status: 400,
+    message: ({ format }: { format: string }) =>
+      `--json and --format ${format} both claim stdout`,
+    why: 'Each format is a different contract on stdout, and a consumer can only parse one of them',
+    fix: 'Drop --json, or pass --format json',
+    tags: ['map'],
+  },
 })
 
 declare module 'evlog' {
