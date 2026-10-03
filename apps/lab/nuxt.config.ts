@@ -155,6 +155,9 @@ export default defineNuxtConfig({
     sources: [
       {
         glob: `${docs}/app/components/content/*.vue`,
+        // The framework picker wraps fenced code from markdown; without a page
+        // around it there is nothing to render.
+        ignore: ['FrameworkTabs.vue'],
         group: 'content',
         css: `${docs}/app/assets/css/main.css`,
         source: `${docs}/app`,

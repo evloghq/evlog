@@ -24,6 +24,11 @@ export interface StageSource {
    * configured.
    */
   glob: string
+  /**
+   * File names matched by `glob` that are not stageable: a prose wrapper that
+   * only renders the markdown it is given has nothing to put on a stage.
+   */
+  ignore?: string[]
   /** Shown in the picker to tell one body of work from another. */
   group?: string
   /**
@@ -85,7 +90,11 @@ export default defineNuxtModule<StagesOptions>({
       // Vite reads the literal, so it has to be a path relative to this file —
       // and one that starts with a dot, or it is taken for a package.
       const path = withLeadingDot(relative(generatedDir, absolute))
-      return `  ...withGroup(import.meta.glob(${JSON.stringify(path)}), ${JSON.stringify(source.group ?? `group-${index}`)}),`
+      // A negative pattern only applies inside the directory the positive one
+      // names: `**` never walks up through `..`.
+      const dir = path.slice(0, path.lastIndexOf('/'))
+      const patterns = [path, ...(source.ignore ?? []).map(name => `!${dir}/${name}`)]
+      return `  ...withGroup(import.meta.glob(${JSON.stringify(patterns)}), ${JSON.stringify(source.group ?? `group-${index}`)}),`
     })
 
     mkdirSync(generatedDir, { recursive: true })
