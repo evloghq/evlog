@@ -301,12 +301,19 @@ function hasContextLoggerPath(chain: readonly string[]): boolean {
 }
 
 /**
- * Whether a member path ends on the logger the integration parks on the request
- * object: `req.log` for Express, `request.log` for Fastify. Taken at face value
- * like `context.log`, for the same asymmetry of costs.
+ * Whether a member path is the logger the integration parks on the request
+ * object: `req.log` for Express, `request.log` for Fastify. The request is
+ * whatever the framework handed the handler, so the root has to be a function
+ * parameter: `fastify.log` on the instance built at module level is Fastify's
+ * own logger, not evlog's, and must not count.
  */
-function endsWithRequestLogger(path: readonly string[], member: string | undefined): boolean {
-  return member !== undefined && path.length > 0 && path.at(-1) === member
+function isRequestLogger(
+  root: string | null,
+  path: readonly string[],
+  member: string | undefined,
+  parameters: ReadonlySet<string>,
+): boolean {
+  return member !== undefined && root !== null && parameters.has(root) && path.length > 0 && path.at(-1) === member
 }
 
 /**
@@ -314,8 +321,12 @@ function endsWithRequestLogger(path: readonly string[], member: string | undefin
  * sit before the invoked one, so `console.log(…)` and `logger.log(…)`, where
  * `log` is the call itself, never count.
  */
-function callsRequestLogger(call: Pick<CallFact, 'root' | 'chain'>, member: string | undefined): boolean {
-  if (member === undefined || call.root === 'console') return false
+function callsRequestLogger(
+  call: Pick<CallFact, 'root' | 'chain'>,
+  member: string | undefined,
+  parameters: ReadonlySet<string>,
+): boolean {
+  if (member === undefined || call.root === null || !parameters.has(call.root)) return false
   const index = call.chain.indexOf(member)
   return index !== -1 && index < call.chain.length - 1
 }
@@ -350,6 +361,20 @@ function memberPath(node: Node): string[] {
     current = unwrapChain(object)
   }
   return path
+}
+
+/** The identifier a member chain hangs on — `req` in `req.context.log` — or `null` when it is not one. */
+function memberRoot(node: Node): string | null {
+  let current = unwrapChain(node)
+  while (current.type === 'MemberExpression') current = unwrapChain((current as { object: Node }).object)
+  return current.type === 'Identifier' ? current.name : null
+}
+
+/** Names a function's parameters bind, defaults and destructuring included. */
+function parameterNames(node: Node): string[] {
+  return (node as { params: Node[] }).params.flatMap(
+    param => patternNames(param.type === 'AssignmentPattern' ? (param as { left: Node }).left : param),
+  )
 }
 
 /**
@@ -511,6 +536,8 @@ export function buildFileFacts(
   const loggerCandidates: Array<{ binding: string | null, factory: string, line: number }> = []
   /** Loggers read off the request context — no import to resolve them against. */
   const contextLoggers: Array<{ binding: string, line: number }> = []
+  /** Every function parameter in the file: what a request logger may hang on. */
+  const parameters = new Set<string>()
   /** Exported bindings whose value comes from a call — resolved after the pass. */
   const exportedFromFactory: Array<{ names: readonly string[], factory: string }> = []
   /** Source spans in which a failure is caught, handled or surfaced. */
@@ -568,6 +595,15 @@ export function buildFileFacts(
       case 'ClassDeclaration': {
         const { id } = (node as { id?: { name: string } })
         if (id?.name) localDeclarations.add(id.name)
+        if (node.type === 'FunctionDeclaration') {
+          for (const name of parameterNames(node)) parameters.add(name)
+        }
+        break
+      }
+
+      case 'FunctionExpression':
+      case 'ArrowFunctionExpression': {
+        for (const name of parameterNames(node)) parameters.add(name)
         break
       }
 
@@ -589,7 +625,7 @@ export function buildFileFacts(
         if (init.type === 'MemberExpression') {
           const path = memberPath(init)
           const line = lines.lineAt((init as unknown as { start: number }).start)
-          if (hasContextLoggerPath(path) || endsWithRequestLogger(path, options.requestLoggerMember)) {
+          if (hasContextLoggerPath(path) || isRequestLogger(memberRoot(init), path, options.requestLoggerMember, parameters)) {
             for (const name of patternNames(declarator.id)) {
               contextLoggers.push({ binding: name, line })
             }
@@ -750,7 +786,7 @@ export function buildFileFacts(
   }
   /* `event.context.log.set({ … })` — used straight off the request, never bound. */
   if (!loggerInit) {
-    const inline = calls.find(call => hasContextLoggerPath(call.chain) || callsRequestLogger(call, options.requestLoggerMember))
+    const inline = calls.find(call => hasContextLoggerPath(call.chain) || callsRequestLogger(call, options.requestLoggerMember, parameters))
     if (inline) loggerInit = { line: inline.line, column: 0 }
   }
 
@@ -798,7 +834,7 @@ export function buildFileFacts(
     loggerCalls: member => calls.filter((call) => {
       if (!call.chain.includes(member)) return false
       if (call.root !== null && loggerBindings.has(call.root)) return true
-      return hasContextLoggerPath(call.chain) || callsRequestLogger(call, options.requestLoggerMember)
+      return hasContextLoggerPath(call.chain) || callsRequestLogger(call, options.requestLoggerMember, parameters)
     }),
     callsTo: name => calls.filter(call => call.member === name),
   }

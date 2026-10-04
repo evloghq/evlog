@@ -198,8 +198,30 @@ const CASES: Record<CheckId, RuleCases> = {
         name: 'the same logger used without ever being bound',
         code: 'export default defineEventHandler((event) => { event.context.log.set({ a: 1 }) })',
       },
+      {
+        name: 'the logger parked on the express request, bound then used',
+        framework: 'express',
+        code: 'app.post(\'/x\', (req, res) => { const log = req.log\nlog.set({ a: 1 }) })',
+      },
+      {
+        name: 'the logger parked on the fastify request, used without being bound',
+        framework: 'fastify',
+        code: 'app.post(\'/x\', async (request) => { request.log.set({ a: 1 }) })',
+      },
     ],
     invalid: [
+      {
+        name: 'fastify\'s own instance logger is not the request logger',
+        framework: 'fastify',
+        code: 'const fastify = Fastify()\nfastify.post(\'/x\', async () => { fastify.log.info(\'hit\') })',
+        message: /dark event/,
+      },
+      {
+        name: 'binding the instance logger does not make it the request logger either',
+        framework: 'fastify',
+        code: 'const app = Fastify()\napp.post(\'/x\', async () => { const log = app.log\nlog.info(\'hit\') })',
+        message: /dark event/,
+      },
       {
         name: 'nothing at all, on an ambient framework, says the event is empty not absent',
         code: 'export default defineEventHandler(() => ({ ok: true }))',
