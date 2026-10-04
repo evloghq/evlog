@@ -57,10 +57,10 @@
     "demo": "tsx scripts/demo.ts"
   },
   "devDependencies": {
-    "ai": "^7.0.107",
+    "ai": "^7.0.127",
     "evlog": "workspace:*",
     "tsdown": "^0.23.0",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   },

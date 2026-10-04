@@ -55,10 +55,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clack/prompts": "^1.8.0",
+    "@clack/prompts": "^1.8.1",
     "@evlog/telemetry": "workspace:*",
     "citty": "^0.2.2",
-    "oxc-parser": "^0.149.0"
+    "oxc-parser": "^0.152.0"
   },
   "peerDependencies": {
     "evlog": ">=2.29.0"
@@ -66,7 +66,7 @@
   "devDependencies": {
     "evlog": "workspace:*",
     "tsdown": "^0.23.0",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   },

@@ -50,7 +50,7 @@
   "peerDependencies": {
     "evlog": "^2.29.0",
     "@nuxthub/core": "^0.10.8",
-    "drizzle-orm": ">=0.45.2"
+    "drizzle-orm": ">=0.45.3"
   },
   "peerDependenciesMeta": {
     "drizzle-orm": {
