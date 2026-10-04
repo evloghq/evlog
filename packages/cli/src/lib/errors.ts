@@ -226,8 +226,16 @@ export const cliErrors = defineErrorCatalog('cli', {
     status: 400,
     message: ({ value }: { value: string }) =>
       `Unknown --format "${value}"`,
-    why: 'map renders human, json, github (workflow annotations) and sarif',
-    fix: 'Pass one of: human, json, github, sarif',
+    why: 'map renders human, json and github (workflow annotations)',
+    fix: 'Pass one of: human, json, github',
+    tags: ['map'],
+  },
+  MAP_INVALID_LIMIT: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      `Invalid --limit "${value}"`,
+    why: 'The limit caps how many annotations reach the pull request, and a cap that cannot be read would silently become the default',
+    fix: 'Pass a whole number of 1 or more, e.g. --limit 10',
     tags: ['map'],
   },
   MAP_FORMAT_CONFLICT: {

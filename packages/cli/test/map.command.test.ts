@@ -7,13 +7,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { version } from '../package.json'
 import map, { formatMapReport, runMap } from '../src/commands/map'
 import type { MapResult } from '../src/commands/map'
+import type { MapFile, RouteEntry } from '../src/lib/map/types'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
 import { SCHEMA_VERSION } from '../src/core/output'
 import { resolveCliEnvironment } from '../src/lib/environment'
 import { MIN_WIDTH, formatMapInspect } from '../src/lib/map/report'
 import { REQUIREMENTS, RULE_SET_VERSION } from '../src/lib/map/rules/index'
-import type { RouteEntry } from '../src/lib/map/types'
 
 const FIXTURES = join(import.meta.dirname, 'map/fixtures')
 
@@ -440,6 +440,61 @@ describe('map --format', () => {
     expect(process.exitCode).toBeUndefined()
   })
 
+  it('github: without a baseline, the warnings follow the FIX FIRST order and stop at --limit', async () => {
+    const cwd = join(FIXTURES, 'nuxt-basic')
+    const out = captureStdout()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--limit', '2', '--no-header', '--no-write'] })
+
+    const lines = out.join('').trim().split('\n')
+    const warnings = lines.filter(line => line.startsWith('::warning'))
+    expect(warnings).toHaveLength(2)
+    /* The sensitive payments route outranks every plain dark handler. */
+    expect(warnings[0]).toContain('file=server/api/payments/stripe.post.ts,')
+    expect(lines.at(-1)).toMatch(/^::notice title=evlog map::score \d+\/100 .*; \d+ more findings not shown$/)
+  })
+
+  it('github: keeps ten findings by default, which is what GitHub keeps', async () => {
+    const cwd = join(FIXTURES, 'nuxt-basic')
+    const out = captureStdout()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--no-header', '--no-write'] })
+
+    expect(out.join('').trim().split('\n').filter(line => line.startsWith('::warning'))).toHaveLength(10)
+  })
+
+  it('github: with a baseline, only the regressions are emitted, as errors', async () => {
+    const cwd = await copyFixture('nuxt-basic')
+    const scanned = captureStdout()
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--no-write'] })
+    const { map: current } = JSON.parse(scanned.join('')) as { map: MapFile }
+
+    /* A baseline in which the health route passed wide-event: the scan now fails it, so that is the one regression. */
+    const health = current.routes.find(route => route.file === 'server/routes/health.get.ts')!
+    health.checks['wide-event'] = { ...health.checks['wide-event'], status: 'pass' }
+    await writeFile(join(cwd, 'evlog.map.json'), JSON.stringify(current))
+    vi.restoreAllMocks()
+    const out = captureStdout()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--baseline', '--no-header', '--no-write'] })
+
+    const lines = out.join('').trim().split('\n')
+    expect(lines.filter(line => line.startsWith('::warning'))).toHaveLength(0)
+    expect(lines.filter(line => line.startsWith('::error file='))).toEqual([expect.stringMatching(/^::error file=server\/routes\/health\.get\.ts,line=\d+,title=evlog map%3A wide-event::/),])
+    expect(lines.at(-1)).toMatch(/^::error title=evlog map::score .*; regressed against /)
+    expect(process.exitCode).toBe(1)
+  })
+
+  it.each(['0', 'abc', '2.5'])('rejects --limit %s instead of falling back to the default', async (value) => {
+    const cwd = join(FIXTURES, 'hono-basic')
+    const out = captureStdout()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--limit', value, '--no-header', '--no-write'] })
+
+    expect(JSON.parse(out.join('')).error.code).toBe('cli.MAP_INVALID_LIMIT')
+    expect(process.exitCode).toBe(1)
+  })
+
   it('github: paths are rebased on GITHUB_WORKSPACE when the project is a package inside it', async () => {
     const cwd = join(FIXTURES, 'hono-basic')
     vi.stubEnv('GITHUB_WORKSPACE', resolve(FIXTURES, '../../..'))
@@ -462,30 +517,6 @@ describe('map --format', () => {
 
     expect(out.join('')).toMatch(/^::error title=evlog map::score \d+\/100 .*below --min-score 100$/m)
     expect(process.exitCode).toBe(1)
-  })
-
-  it('sarif: a 2.1.0 log naming every rule, with one result per failed check', async () => {
-    const cwd = join(FIXTURES, 'hono-basic')
-    const out = captureStdout()
-
-    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'sarif', '--no-header', '--no-write'] })
-
-    const sarif = JSON.parse(out.join('')) as {
-      version: string
-      schemaVersion?: unknown
-      runs: Array<{
-        tool: { driver: { name: string, rules: Array<{ id: string }> } }
-        results: Array<{ ruleId: string, level: string, locations: Array<{ physicalLocation: { artifactLocation: { uri: string }, region: { startLine: number } } }> }>
-      }>
-    }
-    expect(sarif.version).toBe('2.1.0')
-    expect(sarif.schemaVersion).toBeUndefined()
-    const [run] = sarif.runs
-    expect(run!.tool.driver.name).toBe('evlog')
-    expect(run!.tool.driver.rules.map(rule => rule.id)).toEqual(expect.arrayContaining(REQUIREMENTS.map(rule => rule.id)))
-    const health = run!.results.find(result => result.ruleId === 'wide-event')!
-    expect(health.level).toBe('warning')
-    expect(health.locations[0]!.physicalLocation).toEqual({ artifactLocation: { uri: 'src/health.ts' }, region: { startLine: 5 } })
   })
 
   it('refuses --json together with another --format', async () => {

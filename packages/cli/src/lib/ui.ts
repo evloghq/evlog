@@ -15,7 +15,7 @@ export interface CliUi {
   human: (text: string) => void
   /** Machine payload on stdout (adds `schemaVersion`). */
   json: (payload: Record<string, unknown>) => void
-  /** A foreign contract on stdout (SARIF, workflow commands), written as is. */
+  /** A foreign contract on stdout (workflow commands), written as is. */
   stdout: (text: string) => void
   /** Set exit code from a check summary (`fail > 0` → 1) or a raw code. */
   exit: (summaryOrCode: CheckSummary | number) => void

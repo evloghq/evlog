@@ -26,7 +26,7 @@ import { recordMapRun, resolveGate } from '../lib/map/telemetry'
 import type { MapView } from '../lib/map/telemetry-fields'
 import type { Framework, ScanContext, ScanResult } from '../lib/map/types'
 import { writeMapFile } from '../lib/map/write'
-import { formatGithubAnnotations, toSarif } from '../lib/map/formats'
+import { formatGithubAnnotations } from '../lib/map/formats'
 import { VERSION } from '../lib/constants'
 
 /** Typed result of `evlog map` — rendered by {@link formatMapReport}. */
@@ -207,7 +207,7 @@ function parseMinScoreArg(value: unknown): number | undefined {
   return threshold
 }
 
-const FORMATS = ['human', 'json', 'github', 'sarif'] as const
+const FORMATS = ['human', 'json', 'github'] as const
 type MapFormat = typeof FORMATS[number]
 
 /**
@@ -220,6 +220,17 @@ function parseFormatArg(value: unknown, json: boolean | undefined): MapFormat {
   if (!(FORMATS as readonly string[]).includes(value)) throw cliErrors.MAP_INVALID_FORMAT({ value })
   if (json && value !== 'json') throw cliErrors.MAP_FORMAT_CONFLICT({ format: value })
   return value as MapFormat
+}
+
+/** GitHub's cap: it keeps this many annotations per level per step and drops the rest. */
+const DEFAULT_LIMIT = 10
+
+/** Read `--limit`; the whole string has to parse, for the same reason as `--min-score`. */
+function parseLimitArg(value: unknown): number {
+  if (typeof value !== 'string' || value.length === 0) return DEFAULT_LIMIT
+  const limit = Number(value)
+  if (!Number.isInteger(limit) || limit < 1) throw cliErrors.MAP_INVALID_LIMIT({ value })
+  return limit
 }
 
 /**
@@ -256,7 +267,8 @@ export default defineEvlogCommand('map', {
     // `x`, not as setting `noX` (see `wantsHeader`'s `--no-header` argv fallback).
     write: { type: 'boolean', default: true, description: 'Write evlog.map.json (--no-write to skip)' },
     verbose: { type: 'boolean', description: 'Show per-file parse warnings' },
-    format: { type: 'string', description: 'Output: human (default), json, github (workflow annotations), sarif' },
+    format: { type: 'string', description: 'Output: human (default), json, github (workflow annotations)' },
+    limit: { type: 'string', description: `Most annotations --format github emits (default ${DEFAULT_LIMIT}, GitHub's cap)` },
   },
   async run({ args, cli, log, ui }) {
     const entry = typeof args.entry === 'string' && args.entry.length > 0 ? args.entry : undefined
@@ -265,11 +277,13 @@ export default defineEvlogCommand('map', {
     let threshold: number | undefined
     let framework: Framework | undefined
     let format: MapFormat = 'human'
+    let limit = DEFAULT_LIMIT
     try {
       /* Before the scan, not after: an unusable threshold should cost nothing,
          and validating it afterwards means the command reads the whole project
          and writes evlog.map.json before admitting it cannot gate on it. */
       format = parseFormatArg(args.format, args.json)
+      limit = parseLimitArg(args.limit)
       threshold = parseMinScoreArg(args.minScore)
       framework = parseFrameworkArg(args.framework)
       result = await runMap(cli, log, {
@@ -294,7 +308,7 @@ export default defineEvlogCommand('map', {
       throw error
     }
 
-    const view: MapView = format === 'github' || format === 'sarif' ? format : entry ? 'inspect' : args.all ? 'all' : 'summary'
+    const view: MapView = format === 'github' ? format : entry ? 'inspect' : args.all ? 'all' : 'summary'
     recordMapRun({
       scan: result.scan,
       frameworkForced: framework !== undefined,
@@ -306,13 +320,11 @@ export default defineEvlogCommand('map', {
     })
 
     const human = formatMapReport(cli, result, { all: args.all, entry, minScore: threshold })
-    const location = { projectRoot: result.projectRoot, workspace: cli.env.GITHUB_WORKSPACE }
-    if (format === 'sarif') {
-      ui.stdout(JSON.stringify(toSarif(result.scan, result.baseline, location, VERSION), null, 2))
-    } else if (format === 'github') {
+    if (format === 'github') {
       /* Annotations are the stdout contract; the report still goes to stderr so
          the job log reads the same as a local run. */
-      ui.stdout(formatGithubAnnotations(result.scan, result.baseline, location, { minScore: threshold }))
+      const location = { projectRoot: result.projectRoot, workspace: cli.env.GITHUB_WORKSPACE }
+      ui.stdout(formatGithubAnnotations(result.scan, result.baseline, location, { minScore: threshold, limit }))
       ui.human(human)
     } else {
       ui.done({

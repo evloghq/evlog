@@ -8,7 +8,7 @@ const GATES = ['none', 'min-score', 'baseline', 'both'] as const
 export type MapGate = typeof GATES[number]
 
 /** Which renderer the run asked for: the three human views, or a machine format. */
-const VIEWS = ['summary', 'all', 'inspect', 'github', 'sarif'] as const
+const VIEWS = ['summary', 'all', 'inspect', 'github'] as const
 export type MapView = typeof VIEWS[number]
 
 /**

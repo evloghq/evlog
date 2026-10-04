@@ -227,8 +227,8 @@ function priorityReason(route: RouteEntry): { sentence: string, doc: string } {
     : { sentence: 'has gaps', doc: '/cli/rules' }
 }
 
-/** Worst first, sensitive entry points ahead of the rest. */
-function prioritize(routes: RouteEntry[]): RouteEntry[] {
+/** Entry points with gaps, worst first, sensitive ones ahead of the rest: the FIX FIRST order. */
+export function prioritize(routes: RouteEntry[]): RouteEntry[] {
   return [...routes]
     .filter(hasGaps)
     .sort((a, b) => {
