@@ -35,6 +35,8 @@ export interface MapResult {
   framework: Framework
   frameworkWarnings: string[]
   scan: ScanResult
+  /** Absolute directory the scan ran in — what the scan's file paths are relative to. */
+  projectRoot: string
   /** Path `evlog.map.json` was written to, or `null` with `--no-write`. */
   mapPath: string | null
   /** Diff against the committed map, when `--baseline` was passed. */
@@ -129,6 +131,7 @@ export async function runMap(
     framework,
     frameworkWarnings: warnings,
     scan: scanResult,
+    projectRoot: project.packageDir,
     mapPath,
     baseline,
     baselineWarnings,
@@ -303,12 +306,13 @@ export default defineEvlogCommand('map', {
     })
 
     const human = formatMapReport(cli, result, { all: args.all, entry, minScore: threshold })
+    const location = { projectRoot: result.projectRoot, workspace: cli.env.GITHUB_WORKSPACE }
     if (format === 'sarif') {
-      ui.stdout(JSON.stringify(toSarif(result.scan, result.baseline, VERSION), null, 2))
+      ui.stdout(JSON.stringify(toSarif(result.scan, result.baseline, location, VERSION), null, 2))
     } else if (format === 'github') {
       /* Annotations are the stdout contract; the report still goes to stderr so
          the job log reads the same as a local run. */
-      ui.stdout(formatGithubAnnotations(result.scan, result.baseline, { minScore: threshold }))
+      ui.stdout(formatGithubAnnotations(result.scan, result.baseline, location, { minScore: threshold }))
       ui.human(human)
     } else {
       ui.done({

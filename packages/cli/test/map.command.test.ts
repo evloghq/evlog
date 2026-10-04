@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { runCommand } from 'citty'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { version } from '../package.json'
@@ -438,6 +438,20 @@ describe('map --format', () => {
     expect(lines.some(line => line.startsWith('::error'))).toBe(false)
     expect(lines.at(-1)).toMatch(/^::notice title=evlog map::score \d+\/100 \(/)
     expect(process.exitCode).toBeUndefined()
+  })
+
+  it('github: paths are rebased on GITHUB_WORKSPACE when the project is a package inside it', async () => {
+    const cwd = join(FIXTURES, 'hono-basic')
+    vi.stubEnv('GITHUB_WORKSPACE', resolve(FIXTURES, '../../..'))
+    const out = captureStdout()
+
+    try {
+      await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--no-header', '--no-write'] })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+
+    expect(out.join('')).toMatch(/^::warning file=test\/map\/fixtures\/hono-basic\/src\/health\.ts,line=5,/m)
   })
 
   it('github: a score under --min-score is an error and exits 1', async () => {
