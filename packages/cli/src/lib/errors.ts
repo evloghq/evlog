@@ -287,6 +287,23 @@ export const cliErrors = defineErrorCatalog('cli', {
     fix: 'Pass milliseconds (500) or a unit (500ms, 1.5s)',
     tags: ['logs'],
   },
+  LOGS_INVALID_WHERE: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      `Invalid --where "${value}"`,
+    why: 'A clause that cannot be read would silently match everything',
+    fix: 'Write field=value, field!=value, field>n, field>=n, field<n, field<=n, field~regex, field (present) or !field (absent); dotted fields reach into objects',
+    tags: ['logs'],
+  },
+  LOGS_URL_UNREACHABLE: {
+    status: 502,
+    message: ({ url, reason }: { url: string, reason: string }) =>
+      `Could not read events from ${url}: ${reason}`,
+    why: 'The memory drain only exists while the app runs, and only where the app exposes readMemoryLogs() over HTTP',
+    fix: 'Start the app, check the endpoint returns a JSON array of events, and pass its URL to --url',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs'],
+  },
   LOGS_INVALID_LIMIT: {
     status: 400,
     message: ({ value }: { value: string }) =>

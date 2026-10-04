@@ -70,6 +70,9 @@ pnpm evlog map
 | `evlog logs errors` | The ones that failed: a `5xx`, an `error` level, or an `error` block |
 | `evlog logs slow [--over 1s]` | Over the bar (default 500ms), worst first |
 | `evlog logs <requestId>` | One request in full: error with `why`/`fix`, audit record, business fields |
+| `evlog logs stats` | Per route: count, errors, p50, p95; then by status class and level |
+| `evlog logs --where payment.amount>5000 --where audit.outcome=failure` | Any field on the event: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~regex`, present, `!absent` |
+| `evlog logs --url http://localhost:8787/_evlog/logs` | Read the memory drain's dev endpoint instead of files |
 | `evlog logs -f` | Follow new events as the app writes them |
 | `evlog logs --since 15m --path /api/x --status 5xx --level error` | Filters, composable with every view |
 | `evlog logs --json` | The events as JSON on stdout (one line per event with `-f`) |

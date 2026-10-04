@@ -2,8 +2,8 @@ import type { WideEvent } from 'evlog'
 import type { CliContext } from '../../core/context'
 import { createStyle } from '../../core/output'
 import type { Style, StyleCode } from '../../core/output'
-import { field, isError } from './query'
-import type { LogsQuery } from './query'
+import { computeStats, field, isError } from './query'
+import type { LogsQuery, LogsStats } from './query'
 
 /** Fields every request event carries, shown in the fixed columns rather than the summary. */
 const STANDARD = new Set([
@@ -69,15 +69,21 @@ function summary(event: WideEvent): { text: string, color?: StyleCode } {
   return { text: fields(event) }
 }
 
+/** The app an event came from when several directories are read, kept off the event itself. */
+export const SOURCE = Symbol('evlog.source')
+export type Sourced = WideEvent & { [SOURCE]?: string }
+
 /** One event on one line: time, request, status, duration, and what mattered. */
-export function formatLine(style: Style, event: WideEvent): string {
+export function formatLine(style: Style, event: Sourced): string {
   const status = typeof field(event, 'status') === 'number' ? field(event, 'status') as number : undefined
   const method = str(field(event, 'method'))
   const path = str(field(event, 'path')) ?? str(field(event, 'operation')) ?? event.service
   const where = method ? `${method.padEnd(6)} ${path}` : `       ${path}`
   const { text, color } = summary(event)
+  const source = event[SOURCE]
   const columns = [
     style.paint('dim', clock(event.timestamp)),
+    ...(source ? [style.paint('cyan', source.padEnd(12))] : []),
     where.padEnd(44),
     style.paint(statusColor(status, event.level), status !== undefined ? String(status) : event.level.padEnd(3)),
     style.paint('dim', (event.duration ?? '').padStart(7)),
@@ -139,12 +145,15 @@ export function formatEvent(style: Style, event: WideEvent): string {
 }
 
 export interface LogsResult {
-  dir: string
+  /** Where the events came from: a directory per line, or the URL. */
+  sources: string[]
   query: LogsQuery
   /** Every event that matched, in the reader's order. */
   matched: number
   /** The events shown: `select()` applied to `matched`. */
-  events: WideEvent[]
+  events: Sourced[]
+  /** Every matched event, for `stats`. */
+  all: Sourced[]
 }
 
 function describe(query: LogsQuery): string {
@@ -152,10 +161,26 @@ function describe(query: LogsQuery): string {
   if (query.view === 'errors') parts.push('errors')
   if (query.view === 'slow') parts.push(`slower than ${query.over}ms`)
   if (query.view === 'trace') parts.push(`request ${query.id}`)
+  for (const clause of query.where) parts.push(`${clause.path.join('.')}${clause.op === 'exists' ? '' : clause.op === 'absent' ? ' absent' : `${clause.op}${String(clause.value)}`}`)
   if (query.since) parts.push(`since ${query.since.toISOString()}`)
   if (query.until) parts.push(`until ${query.until.toISOString()}`)
   if (query.level) parts.push(`level ${query.level.join(',')}`)
   return parts.join(' · ')
+}
+
+function formatStats(style: Style, stats: LogsStats): string[] {
+  const lines: string[] = []
+  const ms = (value: number | undefined): string => (value === undefined ? '–' : `${value}ms`)
+  const width = Math.max(5, ...stats.byRoute.map(row => row.route.length))
+  lines.push(style.paint('dim', `${'ROUTE'.padEnd(width)}  ${'COUNT'.padStart(5)}  ${'ERRORS'.padStart(6)}  ${'P50'.padStart(7)}  ${'P95'.padStart(7)}`))
+  for (const row of stats.byRoute) {
+    const errors = row.errors > 0 ? style.paint('red', String(row.errors).padStart(6)) : String(row.errors).padStart(6)
+    lines.push(`${row.route.padEnd(width)}  ${String(row.count).padStart(5)}  ${errors}  ${ms(row.p50).padStart(7)}  ${ms(row.p95).padStart(7)}`)
+  }
+  const classes = Object.entries(stats.byStatus).sort().map(([key, count]) => `${key} ${count}`).join(' · ')
+  const levels = Object.entries(stats.byLevel).sort((a, b) => b[1] - a[1]).map(([key, count]) => `${key} ${count}`).join(' · ')
+  lines.push('', `${style.paint('dim', 'status')}  ${classes}`, `${style.paint('dim', 'level ')}  ${levels}`)
+  return lines
 }
 
 /** The one-shot report: a header, one line per event (or the full event for a trace), and what to try next. */
@@ -164,8 +189,14 @@ export function formatLogsReport(ctx: CliContext, result: LogsResult): string {
   const { query, events, matched } = result
   const lines: string[] = []
   const filters = describe(query)
+  const where = result.sources.length === 1 ? result.sources[0] : `${result.sources.length} apps`
+  if (query.view === 'stats') {
+    lines.push(style.paint('dim', `${matched} event${matched === 1 ? '' : 's'} · ${where}${filters ? ` · ${filters}` : ''}`), '')
+    if (matched === 0) return [...lines, 'no event matches'].join('\n')
+    return [...lines, ...formatStats(style, computeStats(result.all))].join('\n')
+  }
   const shown = events.length === matched ? `${matched} event${matched === 1 ? '' : 's'}` : `${events.length} of ${matched} events`
-  lines.push(style.paint('dim', `${shown} · ${result.dir}${filters ? ` · ${filters}` : ''}`), '')
+  lines.push(style.paint('dim', `${shown} · ${where}${filters ? ` · ${filters}` : ''}`), '')
 
   if (events.length === 0) {
     lines.push(query.view === 'trace' ? `no event carries the id ${query.id}` : 'no event matches')
@@ -184,6 +215,7 @@ export function formatLogsReport(ctx: CliContext, result: LogsResult): string {
   if (query.view === 'recent' && failures > 0) hints.push(`evlog logs errors — the ${failures} that failed`)
   hints.push('evlog logs <requestId> — one request in full')
   if (query.view !== 'slow') hints.push('evlog logs slow — worst first')
+  if (query.view === 'recent') hints.push('evlog logs stats — by route')
   lines.push('', style.paint('dim', hints.join(' · ')))
   return lines.join('\n')
 }

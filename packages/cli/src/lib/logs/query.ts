@@ -2,7 +2,7 @@ import type { LogLevel, WideEvent } from 'evlog'
 import { cliErrors } from '../errors'
 
 /** What the run shows: the latest events, the failures, the slowest, or one request. */
-const VIEWS = ['recent', 'errors', 'slow', 'trace'] as const
+const VIEWS = ['recent', 'errors', 'slow', 'trace', 'stats'] as const
 export type LogsView = typeof VIEWS[number]
 
 /**
@@ -76,8 +76,92 @@ export function parseLimit(value: unknown): number {
   return limit
 }
 
+/** One `--where` clause: a dotted field, an operator, and the value it is held against. */
+export interface Where {
+  path: string[]
+  op: '=' | '!=' | '>' | '>=' | '<' | '<=' | '~' | 'exists' | 'absent'
+  value: string | number | boolean | RegExp | undefined
+}
+
+const WHERE = /^(!?)([\w.$-]+)(?:(>=|<=|!=|=|>|<|~)(.*))?$/s
+
+function coerce(raw: string): string | number | boolean {
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  const number = Number(raw)
+  return raw.trim() !== '' && !Number.isNaN(number) ? number : raw
+}
+
+/**
+ * `payment.amount>5000`, `audit.outcome=failure`, `error.message~declined`,
+ * `user.id`, `!error`. A quoted value keeps its quotes off: `path="/a b"`.
+ */
+export function parseWhere(raw: string): Where {
+  const match = WHERE.exec(raw.trim())
+  if (!match) throw cliErrors.LOGS_INVALID_WHERE({ value: raw })
+  const [, negated, key, op, value] = match
+  const path = key!.split('.')
+  if (op === undefined) return { path, op: negated ? 'absent' : 'exists', value: undefined }
+  if (negated) throw cliErrors.LOGS_INVALID_WHERE({ value: raw })
+  if (/^[=<>~!]/.test(value!)) throw cliErrors.LOGS_INVALID_WHERE({ value: raw })
+  const text = value!.replace(/^(["'])(.*)\1$/s, '$2')
+  if (op === '~') {
+    try {
+      return { path, op, value: new RegExp(text, 'i') }
+    } catch {
+      throw cliErrors.LOGS_INVALID_WHERE({ value: raw })
+    }
+  }
+  return { path, op: op as Where['op'], value: coerce(text) }
+}
+
+export function parseWheres(value: unknown): Where[] {
+  const raws = Array.isArray(value) ? value : typeof value === 'string' && value.length > 0 ? [value] : []
+  return raws.map(raw => parseWhere(String(raw)))
+}
+
+function read(event: WideEvent, path: string[]): unknown {
+  let current: unknown = event
+  for (const key of path) {
+    if (typeof current !== 'object' || current === null) return undefined
+    current = (current as Record<string, unknown>)[key]
+  }
+  return current
+}
+
+export function matchesWhere(event: WideEvent, where: Where): boolean {
+  const actual = read(event, where.path)
+  if (where.op === 'exists') return actual !== undefined && actual !== null
+  if (where.op === 'absent') return actual === undefined || actual === null
+  if (actual === undefined || actual === null) return false
+  if (where.op === '~') return where.value instanceof RegExp && where.value.test(typeof actual === 'string' ? actual : JSON.stringify(actual))
+  const expected = where.value
+  if (typeof expected === 'number' && typeof actual === 'number') {
+    switch (where.op) {
+      case '=': return actual === expected
+      case '!=': return actual !== expected
+      case '>': return actual > expected
+      case '>=': return actual >= expected
+      case '<': return actual < expected
+      case '<=': return actual <= expected
+    }
+  }
+  const left = typeof actual === 'object' ? JSON.stringify(actual) : String(actual)
+  const right = String(expected)
+  switch (where.op) {
+    case '=': return left === right
+    case '!=': return left !== right
+    case '>': return left > right
+    case '>=': return left >= right
+    case '<': return left < right
+    case '<=': return left <= right
+  }
+  return false
+}
+
 export interface LogsQuery {
   view: LogsView
+  where: Where[]
   /** The request or trace id a `trace` view looks for. */
   id?: string
   since?: Date
@@ -99,6 +183,7 @@ export interface LogsArgs {
   status?: string
   over?: string
   limit?: string
+  where?: string | string[]
 }
 
 const DEFAULT_OVER = 500
@@ -149,9 +234,10 @@ export function buildQuery(args: LogsArgs, now = new Date()): LogsQuery {
   const over = parseOver(args.over) ?? DEFAULT_OVER
   const limit = parseLimit(args.limit)
   const path = typeof args.path === 'string' && args.path.length > 0 ? args.path : undefined
+  const where = parseWheres(args.where)
 
   const what = args.what?.trim()
-  const view: LogsView = what === 'errors' ? 'errors' : what === 'slow' ? 'slow' : what ? 'trace' : 'recent'
+  const view: LogsView = what === 'errors' ? 'errors' : what === 'slow' ? 'slow' : what === 'stats' ? 'stats' : what ? 'trace' : 'recent'
   const id = view === 'trace' ? what : undefined
 
   const filter = (event: WideEvent): boolean => {
@@ -163,10 +249,10 @@ export function buildQuery(args: LogsArgs, now = new Date()): LogsQuery {
     if (view === 'errors' && !isError(event)) return false
     if (view === 'slow' && (number(event, 'durationMs') ?? -1) < over) return false
     if (id !== undefined && !matchesId(event, id)) return false
-    return true
+    return where.every(clause => matchesWhere(event, clause))
   }
 
-  return { view, id, since, until, level, limit, over, filter }
+  return { view, id, where, since, until, level, limit, over, filter }
 }
 
 /**
@@ -175,10 +261,65 @@ export function buildQuery(args: LogsArgs, now = new Date()): LogsQuery {
  * bottom like `tail`. The `slow` view is the exception: worst first.
  */
 export function select(events: WideEvent[], query: LogsQuery): WideEvent[] {
+  if (query.view === 'stats') return []
   if (query.view === 'slow') {
     return [...events]
       .sort((a, b) => (number(b, 'durationMs') ?? 0) - (number(a, 'durationMs') ?? 0))
       .slice(0, query.limit)
   }
   return events.slice(-query.limit)
+}
+
+export interface RouteStats {
+  route: string
+  count: number
+  errors: number
+  p50: number | undefined
+  p95: number | undefined
+}
+
+export interface LogsStats {
+  total: number
+  errors: number
+  byRoute: RouteStats[]
+  byStatus: Record<string, number>
+  byLevel: Record<string, number>
+}
+
+function percentile(sorted: number[], p: number): number | undefined {
+  if (sorted.length === 0) return undefined
+  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)]
+}
+
+/** The shape of the traffic: per route, per status class, per level. Routes with the most errors first, then the busiest. */
+export function computeStats(events: WideEvent[]): LogsStats {
+  const routes = new Map<string, { count: number, errors: number, durations: number[] }>()
+  const byStatus: Record<string, number> = {}
+  const byLevel: Record<string, number> = {}
+  let errors = 0
+  for (const event of events) {
+    const method = text(event, 'method')
+    const route = `${method ? `${method} ` : ''}${text(event, 'path') ?? text(event, 'operation') ?? event.service}`
+    const entry = routes.get(route) ?? { count: 0, errors: 0, durations: [] }
+    entry.count += 1
+    const failed = isError(event)
+    if (failed) {
+      entry.errors += 1
+      errors += 1
+    }
+    const duration = number(event, 'durationMs')
+    if (duration !== undefined) entry.durations.push(duration)
+    routes.set(route, entry)
+    const status = number(event, 'status')
+    const statusKey = status === undefined ? 'none' : `${Math.floor(status / 100)}xx`
+    byStatus[statusKey] = (byStatus[statusKey] ?? 0) + 1
+    byLevel[event.level] = (byLevel[event.level] ?? 0) + 1
+  }
+  const byRoute = [...routes.entries()]
+    .map(([route, entry]) => {
+      const sorted = [...entry.durations].sort((a, b) => a - b)
+      return { route, count: entry.count, errors: entry.errors, p50: percentile(sorted, 0.5), p95: percentile(sorted, 0.95) }
+    })
+    .sort((a, b) => b.errors - a.errors || b.count - a.count || a.route.localeCompare(b.route))
+  return { total: events.length, errors, byRoute, byStatus, byLevel }
 }
