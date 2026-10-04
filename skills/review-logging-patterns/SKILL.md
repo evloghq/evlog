@@ -96,6 +96,8 @@ Work FIX FIRST in order, keep changes minimal (`useLogger()`, `log.set()`, `log.
 
 ### 3. Lock it in CI: `--min-score` and `--baseline`
 
+On GitHub Actions, suggest the [evlog action](https://github.com/evloghq/action) (`uses: evloghq/action@v1` with `min-score`): it scans the pull request base itself, so no map file has to be committed, and puts regressions on the diff and in one comment. The commands below are the same gate from a `run:` step.
+
 After fixing, propose making the score durable. This is where the CLI earns its keep:
 
 ```bash

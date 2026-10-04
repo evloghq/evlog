@@ -63,7 +63,7 @@ pnpm evlog map
 | `evlog map --min-score <n>` | Exit 1 if the global score is below `n` |
 | `evlog map --baseline [ref]` | Exit 1 on a regression against the committed `evlog.map.json` (path, or `git:<ref>`) |
 | `evlog map --no-write` | Skip writing `evlog.map.json` to the project root |
-| `evlog map --format github` | GitHub Actions annotations on stdout, one per failing requirement |
+| `evlog map --format github` | GitHub Actions annotations on stdout; or use [`evloghq/action`](https://github.com/evloghq/action), which adds the base comparison, the job summary and a pull request comment |
 | `evlog map --format sarif` | SARIF 2.1.0 on stdout, for code scanning |
 | `evlog map --verbose` | Show per-file parse warnings |
 | `evlog map --cwd <dir>` | Scan another app in the workspace |
