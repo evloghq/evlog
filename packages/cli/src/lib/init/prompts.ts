@@ -1,3 +1,4 @@
+import type { CANCEL_SYMBOL } from '@clack/prompts'
 import {
   autocomplete,
   autocompleteMultiselect,
@@ -56,9 +57,9 @@ export class InitCancelled extends Error {
 }
 
 /** Unwrap a clack answer, turning a cancel into a throw. */
-function required<T>(value: T | symbol): T {
+function required<T>(value: T | typeof CANCEL_SYMBOL): T {
   if (isCancel(value)) throw new InitCancelled()
-  return value as T
+  return value
 }
 
 export interface PromptContext {
