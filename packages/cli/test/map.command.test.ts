@@ -3,7 +3,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { runCommand } from 'citty'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { version } from '../package.json'
 import map, { formatMapReport, runMap } from '../src/commands/map'
 import type { MapResult } from '../src/commands/map'
@@ -417,6 +417,11 @@ describe('map command', () => {
 })
 
 describe('map --format', () => {
+  /* The runner sets GITHUB_WORKSPACE, which rebases every path; these tests
+     pin it so they read the same on CI as locally. */
+  beforeEach(() => vi.stubEnv('GITHUB_WORKSPACE', ''))
+  afterEach(() => vi.unstubAllEnvs())
+
   function captureStdout(): string[] {
     const out: string[] = []
     vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
@@ -500,11 +505,7 @@ describe('map --format', () => {
     vi.stubEnv('GITHUB_WORKSPACE', resolve(FIXTURES, '../../..'))
     const out = captureStdout()
 
-    try {
-      await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--no-header', '--no-write'] })
-    } finally {
-      vi.unstubAllEnvs()
-    }
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--no-header', '--no-write'] })
 
     expect(out.join('')).toMatch(/^::warning file=test\/map\/fixtures\/hono-basic\/src\/health\.ts,line=5,/m)
   })
