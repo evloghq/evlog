@@ -347,6 +347,7 @@ describe('map command', () => {
     expect(raw.schemaVersion).toBe(SCHEMA_VERSION)
     expect(raw.environment).toBe(resolveCliEnvironment())
     expect(raw.map.framework).toBe('nuxt')
+    expect((raw as unknown as { grade: string }).grade).toMatch(/^(excellent|good|needs-work|poor)$/)
     expect(raw.mapPath).toBeNull()
     expect(raw.summary.instrumented + raw.summary.partial + raw.summary.dark + raw.summary.exempt)
       .toBe(raw.map.routes.length)
@@ -481,12 +482,12 @@ describe('map --format', () => {
     vi.restoreAllMocks()
     const out = captureStdout()
 
-    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--baseline', '--no-header', '--no-write'] })
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'github', '--baseline-label', 'main', '--baseline', '--no-header', '--no-write'] })
 
     const lines = out.join('').trim().split('\n')
     expect(lines.filter(line => line.startsWith('::warning'))).toHaveLength(0)
     expect(lines.filter(line => line.startsWith('::error file='))).toEqual([expect.stringMatching(/^::error file=server\/routes\/health\.get\.ts,line=\d+,title=evlog map%3A wide-event::/),])
-    expect(lines.at(-1)).toMatch(/^::error title=evlog map::score .*; regressed against /)
+    expect(lines.at(-1)).toMatch(/^::error title=evlog map::score .*; regressed against main$/)
     expect(process.exitCode).toBe(1)
   })
 

@@ -52,7 +52,14 @@ export interface MapResult {
 export async function runMap(
   ctx: CliContext,
   log: CliDebug = createNoopCliDebug(),
-  options: { framework?: Framework, noWrite?: boolean, verbose?: boolean, baseline?: string | true } = {},
+  options: {
+    framework?: Framework
+    noWrite?: boolean
+    verbose?: boolean
+    baseline?: string | true
+    /** What to call the baseline in the report and the annotations, in place of how it was spelled. */
+    baselineLabel?: string
+  } = {},
 ): Promise<MapResult> {
   const project = await log.step(
     'resolveProject',
@@ -93,6 +100,7 @@ export async function runMap(
       r => ({ baselineSource: r.source.label, baselineScore: r.map.score }),
     )
     : null
+  if (baselineMap && options.baselineLabel) baselineMap.source = { ...baselineMap.source, label: options.baselineLabel }
 
   /* A map written before version reporting cannot prove its rule set matches
      the running one, so it gets a warning instead of a gate: hard-failing every
@@ -262,6 +270,7 @@ export default defineEvlogCommand('map', {
       type: 'string',
       description: 'Compare against the committed evlog.map.json and exit 1 on regression (path, or git:<ref>)',
     },
+    baselineLabel: { type: 'string', description: 'Name the baseline this way in the report and the annotations (a branch, where the file is a temp copy)' },
     // `default: true` + citty's `--no-write` negation — declaring this as `noWrite`
     // directly would not work: citty's parser treats any `--no-x` flag as negating
     // `x`, not as setting `noX` (see `wantsHeader`'s `--no-header` argv fallback).
@@ -291,6 +300,7 @@ export default defineEvlogCommand('map', {
         noWrite: !args.write,
         verbose: args.verbose,
         baseline: parseBaselineArg(args.baseline),
+        baselineLabel: typeof args.baselineLabel === 'string' && args.baselineLabel.length > 0 ? args.baselineLabel : undefined,
       })
     } catch (error) {
       if (error instanceof EvlogError) {
@@ -331,6 +341,7 @@ export default defineEvlogCommand('map', {
         jsonMode: format === 'json',
         json: {
           map: result.scan.map,
+          grade: result.scan.grade,
           summary: result.scan.summary,
           mapPath: result.mapPath,
           ...(result.baseline ? { baseline: result.baseline } : {}),
