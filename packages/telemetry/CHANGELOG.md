@@ -1,5 +1,11 @@
 # @evlog/telemetry
 
+## 0.3.3
+
+### Patch Changes
+
+- [#765](https://github.com/evloghq/evlog/pull/765) [`c7f1356`](https://github.com/evloghq/evlog/commit/c7f135629c8dfa6ab0190508d1f25175541d8623) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `withTelemetry` now reads a command's `args` when the command runs, so a command whose `args` are declared lazily (`args: async () => …`) still has its defaulted flags filtered out of the telemetry event.
+
 ## 0.3.2
 
 ### Patch Changes

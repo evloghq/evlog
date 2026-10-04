@@ -1,5 +1,20 @@
 # @evlog/cli
 
+## 0.8.0
+
+### Minor Changes
+
+- [#766](https://github.com/evloghq/evlog/pull/766) [`53e3837`](https://github.com/evloghq/evlog/commit/53e38371d31ce73125f2fb647810719b7a512554) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map` and `evlog init` now support Express and Fastify. `map` finds `app.get('/path', …)` and `router.*` registrations (Fastify's `app.route({ method, url })` too), credits handlers that use `req.log` / `request.log`, and treats the per-request event as ambient once `app.use(evlog())` or `app.register(evlog)` is found. `init` writes `src/evlog.ts` with `initLogger` and the middleware (Express) or the plugin options (Fastify), and prints the registration line to paste. Internally every framework is now one directory under `lib/frameworks/`, so adding one no longer touches the scanner, the planner dispatch or the help text.
+
+- [#765](https://github.com/evloghq/evlog/pull/765) [`c7f1356`](https://github.com/evloghq/evlog/commit/c7f135629c8dfa6ab0190508d1f25175541d8623) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The CLI now requires Node 22 or later. `--cwd <dir>` is accepted by every command, not only `doctor`, `map`, `init` and `agents`. `evlog --help` no longer loads any command module, and `tinyglobby` is replaced by Node's own `fs.globSync`, so the install carries one fewer dependency tree.
+
+- [#767](https://github.com/evloghq/evlog/pull/767) [`30c9916`](https://github.com/evloghq/evlog/commit/30c9916f8a7c29a2a587b682766a8ffd96babd15) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map --format github` writes GitHub Actions workflow commands to stdout so findings land on the pull request diff. With `--baseline` it emits the regressions as `::error`; without one, the FIX FIRST list as `::warning`, worst entry point first. `--limit <n>` caps the list (default 10, GitHub's per-step cap) and the closing `::notice` says how many were left out. Paths are rebased on `GITHUB_WORKSPACE` when it is set, so a package scanned with `--cwd` inside a monorepo checkout still annotates the right file. `--format json` is the same as `--json`; asking for both is refused.
+
+### Patch Changes
+
+- Updated dependencies [[`c7f1356`](https://github.com/evloghq/evlog/commit/c7f135629c8dfa6ab0190508d1f25175541d8623)]:
+  - @evlog/telemetry@0.3.3
+
 ## 0.7.0
 
 ### Minor Changes
