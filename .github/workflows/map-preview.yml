@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   map:
@@ -17,12 +16,4 @@ jobs:
       - run: pnpm exec turbo run build --filter=@evlog/cli
 
       - name: Annotate the pull request
-        run: node packages/cli/dist/cli.mjs map --format github --no-write --cwd packages/cli/test/map/fixtures/express-basic
-
-      - name: Write the SARIF log
-        run: node packages/cli/dist/cli.mjs map --format sarif --no-write --cwd packages/cli/test/map/fixtures/express-basic > evlog.sarif
-
-      - uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: evlog.sarif
-          category: evlog-map
+        run: node packages/cli/dist/cli.mjs map --format github --no-write --cwd packages/cli/test/map/fixtures/nuxt-basic
