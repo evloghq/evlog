@@ -64,9 +64,15 @@ pnpm evlog map
 | `evlog map --baseline [ref]` | Exit 1 on a regression against the committed `evlog.map.json` (path, or `git:<ref>`) |
 | `evlog map --no-write` | Skip writing `evlog.map.json` to the project root |
 | `evlog map --format github` | GitHub Actions annotations on stdout; or use [`evloghq/action`](https://github.com/evloghq/action), which adds the base comparison, the job summary and a pull request comment |
-| `evlog map --format sarif` | SARIF 2.1.0 on stdout, for code scanning |
 | `evlog map --verbose` | Show per-file parse warnings |
 | `evlog map --cwd <dir>` | Scan another app in the workspace |
+| `evlog logs` | The last 50 wide events the fs drain wrote, oldest first |
+| `evlog logs errors` | The ones that failed: a `5xx`, an `error` level, or an `error` block |
+| `evlog logs slow [--over 1s]` | Over the bar (default 500ms), worst first |
+| `evlog logs <requestId>` | One request in full: error with `why`/`fix`, audit record, business fields |
+| `evlog logs -f` | Follow new events as the app writes them |
+| `evlog logs --since 15m --path /api/x --status 5xx --level error` | Filters, composable with every view |
+| `evlog logs --json` | The events as JSON on stdout (one line per event with `-f`) |
 | `evlog doctor` | Monorepo-aware diagnosis: Node, project/workspace, stack, evlog install, `.evlog/logs` |
 | `evlog doctor --cwd <dir>` | Run against another directory |
 | `evlog doctor --debug` | Same, plus a debug wide event (see Debug) |

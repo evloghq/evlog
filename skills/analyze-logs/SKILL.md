@@ -21,6 +21,17 @@ Read and analyze structured wide-event logs from the local `.evlog/logs/` direct
 
 ## Finding the logs
 
+Try the CLI first; it reads both file layouts, every dated file, and knows where the project's drain writes:
+
+```bash
+npx evlog logs --json                      # the last 50 events
+npx evlog logs errors --since 1h --json    # what failed
+npx evlog logs slow --over 1s --json       # what was slow, worst first
+npx evlog logs <requestId> --json          # one request, every event with that id
+```
+
+`--json` is an envelope (`dir`, `view`, `matched`, `events`); filters are `--since`, `--until`, `--level`, `--path`, `--status` (`500` or `5xx`), `--limit`, and `--dir` for a non-default directory. Docs: https://www.evlog.dev/cli/logs. If the CLI is unavailable or the user declines it, read the files directly as below.
+
 Logs are written by evlog's file system drain as `.jsonl` files, organized by date.
 
 **Format detection**: The drain supports two modes:

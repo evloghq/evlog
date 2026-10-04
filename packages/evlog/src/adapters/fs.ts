@@ -302,18 +302,48 @@ function fileWithinRange(filename: string, since?: number, until?: number): bool
   return true
 }
 
+/**
+ * Turn lines into events, one object per line or one object across lines.
+ *
+ * `pretty: true` writes each event indented, so its closing brace sits alone
+ * at the start of a line while every nested one is indented: that is how an
+ * object's end is found without parsing on every line. Anything that does not
+ * parse once assembled (a partial write, a manual edit) is dropped silently,
+ * the same as a malformed single line.
+ */
+function createEventAssembler(): (line: string) => WideEvent | undefined {
+  let pending: string[] = []
+  return (line) => {
+    if (pending.length === 0) {
+      const trimmed = line.trim()
+      if (!trimmed) return undefined
+      try {
+        return JSON.parse(trimmed) as WideEvent
+      } catch {
+        if (trimmed === '{') pending.push(trimmed)
+        return undefined
+      }
+    }
+    pending.push(line)
+    if (line !== '}') return undefined
+    const text = pending.join('\n')
+    pending = []
+    try {
+      return JSON.parse(text) as WideEvent
+    } catch {
+      return undefined
+    }
+  }
+}
+
 async function* iterateFile(filePath: string): AsyncGenerator<WideEvent> {
   const stream = createReadStream(filePath, { encoding: 'utf-8' })
   const rl = createInterface({ input: stream, crlfDelay: Infinity })
+  const assemble = createEventAssembler()
   try {
     for await (const line of rl) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      try {
-        yield JSON.parse(trimmed) as WideEvent
-      } catch {
-        // Skip malformed lines (partial writes, manual edits) silently.
-      }
+      const event = assemble(line)
+      if (event) yield event
     }
   } finally {
     rl.close()
@@ -379,7 +409,7 @@ async function readAppendedLines(
     }
     const complete = chunk.slice(0, newlineIdx)
     const remainder = chunk.slice(newlineIdx + 1)
-    const lines = complete.split('\n').map(l => l.trim()).filter(Boolean)
+    const lines = complete.split('\n').filter(l => l.trim())
     return { events: lines, offset: size, carry: remainder }
   } finally {
     await handle.close()
@@ -432,6 +462,15 @@ export async function* tailFsLogs(options: TailFsLogsOptions = {}): AsyncGenerat
 
   const offsets = new Map<string, number>()
   const carries = new Map<string, string>()
+  const assemblers = new Map<string, ReturnType<typeof createEventAssembler>>()
+  function assemblerFor(filename: string): ReturnType<typeof createEventAssembler> {
+    let assemble = assemblers.get(filename)
+    if (!assemble) {
+      assemble = createEventAssembler()
+      assemblers.set(filename, assemble)
+    }
+    return assemble
+  }
 
   if (options.fromEnd) {
     const files = await listLogFiles(dir)
@@ -472,14 +511,11 @@ export async function* tailFsLogs(options: TailFsLogsOptions = {}): AsyncGenerat
       offsets.set(filename, offset)
       carries.set(filename, newCarry)
 
+      const assemble = assemblerFor(filename)
       for (const line of events) {
         if (signal?.aborted) return
-        try {
-          const event = JSON.parse(line) as WideEvent
-          if (predicate(event)) yield event
-        } catch {
-          // Skip malformed lines.
-        }
+        const event = assemble(line)
+        if (event && predicate(event)) yield event
       }
     }
   }

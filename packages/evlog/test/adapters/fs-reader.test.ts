@@ -75,6 +75,18 @@ describe('readFsLogs', () => {
     expect(events).toEqual([1, 2, 3])
   })
 
+  it('reads events written with pretty: true, mixed with compact ones', async () => {
+    const pretty = (event: WideEvent): string => JSON.stringify(event, null, 2)
+    await writeFile(
+      join(dir, '2026-03-14.jsonl'),
+      `${pretty(makeEvent(1, { nested: { deep: { x: 1 } } }))}\n${JSON.stringify(makeEvent(2))}\n${pretty(makeEvent(3))}\n`,
+    )
+
+    const ids: number[] = []
+    for await (const event of readFsLogs({ dir })) ids.push(event.id as number)
+    expect(ids).toEqual([1, 2, 3])
+  })
+
   it('skips malformed lines without throwing', async () => {
     await writeFile(
       join(dir, '2026-03-14.jsonl'),
@@ -305,6 +317,33 @@ describe('tailFsLogs', () => {
 
     await consumer
     expect(collected).toEqual([42])
+  })
+
+  it('assembles a pretty-printed event appended across polls', async () => {
+    const file = join(dir, '2026-03-14.jsonl')
+    await writeFile(file, '')
+
+    const ac = new AbortController()
+    const collected: number[] = []
+
+    const consumer = (async () => {
+      for await (const event of tailFsLogs({ dir, pollIntervalMs: 50, signal: ac.signal, fromEnd: true })) {
+        collected.push(event.id as number)
+        if (collected.length === 2) {
+          ac.abort()
+          break
+        }
+      }
+    })()
+
+    await new Promise(r => setTimeout(r, 100))
+    const lines = JSON.stringify(makeEvent(7, { nested: { a: 1 } }), null, 2).split('\n')
+    await appendFile(file, `${lines.slice(0, 4).join('\n')}\n`)
+    await new Promise(r => setTimeout(r, 100))
+    await appendFile(file, `${lines.slice(4).join('\n')}\n${JSON.stringify(makeEvent(8))}\n`)
+
+    await consumer
+    expect(collected).toEqual([7, 8])
   })
 
   it('aborts cleanly via AbortSignal', async () => {

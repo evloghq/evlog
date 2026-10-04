@@ -17,6 +17,8 @@ node_modules
 logs
 !examples/eve/app/api/demo/logs/
 !examples/eve/app/api/demo/logs/**
+!packages/cli/src/lib/logs/
+!packages/cli/src/lib/logs/**
 *.log
 
 # Misc

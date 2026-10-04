@@ -246,6 +246,55 @@ export const cliErrors = defineErrorCatalog('cli', {
     fix: 'Drop --json, or pass --format json',
     tags: ['map'],
   },
+  LOGS_NO_SINK: {
+    status: 404,
+    message: ({ cwd }: { cwd: string }) =>
+      `No local logs under ${cwd}`,
+    why: 'There is no .evlog/logs directory here and no fs drain is configured, so nothing has been written to read',
+    fix: 'Run evlog init --drain fs, start the app and make a request, or pass --dir <path>',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs'],
+  },
+  LOGS_INVALID_TIME: {
+    status: 400,
+    message: ({ flag, value }: { flag: string, value: string }) =>
+      `Invalid --${flag} "${value}"`,
+    why: 'A time bound that cannot be read would silently become no bound, and the run would show everything',
+    fix: 'Pass a duration back from now (15m, 2h, 3d) or a date (2026-10-01, 2026-10-01T09:00)',
+    tags: ['logs'],
+  },
+  LOGS_INVALID_LEVEL: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      `Unknown level "${value}"`,
+    why: 'Levels are the six evlog writes',
+    fix: 'Pass one or more of: trace, debug, info, warn, error, fatal',
+    tags: ['logs'],
+  },
+  LOGS_INVALID_STATUS: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      `Invalid --status "${value}"`,
+    why: 'A status filter that cannot be read would silently match nothing',
+    fix: 'Pass a status (404) or a class (4xx)',
+    tags: ['logs'],
+  },
+  LOGS_INVALID_DURATION: {
+    status: 400,
+    message: ({ flag, value }: { flag: string, value: string }) =>
+      `Invalid --${flag} "${value}"`,
+    why: 'A duration that cannot be read would silently fall back to the default',
+    fix: 'Pass milliseconds (500) or a unit (500ms, 1.5s)',
+    tags: ['logs'],
+  },
+  LOGS_INVALID_LIMIT: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      `Invalid --limit "${value}"`,
+    why: 'A limit that cannot be read would silently become the default',
+    fix: 'Pass a whole number of 1 or more, e.g. --limit 20',
+    tags: ['logs'],
+  },
 })
 
 declare module 'evlog' {
