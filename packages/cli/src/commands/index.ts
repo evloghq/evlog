@@ -31,5 +31,6 @@ export const subCommands = {
   telemetry: lazyCommand(
     { name: 'telemetry', description: 'View or change anonymous usage telemetry settings' },
     () => import('./telemetry'),
+    { group: true },
   ),
 }

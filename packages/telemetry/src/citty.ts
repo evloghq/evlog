@@ -42,15 +42,29 @@ function wrapCommand(
       ? [...path, segment]
       : path
 
+  /* citty resolves `args` once to parse argv, then calls `run`. The event
+     needs the same definitions to tell a defaulted flag from a passed one, so
+     the value citty resolved is kept rather than resolving a second time: a
+     function-valued resolver may not be idempotent, and a rejection from it
+     must not stop the command when telemetry is off. */
+  let resolvedArgs: ArgsDef | undefined
+  const args = command.args === undefined
+    ? undefined
+    : async () => {
+      resolvedArgs = await resolve(command.args!)
+      return resolvedArgs
+    }
+
   return {
     ...command,
+    args,
     subCommands: command.subCommands ? wrapSubCommands(command.subCommands, telemetry, commandPath) : undefined,
     run: command.run
-      ? async (ctx) => {
+      ? (ctx) => {
         const name = commandPath.join(' ') || segment || 'run'
         return telemetry.run(name, () => command.run!(ctx), {
           flags: ctx.args as Record<string, unknown>,
-          args: command.args ? await resolve(command.args) as FlagDefinitions : undefined,
+          args: resolvedArgs as FlagDefinitions | undefined,
         })
       }
       : command.run,

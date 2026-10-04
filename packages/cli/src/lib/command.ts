@@ -150,14 +150,24 @@ async function resolve<T>(value: Resolvable<T>): Promise<T> {
  * any of them; the module's own `meta` only needs a `name`. `args`,
  * `subCommands` and `run` all go through citty's lazy resolution, so the import
  * happens once, when the command is actually selected.
+ *
+ * A `group` has subcommands and no work of its own. citty runs a parent's `run`
+ * after the selected subcommand and only reports `No command specified.` when
+ * the parent has none, so a group must not declare one: with it, `evlog
+ * telemetry status` would record a second telemetry event for `telemetry`, and
+ * a bare `evlog telemetry` would exit silently.
  */
-export function lazyCommand(meta: CommandMeta, load: () => Promise<{ default: CommandDef<any> }>): CommandDef<any> {
+export function lazyCommand(
+  meta: CommandMeta,
+  load: () => Promise<{ default: CommandDef<any> }>,
+  options: { group?: boolean } = {},
+): CommandDef<any> {
   let pending: Promise<CommandDef<any>> | undefined
   const command = () => (pending ??= load().then(module => module.default))
   return {
     meta,
     args: async () => (await resolve((await command()).args)) ?? {},
     subCommands: async () => (await resolve((await command()).subCommands)) ?? {},
-    run: async ctx => (await command()).run?.(ctx),
+    ...(options.group ? {} : { run: async ctx => (await command()).run?.(ctx) }),
   }
 }
