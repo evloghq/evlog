@@ -11,4 +11,6 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// Touched so the map preview workflow renders its annotations on this diff.
+
 export default app
