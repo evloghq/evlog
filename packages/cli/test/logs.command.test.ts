@@ -306,6 +306,56 @@ describe('runLogs', () => {
     expect(seen.map(e => e.path)).toEqual(['/api/health', '/api/back-up'])
   })
 
+  it('hands the abort signal to the fetch, so a stalled poll can be interrupted', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-logs-url-signal-'))
+    tempDirs.push(cwd)
+    const signals: Array<AbortSignal | undefined> = []
+    const controller = new AbortController()
+    const fetchFn = ((_url: string, init?: { signal?: AbortSignal }) => {
+      signals.push(init?.signal)
+      if (signals.length === 2) controller.abort()
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([EVENTS[1]!]) })
+    }) as unknown as typeof fetch
+
+    await runLogs(fakeContext(cwd), {}, { url: 'http://x', fetchFn, follow: true, signal: controller.signal, pollIntervalMs: 5, now: NOW })
+
+    expect(signals).toHaveLength(2)
+    expect(signals.every(signal => signal === controller.signal)).toBe(true)
+  })
+
+  it('says when a followed endpoint goes quiet, and when it answers again', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-logs-url-quiet-'))
+    tempDirs.push(cwd)
+    let calls = 0
+    const fetchFn = (() => {
+      calls += 1
+      /* The first call is the one-shot read; then six dead polls, then it is back. */
+      if (calls > 1 && calls <= 7) return Promise.reject(new Error('ECONNREFUSED'))
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([EVENTS[1]!]) })
+    }) as unknown as typeof fetch
+
+    const controller = new AbortController()
+    const notices: string[] = []
+    await runLogs(fakeContext(cwd), {}, {
+      url: 'http://x',
+      fetchFn,
+      follow: true,
+      signal: controller.signal,
+      pollIntervalMs: 5,
+      now: NOW,
+      onNotice: (message) => {
+        notices.push(message)
+        if (notices.length === 2) controller.abort()
+      },
+    })
+
+    /* One line per outage, not one per poll: the sixth failure is silent. */
+    expect(notices).toEqual([
+      'no answer from http://x for 5 polls (Could not read events from http://x: ECONNREFUSED) — still trying',
+      'http://x is answering again',
+    ])
+  })
+
   it('an unreachable --url is a failure with the fix', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-logs-url-down-'))
     tempDirs.push(cwd)

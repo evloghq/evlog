@@ -21,7 +21,7 @@ Read and analyze structured wide-event logs from the local `.evlog/logs/` direct
 
 ## Finding the logs
 
-Try the CLI first; it reads both file layouts, every dated file, and knows where the project's drain writes. Prefer the copy the project installed (`pnpm evlog`, `npm exec evlog`, `bunx evlog`): `npx evlog` fetches `@evlog/cli` when the project has none, which runs code the lockfile never pinned. Ask before that happens.
+Try the CLI first; it reads both file layouts, every dated file, and knows where the project's drain writes. Prefer the copy the project installed (`pnpm evlog`, or the equivalent for its package manager). The wrappers that fetch on demand (`npx`, `bunx`, `npm exec`) install `@evlog/cli` when the project has none, which runs a release the lockfile never pinned. Ask before that happens.
 
 ```bash
 pnpm evlog logs --json                       # the last 50 events

@@ -71,8 +71,12 @@ export interface RunLogsOptions {
   signal?: AbortSignal
   /** Called for each event that arrives while following. */
   onEvent?: (event: Sourced) => void
+  /** Called when following has something to say that is not an event: the endpoint went quiet, or came back. */
+  onNotice?: (message: string) => void
   now?: Date
   fetchFn?: typeof fetch
+  /** How often a followed `--url` is re-read. The endpoint is a snapshot, so there is nothing to wait on. */
+  pollIntervalMs?: number
 }
 
 function tag(event: WideEvent, name: string | undefined): Sourced {
@@ -80,10 +84,10 @@ function tag(event: WideEvent, name: string | undefined): Sourced {
   return Object.defineProperty(event, SOURCE, { value: name, enumerable: false }) as Sourced
 }
 
-async function fetchEvents(url: string, fetchFn: typeof fetch): Promise<WideEvent[]> {
+async function fetchEvents(url: string, fetchFn: typeof fetch, signal?: AbortSignal): Promise<WideEvent[]> {
   let response: Response
   try {
-    response = await fetchFn(url, { headers: { accept: 'application/json' } })
+    response = await fetchFn(url, { headers: { accept: 'application/json' }, signal })
   } catch (error) {
     throw cliErrors.LOGS_URL_UNREACHABLE({ url, reason: error instanceof Error ? error.message : String(error) })
   }
@@ -111,7 +115,7 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
   let all: Sourced[]
   let sources: string[]
   if (options.url) {
-    all = (await fetchEvents(options.url, fetchFn)).filter(inRange)
+    all = (await fetchEvents(options.url, fetchFn, options.signal)).filter(inRange)
     sources = [options.url]
   } else {
     const found = await resolveLogsSources(ctx, options.dir)
@@ -173,6 +177,13 @@ function pause(ms: number, signal: AbortSignal | undefined): Promise<void> {
 }
 
 /**
+ * Consecutive failed polls before the silence is reported. A restart takes a
+ * few seconds, so warning on the first one would cry wolf; never warning
+ * leaves a follower that looks alive and delivers nothing.
+ */
+const QUIET_POLLS = 5
+
+/**
  * The endpoint is a snapshot, so following it means polling and keeping what
  * was already shown apart from what is new: an event later than the newest
  * shown, or one at the same instant that was not in the last snapshot.
@@ -180,15 +191,22 @@ function pause(ms: number, signal: AbortSignal | undefined): Promise<void> {
 async function followUrl(url: string, shown: WideEvent[], inRange: (event: WideEvent) => boolean, options: RunLogsOptions): Promise<void> {
   const fetchFn = options.fetchFn ?? fetch
   let seen = seenOf(shown, shown.reduce((max, event) => Math.max(max, timeOf(event)), 0))
+  let failures = 0
   while (!options.signal?.aborted) {
-    await pause(1000, options.signal)
+    await pause(options.pollIntervalMs ?? 1000, options.signal)
     if (options.signal?.aborted) return
     let events: WideEvent[]
     try {
-      events = (await fetchEvents(url, fetchFn)).filter(inRange)
-    } catch {
+      events = (await fetchEvents(url, fetchFn, options.signal)).filter(inRange)
+      if (failures >= QUIET_POLLS) options.onNotice?.(`${url} is answering again`)
+      failures = 0
+    } catch (error) {
       /* A follower outlives the app it watches: a dev server restarting is a
          gap in the stream, not a reason to stop. */
+      failures += 1
+      if (failures === QUIET_POLLS) {
+        options.onNotice?.(`no answer from ${url} for ${failures} polls (${error instanceof Error ? error.message : String(error)}) — still trying`)
+      }
       continue
     }
     const fresh: WideEvent[] = []
@@ -237,6 +255,7 @@ export default defineEvlogCommand('logs', {
           if (args.json) ui.stdout(JSON.stringify(event))
           else ui.human(formatLine(style, event))
         },
+        onNotice: message => ui.human(style.paint('dim', message)),
       })
     } catch (error) {
       if (error instanceof EvlogError) {
