@@ -124,7 +124,10 @@ describe('frameworkColor', () => {
     expect(new Set(['nuxt', 'next', 'nitro', 'tanstack-start', 'hono'].map(frameworkColor)).size).toBe(5)
   })
 
-  it('gives ids the CLI cannot emit the neutral rather than a category slot', () => {
+  it('keeps frameworks without a chart slot on the neutral, whatever the CLI emits', () => {
+    /* `express` and `fastify` are real CLI ids that share the `other` band,
+       so they must not take a categorical slot from the five above. */
+    expect(frameworkColor('express')).toBe('var(--chart-cat-other)')
     expect(frameworkColor('fastify')).toBe('var(--chart-cat-other)')
     expect(frameworkColor(OTHER_VERSION)).toBe('var(--chart-cat-other)')
   })
@@ -132,12 +135,14 @@ describe('frameworkColor', () => {
 
 describe('frameworkIcon / frameworkLabel', () => {
   it('gives every framework the CLI reports its own mark and display name', () => {
-    /* The CLI reports five ids (`packages/cli/src/lib/map/types.ts`); one
-       missing here falls back to a generic box and its raw slug. */
-    for (const id of ['nuxt', 'next', 'nitro', 'tanstack-start', 'hono']) {
+    /* The CLI reports seven ids (`packages/cli/src/lib/frameworks/index.ts`);
+       one missing here falls back to a generic box and its raw slug. */
+    for (const id of ['nuxt', 'next', 'nitro', 'tanstack-start', 'hono', 'express', 'fastify']) {
       expect(frameworkIcon(id)).not.toBe('i-nucleo-box')
       expect(frameworkLabel(id)).not.toBe(id)
     }
     expect(frameworkLabel('hono')).toBe('Hono')
+    expect(frameworkLabel('express')).toBe('Express')
+    expect(frameworkLabel('fastify')).toBe('Fastify')
   })
 })

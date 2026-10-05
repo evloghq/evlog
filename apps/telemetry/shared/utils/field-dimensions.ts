@@ -131,6 +131,8 @@ const FRAMEWORK_ICONS: Record<string, string> = {
   'nitro': 'i-unjs-nitro',
   'tanstack-start': 'i-simple-icons-tanstack',
   'hono': 'i-simple-icons-hono',
+  'express': 'i-simple-icons-express',
+  'fastify': 'i-simple-icons-fastify',
 }
 
 /** Icon for a framework id — unknown ids get a neutral package glyph. */
@@ -144,6 +146,8 @@ const FRAMEWORK_LABELS: Record<string, string> = {
   'nitro': 'Nitro',
   'tanstack-start': 'TanStack Start',
   'hono': 'Hono',
+  'express': 'Express',
+  'fastify': 'Fastify',
 }
 
 /** Display name for a framework id — ids arrive as CLI slugs. */
