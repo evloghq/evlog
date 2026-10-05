@@ -205,6 +205,27 @@ describe('log', () => {
     })
   })
 
+  it('serializes an Error at any depth of an object event', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const error = new Error('Failed query', {
+      cause: new Error('Connection terminated due to connection timeout'),
+    })
+    log.error({ error, job: { failure: error }, message: 'Job failed' })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    const serialized = JSON.parse(JSON.stringify(event))
+    const expected = {
+      name: 'Error',
+      message: 'Failed query',
+      stack: expect.any(String),
+      cause: { name: 'Error', message: 'Connection terminated due to connection timeout', stack: expect.any(String) },
+    }
+    expect(serialized.error).toEqual(expected)
+    expect(serialized.job.failure).toEqual(expected)
+    expect(serialized.message).toBe('Job failed')
+  })
+
   it('serializes a cyclic cause chain', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, drain })

@@ -371,6 +371,24 @@ describe('createRequestLogger', () => {
     })
   })
 
+  it('serializes an Error passed to set() or a level method context', () => {
+    const logger = createRequestLogger({})
+    const error = new Error('Failed query', { cause: new Error('Connection terminated') })
+
+    logger.set({ error })
+    logger.warn('Retrying', { retry: { failure: error } })
+
+    const context = JSON.parse(JSON.stringify(logger.getContext()))
+    const expected = {
+      name: 'Error',
+      message: 'Failed query',
+      stack: expect.any(String),
+      cause: { name: 'Error', message: 'Connection terminated', stack: expect.any(String) },
+    }
+    expect(context.error).toEqual(expected)
+    expect(context.retry.failure).toEqual(expected)
+  })
+
   it('does not include custom properties when absent', () => {
     const logger = createRequestLogger({})
     logger.error(new Error('Plain error'))

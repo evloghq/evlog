@@ -63,6 +63,10 @@ function mergeInto(target: Record<string, unknown>, source: Record<string, unkno
   }
 }
 
+function mergeFields(target: Record<string, unknown>, fields: Record<string, unknown>): void {
+  mergeInto(target, removeErrorCycles(fields, new WeakSet()) as Record<string, unknown>)
+}
+
 const pendingDrainState = new WeakMap<WideEvent, { drainStarted: boolean }>()
 
 function isAiOnlyFieldUpdate(data: Record<string, unknown>): boolean {
@@ -832,7 +836,7 @@ function createLogMethod(level: LogLevel) {
     } else if (tagOrEvent instanceof Error) {
       emitWideEvent(level, { error: serializeError(tagOrEvent) })
     } else if (typeof tagOrEvent === 'object') {
-      emitWideEvent(level, tagOrEvent)
+      emitWideEvent(level, removeErrorCycles(tagOrEvent, new WeakSet()) as Record<string, unknown>)
     } else {
       emitTaggedLog(level, 'log', String(tagOrEvent))
     }
@@ -980,7 +984,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
         warnPostEmit('log.set()', `Keys dropped: ${keys.length ? keys.join(', ') : '(empty)'}.`)
         return
       }
-      mergeInto(context, data as Record<string, unknown>)
+      mergeFields(context, data as Record<string, unknown>)
     },
 
     setLevel(level: LogLevel): void {
@@ -1003,7 +1007,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const err = typeof error === 'string' ? new Error(error) : error
 
       if (errorContext) {
-        mergeInto(context, errorContext as Record<string, unknown>)
+        mergeFields(context, errorContext as Record<string, unknown>)
       }
 
       const errorObj = serializeError(err)
@@ -1027,7 +1031,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       addLog('fatal', message)
       if (fatalContext) {
         const { requestLogs: _, ...rest } = fatalContext as Record<string, unknown>
-        mergeInto(context, rest)
+        mergeFields(context, rest)
       }
     },
 
@@ -1042,7 +1046,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       addLog('info', message)
       if (infoContext) {
         const { requestLogs: _, ...rest } = infoContext as Record<string, unknown>
-        mergeInto(context, rest)
+        mergeFields(context, rest)
       }
     },
 
@@ -1058,7 +1062,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       addLog('warn', message)
       if (warnContext) {
         const { requestLogs: _, ...rest } = warnContext as Record<string, unknown>
-        mergeInto(context, rest)
+        mergeFields(context, rest)
       }
     },
 
@@ -1073,7 +1077,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       addLog('trace', message)
       if (traceContext) {
         const { requestLogs: _, ...rest } = traceContext as Record<string, unknown>
-        mergeInto(context, rest)
+        mergeFields(context, rest)
       }
     },
 
