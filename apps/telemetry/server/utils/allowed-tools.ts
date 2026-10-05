@@ -1,5 +1,5 @@
 /** Tool names accepted by `/api/telemetry/ingest` when no override is configured. */
-export const DEFAULT_ALLOWED_TOOLS = ['evlog-cli']
+export const DEFAULT_ALLOWED_TOOLS = ['evlog-cli', 'evlog-action']
 
 /**
  * Custom field keys accepted per tool. Mirrors `telemetry.set()` calls in each
@@ -17,6 +17,23 @@ export const DEFAULT_ALLOWED_TOOLS = ['evlog-cli']
  * enrichers or map rules change.
  */
 export const DEFAULT_ALLOWED_CUSTOM_KEYS: Record<string, string[]> = {
+  'evlog-action': [
+    'ghaAction',
+    'ghaEvent',
+    'baselineMode',
+    'checkOutcome',
+    'commentOutcome',
+    'packages',
+    'entryPoints',
+    'score',
+    'instrumented',
+    'partial',
+    'dark',
+    'regressions',
+    'fixed',
+    'gatePassed',
+    'baselineDelta',
+  ],
   'evlog-cli': [
     // evlog doctor — which part of a setup people get stuck on
     'checksFailed',

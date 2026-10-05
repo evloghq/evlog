@@ -26,7 +26,15 @@ export function createGitHubActionsTelemetry<
   const eventType = options.eventType ?? process.env.GITHUB_EVENT_NAME ?? 'unknown'
 
   return {
-    ...base,
+    get enabled() {
+      return base.enabled
+    },
+    set(fields) {
+      base.set(fields)
+    },
+    flush() {
+      return base.flush()
+    },
     run(command, fn, opts) {
       return base.run(command, fn, {
         ...opts,

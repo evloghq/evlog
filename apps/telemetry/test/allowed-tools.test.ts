@@ -39,6 +39,7 @@ describe('parseAllowedCustomKeys', () => {
 
   it('lets an override replace the default keys for evlog-cli', () => {
     expect(parseAllowedCustomKeys('{"evlog-cli":["onlyThis"]}')).toEqual({
+      ...DEFAULT_ALLOWED_CUSTOM_KEYS,
       'evlog-cli': ['onlyThis'],
     })
   })
