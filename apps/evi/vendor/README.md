@@ -4,7 +4,7 @@
 mounted extension whose manifest requires a dropped contract (the build then fails with
 `Selected module binding "extensions/<name>.ts" has no compile or runtime usage`). The tarball here
 and `@github-tools/eve-extension` 0.8.0 on the registry are built against tool contract 54, which
-eve 0.69.0 still accepts. When bumping eve, check every extension manifest
+eve 0.71.0 still accepts. When bumping eve, check every extension manifest
 (`dist/extension/_manifest.json`) against `EXTENSION_CAPABILITY_CONTRACTS` in
 `eve/dist/src/compiler/extension-compatibility.js`, and rebuild the tarball when its contract is dropped.
 
