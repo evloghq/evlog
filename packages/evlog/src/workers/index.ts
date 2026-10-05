@@ -93,16 +93,20 @@ export function initWorkersLogger(options: LoggerConfig = {}): void {
  *   return new Response('ok')
  * })
  * ```
+ *
+ * @typeParam TCtx - The handler's `ctx`. Unannotated, it is {@link WorkerExecutionContext}; annotate `ctx` (for
+ *   example as `ExecutionContext` from `@cloudflare/workers-types`) or pass the type argument to reach the rest of
+ *   Cloudflare's context, such as `ctx.exports` or `ctx.props`.
  */
-export function defineWorkerFetch<TEnv = unknown>(
+export function defineWorkerFetch<TEnv = unknown, TCtx extends WorkerExecutionContext = WorkerExecutionContext>(
   handler: (
     request: Request,
     env: TEnv,
-    ctx: WorkerExecutionContext,
+    ctx: TCtx,
     log: AuditableLogger,
   ) => Response | Promise<Response>,
 ): {
-  fetch: (request: Request, env: TEnv, ctx: WorkerExecutionContext) => Promise<Response>
+  fetch: (request: Request, env: TEnv, ctx: TCtx) => Promise<Response>
 } {
   return {
     fetch(request, env, ctx) {
@@ -194,17 +198,21 @@ const integration = defineFrameworkIntegration<WorkersRequestContext>({
  *   },
  * )
  * ```
+ *
+ * @typeParam TCtx - The handler's `ctx`. Unannotated, it is {@link WorkerExecutionContext}; annotate `ctx` (for
+ *   example as `ExecutionContext` from `@cloudflare/workers-types`) or pass the type argument to reach the rest of
+ *   Cloudflare's context, such as `ctx.exports` or `ctx.props`.
  */
-export function withEvlog<TEnv = unknown>(
+export function withEvlog<TEnv = unknown, TCtx extends WorkerExecutionContext = WorkerExecutionContext>(
   handler: (
     request: Request,
     env: TEnv,
-    ctx: WorkerExecutionContext,
+    ctx: TCtx,
     log: AuditableLogger,
   ) => Response | Promise<Response>,
   options: EvlogWorkersOptions = {},
 ): {
-  fetch: (request: Request, env: TEnv, ctx: WorkerExecutionContext) => Promise<Response>
+  fetch: (request: Request, env: TEnv, ctx: TCtx) => Promise<Response>
 } {
   return {
     async fetch(request, env, ctx) {
