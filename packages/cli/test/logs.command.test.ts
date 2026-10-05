@@ -138,6 +138,16 @@ describe('parsing', () => {
     expect(matchesWhere(e, parseWhere('missing.deep=1'))).toBe(false)
   })
 
+  it('reads a numeric field that arrived as text as the number it is', () => {
+    const e = event({ headers: { 'content-length': '10000' }, label: '5kg' })
+    expect(matchesWhere(e, parseWhere('headers.content-length>5000'))).toBe(true)
+    expect(matchesWhere(e, parseWhere('headers.content-length<5000'))).toBe(false)
+    expect(matchesWhere(e, parseWhere('headers.content-length=10000'))).toBe(true)
+    /* Text that is not a number is still compared as text, not coerced. */
+    expect(matchesWhere(e, parseWhere('label=5kg'))).toBe(true)
+    expect(matchesWhere(e, parseWhere('label=5'))).toBe(false)
+  })
+
   it('takes several --where clauses and requires all of them', () => {
     const query = buildQuery({ where: ['status=200', 'durationMs>50'] })
     expect(query.where).toHaveLength(2)
@@ -259,13 +269,41 @@ describe('runLogs', () => {
       url: 'http://x', fetchFn, follow: true, signal: controller.signal, now: NOW,
       onEvent: (e) => {
         seen.push(e)
-        controller.abort()
+        if (seen.length === 3) controller.abort()
       },
     })
     await new Promise(resolve => setTimeout(resolve, 50))
     snapshot.push(event({ timestamp: '2026-10-01T11:59:00.000Z', path: '/api/new' }))
     await run
-    expect(seen.map(e => e.path)).toEqual(['/api/new'])
+    expect(seen.map(e => e.path)).toEqual(['/api/checkout', '/api/items', '/api/new'])
+  })
+
+  it('a failed poll is a gap in the follow, not the end of it', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-logs-url-flaky-'))
+    tempDirs.push(cwd)
+    const snapshot: WideEvent[] = [EVENTS[0]!]
+    let polls = 0
+    const flaky = (() => {
+      polls += 1
+      /* The second call is the first poll: the app is restarting. */
+      if (polls === 2) return Promise.reject(new Error('ECONNREFUSED'))
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(snapshot) })
+    }) as unknown as typeof fetch
+
+    const controller = new AbortController()
+    const seen: WideEvent[] = []
+    const run = runLogs(fakeContext(cwd), {}, {
+      url: 'http://x', fetchFn: flaky, follow: true, signal: controller.signal, now: NOW,
+      onEvent: (e) => {
+        seen.push(e)
+        if (seen.length === 2) controller.abort()
+      },
+    })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    snapshot.push(event({ timestamp: '2026-10-01T11:59:00.000Z', path: '/api/back-up' }))
+    await run
+    expect(polls).toBeGreaterThanOrEqual(3)
+    expect(seen.map(e => e.path)).toEqual(['/api/health', '/api/back-up'])
   })
 
   it('an unreachable --url is a failure with the fix', async () => {
@@ -287,7 +325,7 @@ describe('runLogs', () => {
     await expect(runLogs(fakeContext(elsewhere), {}, { now: NOW })).rejects.toThrow(/No local logs/)
   })
 
-  it('follows: new lines arrive through onEvent until the signal aborts', async () => {
+  it('follows: what it already found streams first, then what arrives, until the signal aborts', async () => {
     const cwd = await makeSink()
     const controller = new AbortController()
     const seen: WideEvent[] = []
@@ -297,14 +335,15 @@ describe('runLogs', () => {
       now: NOW,
       onEvent: (event) => {
         seen.push(event)
-        controller.abort()
+        if (seen.length === 3) controller.abort()
       },
     })
     await new Promise(resolve => setTimeout(resolve, 300))
     await appendFile(join(cwd, '.evlog', 'logs', '2026-10-01.jsonl'), `${JSON.stringify(event({ timestamp: '2026-10-01T11:50:00.000Z', path: '/api/other' }))}\n${JSON.stringify(event({ timestamp: '2026-10-01T11:51:00.000Z', path: '/api/items', status: 201 }))}\n`)
     const result = await run
     expect(result.matched).toBe(2)
-    expect(seen.map(e => e.status)).toEqual([201])
+    /* The two already on disk, oldest first, then the one appended. */
+    expect(seen.map(e => e.status)).toEqual([500, 200, 201])
   })
 })
 

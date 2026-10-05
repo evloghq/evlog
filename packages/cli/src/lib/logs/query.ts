@@ -136,14 +136,21 @@ export function matchesWhere(event: WideEvent, where: Where): boolean {
   if (actual === undefined || actual === null) return false
   if (where.op === '~') return where.value instanceof RegExp && where.value.test(typeof actual === 'string' ? actual : JSON.stringify(actual))
   const expected = where.value
-  if (typeof expected === 'number' && typeof actual === 'number') {
+  /* A numeric field does not always arrive as a number — a header, an env var
+     or a hand-written payload carries it as text, and `"10000" > "5000"` is
+     false lexicographically. Against a numeric clause, read it as the number
+     it is rather than silently answering the wrong question. */
+  const number = typeof actual === 'number'
+    ? actual
+    : typeof actual === 'string' && actual.trim() !== '' ? Number(actual) : Number.NaN
+  if (typeof expected === 'number' && !Number.isNaN(number)) {
     switch (where.op) {
-      case '=': return actual === expected
-      case '!=': return actual !== expected
-      case '>': return actual > expected
-      case '>=': return actual >= expected
-      case '<': return actual < expected
-      case '<=': return actual <= expected
+      case '=': return number === expected
+      case '!=': return number !== expected
+      case '>': return number > expected
+      case '>=': return number >= expected
+      case '<': return number < expected
+      case '<=': return number <= expected
     }
   }
   const left = typeof actual === 'object' ? JSON.stringify(actual) : String(actual)

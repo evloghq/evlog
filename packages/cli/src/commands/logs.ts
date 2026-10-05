@@ -128,6 +128,10 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
   const result: LogsResult = { sources, query, matched: all.length, events: select(all, query), all }
 
   if (options.follow) {
+    /* `tail -f` shows the end of the file before it waits, and the caller only
+       renders what it is handed, so the events already found go through the
+       same path as the ones still to come. */
+    for (const event of result.events) options.onEvent?.(event)
     if (options.url) await followUrl(options.url, all, inRange, options)
     else await followDirs(await resolveLogsSources(ctx, options.dir), query, options)
   }
@@ -179,7 +183,14 @@ async function followUrl(url: string, shown: WideEvent[], inRange: (event: WideE
   while (!options.signal?.aborted) {
     await pause(1000, options.signal)
     if (options.signal?.aborted) return
-    const events = (await fetchEvents(url, fetchFn)).filter(inRange)
+    let events: WideEvent[]
+    try {
+      events = (await fetchEvents(url, fetchFn)).filter(inRange)
+    } catch {
+      /* A follower outlives the app it watches: a dev server restarting is a
+         gap in the stream, not a reason to stop. */
+      continue
+    }
     const fresh: WideEvent[] = []
     for (const event of events) {
       if (isFresh(event, seen)) fresh.push(event)
