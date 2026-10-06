@@ -2,11 +2,73 @@ import type { SessionAuthContext } from 'eve/context'
 import type { ToolContext } from 'eve/tools'
 import type { ApprovalContext, ApprovalResponseContext, ApprovalStatus } from 'eve/tools/approval'
 import { z } from 'zod'
+import { gateway, wrapLanguageModel } from 'ai'
+import { MODEL } from '../model'
 import { cloneUrl, homeRepository, isHomeRepository } from '../repo'
-import { isMaintainer, isPullRequestReview } from '../trust'
+import { isMaintainer, isPullRequestReview, reviewState } from '../trust'
 import { REPO_DIR, runOutput } from '../workspace'
-import { pullRequestSchema, reviewGitHubRequest } from './review-queue'
-import { reviewState } from './review-state'
+import { repositoryToken } from './credentials'
+
+export const pullRequestSchema = z.object({
+  state: z.string(),
+  draft: z.boolean(),
+  title: z.string(),
+  user: z.object({ id: z.number(), login: z.string(), type: z.string() }),
+  author_association: z.string(),
+  head: z.object({ sha: z.string().regex(/^[a-f0-9]{40}$/) }),
+  base: z.object({ sha: z.string().regex(/^[a-f0-9]{40}$/) }),
+})
+
+/** Limit preapproval model input and reject every call except native preparation. */
+export function reviewStepModel(auth: SessionAuthContext | null) {
+  if (!isPullRequestReview(auth) || reviewState.get().prepared) return MODEL
+  return wrapLanguageModel({
+    model: gateway(MODEL),
+    middleware: {
+      specificationVersion: 'v4',
+      transformParams({ params }) {
+        const attempted = params.prompt.some(message => message.role === 'tool'
+          && message.content.some(part => part.type === 'tool-result' && part.toolName === 'pr_review__prepare'))
+        return Promise.resolve({
+          ...params,
+          prompt: [{ role: 'user', content: [{ type: 'text', text: attempted ? 'The review did not start. Stop.' : 'Call pr_review__prepare to request approval. Do nothing else.' }] }],
+          tools: attempted ? [] : params.tools?.filter(tool => tool.name === 'pr_review__prepare'),
+          toolChoice: attempted ? { type: 'none' } : { type: 'tool', toolName: 'pr_review__prepare' },
+          maxOutputTokens: 256,
+        })
+      },
+      async wrapGenerate({ doGenerate, params }) {
+        const result = await doGenerate()
+        for (const part of result.content) {
+          if (part.type === 'tool-call' && (part.toolName !== 'pr_review__prepare' || params.toolChoice?.type === 'none')) throw new Error('Review work is blocked before approval.')
+        }
+        return result
+      },
+      async wrapStream({ doStream, params }) {
+        const result = await doStream()
+        return { ...result, stream: result.stream.pipeThrough(new TransformStream({
+          transform(part, controller) {
+            if ((part.type === 'tool-call' || part.type === 'tool-input-start') && (part.toolName !== 'pr_review__prepare' || params.toolChoice?.type === 'none')) throw new Error('Review work is blocked before approval.')
+            controller.enqueue(part)
+          },
+        })) }
+      },
+    },
+  })
+}
+
+/** Keep GitHub write credentials outside the contributor sandbox. */
+async function reviewGitHubRequest(record: { owner: string, repo: string }, suffix: string, body?: unknown): Promise<unknown> {
+  const token = await repositoryToken(record)
+  if (token === null) throw new Error('The GitHub App is not installed on the review repository.')
+  const response = await fetch(`https://api.github.com/repos/${record.owner}/${record.repo}/${suffix}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  if (!response.ok) throw new Error(`PR review GitHub request failed with status ${response.status}.`)
+  return response.json()
+}
 
 const scopeSchema = z.object({
   owner: z.string(), repo: z.string(),

@@ -1,6 +1,6 @@
 import { defaultGitHubAuth } from 'eve/channels/github'
 import type { GitHubChannelState } from 'eve/channels/github'
-import { reviewGitHubChannel } from '../lib/github/review-queue'
+import { reviewGitHubChannel } from '../lib/github/review-trigger'
 import { githubCredentials } from '../lib/github/credentials'
 import { escalateFailedTriageQuietly, isAutonomousTriageState } from '../lib/github/escalate'
 import { failureComment } from '../lib/failure'

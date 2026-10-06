@@ -1,9 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { SessionAuthContext } from 'eve/context'
 import type { ApprovalContext, ApprovalResponseContext } from 'eve/tools/approval'
-import { canAccessAdminTools, canCaptureEvidence, isMaintainer, pullRequestReviewAuth } from '../trust'
+import { canAccessAdminTools, canCaptureEvidence, isMaintainer, pullRequestReviewAuth, reviewState } from '../trust'
 import { writePolicy } from './label-approval'
-import { reviewState } from './review-state'
 import { prepareExternalReview, publishExternalReview, reviewApprovalResponse, reviewExecutionPolicy, reviewScope } from './external-review'
 
 vi.mock('eve/context', () => ({

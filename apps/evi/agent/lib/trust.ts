@@ -1,6 +1,13 @@
 import type { SessionAuthContext } from 'eve/context'
+import { defineState } from 'eve/context'
 import { environment } from './environment'
-import { reviewState } from './github/review-state'
+
+/** Native session state records checkout and publication, not pending approvals. */
+export const reviewState = defineState('evi.pr-review', () => ({
+  prepared: false,
+  publishing: false,
+  url: null as string | null,
+}))
 
 /**
  * Hugo's identity on each channel, read from the environment so the public

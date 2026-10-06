@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { GitHubInboundContext, GitHubPullRequestEvent } from 'eve/channels/github'
-import { queuePullRequestReview } from './review-queue'
+import { requestPullRequestReview } from './review-trigger'
 
 vi.mock('../trust', async () => ({
   ...await vi.importActual('../trust'),
@@ -18,16 +18,17 @@ const ctx = {
   repository: { owner: 'evloghq', name: 'evlog', fullName: 'evloghq/evlog' },
   github: { request },
 } as unknown as GitHubInboundContext
-const event = { action: 'opened', pullRequestNumber: 12 } as GitHubPullRequestEvent
+const event = { action: 'opened', pullRequestNumber: 12, headSha: sha, raw: pr } as GitHubPullRequestEvent
 
 beforeEach(() => {
   vi.stubEnv('EVI_PR_REVIEW_SLACK_CHANNEL_ID', 'C123')
   request.mockReset().mockResolvedValue({ body: pr, ok: true, status: 200 })
 })
 
-it('reads the GitHub response body and routes a scoped approval task to Slack', async () => {
+it('routes verified webhook metadata to Slack without a GitHub request', async () => {
   const send = vi.fn()
-  await queuePullRequestReview(ctx, event, send)
+  await requestPullRequestReview(ctx, event, send)
+  expect(request).not.toHaveBeenCalled()
   expect(send).toHaveBeenCalledOnce()
   expect(send.mock.calls[0]?.[0]).toMatchObject({ channelId: 'C123', installationTeamId: 'T123' })
   expect(send.mock.calls[0]?.[2]).toMatchObject({
@@ -44,17 +45,17 @@ it.each([
   { author_association: 'COLLABORATOR' },
   { user: { id: 999, login: 'HugoRCD', type: 'User' } },
   { user: { id: 999, login: 'evlogai[bot]', type: 'Bot' } },
-])('does not queue an ineligible PR: %j', async (change) => {
-  request.mockResolvedValue({ body: { ...pr, ...change }, ok: true, status: 200 })
+  { user: { id: 999, login: 'evlogai', type: 'User' } },
+])('does not request approval for an ineligible PR: %j', async (change) => {
   const send = vi.fn()
-  await queuePullRequestReview(ctx, event, send)
+  await requestPullRequestReview(ctx, { ...event, raw: { ...pr, ...change } }, send)
   expect(send).not.toHaveBeenCalled()
 })
 
 it('does nothing when the review channel is unconfigured', async () => {
   vi.stubEnv('EVI_PR_REVIEW_SLACK_CHANNEL_ID', undefined)
   const send = vi.fn()
-  await queuePullRequestReview(ctx, event, send)
+  await requestPullRequestReview(ctx, event, send)
   expect(request).not.toHaveBeenCalled()
   expect(send).not.toHaveBeenCalled()
 })
