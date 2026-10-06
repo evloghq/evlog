@@ -1,6 +1,6 @@
 {
   "name": "@evlog/telemetry",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Wide-event telemetry for CLIs and automation — evlog's one-event-per-run model for tools on user machines, with privacy-safe flags, consent, outbox, and auto disclosure",
   "author": "HugoRCD <contact@evlog.dev>",
   "homepage": "https://evlog.dev",

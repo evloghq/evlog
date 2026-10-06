@@ -1,5 +1,11 @@
 # @evlog/telemetry
 
+## 0.3.4
+
+### Patch Changes
+
+- [#782](https://github.com/evloghq/evlog/pull/782) [`302fd0e`](https://github.com/evloghq/evlog/commit/302fd0ea8726e19dfb9ac6e7fb8f09d926878aba) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Fix `createGitHubActionsTelemetry()` to expose `set()`, `flush()`, and a live `enabled` getter alongside `run()`.
+
 ## 0.3.3
 
 ### Patch Changes

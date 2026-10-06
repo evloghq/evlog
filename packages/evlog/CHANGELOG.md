@@ -1,5 +1,15 @@
 # evlog
 
+## 2.30.1
+
+### Patch Changes
+
+- [#774](https://github.com/evloghq/evlog/pull/774) [`5ca8bd4`](https://github.com/evloghq/evlog/commit/5ca8bd4fbe481acaf05dd226e5cfc44618dd50c9) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `readFsLogs()` and `tailFsLogs()` from `evlog/fs` now read files the drain wrote with `pretty: true`, assembling each indented event, where they used to skip every line of them as malformed.
+
+- [#778](https://github.com/evloghq/evlog/pull/778) [`88d2c9f`](https://github.com/evloghq/evlog/commit/88d2c9f2254a41e6ff7b744b4cbeac844a6b0023) Thanks [@adelrodriguez](https://github.com/adelrodriguez)! - An `Error` inside an event field is now serialized the same way as `log.error(err)`, with `name`, `message`, `stack`, and `cause`, instead of being written as `{}`. This covers the object form of `log.info/warn/error/...({ ... })` at any depth, and `set()` plus the context argument of the level methods on a request logger.
+
+- [#780](https://github.com/evloghq/evlog/pull/780) [`8fabc14`](https://github.com/evloghq/evlog/commit/8fabc14aff3ca30089fbb246b7747d6cd2907220) Thanks [@simplyzetax](https://github.com/simplyzetax)! - `withEvlog` and `defineWorkerFetch` (`evlog/workers`) keep the type of an annotated `ctx`, so a handler typed with Cloudflare's `ExecutionContext` reaches `ctx.exports`, `ctx.props` and `ctx.passThroughOnException()` without a cast. An unannotated `ctx` is still `WorkerExecutionContext`.
+
 ## 2.30.0
 
 ### Minor Changes

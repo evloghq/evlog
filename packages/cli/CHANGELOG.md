@@ -1,5 +1,18 @@
 # @evlog/cli
 
+## 0.9.0
+
+### Minor Changes
+
+- [#773](https://github.com/evloghq/evlog/pull/773) [`a053adb`](https://github.com/evloghq/evlog/commit/a053adb9ec5813626c73c98274ae7188d18f62e5) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map --json` now carries `grade` next to `map` and `summary`, the same word the report prints, so a consumer no longer recomputes it from the score. `--baseline-label <text>` names the baseline in the report and the `--format github` annotations when the map was copied to a temp file, so CI can say `regressed against main` instead of printing a path.
+
+- [#774](https://github.com/evloghq/evlog/pull/774) [`5ca8bd4`](https://github.com/evloghq/evlog/commit/5ca8bd4fbe481acaf05dd226e5cfc44618dd50c9) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog logs` reads the wide events the fs drain wrote to `.evlog/logs`: the last 50 (`evlog logs`), the failures (`evlog logs errors`), the slowest (`evlog logs slow --over 1s`), one request in full by id (`evlog logs <requestId>`, a UUID prefix is enough), or the shape of the traffic (`evlog logs stats`: per route, status class and level). Filters compose with every view: `--since 15m`, `--until`, `--level error,fatal`, `--path`, `--status 5xx`, `--where payment.amount>5000` on any field of the event (`=`, `!=`, `>`, `>=`, `<`, `<=`, `~regex`, present, `!absent`, repeatable), `--limit`, `--dir`. `-f` follows new events like `tail -f`; `--json` returns the events as JSON. It finds the project's log directory the way `doctor` does, reads every app of a workspace when the root has none, reads the memory drain's dev endpoint with `--url` (a follow there survives the app restarting, and says so when the endpoint stays quiet), handles both the compact and the pretty layout, and never writes.
+
+### Patch Changes
+
+- Updated dependencies [[`302fd0e`](https://github.com/evloghq/evlog/commit/302fd0ea8726e19dfb9ac6e7fb8f09d926878aba)]:
+  - @evlog/telemetry@0.3.4
+
 ## 0.8.0
 
 ### Minor Changes
