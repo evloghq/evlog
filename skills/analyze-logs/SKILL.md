@@ -131,7 +131,7 @@ Read the latest `.jsonl` file. Each line is one JSON event. Parse each line inde
 
 Filter based on the user's question:
 
-- **Errors**: `"level"` of `"error"` or `"fatal"`, `status >= 500`, or an `error` object on the event, which is what `evlog logs errors` matches. A 4xx is the client's own and is not counted; read `status` or pass `--status 4xx` for those
+- **Errors**: `"level"` of `"error"` or `"fatal"`, `status >= 500`, or an `error` object on the event, which is what `evlog logs errors` matches. A 4xx status on its own is the client's and does not count, though a 4xx event still matches when it carries one of the other two signals; read `status` or pass `--status 4xx` to see them all
 - **Specific endpoint**: match on `path`
 - **Slow requests**: filter on `durationMs` (e.g. `durationMs > 500`)
 - **Specific user/action**: match on application-specific fields
