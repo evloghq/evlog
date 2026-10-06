@@ -5,7 +5,7 @@ description: The daily pass over evlog's written surfaces. Picks the files the s
 
 # Content pass
 
-One pass, one group, one pull request. The corpus is ~120 files: the docs tree and the landing, the four package READMEs, the internal and published skills, and the three AGENTS.md files. None of that gets fixed in a day, and trying is how a rewriter starts rewriting for its own sake.
+One pass, one group, one pull request. The corpus is roughly 150 files: the docs tree and the landing, the four package READMEs, the internal and published skills, and the three AGENTS.md files. When the scanner's own count differs, the scanner wins. None of that gets fixed in a day, and trying is how a rewriter starts rewriting for its own sake.
 
 Half the corpus is read by people and half by agents, and the pass treats them differently. A skill or an AGENTS.md governs the agent running this pass, so it may fix a house rule there (punctuation, a dead link, a retired entry point, a wrong term) and nothing else. Procedure, bounds, and a skill's `description` come back as findings for Hugo. That is `M-09` in the doctrine, and `content-targets` enforces it by returning those files with mode `report`.
 
@@ -63,7 +63,7 @@ The reviewer returns a verdict. `pass` means that page is done for this run; do 
 
 ### 5. Rewrite, in parallel
 
-For every target whose snapshot loaded successfully, whose verdict is not `pass` and whose mode is `rewrite`, dispatch `content_rewrite` with the same snapshot and that page's findings. A `blocked` verdict caused by a failed snapshot load must be recaptured and reviewed before rewriting. A verified page blocked by critical findings is eligible for rewriting those findings.
+For every target whose snapshot loaded successfully, whose verdict is not `pass` and whose mode is `rewrite`, dispatch `content_rewrite` with the same snapshot and that page's findings. A `blocked` verdict from a failed snapshot load means the page was never reviewed: recapture it and send it back to review before rewriting. A verdict blocked on critical findings means the page was reviewed and refused: rewriting those findings is allowed.
 
 The rewriter returns full replacement text and the original digest. Wait for all readers to finish. Before each edit, call `content_snapshot` again and compare both the revision and digest with the rewrite input. If either changed, capture and review the current page again. Otherwise, read the file and apply only the reviewed changes serially with the parent’s existing editing tools. Do not run other file writes or Git changes concurrently. This check is not an atomic write guard: if another writer is active, stop editing until access is coordinated. After saving, capture a fresh snapshot of the actual file for verification; the proposed text is not evidence of what was saved.
 
@@ -87,7 +87,7 @@ Then the checks the changed files actually need:
 What you are checking:
 
 - Correctness is the blocking check. Send every freshly captured saved snapshot through `content_review` again, with the previous critical findings and execution evidence. Confirm the reported revision and digest match the saved snapshot, and that critical findings are resolved. Missing evidence remains explicitly unverified.
-- Review new scanner candidates against their legitimate twins. Do not revert a factual correction solely because its style score fell. Explain a confirmed false positive in the PR and propose a narrow scanner correction; do not weaken thresholds or add filler to satisfy the score. Required CI failures still prevent marking the PR ready.
+- Review new scanner candidates against their legitimate twins. Do not revert a factual correction solely because its style score fell. Explain a confirmed false positive in the PR and propose a narrow scanner correction; do not weaken thresholds or add filler to satisfy the score. A required CI failure blocks the PR: fix it or report the blocker.
 - The diff touches only the target files. A stray change to a component, a config, or a package is a bug in the pass, not a bonus.
 - Frontmatter and MDC structure survived. Read the diff, not just the score.
 
@@ -126,6 +126,10 @@ Score <before> → <after>. Verdict: <verdict>.
 
 ### Reported, not changed
 - [id] <path>, landing findings and anything else left for you.
+
+### Checks
+
+- [what ran, on which revision, result]. One line each; omit only when the diff is markdown-only prose.
 ```
 
 Facts only. No summary of what the pass is for, no closing note about improving the docs.
