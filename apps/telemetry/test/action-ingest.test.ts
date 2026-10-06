@@ -8,6 +8,7 @@ const custom = {
   baselineMode: 'base',
   checkOutcome: 'created',
   commentOutcome: 'updated',
+  errorStage: 'cli',
   packages: 2,
   entryPoints: 10,
   score: 80,

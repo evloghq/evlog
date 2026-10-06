@@ -23,6 +23,7 @@ export const DEFAULT_ALLOWED_CUSTOM_KEYS: Record<string, string[]> = {
     'baselineMode',
     'checkOutcome',
     'commentOutcome',
+    'errorStage',
     'packages',
     'entryPoints',
     'score',
