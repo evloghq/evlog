@@ -40,7 +40,10 @@ it.each([
   { draft: true },
   { state: 'closed' },
   { author_association: 'MEMBER' },
-  { user: { id: 999, login: 'bot', type: 'Bot' } },
+  { author_association: 'OWNER' },
+  { author_association: 'COLLABORATOR' },
+  { user: { id: 999, login: 'HugoRCD', type: 'User' } },
+  { user: { id: 999, login: 'evlogai[bot]', type: 'Bot' } },
 ])('does not queue an ineligible PR: %j', async (change) => {
   request.mockResolvedValue({ body: { ...pr, ...change }, ok: true, status: 200 })
   const send = vi.fn()
