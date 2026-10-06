@@ -116,11 +116,13 @@ them, only mentions and DMs reach the agent.
 summer (BST) and drifts to 05:00 in winter (GMT). `eve dev` never fires crons;
 `POST /eve/v1/dev/schedules/digest` triggers one locally.
 
-**The upstream-sync and self-review schedule turns push feature branches
-without an approval card.** The push is inert: it only creates a branch, `validatePushBranch`
-refuses `main`/`master`, and the draft PR referencing the branch carries the
-card. Schedule turns are `eve:app`, not the maintainer, so
-`github__createPullRequest` still posts an approval card to the thread.
+**Scheduled runs push feature branches and open PRs without an approval card
+in the home repository.** `validatePushBranch` refuses `main`/`master`.
+Schedule turns use the `eve:app` principal, not the maintainer.
+`createPullRequestPolicy` skips approval for ready and draft PRs targeting
+`EVI_REPOSITORY` (including omitted owner/repo defaults). Other repositories
+still require approval. Other write gates are unchanged, and merge is not in
+the tool surface.
 
 ## AI Gateway
 
