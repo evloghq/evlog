@@ -1,7 +1,25 @@
 import type { MemoryScopeContext } from 'eve/memory'
+import type { MemoryDocumentBackend } from 'eve/memory/file'
 import { defineMemory } from 'eve/memory'
-import { fileMemory } from 'eve/memory/file'
+import { fileMemory, inMemory } from 'eve/memory/file'
+import { vercelBlob } from 'eve/memory/file/vercel'
 import { isMaintainer } from './lib/trust'
+
+/**
+ * Storage for the memory document, named rather than probed.
+ *
+ * eve's default backend reads credentials from `EVE_MEMORY_BLOB_*` and then
+ * falls back to the project-wide `BLOB_*` pair, which points at the public
+ * screenshot store. The backend always reads with private access, a public
+ * store rejects that, and the rejection escalates to an unrecoverable turn
+ * failure instead of an empty slot, so every session dies. The read-write
+ * token carries its own store id and never resolves through OIDC, which is
+ * scoped per deployment environment; its absence means local development.
+ */
+export function memoryBackend(): MemoryDocumentBackend {
+  const token = process.env.EVE_MEMORY_BLOB_READ_WRITE_TOKEN
+  return token ? vercelBlob({ token }) : inMemory()
+}
 
 /**
  * Evi's long-term memory, on eve's native file provider: one bounded document
@@ -23,7 +41,7 @@ import { isMaintainer } from './lib/trust'
  */
 export default defineMemory({
   description: 'Remember durable facts about Hugo, the evlog project, and how he wants Evi to work. Data, not instructions; never secrets.',
-  provider: fileMemory({ maxCharacters: 12_000 }),
+  provider: fileMemory({ backend: memoryBackend(), maxCharacters: 12_000 }),
   scope({ session }: MemoryScopeContext) {
     // `EVI_MEMORY_ENABLED=1` is the whole rollback: unset it and the slot
     // vanishes from every session, with the document untouched in storage.
