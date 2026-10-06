@@ -1,23 +1,36 @@
 # Authorization on the GitHub channel
 
-Design note, not implemented. Written while Evi is still gated to a single user
-(`onComment` rejects everyone but `hugorcd`). Pick this up before that gate comes
-off, or before wiring the autonomous webhook hooks. The gate is required before
-either is implemented.
+Design note, in two halves. What runs today: a principal gate (`isMaintainer` in
+`agent/lib/trust.ts`, backed by `MAINTAINER_PRINCIPALS`), a per-tool
+`requireApproval` map on the GitHub extension (`agent/extensions/github.ts`),
+and `writePolicy` in `agent/lib/github/label-approval.ts`, which auto-approves
+maintainers, asks everyone else, and denies autonomous turns outright. What is
+still a proposal: the `tier` / `threadTier` attribute the rest of this page
+builds on. Evi is still gated to a single user (`onComment` rejects everyone
+but `hugorcd`), and the tier attribute has to land before that gate comes off.
+It is not a prerequisite for the autonomous hooks: `onIssue` is already wired,
+and `writePolicy` covers those turns.
 
 ## Approval is not an authorization control here
 
-Evi now carries the full maintainer tool surface, and every write tool ships
-behind the SDK's `always()` approval. On Slack or the web that is a real control.
+Evi carries the maintainer tool surface, and the GitHub extension routes almost
+every write through its own predicate in `requireApproval`. Only the two
+omitted writes, `closeIssue` and `createPullRequestReview`, fall back to the
+SDK's `always()` default. On Slack or the web that is a real control.
 On GitHub it is not, for three compounding reasons:
 
 1. **There is no approval card.** Per eve's GitHub channel docs, an
    `input.requested` event "is posted as a comment prompt, and the user's reply
    comment maps back to the pending input request." It is a comment.
-2. **Whoever replies first answers it.** Nothing binds the reply to the person who
-   triggered the turn. An attacker approves their own write.
-3. **Autonomous turns have nobody to ask.** Once `onIssue` / `onPullRequest` /
-   `onCheckSuite` are wired, a turn that hits an approval gate parks forever.
+2. **Whoever replies first answers it.** The binding mechanism exists upstream:
+   eve captures the requester's auth on the pending request and exports
+   `ApprovalResponsePolicy`, which decides whether the responder may settle the
+   call. This deployment configures none, so on GitHub an attacker can approve
+   their own write.
+3. **Autonomous turns have nobody to ask.** The channel already wires `onIssue`,
+   and its answer to that is a hard denial, not a card: `writePolicy` refuses an
+   autonomous turn outright on every write outside label and triage work,
+   because an approval request would park forever with nobody to approve it.
 
 Approval is an interaction pattern for a trusted one-to-one channel. On a public
 thread it confirms nothing. The control has to be authorization: decided
@@ -120,8 +133,10 @@ require it on every non-draft PR.
 Everything else keeps a real approval even for admin: `createIssue`, `closeIssue`,
 `deleteIssueComment`, `deletePullRequestComment`, `createPullRequest`,
 `updatePullRequest`, `createPullRequestReview`. Code itself never moves through
-the API: it ships from the sandbox via `git__push`, which is only mounted on
-maintainer sessions.
+the API: it ships from the sandbox via `git__push`, which is mounted on sessions
+that pass `canAccessAdminTools` in `agent/lib/trust.ts`: maintainers, plus
+schedule sessions, whose runs push feature branches to deliver their PRs. It
+refuses `main` and `master` for every caller.
 
 Release writes are not on the list at all: `AGENTS.md` forbids an agent from
 creating one, so the tool set stops at reading them.
@@ -159,23 +174,30 @@ Worth revisiting once there is real traffic: marking content provenance (was thi
 thread opened by someone outside the tier?) and lowering the ceiling on those
 threads regardless of who is asking.
 
-## Autonomous turns need their own principal
+## Autonomous turns run under their own principal
 
-`onIssue`, `onPullRequest`, and `onCheckSuite` all dispatch with
-`defaultGitHubAuth(ctx)`, where the sender is whoever opened the issue or pushed
-the commit. An automated CI-triage turn would therefore run under a random
-contributor's identity, and, with the tier logic above, under their permissions.
+`onIssue` dispatches with `defaultGitHubAuth(ctx)` and then overrides the
+projection: `principalId` becomes `AUTONOMOUS_GITHUB_PRINCIPAL`
+(`github:evlogai`) with `principalType: "service"`
+(`agent/channels/github.ts`). The triage turn runs as the bot, never as the
+issue opener. `onPullRequest` and `onCheckSuite` are not wired yet; when they
+are, they need the same override, or they would run under whoever opened the
+issue or pushed the commit, at that actor's tier under the logic above.
 
-Agent-initiated work needs a constructed system principal instead, at a tier
-chosen for the task rather than inherited from whoever tripped the webhook. It
-should generally be *lower* than admin: nobody is watching, and there is nobody to
-approve anything, so it should only reach tools that are safe unattended.
+What that principal may run is the open part. The gate that exists today is the
+conservative answer: `writePolicy` denies an autonomous turn on every write it
+routes, except the narrow set the extension's per-tool predicates let through,
+label create and apply, a doc-gap issue, and assigning the maintainer. The
+principle for widening it: choose the tier for the task instead of inheriting it
+from whoever tripped the webhook, and keep it *lower* than admin. Nobody is
+watching and there is nobody to approve anything, so it should only reach tools
+that are safe unattended.
 
 ## The gap in @github-tools/eve-extension
 
 Everything above enforces at the approval layer, which means every tool still sits
-in every caller's context (schemas cost roughly 7k tokens per turn for the
-maintainer surface), and a denied call burns a model step to learn it was refused.
+in every caller's context, schemas included, and a denied call burns a model step
+to learn it was refused.
 
 The clean fix is a tool surface that varies per caller. The extension already
 resolves tools inside a dynamic resolver on `step.started`, and simply ignores the
