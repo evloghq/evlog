@@ -1,5 +1,6 @@
 import type { SessionAuthContext } from 'eve/context'
 import { environment } from './environment'
+import { reviewState } from './github/review-state'
 
 /**
  * Hugo's identity on each channel, read from the environment so the public
@@ -64,6 +65,7 @@ function isWorkspaceMember(auth: SessionAuthContext): boolean {
 }
 
 export function isMaintainer(auth: SessionAuthContext | null): boolean {
+  if (isPullRequestReview(auth)) return false
   if (isTrustedLocalDev()) return true
   if (auth === null) return false
   return MAINTAINER_PRINCIPALS.has(auth.principalId) || isWorkspaceMember(auth)
@@ -81,11 +83,25 @@ export function isAutonomous(auth: SessionAuthContext | null): boolean {
   return auth !== null && auth.principalId === AUTONOMOUS_GITHUB_PRINCIPAL
 }
 
-/**
- * Sessions allowed to reach the admin observability tools (Vercel MCP, AI
- * Gateway spend): maintainers, plus app-principal sessions such as schedules,
- * which carry no user identity. The weekly self-review runs from a schedule.
- */
+/** The restricted identity minted by the GitHub PR approval handoff. */
+export function isPullRequestReview(auth: SessionAuthContext | null): boolean {
+  return auth !== null
+    && auth.authenticator === 'pr-review'
+    && auth.principalType === 'service'
+    && auth.principalId === 'evi:pr-review'
+}
+
+/** Review authority identifies one approval, never a maintainer or a schedule. */
+export function pullRequestReviewAuth(scope: { owner: string, repo: string, number: number, sha: string }): SessionAuthContext {
+  return { authenticator: 'pr-review', principalType: 'service', principalId: 'evi:pr-review', attributes: { ...scope, number: String(scope.number) } }
+}
+
+/** Approved reviews may publish visual evidence, but cannot access admin tools. */
+export function canCaptureEvidence(auth: SessionAuthContext | null): boolean {
+  return canAccessAdminTools(auth) || (isPullRequestReview(auth) && reviewState.get().prepared)
+}
+
+/** Maintainers and scheduled app turns may access admin observability tools. */
 export function canAccessAdminTools(auth: SessionAuthContext | null): boolean {
   return isMaintainer(auth) || isScheduleAppAuth(auth)
 }

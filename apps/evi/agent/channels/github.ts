@@ -1,10 +1,12 @@
-import { defaultGitHubAuth, githubChannel } from 'eve/channels/github'
+import { defaultGitHubAuth } from 'eve/channels/github'
 import type { GitHubChannelState } from 'eve/channels/github'
+import { reviewGitHubChannel } from '../lib/github/review-queue'
 import { githubCredentials } from '../lib/github/credentials'
 import { escalateFailedTriageQuietly, isAutonomousTriageState } from '../lib/github/escalate'
 import { failureComment } from '../lib/failure'
 import { isHomeRepository, repositoryOf } from '../lib/repo'
 import { AUTONOMOUS_GITHUB_PRINCIPAL, isAutonomous, MAINTAINER_GITHUB_ID, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'
+import slack from './slack'
 
 const botName = 'evlogai'
 const mentionPattern = new RegExp(
@@ -12,7 +14,7 @@ const mentionPattern = new RegExp(
   'iu',
 )
 
-export default githubChannel({
+export default reviewGitHubChannel({
   botName,
   credentials: githubCredentials,
   onComment: (ctx, comment) => {
@@ -59,7 +61,7 @@ export default githubChannel({
       )
     },
   },
-})
+}, slack)
 
 async function escalate(state: GitHubChannelState): Promise<void> {
   if (state.issueNumber === null) return
