@@ -203,9 +203,11 @@ stays open. If the evi project's OIDC issuer mode ever changes, the constants in
 
 ## evlog
 
-**The fs drain guards neither its `mkdir` nor its `appendFile`.** On Vercel,
-everything outside `/tmp` is read-only, so attaching it there throws once per
-turn and writes events nobody can read.
+**The fs drain disables itself on a read-only directory.** A write failing with
+`EROFS`, `EACCES` or `EPERM` marks the directory unwritable and disables the
+drain for the rest of the process after warning once, so attaching it on Vercel
+is safe, though the events go nowhere: only the temp directory is writable and
+does not outlive the instance.
 
 **`environment` has to be set explicitly** or wide events report `development`
 for both local and eval traffic while the spend tags separate them. Both now read
