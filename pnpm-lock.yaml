@@ -140,7 +140,7 @@ importers:
         version: file:apps/evi/vendor/agent-browser-eve-0.38.2-eve0.74.0.tgz(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6))
       '@github-tools/eve-extension':
         specifier: 0.8.1
-        version: 0.8.1(0475a9833e7c5ffd5238740fa8683adf)
+        version: 0.8.1(f57983d71f98da2007d0ecb91dd7c090)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -157,8 +157,8 @@ importers:
         specifier: ^2.8.0
         version: 2.8.0
       '@vercel/connect':
-        specifier: ^2.3.5
-        version: 2.4.0(@ai-sdk/mcp@2.0.39(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(supports-color@10.2.2)(zod@4.6.5))(ai@7.0.133(zod@4.6.5))(better-auth@1.7.7(15dcbb8809f05abed3b57ee69b39e55d))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6))
+        specifier: ^2.4.1
+        version: 2.4.1(@ai-sdk/mcp@2.0.39(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(supports-color@10.2.2)(zod@4.6.5))(ai@7.0.133(zod@4.6.5))(better-auth@1.7.7(15dcbb8809f05abed3b57ee69b39e55d))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6))
       '@vercel/oidc':
         specifier: ^3.8.9
         version: 3.8.10
@@ -8878,11 +8878,11 @@ packages:
       eve:
         optional: true
 
-  '@vercel/connect@2.4.0':
-    resolution: {integrity: sha512-DLgITa6iPZRhmPA5L76c1riEiCnsTUmBvfkcbgaOM/0PtSHjOnb8AQ9ywyiyDidlUvLnBot9cteaorjIx0aoWA==}
+  '@vercel/connect@2.4.1':
+    resolution: {integrity: sha512-KsVbpJ9NDl16VyWcG/XUhfwvViNu9UzrpIXgi5pTCrMOy2zhIU5h4bh2hST81rYdoTezFoX+HncDZeFztei2KQ==}
     peerDependencies:
       '@ai-sdk/mcp': ^1 || ^2
-      '@auth/core': '>=0.37.0'
+      '@auth/core': '>=0.41.3'
       '@chat-adapter/slack': ^4.0.0
       '@modelcontextprotocol/sdk': ^1.29.0
       ai: ^7.0.128
@@ -18600,13 +18600,13 @@ snapshots:
       - '@vue/composition-api'
       - vue
 
-  '@github-tools/eve-extension@0.8.1(0475a9833e7c5ffd5238740fa8683adf)':
+  '@github-tools/eve-extension@0.8.1(f57983d71f98da2007d0ecb91dd7c090)':
     dependencies:
-      '@github-tools/sdk': 1.18.0(7876c859237e7788a0f3a50a81d21f24)
+      '@github-tools/sdk': 1.18.0(e3ad2a5addf3d8826b7fc34edb95d3a6)
       eve: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6)
       zod: 4.6.5
     optionalDependencies:
-      '@vercel/connect': 2.4.0(@ai-sdk/mcp@2.0.39(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(supports-color@10.2.2)(zod@4.6.5))(ai@7.0.133(zod@4.6.5))(better-auth@1.7.7(15dcbb8809f05abed3b57ee69b39e55d))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6))
+      '@vercel/connect': 2.4.1(@ai-sdk/mcp@2.0.39(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(supports-color@10.2.2)(zod@4.6.5))(ai@7.0.133(zod@4.6.5))(better-auth@1.7.7(15dcbb8809f05abed3b57ee69b39e55d))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6))
     transitivePeerDependencies:
       - '@ai-sdk/workflow'
       - '@nestjs/common'
@@ -18630,14 +18630,14 @@ snapshots:
       - vite
       - workflow
 
-  '@github-tools/sdk@1.18.0(7876c859237e7788a0f3a50a81d21f24)':
+  '@github-tools/sdk@1.18.0(e3ad2a5addf3d8826b7fc34edb95d3a6)':
     dependencies:
       ai: 7.0.133(zod@4.6.5)
       evlog: 2.29.0(9336ae35acbe5f37663a8c8ee79292f8)
       octokit: 5.0.5
       zod: 4.6.5
     optionalDependencies:
-      '@vercel/connect': 2.4.0(@ai-sdk/mcp@2.0.39(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(supports-color@10.2.2)(zod@4.6.5))(ai@7.0.133(zod@4.6.5))(better-auth@1.7.7(15dcbb8809f05abed3b57ee69b39e55d))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6))
+      '@vercel/connect': 2.4.1(@ai-sdk/mcp@2.0.39(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(supports-color@10.2.2)(zod@4.6.5))(ai@7.0.133(zod@4.6.5))(better-auth@1.7.7(15dcbb8809f05abed3b57ee69b39e55d))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6))
       eve: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6)
     transitivePeerDependencies:
       - '@nestjs/common'
@@ -28055,7 +28055,7 @@ snapshots:
       better-auth: 1.7.7(a64d62232a3a9c1ce62c91a85f5aceae)
       eve: 0.30.8(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@vercel/blob@2.8.0)(ai@7.0.133(zod@4.6.5))(better-sqlite3@12.11.1)(chokidar@5.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.3(@cloudflare/workers-types@4.20260503.1)(@electric-sql/pglite@0.5.8)(@libsql/client@0.18.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(bun-types@1.4.2)(kysely@0.28.17)(postgres@3.4.9))(giget@3.3.0)(ioredis@5.10.1(supports-color@10.2.2))(jiti@2.7.0)(lru-cache@11.3.5)(rollup@4.60.2)(vite@8.3.2(@types/node@25.9.9)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  '@vercel/connect@2.4.0(@ai-sdk/mcp@2.0.39(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(supports-color@10.2.2)(zod@4.6.5))(ai@7.0.133(zod@4.6.5))(better-auth@1.7.7(15dcbb8809f05abed3b57ee69b39e55d))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6))':
+  '@vercel/connect@2.4.1(@ai-sdk/mcp@2.0.39(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(supports-color@10.2.2)(zod@4.6.5))(ai@7.0.133(zod@4.6.5))(better-auth@1.7.7(15dcbb8809f05abed3b57ee69b39e55d))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.133(zod@4.6.5))(microsandbox@0.7.6))':
     dependencies:
       '@vercel/oidc': 4.0.0
     optionalDependencies:
@@ -28227,7 +28227,7 @@ snapshots:
       obug: 2.1.4
       std-env: 4.3.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@25.9.9)(@vitest/coverage-v8@4.1.11)(happy-dom@20.14.5)(vite@8.3.2(@types/node@25.9.9)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.19.1)(@vitest/coverage-v8@4.1.11)(happy-dom@20.14.5)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/expect@4.1.11':
     dependencies:
