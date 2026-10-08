@@ -149,7 +149,7 @@ function getLevelColor(level: string): string {
               <div class="size-3 rounded-full bg-accented" />
               <div class="size-3 rounded-full bg-accented" />
             </div>
-            <span class="ml-3 font-mono text-xs text-dimmed">evlog.config.ts</span>
+            <span class="ml-3 font-mono text-xs text-dimmed">logger.ts</span>
           </div>
           <div class="p-5 font-mono text-xs sm:text-sm leading-relaxed overflow-x-auto">
             <pre><code><span class="text-amber-400">initLogger</span>({

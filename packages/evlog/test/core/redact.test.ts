@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { redactEvent, normalizeRedactConfig, resolveRedactConfig, builtinPatterns, hasFunctionRedactPolicy, compileRedactPathMatchers, redactPathsInTree } from '../../src/redact'
+import { redactEvent, normalizeRedactConfig, resolveRedactConfig, builtinPatterns, hasFunctionRedactPolicy, FUNCTION_REDACT_POLICY_WARNING, prepareRedactForBridge, compileRedactPathMatchers, redactPathsInTree } from '../../src/redact'
 import type { RedactConfig } from '../../src/types'
 import { createLogger, initLogger } from '../../src/logger'
 import { defined } from '../helpers/defined'
@@ -609,6 +609,17 @@ describe('normalizeRedactConfig', () => {
     warn.mockRestore()
   })
 
+  it('warns on pattern objects without a source field instead of dropping them silently', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const config = normalizeRedactConfig({
+      builtins: false,
+      patterns: [{ source: '\\d+' }, {}],
+    })
+    expect(config?.patterns).toHaveLength(1)
+    expect(warn).toHaveBeenCalledWith('[normalizeRedactConfig] Ignoring redact pattern object without a `source` field')
+    warn.mockRestore()
+  })
+
   it('handles builtins field from deserialized JSON', () => {
     const config = normalizeRedactConfig({
       builtins: ['email', 'creditCard'],
@@ -844,5 +855,34 @@ describe('function-valued redact policy across the config bridge', () => {
     // being called before serialization, not after.
     expect(hasFunctionRedactPolicy(serialized)).toBe(false)
     expect(normalizeRedactConfig(serialized)?.replacement).toBeUndefined()
+  })
+
+  it('warns when a function-valued policy crosses the bridge', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    prepareRedactForBridge({ replacement: () => '[x]' })
+    expect(warn).toHaveBeenCalledWith(FUNCTION_REDACT_POLICY_WARNING)
+    warn.mockRestore()
+  })
+})
+
+describe('RegExp patterns across the config bridge', () => {
+  it('rewrites RegExp patterns to source/flags so a JSON round-trip still redacts', () => {
+    const redact = { builtins: false, patterns: [/sk_live_\w+/g] }
+    prepareRedactForBridge(redact)
+    const serialized = JSON.parse(JSON.stringify(redact))
+
+    const resolved = defined(normalizeRedactConfig(serialized), 'redact config')
+    expect(resolved.patterns).toHaveLength(1)
+    expect(defined(resolved.patterns?.[0], 'patterns[0]').flags).toBe('g')
+
+    const event = redactEvent({ key: 'sk_live_abc123' }, resolved)
+    expect(event.key).toBe('[REDACTED]')
+  })
+
+  it('keeps patterns intact when the config is passed live, not through the bridge', () => {
+    const redact = { builtins: false, patterns: [/sk_live_\w+/g] }
+    prepareRedactForBridge(redact)
+    const resolved = defined(normalizeRedactConfig(redact), 'redact config')
+    expect(defined(resolved.patterns?.[0], 'patterns[0]')).toBeInstanceOf(RegExp)
   })
 })

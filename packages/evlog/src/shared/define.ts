@@ -5,7 +5,7 @@ import { pickBaseEvlogOptions } from './middleware'
 
 /**
  * Single-config shape accepted everywhere evlog is bootstrapped: at
- * `initLogger`, in framework middleware, and in the Nuxt module. Authored
+ * `initLogger` and in framework middleware. Authored
  * with {@link defineEvlog} and split via {@link toLoggerConfig} /
  * {@link toMiddlewareOptions}.
  */

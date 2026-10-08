@@ -66,6 +66,8 @@ export default defineEvlog({
 })
 ```
 
+`defineEvlog` only authors the config. Nothing registers until the object reaches evlog: pass it to `initLogger` or the framework integration you already use.
+
 Every event that passes a signal's `when` gets judged. All due signals for one event go into a single model call.
 
 ## What lands on the event

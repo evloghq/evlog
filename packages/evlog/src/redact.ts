@@ -539,6 +539,27 @@ export const FUNCTION_REDACT_POLICY_WARNING
     + 'Declare it at runtime instead — initLogger({ redact: { ... } }) from a server plugin — or use a string replacement.'
 
 /**
+ * Prepare a `redact` config for the config bridges (`__EVLOG_CONFIG__`,
+ * `process.env.__EVLOG_CONFIG`, a framework runtimeConfig). RegExp patterns
+ * are rewritten in place to `{ source, flags }` — the shape
+ * `deserializeRegexList` reads back — because JSON.stringify reduces a
+ * RegExp to `{}` and the pattern is silently dropped. A function-valued
+ * policy cannot survive any bridge; warn so the missing redaction is loud.
+ * Modules that serialize user config call this before `JSON.stringify`.
+ */
+export function prepareRedactForBridge(redact: unknown): void {
+  if (hasFunctionRedactPolicy(redact)) {
+    console.warn(FUNCTION_REDACT_POLICY_WARNING)
+  }
+  if (!redact || typeof redact !== 'object') return
+  const { patterns } = redact as { patterns?: unknown }
+  if (!Array.isArray(patterns)) return
+  ;(redact as { patterns: unknown[] }).patterns = patterns.map(p =>
+    p instanceof RegExp ? { source: p.source, flags: p.flags } : p,
+  )
+}
+
+/**
  * Normalize a redact config that may have been deserialized from JSON
  * (e.g. via `process.env.__EVLOG_CONFIG`). Converts pattern strings
  * back to RegExp instances, then resolves built-in patterns.
@@ -595,12 +616,15 @@ function deserializeRegexList(raw: unknown[]): RegExp[] {
         patterns.push(new RegExp(p, 'g'))
         continue
       }
-      if (typeof p === 'object' && p !== null && typeof (p as { source?: unknown }).source === 'string') {
-        const flags = typeof (p as { flags?: unknown }).flags === 'string'
-          ? (p as { flags: string }).flags
-          : 'g'
-        patterns.push(new RegExp((p as { source: string }).source, flags))
+      if (typeof p !== 'object' || p === null) continue
+      if (typeof (p as { source?: unknown }).source !== 'string') {
+        console.warn('[normalizeRedactConfig] Ignoring redact pattern object without a `source` field')
+        continue
       }
+      const flags = typeof (p as { flags?: unknown }).flags === 'string'
+        ? (p as { flags: string }).flags
+        : 'g'
+      patterns.push(new RegExp((p as { source: string }).source, flags))
     } catch {
       console.warn('[normalizeRedactConfig] Ignoring invalid redact regex entry')
     }

@@ -13,6 +13,7 @@ import type { NitroConfig } from 'nitropack'
 import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from '../types'
 import type { DevTerminalInput } from '../shared/dev-terminal'
 import { prependNitroErrorHandler } from '../nitro'
+import { prepareRedactForBridge } from '../redact'
 import { createStripPlugin } from '../vite/strip'
 import { createSourceLocationPlugin } from '../vite/source-location'
 import { name, version } from '../../package.json'
@@ -314,7 +315,7 @@ export interface ModuleOptions {
   /**
    * How long to retain events before cleanup (used by @evlog/nuxthub).
    * Supports "30d" (days), "24h" (hours), "60m" (minutes).
-   * @default '30d'
+   * @default '7d'
    */
   retention?: string
 }
@@ -356,6 +357,12 @@ export default defineNuxtModule<ModuleOptions>({
           : false
     const streamEnabled = normalizedStream !== false
     options.stream = normalizedStream
+
+    // runtimeConfig and the JSON bridges in the nitro:config hook below
+    // serialize the config: RegExps in redact.patterns would collapse to {}
+    // and be dropped server-side, and function-valued redact policy would
+    // vanish silently.
+    prepareRedactForBridge(options.redact)
 
     nuxt.options.runtimeConfig.evlog = options
 
