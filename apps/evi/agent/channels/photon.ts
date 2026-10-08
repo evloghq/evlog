@@ -45,6 +45,13 @@ export default photonIMessageChannel({
 
       await channel.thread.post(body)
     },
+    // eve 0.73 spans the built-in prompt queue across `input.requested`,
+    // `input.resolved` and `approval.settled` on Chat SDK channels. Photon
+    // renders prompts itself from `input.requested`, so the other two are
+    // explicit no-ops; otherwise the built-in handlers post prompts twice
+    // and stop posting later ones.
+    async 'input.resolved'() {},
+    async 'approval.settled'() {},
     // A terminal failure is always reported in the thread; a failed turn never ends silent.
     async 'turn.failed'(event, channel) {
       if (!channel.thread) return
