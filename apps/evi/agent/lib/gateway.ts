@@ -89,6 +89,35 @@ export function reportApiKeyName(): string | undefined {
   return process.env.AI_GATEWAY_REPORT_API_KEY_NAME?.trim() || undefined
 }
 
+/**
+ * Today's date in UTC, `YYYY-MM-DD`: the reference spend-report windows are
+ * validated against.
+ */
+export function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+/**
+ * Why a spend-report window is invalid, or undefined when it is fine. The
+ * gateway silently answers an out-of-range window with zero rows, and the
+ * empty-scope note then reads as a tagging gap, so the window is rejected up
+ * front instead.
+ */
+export function reportWindowProblem(
+  startDate: string,
+  endDate: string,
+  today = todayUtc(),
+): { field: 'startDate' | 'endDate', message: string } | undefined {
+  if (startDate > endDate) return { field: 'startDate', message: 'startDate must not be later than endDate' }
+  if (endDate > today) {
+    return {
+      field: 'endDate',
+      message: `endDate is in the future: the window ends ${endDate} but today is ${today} (UTC), and the gateway has no data for dates that have not happened yet`,
+    }
+  }
+  return undefined
+}
+
 /** The caller-supplied part of a spend-report request. */
 export interface ReportQueryInput {
   groupBy?: string

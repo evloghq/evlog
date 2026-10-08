@@ -2,7 +2,7 @@ import { useLogger } from 'evlog/eve'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { eviErrors, refusal } from '../lib/errors'
-import { defaultReportTag, gatewayFetch, reportQuery, scopedReport } from '../lib/gateway'
+import { defaultReportTag, gatewayFetch, reportQuery, reportWindowProblem, scopedReport } from '../lib/gateway'
 import { canAccessAdminTools } from '../lib/trust'
 
 function notAvailable(tool: string) {
@@ -39,9 +39,9 @@ export default defineDynamic({
             credentialType: z.enum(['byok', 'system']).optional(),
             tags: z.array(z.string()).optional().describe('Override default report tags (env AI_GATEWAY_REPORT_TAGS / default evi:env:<environment>). Ignored while key-name scoping applies, i.e. AI_GATEWAY_REPORT_API_KEY_NAME is set and no groupBy was requested.'),
             tagsMatch: z.enum(['any', 'all']).optional(),
-          }).refine(({ startDate, endDate }) => startDate <= endDate, {
-            message: 'startDate must not be later than endDate',
-            path: ['startDate'],
+          }).superRefine(({ startDate, endDate }, ctx) => {
+            const problem = reportWindowProblem(startDate, endDate)
+            if (problem) ctx.addIssue({ code: 'custom', message: problem.message, path: [problem.field] })
           }),
           async execute(input, toolCtx) {
             if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAvailable('ai_gateway__report')

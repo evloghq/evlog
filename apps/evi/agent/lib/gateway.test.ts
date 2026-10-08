@@ -117,6 +117,44 @@ describe('reportQuery', () => {
   })
 })
 
+describe('reportWindowProblem', () => {
+  it('accepts a window that ends today', async () => {
+    const { reportWindowProblem } = await loadGateway({})
+    expect(reportWindowProblem('2026-10-01', '2026-10-08', '2026-10-08')).toBeUndefined()
+  })
+
+  it('rejects a window whose end date has not happened yet', async () => {
+    const { reportWindowProblem } = await loadGateway({})
+    expect(reportWindowProblem('2026-02-07', '2027-03-07', '2026-10-08')).toEqual({
+      field: 'endDate',
+      message: 'endDate is in the future: the window ends 2027-03-07 but today is 2026-10-08 (UTC), and the gateway has no data for dates that have not happened yet',
+    })
+  })
+
+  it('rejects an inverted window', async () => {
+    const { reportWindowProblem } = await loadGateway({})
+    expect(reportWindowProblem('2026-10-08', '2026-10-01', '2026-10-08')).toEqual({
+      field: 'startDate',
+      message: 'startDate must not be later than endDate',
+    })
+  })
+})
+
+describe('todayUtc', () => {
+  it('returns the UTC calendar date regardless of the local clock', async () => {
+    const { todayUtc } = await loadGateway({})
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-10-08T23:30:00Z'))
+      expect(todayUtc()).toBe('2026-10-08')
+      vi.setSystemTime(new Date('2026-10-09T00:30:00Z'))
+      expect(todayUtc()).toBe('2026-10-09')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('scopedReport', () => {
   const payload = {
     results: [
