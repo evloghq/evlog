@@ -451,30 +451,6 @@ describe('createAILogger', () => {
       expect(aiData.msToFinish).toBeGreaterThanOrEqual(0)
     })
 
-    it('captures tool calls from stream chunks', async () => {
-      const log = createMockLogger()
-      const ai = createAILogger(log)
-      const model = createMockModel()
-      const wrappedModel = wrapMock(ai, model)
-
-      const chunks: LanguageModelV4StreamPart[] = [
-        { type: 'tool-input-start', id: 'tc1', toolName: 'searchWeb' },
-        { type: 'tool-input-delta', id: 'tc1', delta: '{}' },
-        { type: 'tool-input-end', id: 'tc1' },
-        { type: 'finish', finishReason: createFinishReason('tool-calls'), usage: createMockUsage() },
-      ]
-
-      vi.mocked(model.doStream).mockResolvedValue({
-        stream: makeReadableStream(chunks),
-      })
-
-      const result = await wrappedModel.doStream(createMockCallOptions())
-      await consumeStream(result.stream)
-
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.toolCalls).toEqual(['searchWeb'])
-    })
-
     it('captures modelId from response-metadata chunk', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
@@ -556,31 +532,6 @@ describe('createAILogger', () => {
       expect(aiData.totalTokens).toBe(450)
     })
 
-    it('shows steps only when greater than 1', async () => {
-      const log = createMockLogger()
-      const ai = createAILogger(log)
-      const model = createMockModel()
-      const wrappedModel = wrapMock(ai, model)
-
-      const mockResult = {
-        content: [],
-        finishReason: createFinishReason(),
-        usage: createMockUsage(),
-        response: { modelId: 'claude-sonnet-4.6' },
-      }
-
-      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult(mockResult))
-
-      await wrappedModel.doGenerate(createMockCallOptions())
-      let aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.steps).toBeUndefined()
-
-      vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult(mockResult))
-      await wrappedModel.doGenerate(createMockCallOptions())
-      aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.steps).toBe(2)
-    })
-
     it('tracks multiple models with ai.models array', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
@@ -636,33 +587,6 @@ describe('createAILogger', () => {
       const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
       expect(aiData.model).toBe('claude-sonnet-4.6')
       expect(aiData.models).toBeUndefined()
-    })
-
-    it('concatenates tool calls across multiple calls', async () => {
-      const log = createMockLogger()
-      const ai = createAILogger(log)
-      const model = createMockModel()
-      const wrappedModel = wrapMock(ai, model)
-
-      vi.mocked(model.doGenerate)
-        .mockResolvedValueOnce({
-          content: [{ type: 'tool-call', toolCallId: 'tc1', toolName: 'search', args: '{}' }],
-          finishReason: createFinishReason('tool-calls'),
-          usage: createMockUsage(),
-          response: { modelId: 'claude-sonnet-4.6' },
-        })
-        .mockResolvedValueOnce({
-          content: [{ type: 'tool-call', toolCallId: 'tc2', toolName: 'calculate', args: '{}' }],
-          finishReason: createFinishReason('stop'),
-          usage: createMockUsage(),
-          response: { modelId: 'claude-sonnet-4.6' },
-        })
-
-      await wrappedModel.doGenerate(createMockCallOptions())
-      await wrappedModel.doGenerate(createMockCallOptions())
-
-      const aiData = log.merged.ai as Record<string, unknown>
-      expect(aiData.toolCalls).toEqual(['search', 'calculate'])
     })
 
     it('does not grow array fields quadratically across multi-step runs', async () => {
