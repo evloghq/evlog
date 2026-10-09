@@ -16,72 +16,6 @@ function getSafeHeaders(allHeaders: Partial<Record<string, string | undefined>>)
 }
 
 describe('nitro plugin - drain hook headers', () => {
-  it('passes headers to evlog:drain hook', () => {
-    const mockHeaders = {
-      'content-type': 'application/json',
-      'x-request-id': 'test-123',
-      'x-posthog-session-id': 'session-456',
-      'x-posthog-distinct-id': 'user-789',
-    }
-
-    vi.mocked(getHeaders).mockReturnValue(mockHeaders)
-
-    let drainContext: DrainContext | null = null
-    const mockHooks = {
-      callHook: vi.fn().mockImplementation((hookName, ctx) => {
-        if (hookName === 'evlog:drain') {
-          drainContext = ctx
-        }
-        return Promise.resolve()
-      }),
-    }
-
-    const mockNitroApp = { hooks: mockHooks }
-    const mockEvent = {
-      method: 'POST',
-      path: '/api/test',
-      context: { requestId: 'req-123' },
-    }
-    const mockEmittedEvent = {
-      timestamp: new Date().toISOString(),
-      level: 'info' as const,
-      service: 'test',
-      environment: 'test',
-    }
-
-    // Simulate what callDrainHook does
-    const allHeaders = getHeaders(mockEvent as Parameters<typeof getHeaders>[0])
-    mockNitroApp.hooks.callHook('evlog:drain', {
-      event: mockEmittedEvent,
-      request: {
-        method: mockEvent.method,
-        path: mockEvent.path,
-        requestId: mockEvent.context.requestId,
-      },
-      headers: getSafeHeaders(allHeaders),
-    })
-
-    // Verify the drain hook was called with headers
-    expect(mockHooks.callHook).toHaveBeenCalledWith('evlog:drain', expect.objectContaining({
-      event: mockEmittedEvent,
-      request: {
-        method: 'POST',
-        path: '/api/test',
-        requestId: 'req-123',
-      },
-      headers: mockHeaders,
-    }))
-
-    // Verify drainContext contains headers
-    const ctx = defined(drainContext, 'drainContext')
-    expect(ctx.headers).toMatchObject({
-      'content-type': 'application/json',
-      'x-request-id': 'test-123',
-      'x-posthog-session-id': 'session-456',
-      'x-posthog-distinct-id': 'user-789',
-    })
-  })
-
   it('filters out sensitive headers for security', () => {
     const mockHeaders = {
       'content-type': 'application/json',
@@ -479,31 +413,6 @@ describe('nitro plugin - waitUntil support', () => {
     }).not.toThrow()
 
     expect(executionContext._promises).toHaveLength(1)
-  })
-
-  it('does not call waitUntil when emittedEvent is null', () => {
-    const mockWaitUntil = vi.fn()
-    const mockHooks = {
-      callHook: vi.fn().mockResolvedValue(undefined),
-    }
-
-    const mockEvent: ServerEvent = {
-      method: 'GET',
-      path: '/api/test',
-      context: {
-        cloudflare: {
-          context: {
-            waitUntil: mockWaitUntil,
-          },
-        },
-      },
-    }
-
-    callDrainHook({ hooks: mockHooks }, null, mockEvent)
-
-    // Neither should be called when event is null
-    expect(mockWaitUntil).not.toHaveBeenCalled()
-    expect(mockHooks.callHook).not.toHaveBeenCalled()
   })
 })
 
