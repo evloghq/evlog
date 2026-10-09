@@ -243,8 +243,8 @@ export default definePlugin(async (nitroApp) => {
     // Skip if already emitted by error hook or route was filtered out
     if (ctx?._evlogEmitted || ctx?._evlogEmitting || !ctx?._evlogShouldEmit) return
 
-    const log = ctx?.log as RequestLogger | undefined
-    if (!log || !ctx) return
+    const log = ctx.log as RequestLogger | undefined
+    if (!log) return
 
     const emitSuccessResponse = async (responseStatus: number) => {
       log.set({ status: responseStatus })
