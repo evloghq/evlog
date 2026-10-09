@@ -87,7 +87,7 @@ const labels = computed(() => data.value.map(point => point.label))
         :legend-position="LegendPosition.TopRight"
       >
         <template #tooltip="{ values }">
-          <ActivityTooltip :values :series="SERIES" :has-previous />
+          <ActivityTooltip :values="unwrapTooltipDatum(values)" :series="SERIES" :has-previous />
         </template>
       </DualChart>
 
