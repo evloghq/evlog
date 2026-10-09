@@ -790,10 +790,11 @@ function flushState(log: RequestLogger, state: AccumulatorState): void {
   }
 }
 
-function recordModel(state: AccumulatorState, provider: string, modelId: string, responseModelId?: string): void {
+function recordModel(state: AccumulatorState, provider: string, modelId: string, responseModelId?: string): { provider: string, model: string } {
   const resolved = resolveProviderAndModel(provider, responseModelId ?? modelId)
   state.models.push(resolved.model)
   state.lastProvider = resolved.provider
+  return resolved
 }
 
 function safeParseJSON(input: string): unknown {
@@ -807,11 +808,10 @@ function safeParseJSON(input: string): unknown {
 function recordError(log: RequestLogger, state: AccumulatorState, model: { provider: string, modelId: string }, error: unknown): void {
   state.calls++
   state.steps++
-  recordModel(state, model.provider, model.modelId)
+  const resolved = recordModel(state, model.provider, model.modelId)
   state.lastFinishReason = 'error'
-  state.lastError = error instanceof Error ? error.message : String(error)
+  state.lastError = formatTelemetryError(error)
 
-  const resolved = resolveProviderAndModel(model.provider, model.modelId)
   state.stepsUsage.push({
     model: resolved.model,
     inputTokens: 0,
@@ -972,7 +972,7 @@ function buildMiddlewareFromState(log: RequestLogger, state: AccumulatorState): 
           }
 
           if (chunk.type === 'error') {
-            streamError = chunk.error instanceof Error ? chunk.error.message : String(chunk.error)
+            streamError = formatTelemetryError(chunk.error)
           }
 
           controller.enqueue(chunk)
