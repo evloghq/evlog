@@ -6,8 +6,8 @@ One row per drain adapter that talks to a third-party API. The row names the aut
 
 | Adapter | Ingest documentation | Official client | Start here | Aligned to |
 | --- | --- | --- | --- | --- |
-| `axiom.ts` | https://axiom.co/docs/send-data/ingest-api | `axiomhq/axiom-js` (`@axiomhq/js`) | `packages/js/src/client.ts` | unset |
-| `better-stack.ts` | https://betterstack.com/docs/logs/http-rest-api/ | `logtail/logtail-js` (`@logtail/node`) | `packages/node/src/node.ts` | unset |
+| `axiom.ts` | https://axiom.co/docs/restapi/ingest | `axiomhq/axiom-js` (`@axiomhq/js`) | `packages/js/src/client.ts` | @axiomhq/js 2.0.0 @ a34dffd |
+| `better-stack.ts` | https://betterstack.com/docs/logs/http-rest-api/ | `logtail/logtail-js` (`@logtail/node`) | `packages/node/src/node.ts` | @logtail/node 0.5.12 @ a34dffd |
 | `clickhouse.ts` | https://clickhouse.com/docs/interfaces/http | `ClickHouse/clickhouse-js` (`@clickhouse/client`) | `packages/client-common/src/client.ts`, `packages/client-node/src/connection/node_base_connection.ts` | unset |
 | `datadog.ts` | https://docs.datadoghq.com/api/latest/logs/#send-logs | `DataDog/datadog-api-client-typescript` (`@datadog/datadog-api-client`) | `packages/datadog-api-client-v2/apis/LogsApi.ts` | unset |
 | `hyperdx.ts` | https://www.hyperdx.io/docs/install/opentelemetry | `hyperdxio/hyperdx-js` (`@hyperdx/node-logger`) | `packages/node-logger/src/logger.ts` | unset |
