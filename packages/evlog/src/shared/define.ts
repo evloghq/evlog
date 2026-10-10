@@ -1,9 +1,8 @@
 import type { EnvironmentContext, LoggerConfig, SamplingConfig } from '../types'
+import { layerEvlogConfig } from './configMerge'
 import type { DevTerminalInput } from './dev-terminal'
-import { isPlainObject } from './event'
 import type { BaseEvlogOptions } from './middleware'
 import { pickBaseEvlogOptions } from './middleware'
-import type { EvlogPlugin } from './plugin'
 
 /**
  * Ids of the checks `evlog map` runs. The CLI asserts at compile time that
@@ -94,36 +93,7 @@ export interface EvlogConfig extends BaseEvlogOptions {
   logs?: EvlogLogsConfig
 }
 
-/** Lists that grow across `extends` instead of being replaced: dropping a parent entry would loosen redaction or lose kept events. */
-const APPENDED_LISTS = new Set(['redact.paths', 'redact.patterns', 'sampling.keep'])
-
 const EXTENDED = Symbol.for('evlog.config.extended')
-
-function mergePlugins(parent: EvlogPlugin[], child: EvlogPlugin[]): EvlogPlugin[] {
-  const byName = new Map(parent.map(plugin => [plugin.name, plugin]))
-  for (const plugin of child) byName.set(plugin.name, plugin)
-  return [...byName.values()]
-}
-
-function mergeValue(parent: unknown, child: unknown, path: string): unknown {
-  if (child === undefined) return parent
-  if (path === 'plugins' && Array.isArray(parent) && Array.isArray(child)) return mergePlugins(parent, child)
-  /* `redact: true` is the built-in patterns with nothing else, which a parent
-     object already includes; letting it replace the object would drop the
-     parent's paths. `false` is the only way to turn redaction off. */
-  if (path === 'redact' && child === true && isPlainObject(parent)) return parent
-  if (Array.isArray(parent) && Array.isArray(child)) return APPENDED_LISTS.has(path) ? [...parent, ...child] : child
-  if (isPlainObject(parent) && isPlainObject(child)) return mergeRecords(parent, child, path)
-  return child
-}
-
-function mergeRecords(parent: Record<string, unknown>, child: Record<string, unknown>, prefix: string): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...parent }
-  for (const [key, value] of Object.entries(child)) {
-    out[key] = mergeValue(parent[key], value, prefix ? `${prefix}.${key}` : key)
-  }
-  return out
-}
 
 /**
  * Merge a config onto the one it extends.
@@ -148,7 +118,7 @@ export function mergeEvlogConfig(parent: EvlogConfig, child: EvlogConfig): Evlog
     )
   }
   const { extends: _parent, ...own } = child
-  const merged = mergeRecords(parent as Record<string, unknown>, own, '') as EvlogConfig
+  const merged = layerEvlogConfig(parent, own)
   Object.defineProperty(merged, EXTENDED, { value: true })
   return merged
 }

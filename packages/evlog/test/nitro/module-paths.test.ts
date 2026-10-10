@@ -1,3 +1,6 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import nitroV2Module from '../../src/nitro/module'
 import nitroV3Module from '../../src/nitro-v3/module'
@@ -13,6 +16,8 @@ describe('nitro modules avoid backslash paths', () => {
   function makeNitroStub() {
     return {
       options: {
+        rootDir: mkdtempSync(join(tmpdir(), 'evlog-module-paths-')),
+        virtual: {} as Record<string, string>,
         plugins: [] as string[],
         errorHandler: undefined as string | string[] | undefined,
         noExternals: undefined as undefined | true | string[],

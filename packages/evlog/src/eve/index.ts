@@ -11,6 +11,8 @@ import type { AuditableLogger } from '../audit'
 import type { AIToolExecution, AIEventData, ModelCost } from '../ai/index'
 import { initLogger, isLoggerInitialized, isLoggerLocked, noopLogger } from '../logger'
 import type { LoggerConfig } from '../types'
+import type { EvlogConfig } from '../shared/define'
+import { toLoggerConfig } from '../shared/define'
 import type { BaseEvlogOptions, MiddlewareLoggerOptions } from '../shared/middleware'
 import { createMiddlewareLogger, pickBaseEvlogOptions } from '../shared/middleware'
 import {
@@ -34,9 +36,20 @@ const CANCELLED_STATUS = 499
  */
 export type EveMessageMode = 'omit' | 'preview' | 'full'
 
-/** Options for {@link defineEvlogHook}. */
-export interface EvlogEveOptions extends BaseEvlogOptions {
-  /** Passed to {@link initLogger} on the first hook invocation. */
+/**
+ * Options for {@link defineEvlogHook}: every runtime setting of
+ * `evlog.config.ts`, plus the eve-specific ones below. The logger settings
+ * (`service`, `environment`, `sampling`, `silent`, `drain`, `plugins`...)
+ * initialise the logger on the first hook invocation, so out-of-turn events
+ * reach the same drain as turns. `map` and `logs` are CLI-only and not
+ * accepted here.
+ */
+export interface EvlogEveOptions extends Omit<EvlogConfig, 'extends' | 'map' | 'logs'> {
+  /**
+   * Passed to {@link initLogger} as is on the first hook invocation, in place
+   * of the logger settings above. Use it to give out-of-turn events their own
+   * drain or service.
+   */
   init?: LoggerConfig
   /**
    * How much of the user message to record. Default `'omit'`.
@@ -399,6 +412,11 @@ function summarizeMessageParts(parts: readonly unknown[]): Array<Record<string, 
   })
 }
 
+function loggerConfigFromOptions(options: EvlogEveOptions): LoggerConfig {
+  const config = toLoggerConfig(options)
+  return { ...config, env: { service: 'eve-agent', ...config.env } }
+}
+
 function ensureInit(options: EvlogEveOptions): void {
   const state = getEveGlobalState()
   if (options.maxSessions !== undefined) {
@@ -406,7 +424,7 @@ function ensureInit(options: EvlogEveOptions): void {
   }
   if (isEveInitialized()) return
   if (!isLoggerLocked() && !isLoggerInitialized()) {
-    initLogger(options.init ?? { env: { service: 'eve-agent' } })
+    initLogger(options.init ?? loggerConfigFromOptions(options))
   }
   setEveInitialized(true)
 }
@@ -1134,6 +1152,13 @@ function getTurnState(sessionId: string, turnId: string): TurnState | undefined 
  *     ctx.event.runtime = process.env.VERCEL_REGION
  *   },
  * })
+ * ```
+ *
+ * The options take `evlog.config.ts` as it is. With its default export
+ * imported as `config`, spread it and add the eve settings:
+ *
+ * ```ts
+ * export default defineEvlogHook({ ...config, message: 'preview' })
  * ```
  */
 export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {

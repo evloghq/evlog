@@ -10,6 +10,7 @@ import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
 import { shouldLog, getServiceForPath, extractErrorStatus } from '../nitro'
 import { normalizeRedactConfig } from '../redact'
+import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import { bindStreamingResponseLifecycle, shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { startStreamServer, type StreamServerOptions } from '../stream'
@@ -57,7 +58,7 @@ async function emitWithTailSampling(
 
 export default defineNitroPlugin(async (nitroApp) => {
   setActiveNitroRuntime('v2')
-  const evlogConfig = await resolveEvlogConfigForNitroPlugin()
+  const evlogConfig = withEvlogFileConfig(await resolveEvlogConfigForNitroPlugin())
 
   const redact = normalizeRedactConfig(evlogConfig?.redact as boolean | Record<string, unknown> | undefined)
 
@@ -71,9 +72,12 @@ export default defineNitroPlugin(async (nitroApp) => {
     silent: evlogConfig?.silent,
     sampling: evlogConfig?.sampling,
     minLevel: evlogConfig?.minLevel,
+    stringify: evlogConfig?.stringify,
     redact,
+    plugins: evlogFileConfigPlugins(),
     _suppressDrainWarning: true,
   })
+  nitroApp.hooks.hook('close', flushEvlogFileConfigDrain)
 
   // When `evlog.stream` is set (or auto-on in dev), boot the mini stream
   // server and hook every drained event into it. The server runs on its
