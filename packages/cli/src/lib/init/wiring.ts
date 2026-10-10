@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, relative, sep } from 'node:path'
 import { DOCS_URL } from '../../core/output'
+import { readConfig as readEvlogConfig } from '../config/read'
 import { getFramework } from '../frameworks'
 import type { InitFramework } from '../frameworks'
 import { findDestination, findEnricher, findSamplingPreset } from './catalog'
@@ -34,6 +35,8 @@ export interface WiringPlan {
 export interface WiringInput {
   /** Package root — where configs live and files are written. */
   root: string
+  /** Workspace root: the highest directory a parent `evlog.config` is looked for in. Defaults to `root`. */
+  workspaceRoot?: string
   framework: InitFramework
   service: string
   /** Local sink: `fs` or `none`. */
@@ -101,194 +104,38 @@ export function configCandidates(base: string): string[] {
   return CONFIG_EXTENSIONS.map(ext => `${base}.${ext}`)
 }
 
-/**
- * The Nitro drain plugin for the chosen destinations.
- *
- * Only the filesystem drain is gated on `import.meta.dev` — it writes files on
- * whatever box serves the request.
- */
-/**
- * The server-plugin factory the generated files use.
- *
- * Nitro v2 auto-imports `defineNitroPlugin` (Nuxt does); Nitro v3 does not and
- * exports `definePlugin` from `nitro` instead.
- */
-function nitroPluginApi(input: WiringInput): { importLine: string | null, factory: string } {
-  if (input.nitroMajor === 3) return { importLine: `import { definePlugin } from 'nitro'`, factory: 'definePlugin' }
-  return { importLine: null, factory: 'defineNitroPlugin' }
+/** Frameworks Nitro builds the server for, where `import.meta.dev` is replaced at build time. */
+function isNitroFamily(framework: InitFramework): boolean {
+  return framework === 'nuxt' || framework === 'nitro' || framework === 'tanstack-start'
 }
 
-function nitroDrainTemplate(input: WiringInput): string | null {
-  const dev = input.devDrain === 'none' ? null : findDestination(input.devDrain) ?? null
-  const prod = input.prodDrains.map(id => findDestination(id)).filter(Boolean) as NonNullable<ReturnType<typeof findDestination>>[]
-  if (!dev && prod.length === 0) return null
+/** A setting this run puts in `evlog.config.ts`. */
+export type ConfigSetting = 'drain' | 'enrich' | 'sampling'
 
-  const plugin = nitroPluginApi(input)
-  const batched = input.extras.includes('pipeline') && prod.length > 0
-  const imports: string[] = []
-  if (plugin.importLine) imports.push(plugin.importLine)
-  if (batched) imports.push(`import type { DrainContext } from 'evlog'`)
-  /* Deduped by id: nothing stops the same destination being the local sink and
-     a production one, and importing its factory twice is a file that does not
-     compile. */
-  for (const destination of dedupeDestinations([...(dev ? [dev] : []), ...prod])) {
-    imports.push(`import { ${destination.factory!.replace('()', '')} } from '${destination.specifier}'`)
-  }
-  if (batched) imports.push(`import { createDrainPipeline } from 'evlog/pipeline'`)
-
-  const body: string[] = []
-  if (batched) {
-    body.push(`const pipeline = createDrainPipeline<DrainContext>({
-  batch: { size: 50, intervalMs: 5000 },
-  retry: { maxAttempts: 3 },
-})
-`)
-  }
-
-  // Batching wraps the network sends only, never the local write.
-  const wrap = (factory: string) => batched ? `pipeline(${factory})` : factory
-  const prodList = prod.map(destination => wrap(destination.factory!)).join(', ')
-
-  // One plugin branched on the environment, so the whole delivery story is in one place.
-  if (dev && prod.length > 0) {
-    body.push(`/**
- * Development writes to ${dev.label}; production sends to ${prod.map(d => d.label).join(' and ')}.
-${envComment(prod)} */
-const drains = import.meta.dev
-  ? [${dev.factory}]
-  : [${prodList}]
-
-export default ${plugin.factory}((nitroApp) => {
-  nitroApp.hooks.hook('evlog:drain', async (ctx) => {
-    await Promise.all(drains.map(drain => drain(ctx)))
-  })
-})
-`)
-  } else if (prod.length > 0) {
-    body.push(`/**
- * Wide events land in ${prod.map(d => d.label).join(' and ')}.
-${envComment(prod)} */
-const drains = [${prodList}]
-
-export default ${plugin.factory}((nitroApp) => {
-  nitroApp.hooks.hook('evlog:drain', async (ctx) => {
-    await Promise.all(drains.map(drain => drain(ctx)))
-  })
-})
-`)
-  } else {
-    body.push(`/**
- * Local wide-event sink — NDJSON under .evlog/logs.
- */
-const drain = ${dev!.factory}
-
-export default ${plugin.factory}((nitroApp) => {
-  // Local files are a development convenience — never a production sink.
-  if (!import.meta.dev) return
-  nitroApp.hooks.hook('evlog:drain', drain)
-})
-`)
-  }
-
-  return `${imports.join('\n')}\n\n${body.join('\n')}`
+/** The settings the run's answers add to `evlog.config.ts`. */
+export function chosenSettings(input: WiringInput): ConfigSetting[] {
+  const settings: ConfigSetting[] = []
+  if (allDrains(input).length > 0) settings.push('drain')
+  if (input.extras.includes('enrichers') && input.enrichers.length > 0) settings.push('enrich')
+  if (input.extras.includes('sampling') && findSamplingPreset(input.sampling)?.rates) settings.push('sampling')
+  return settings
 }
 
-function envComment(destinations: { env: { name: string }[] }[]): string {
-  const names = [...new Set(destinations.flatMap(d => d.env.map(v => v.name)))]
-  return names.length > 0 ? ` * Reads ${names.join(', ')} from the environment.\n` : ''
-}
-
-function nitroEnricherTemplate(input: WiringInput): string {
-  const plugin = nitroPluginApi(input)
-  const chosen = input.enrichers.map(id => findEnricher(id)).filter(Boolean)
-  const factories = chosen.map(enricher => enricher!.factory)
-  const names = [...factories].map(factory => factory.replace('()', '')).sort()
-
-  return `${plugin.importLine ? `${plugin.importLine}\n` : ''}import {
-${names.map(name => `  ${name},`).join('\n')}
-} from 'evlog/enrichers'
-
-const enrichers = [
-${factories.map(factory => `  ${factory},`).join('\n')}
-]
-
-export default ${plugin.factory}((nitroApp) => {
-  nitroApp.hooks.hook('evlog:enrich', async (ctx) => {
-    for (const enrich of enrichers) await enrich(ctx)
-  })
-})
-`
-}
-
-/**
- * Add the Nitro-side plugins.
- *
- * An existing drain file is never rewritten; a destination it does not already
- * wire goes beside it under a name of its own.
- */
-export function withNitroPlugins(plan: WiringPlan, input: WiringInput): WiringPlan {
-  const drain = nitroDrainTemplate(input)
-  if (drain) {
-    const preferred = join('server', 'plugins', 'evlog-drain.ts')
-    const path = join(input.root, preferred)
-
-    if (!existsSync(path)) {
-      plan.actions.push({ path, relative: preferred, kind: 'create', contents: drain })
-    } else if (wiresEveryDrain(path, input)) {
-      // Including the file this command wrote last time — this is what keeps it idempotent.
-      plan.already.push(`${preferred} already wires ${describeDrains(input)}`)
-    } else {
-      const suffix = allDrains(input).join('-') || 'extra'
-      const alternate = join('server', 'plugins', `evlog-drain-${suffix}.ts`)
-      const alternatePath = join(input.root, alternate)
-      if (existsSync(alternatePath)) {
-        plan.already.push(`${alternate} already exists`)
-      } else {
-        plan.actions.push({ path: alternatePath, relative: alternate, kind: 'create', contents: drain })
-        plan.already.push(`${preferred} left as it is — the new drain went to ${alternate}`)
-      }
-    }
-  }
-
-  if (input.extras.includes('enrichers') && input.enrichers.length > 0) {
-    const relativePath = join('server', 'plugins', 'evlog-enrich.ts')
-    const path = join(input.root, relativePath)
-    if (existsSync(path)) plan.already.push(`${relativePath} already exists`)
-    else plan.actions.push({ path, relative: relativePath, kind: 'create', contents: nitroEnricherTemplate(input) })
-  }
-
-  return plan
-}
-
-/** The `sampling` block for a module config, when the extra was selected. */
-export function samplingProperty(input: WiringInput): string | null {
-  if (!input.extras.includes('sampling')) return null
-  const preset = findSamplingPreset(input.sampling)
-  if (!preset?.rates) return null
-  const { info, warn } = preset.rates
-  /* `error: 100` is stated rather than chosen, and `debug` is left out: an
-     unspecified level is kept in full. */
-  return `sampling: {
-      rates: { info: ${info}, warn: ${warn}, error: 100 },
-    }`
-}
-
-/**
- * The pieces of a generated evlog config file — shared by Next's `lib/evlog.ts`
- * (create and patch paths) and Hono's `src/evlog.ts`, which are both plain
- * TypeScript rather than a framework config.
- */
+/** The pieces of the generated `evlog.config.ts`, also used for the snippets of a config init does not write. */
 interface FactoryParts {
   imports: string[]
-  /** Statements that go above `createEvlog`. */
+  /** Statements that go above `defineEvlog`. */
   preamble: string
   /** Option keys, each already indented and comma-terminated. */
   options: string[]
 }
 
-export function factoryParts(input: WiringInput): FactoryParts {
-  const dev = input.devDrain === 'none' ? null : findDestination(input.devDrain) ?? null
-  const prod = input.prodDrains.map(id => findDestination(id)).filter(Boolean) as NonNullable<ReturnType<typeof findDestination>>[]
+export function factoryParts(input: WiringInput, settings: readonly ConfigSetting[] = chosenSettings(input)): FactoryParts {
+  const wired = settings.includes('drain')
+  const dev = wired && input.devDrain !== 'none' ? findDestination(input.devDrain) ?? null : null
+  const prod = wired
+    ? input.prodDrains.map(id => findDestination(id)).filter(Boolean) as NonNullable<ReturnType<typeof findDestination>>[]
+    : []
   const batched = input.extras.includes('pipeline') && prod.length > 0
 
   const imports: string[] = []
@@ -301,7 +148,7 @@ export function factoryParts(input: WiringInput): FactoryParts {
   }
   if (batched) imports.push(`import { createDrainPipeline } from 'evlog/pipeline'`)
 
-  const enrichers = input.extras.includes('enrichers')
+  const enrichers = settings.includes('enrich')
     ? input.enrichers.map(id => findEnricher(id)).filter(Boolean)
     : []
   if (enrichers.length > 0) {
@@ -314,19 +161,28 @@ export function factoryParts(input: WiringInput): FactoryParts {
     blocks.push(`const pipeline = createDrainPipeline<DrainContext>({\n  batch: { size: 50, intervalMs: 5000 },\n  retry: { maxAttempts: 3 },\n})`)
   }
 
+  // Batching wraps the network sends only, never the local write.
   const wrap = (factory: string) => batched ? `pipeline(${factory})` : factory
+  const prodList = prod.map(d => wrap(d.factory!)).join(', ')
   const options: string[] = []
+  /* Nitro replaces `import.meta.dev` at build time and leaves `NODE_ENV` to the
+     host, which a bare `node .output/server/index.mjs` never sets. Next and Hono
+     have no `import.meta.dev`. */
+  const nitro = isNitroFamily(input.framework)
 
-  // Neither Next nor Hono has `import.meta.dev`, so the split is on NODE_ENV.
   if (dev && prod.length > 0) {
-    blocks.push(`const drains = process.env.NODE_ENV === 'production'\n  ? [${prod.map(d => wrap(d.factory!)).join(', ')}]\n  : [${dev.factory}]`)
+    blocks.push(nitro
+      ? `const drains = import.meta.dev\n  ? [${dev.factory}]\n  : [${prodList}]`
+      : `const drains = process.env.NODE_ENV === 'production'\n  ? [${prodList}]\n  : [${dev.factory}]`)
     options.push('  drain: async ctx => void await Promise.all(drains.map(drain => drain(ctx))),')
   } else if (prod.length > 0) {
-    blocks.push(`const drains = [${prod.map(d => wrap(d.factory!)).join(', ')}]`)
+    blocks.push(`const drains = [${prodList}]`)
     options.push('  drain: async ctx => void await Promise.all(drains.map(drain => drain(ctx))),')
   } else if (dev) {
-    options.push('  // Local NDJSON under .evlog/logs — development only.')
-    options.push(`  drain: process.env.NODE_ENV === 'production' ? undefined : ${dev.factory},`)
+    options.push('  // Local NDJSON under .evlog/logs, in development only.')
+    options.push(nitro
+      ? `  drain: import.meta.dev ? ${dev.factory} : undefined,`
+      : `  drain: process.env.NODE_ENV === 'production' ? undefined : ${dev.factory},`)
   }
 
   if (enrichers.length > 0) {
@@ -334,13 +190,201 @@ export function factoryParts(input: WiringInput): FactoryParts {
     options.push('  enrich: async (ctx) => {\n    for (const enrich of enrichers) await enrich(ctx)\n  },')
   }
 
-  const preset = input.extras.includes('sampling') ? findSamplingPreset(input.sampling) : undefined
+  const preset = settings.includes('sampling') ? findSamplingPreset(input.sampling) : undefined
   if (preset?.rates) {
     const { info, warn } = preset.rates
+    /* `error: 100` is stated rather than chosen, and `debug` is left out: an
+       unspecified level is kept in full. */
     options.push(`  sampling: {\n    rates: { info: ${info}, warn: ${warn}, error: 100 },\n  },`)
   }
 
   return { imports, preamble: blocks.length > 0 ? `\n${blocks.join('\n\n')}\n` : '', options }
+}
+
+/** The specifier that imports `file` from a module in `fromDir`. */
+function importSpecifier(fromDir: string, file: string): string {
+  const path = relative(fromDir, file).split(sep).join('/')
+    .replace(/\.(?:ts|js)$/, '')
+    .replace(/\.mts$/, '.mjs')
+  return path.startsWith('.') ? path : `./${path}`
+}
+
+/**
+ * The `evlog.config` this package reads, and whether init writes it.
+ *
+ * - `own`: one is already in the package. It is never rewritten.
+ * - `create`: init writes one, extending `parent` when a directory above has one.
+ * - `parent`: a directory above has one that cannot be extended, so it applies as it is.
+ */
+type ConfigTarget =
+  | { kind: 'own', file: string }
+  | { kind: 'create', file: string, parent: string | null }
+  | { kind: 'parent', file: string, reason: string }
+
+function configTarget(input: WiringInput): ConfigTarget {
+  const own = firstExisting(input.root, configCandidates('evlog.config'))
+  if (own) return { kind: 'own', file: own }
+
+  const file = join(input.root, 'evlog.config.ts')
+  const parent = parentConfig(input)
+  if (!parent) return { kind: 'create', file, parent: null }
+
+  const reason = unextendable(parent)
+  return reason ? { kind: 'parent', file: parent, reason } : { kind: 'create', file, parent }
+}
+
+/** The nearest `evlog.config` above the package, up to the workspace root. */
+function parentConfig(input: WiringInput): string | null {
+  const top = input.workspaceRoot ?? input.root
+  if (relative(top, input.root).startsWith('..')) return null
+
+  let dir = input.root
+  while (dir !== top) {
+    dir = dirname(dir)
+    const found = firstExisting(dir, configCandidates('evlog.config'))
+    if (found) return found
+  }
+  return null
+}
+
+/** Why a new config cannot extend `file`, or `null` when it can. */
+function unextendable(file: string): string | null {
+  try {
+    const { parent } = readEvlogConfig(file, path => path)
+    return parent ? `it already extends ${parent.specifier ?? 'another config'}, and a config extends one level` : null
+  } catch {
+    return 'init could not read it without running it'
+  }
+}
+
+/** The settings a config sets, its parent's included, or `null` when it cannot be read without running it. */
+function configKeys(file: string): Set<string> | null {
+  try {
+    const { config, parent } = readEvlogConfig(file, path => path)
+    return new Set([...Object.keys(parent?.document.value ?? {}), ...Object.keys(config.value)])
+  } catch {
+    return null
+  }
+}
+
+/** How a module at `relativePath` (from the package root) imports the config that applies to it. */
+export function evlogConfigImport(input: WiringInput, relativePath: string): string {
+  return importSpecifier(dirname(join(input.root, relativePath)), configTarget(input).file)
+}
+
+function evlogConfigTemplate(input: WiringInput, parent: string | null, settings: readonly ConfigSetting[]): string {
+  const { imports, preamble, options } = factoryParts(input, settings)
+  const head = [`import { defineEvlog } from 'evlog'`, ...imports]
+  if (parent) head.push(`import base from '${importSpecifier(input.root, parent)}'`)
+
+  const prod = settings.includes('drain') ? input.prodDrains.map(id => findDestination(id)).filter(Boolean) : []
+  const variables = [...new Set(prod.flatMap(destination => destination!.env.map(variable => variable.name)))]
+  const doc = [
+    `Settings for ${input.service}, read by the app and by the evlog CLI.`,
+    ...(variables.length > 0 ? [`Reads ${variables.join(', ')} from the environment.`] : []),
+    `${DOCS_URL}/cli/config`,
+  ]
+  const body = [...(parent ? ['  extends: base,'] : []), `  service: ${quote(input.service)},`, ...options]
+
+  return `${head.join('\n')}
+${preamble}
+/**
+${doc.map(line => ` * ${line}`).join('\n')}
+ */
+export default defineEvlog({
+${body.join('\n')}
+})
+`
+}
+
+/** A config to paste, for the cases init does not write the file itself. */
+function configSnippet(input: WiringInput, settings: readonly ConfigSetting[], service: boolean): string {
+  const { imports, preamble, options } = factoryParts(input, settings)
+  const body = [...(service ? [`  service: ${quote(input.service)},`] : []), ...options]
+  return [imports.join('\n'), preamble.trim(), `defineEvlog({\n${body.join('\n')}\n})`].filter(Boolean).join('\n\n')
+}
+
+/** Drain and enricher plugins an earlier `evlog init` wrote under `server/plugins`. */
+function nitroPluginFiles(input: WiringInput): Partial<Record<'drain' | 'enrich', string>> {
+  const dir = join(input.root, 'server', 'plugins')
+  if (!isNitroFamily(input.framework) || !existsSync(dir)) return {}
+
+  const names = readdirSync(dir)
+  const drain = names.find(name => /^evlog-drain\.[cm]?[jt]s$/.test(name))
+  const enrich = names.find(name => /^evlog-enrich\.[cm]?[jt]s$/.test(name))
+  return {
+    ...(drain ? { drain: join('server', 'plugins', drain) } : {}),
+    ...(enrich ? { enrich: join('server', 'plugins', enrich) } : {}),
+  }
+}
+
+/**
+ * Put the run's settings in `evlog.config.ts`.
+ *
+ * A drain or enricher plugin already under `server/plugins` keeps its job: the
+ * same setting in the config would run beside it.
+ */
+function withEvlogConfig(plan: WiringPlan, input: WiringInput): WiringPlan {
+  const chosen = chosenSettings(input)
+  const plugins = nitroPluginFiles(input)
+
+  if (plugins.drain && chosen.includes('drain')) {
+    plan.already.push(`${plugins.drain} already drains events, so evlog.config.ts leaves drain out`)
+    if (!wiresEveryDrain(join(input.root, plugins.drain), input)) {
+      plan.manual.push({
+        title: `Send events to ${describeDrains(input)}`,
+        file: plugins.drain,
+        snippet: configSnippet(input, ['drain'], false),
+        reason: `${plugins.drain} does not send to every destination you picked. Move its drains into evlog.config.ts with these, and delete the plugin`,
+      })
+    }
+  }
+  if (plugins.enrich && chosen.includes('enrich')) {
+    plan.already.push(`${plugins.enrich} already enriches events, so evlog.config.ts leaves enrich out`)
+  }
+
+  let settings = chosen.filter(setting => setting === 'sampling' || !plugins[setting])
+  const target = configTarget(input)
+  const label = relative(input.root, target.file)
+
+  if (target.kind === 'create') {
+    if (target.parent) {
+      // A function or rate set here replaces the one it extends rather than adding to it.
+      const inherited = configKeys(target.parent) ?? new Set()
+      const parentLabel = relative(input.root, target.parent)
+      for (const setting of settings.filter(setting => inherited.has(setting))) {
+        plan.already.push(`${parentLabel} sets ${setting}, so evlog.config.ts inherits it`)
+      }
+      settings = settings.filter(setting => !inherited.has(setting))
+    }
+    plan.actions.unshift({ path: target.file, relative: label, kind: 'create', contents: evlogConfigTemplate(input, target.parent, settings) })
+    return plan
+  }
+
+  if (target.kind === 'parent') {
+    plan.manual.push({
+      title: `Add the settings for ${input.service}`,
+      file: label,
+      snippet: configSnippet(input, settings, true),
+      reason: `${label} applies to this package and ${target.reason}, so init did not write a config here that would replace it`,
+    })
+    return plan
+  }
+
+  plan.already.push(`${label} already exists`)
+  const keys = configKeys(target.file)
+  const missing = keys ? settings.filter(setting => !keys.has(setting)) : settings
+  if (missing.length > 0) {
+    plan.manual.push({
+      title: `Add ${missing.join(', ')} to ${label}`,
+      file: label,
+      snippet: configSnippet(input, missing, false),
+      reason: keys
+        ? `init does not rewrite a config you wrote`
+        : `${label} is not a plain defineEvlog({ … }) init can read, so it cannot tell what it sets`,
+    })
+  }
+  return plan
 }
 
 /** An error catalog built from the project's own repeated errors. */
@@ -535,33 +579,62 @@ function withEnvGuidance(plan: WiringPlan, input: WiringInput): WiringPlan {
 }
 
 /**
- * The module `init` writes for a code-first framework: `initLogger` with the
- * sampling preset, then whatever the integration exports, built from the
- * middleware options. Sampling belongs to `initLogger`; drains and enrichers are
- * middleware options, so the two halves are split here once.
+ * The module `init` writes for a code-first framework: `initLogger` and the
+ * integration, both built from `evlog.config.ts`. Sampling is a logger setting
+ * and drains are middleware options, so the config is split in two here.
  */
-export function middlewareModuleTemplate(
+function middlewareModuleTemplate(
   input: WiringInput,
-  integration: { source: string, imports?: readonly string[], declare: (options: string | null) => string },
+  relativePath: string,
+  integration: MiddlewareIntegration,
 ): string {
-  const { imports, preamble, options } = factoryParts(input)
-  const sampling = options.filter(option => option.trimStart().startsWith('sampling:'))
-  const middleware = options.filter(option => !sampling.includes(option))
-  const head = [`import { initLogger } from 'evlog'`, `import { evlog } from '${integration.source}'`, ...(integration.imports ?? []), ...imports]
+  const head = [
+    `import { initLogger, toLoggerConfig, toMiddlewareOptions } from 'evlog'`,
+    `import { evlog } from '${integration.source}'`,
+    ...(integration.imports ?? []),
+    `import config from '${evlogConfigImport(input, relativePath)}'`,
+  ]
 
   return `${head.join('\n')}
 
-initLogger({
-  env: { service: '${input.service}' },
-${sampling.join('\n')}${sampling.length > 0 ? '\n' : ''}})
-${preamble}
-${integration.declare(middleware.length > 0 ? `{\n${middleware.join('\n')}\n}` : null)}
+initLogger(toLoggerConfig(config))
+
+${integration.declare('toMiddlewareOptions(config)')}
 `
+}
+
+export interface MiddlewareIntegration {
+  source: string
+  imports?: readonly string[]
+  /** The export, given the expression for the middleware options. */
+  declare: (options: string) => string
+}
+
+/** Write the middleware module, or say how an existing one reads the config. Never overwrites. */
+export function addMiddlewareModule(plan: WiringPlan, input: WiringInput, relativePath: string, integration: MiddlewareIntegration): void {
+  const path = join(input.root, relativePath)
+  if (!existsSync(path)) {
+    plan.actions.push({ path, relative: relativePath, kind: 'create', contents: middlewareModuleTemplate(input, relativePath, integration) })
+    return
+  }
+
+  plan.already.push(`${relativePath} already exists`)
+  if (readFileSync(path, 'utf8').includes('evlog.config')) return
+  plan.manual.push({
+    title: `Read evlog.config.ts in ${relativePath}`,
+    file: relativePath,
+    snippet: `import { initLogger, toLoggerConfig, toMiddlewareOptions } from 'evlog'
+import config from '${evlogConfigImport(input, relativePath)}'
+
+initLogger(toLoggerConfig(config))
+// and pass toMiddlewareOptions(config) to evlog()`,
+    reason: `${relativePath} does not import the config, so the settings in it do not reach the app`,
+  })
 }
 
 /** Build the file plan for a framework. Pure: reads the project, writes nothing. */
 export async function planWiring(input: WiringInput): Promise<WiringPlan> {
   const plan = await getFramework(input.framework).init!()
   // Applied once here rather than in each planner, where one would be forgotten.
-  return withEnvGuidance(withCatalogs(plan(input), input), input)
+  return withEnvGuidance(withCatalogs(withEvlogConfig(plan(input), input), input), input)
 }

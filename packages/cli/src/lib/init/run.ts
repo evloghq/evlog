@@ -254,6 +254,7 @@ export async function runInit(
     'planWiring',
     () => planWiring({
       root: project.packageDir,
+      workspaceRoot: project.root,
       framework: answers.framework,
       service: answers.service,
       devDrain: answers.devDrain,
