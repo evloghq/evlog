@@ -3,8 +3,8 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 
 const EXTENSIONS = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs']
 
-/** Conditions read from `exports`, in order. `types` is left out on purpose: a `.d.ts` has no values to read. */
-const CONDITIONS = ['import', 'module', 'default', 'node', 'require']
+/** The `exports` conditions an ESM import or a bundler matches. `types` is left out: a `.d.ts` has no values to read. */
+const CONDITIONS = new Set(['import', 'module', 'node', 'default'])
 
 function isFile(path: string): boolean {
   return existsSync(path) && statSync(path).isFile()
@@ -32,6 +32,7 @@ function splitSpecifier(specifier: string): { name: string, subpath: string } {
   return { name: parts.slice(0, size).join('/'), subpath: rest ? `./${rest}` : '.' }
 }
 
+/** The target of an `exports` entry, taking the first matching condition in the package's own key order, as Node does. */
 function pickCondition(entry: unknown): string | null {
   if (typeof entry === 'string') return entry
   if (Array.isArray(entry)) {
@@ -42,10 +43,9 @@ function pickCondition(entry: unknown): string | null {
     return null
   }
   if (typeof entry !== 'object' || entry === null) return null
-  const conditions = entry as Record<string, unknown>
-  for (const condition of CONDITIONS) {
-    if (!(condition in conditions)) continue
-    const target = pickCondition(conditions[condition])
+  for (const [condition, value] of Object.entries(entry)) {
+    if (!CONDITIONS.has(condition)) continue
+    const target = pickCondition(value)
     if (target) return target
   }
   return null
@@ -55,6 +55,14 @@ interface PackageManifest {
   exports?: unknown
   module?: string
   main?: string
+}
+
+function readManifest(path: string): PackageManifest | null {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as PackageManifest
+  } catch {
+    return null
+  }
 }
 
 /** The file a package exposes for `subpath`, following `exports` when the package declares it. */
@@ -77,7 +85,8 @@ function resolvePackage(specifier: string, fromDir: string): string | null {
     const packageDir = join(dir, 'node_modules', name)
     const manifestPath = join(packageDir, 'package.json')
     if (isFile(manifestPath)) {
-      const target = packageTarget(JSON.parse(readFileSync(manifestPath, 'utf8')) as PackageManifest, subpath)
+      const manifest = readManifest(manifestPath)
+      const target = manifest && packageTarget(manifest, subpath)
       return target ? resolveFile(join(packageDir, target)) : null
     }
     const parent = dirname(dir)

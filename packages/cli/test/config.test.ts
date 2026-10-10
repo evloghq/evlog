@@ -81,6 +81,13 @@ export default defineEvlog({
 `,
 }
 
+/** A config extending a package whose package.json is cut off mid-object. */
+const MALFORMED_PRESET = {
+  'package.json': PACKAGE,
+  'node_modules/@acme/evlog-preset/package.json': '{ "name": "@acme/evlog-preset",',
+  'evlog.config.ts': 'import preset from \'@acme/evlog-preset\'\n\nexport default { extends: preset }\n',
+}
+
 afterEach(async () => {
   vi.restoreAllMocks()
   process.exitCode = undefined
@@ -219,6 +226,37 @@ export default defineEvlog({ extends: preset, map: { minScore: 70 } })
     expect(config!.map.minScore).toBe(70)
     expect(config!.extends?.specifier).toBe('@acme/evlog-preset')
     expect(config!.extends?.file.endsWith(join('dist', 'index.mjs'))).toBe(true)
+  })
+
+  it.each([
+    ['default before import', { default: './dist/default.mjs', import: './dist/import.mjs' }, 'default.mjs', 60],
+    ['require before import', { require: './dist/index.cjs', import: './dist/import.mjs' }, 'import.mjs', 70],
+  ])('resolves package exports in the order the package declares them: %s', async (_, conditions, file, minScore) => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'node_modules/@acme/evlog-preset/package.json': JSON.stringify({
+        name: '@acme/evlog-preset',
+        type: 'module',
+        exports: { '.': conditions },
+      }),
+      'node_modules/@acme/evlog-preset/dist/default.mjs': 'export default { map: { minScore: 60 } }\n',
+      'node_modules/@acme/evlog-preset/dist/import.mjs': 'export default { map: { minScore: 70 } }\n',
+      'node_modules/@acme/evlog-preset/dist/index.cjs': 'module.exports = { map: { minScore: 80 } }\n',
+      'evlog.config.ts': 'import preset from \'@acme/evlog-preset\'\n\nexport default { extends: preset }\n',
+    })
+    const config = await load(cwd)
+
+    expect(config!.extends?.file.endsWith(join('dist', file))).toBe(true)
+    expect(config!.map.minScore).toBe(minScore)
+  })
+
+  it('treats a package whose package.json does not parse as unresolved', async () => {
+    const cwd = await makeProject(MALFORMED_PRESET)
+
+    await expect(load(cwd)).rejects.toMatchObject({
+      code: cliErrors.CONFIG_EXTENDS_NOT_FOUND.code,
+      message: 'Cannot resolve "@acme/evlog-preset", extended in evlog.config.ts:3',
+    })
   })
 
   it('refuses a parent that extends another config', async () => {
@@ -425,6 +463,16 @@ describe('evlog doctor with evlog.config', () => {
       message: 'logs.limit in evlog.config.ts:1 must be a whole number of 1 or more',
     })
     expect(result.summary.fail).toBeGreaterThan(0)
+  })
+
+  it('fails the check on a preset whose package.json does not parse', async () => {
+    const cwd = await makeProject(MALFORMED_PRESET)
+    const result = await runDoctor(fakeContext(cwd))
+
+    expect(result.checks.find(check => check.id === 'config')).toMatchObject({
+      status: 'fail',
+      message: 'Cannot resolve "@acme/evlog-preset", extended in evlog.config.ts:3',
+    })
   })
 
   it('says nothing when there is no config', async () => {
