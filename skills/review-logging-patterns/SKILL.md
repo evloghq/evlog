@@ -56,7 +56,7 @@ npm install evlog
 
 ## Use the CLI (recommended on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify)
 
-The `evlog` executable ships with the `evlog` package: `pnpm evlog`, `npx evlog`, `bunx evlog`. It runs `@evlog/cli` when installed and fetches it on demand otherwise (no dependency added to the project), so it works on a project with nothing yet. Early but worth trying. It reads the project on disk (no traffic, no config). On the seven supported frameworks it covers the whole loop: **wire evlog in** (`init`), **score coverage** (`map`), **lock the score in CI** (`--min-score`, `--baseline`). If the CLI is unavailable, the framework has no adapter yet, or the user declines, continue with the manual sections below; the skill does not depend on it. **Ask before installing anything**.
+The `evlog` executable ships with the `evlog` package: `pnpm evlog`, `npx evlog`, `bunx evlog`. It runs `@evlog/cli` when installed and fetches it on demand otherwise (no dependency added to the project), so it works on a project with nothing yet. Early but worth trying. It reads the project on disk (no traffic, no config needed). On the seven supported frameworks it covers the whole loop: **wire evlog in** (`init`), **score coverage** (`map`), **lock the score in CI** (`--min-score`, `--baseline`). If the CLI is unavailable, the framework has no adapter yet, or the user declines, continue with the manual sections below; the skill does not depend on it. **Ask before installing anything**.
 
 ### 1. Setup: `evlog init`
 
@@ -107,6 +107,8 @@ pnpm exec evlog map --baseline       # ratchet: exits 1 if this PR made things w
 ```
 
 `--baseline` compares the fresh scan against the committed `evlog.map.json`, **per entry point and per requirement**, so a refactor that instruments one route and breaks another fails even if the total score is unchanged. Disabling a passing check with a comment counts as a regression too. New uninstrumented routes are listed as `NEW AND DARK` without failing. Workflow: commit `evlog.map.json` once, add the `--baseline` run to CI, then re-run `map` without `--baseline` to accept an intentional change. Docs: https://www.evlog.dev/cli/ci
+
+When the project has an `evlog.config.ts`, the gate can live there instead of in the CI step: `map: { minScore: 80, baseline: true }` makes a bare `evlog map` gate the same way, and a flag still wins. The same `map` block turns checks off for every entry point (`rules: { 'error-catalog': 'off' }`) and leaves entry points out by file glob (`ignore`). The CLI reads these values without running the file, so they must be literals. Docs: https://www.evlog.dev/cli/config
 
 Early days: adapters and rules are still evolving; expect scores to move between releases. Docs: https://www.evlog.dev/cli/map · Rules: https://www.evlog.dev/cli/rules
 

@@ -26,6 +26,8 @@ export interface Location {
 
 export interface AnnotationOptions {
   minScore?: number
+  /** The setting `minScore` came from, named in the annotation: `--min-score` or `map.minScore`. */
+  minScoreFrom?: string
   /**
    * Most findings to emit. GitHub keeps ten annotations per level per step and
    * drops the rest without a word, so past that the list is not a list.
@@ -121,7 +123,7 @@ export function formatGithubAnnotations(
      hidden > 0 ? `; ${hidden} more finding${hidden === 1 ? '' : 's'} not shown` : ''}`
 
   if (options.minScore !== undefined && score < options.minScore) {
-    lines.push(annotation('error', { title: 'evlog map' }, `${summary}; below --min-score ${options.minScore}`))
+    lines.push(annotation('error', { title: 'evlog map' }, `${summary}; below ${options.minScoreFrom ?? '--min-score'} ${options.minScore}`))
   } else if (baseline && hasRegressed(baseline)) {
     lines.push(annotation('error', { title: 'evlog map' }, `${summary}; regressed against ${baseline.source.label}`))
   } else {
