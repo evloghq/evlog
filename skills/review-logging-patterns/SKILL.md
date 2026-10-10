@@ -912,7 +912,7 @@ log.emit()  // Manual emit required in standalone
 
 All options work in Nuxt (`evlog` key), Nitro (passed to `evlog()`), Next.js (`createEvlog()`), and standalone (`initLogger()`).
 
-They can also live in `evlog.config.ts`, written with `defineEvlog()`. Nuxt and Nitro load the file on their own, with module options overriding it. Other frameworks import it and pass `toLoggerConfig(config)` to `initLogger()` and `toMiddlewareOptions(config)` to the middleware. `evlog config` prints what it resolves to, and `extends` shares a base config across apps (one level). Docs: https://www.evlog.dev/cli/config
+They can also live in `evlog.config.ts`, written with `defineEvlog()`. Nuxt and Nitro load the file on their own, with module options overriding it. Other frameworks import it and pass `toLoggerConfig(config)` to `initLogger()` and `toMiddlewareOptions(config)` to the middleware. `evlog init` writes the file, `evlog config` prints what it resolves to, and `extends` shares a base config across apps (one level). Docs: https://www.evlog.dev/cli/config
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
