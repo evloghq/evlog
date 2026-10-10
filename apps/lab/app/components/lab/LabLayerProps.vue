@@ -115,9 +115,8 @@ const TEXT_TOGGLES = [
 <template>
   <LabSection :title="`Editing ${KINDS[layer.kind].label}`">
     <!--
-      What is selected, stated rather than implied. The panel used to open on a
-      bare text field and you had to work out from its contents whether you were
-      editing an image, a title or the animation.
+      What is selected, stated rather than implied. The panel says whether you are editing an image,
+      a title or the animation.
     -->
     <div class="mb-2 flex items-center gap-2 border border-primary-500/40 bg-primary-500/10 px-2 py-1.5">
       <UIcon :name="KINDS[layer.kind].icon" class="size-3.5 shrink-0 text-primary" />

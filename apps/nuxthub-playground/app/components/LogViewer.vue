@@ -128,7 +128,6 @@ onUnmounted(() => {
         :key="log.id"
         style="border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;"
       >
-        <!-- Row summary -->
         <div
           style="display: grid; grid-template-columns: 90px 50px 40px 1fr 40px 55px 20px; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; font-size: 0.78rem; cursor: pointer; transition: background 0.1s;"
           :style="{ background: expandedId === log.id ? '#f8fafc' : '#fff' }"
@@ -163,7 +162,6 @@ onUnmounted(() => {
           </span>
         </div>
 
-        <!-- Expanded details -->
         <div v-if="expandedId === log.id" style="border-top: 1px solid #e2e8f0; padding: 0.75rem; background: #f8fafc; font-size: 0.82rem;">
           <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; color: #718096; font-size: 0.78rem;">
             <span v-if="log.service"><strong>service:</strong> {{ log.service }}</span>
@@ -172,7 +170,6 @@ onUnmounted(() => {
             <span v-if="log.environment"><strong>env:</strong> {{ log.environment }}</span>
           </div>
 
-          <!-- Error block -->
           <div
             v-if="parseJson(log.error)"
             style="background: #fff5f5; border: 1px solid #fed7d7; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem;"
@@ -201,7 +198,6 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Data block -->
           <div v-if="parseJson(log.data)" style="background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.75rem;">
             <div style="font-weight: 600; color: #4a5568; margin-bottom: 0.5rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;">
               Data

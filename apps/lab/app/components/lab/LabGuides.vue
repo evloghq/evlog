@@ -99,7 +99,6 @@ const rows = computed(() => ticksFor(props.height))
       <span v-if="tick.major && tick.value" class="absolute left-1 top-1 leading-none">{{ tick.value }}</span>
     </div>
 
-    <!-- Thirds. -->
     <div
       v-for="at in THIRDS"
       :key="`v${at}`"
@@ -113,7 +112,6 @@ const rows = computed(() => ticksFor(props.height))
       :style="{ top: `${at * 100}%` }"
     />
 
-    <!-- Safe area, named where it is least in the way. -->
     <div class="absolute border border-dashed border-white/14" :style="{ inset: `${SAFE * 100}%` }" />
     <span class="absolute left-[5%] top-[5%] ml-1 mt-1 leading-none text-white/25">safe</span>
 
@@ -128,7 +126,6 @@ const rows = computed(() => ticksFor(props.height))
     <div class="absolute left-0 top-1/2 h-px w-3 -translate-y-1/2 bg-white/45" />
     <div class="absolute right-0 top-1/2 h-px w-3 -translate-y-1/2 bg-white/45" />
 
-    <!-- The frame's own size, stated once. -->
     <span class="absolute bottom-1 right-1.5 leading-none text-white/30">{{ width }} × {{ height }}</span>
   </div>
 </template>

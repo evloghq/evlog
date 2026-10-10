@@ -229,7 +229,6 @@ const collapsedCount = computed(() => lineCollapsed.value.filter(Boolean).length
             class="border bg-elevated/30 px-3.5 py-3 transition-colors duration-500 min-h-[180px]"
             :class="phase === 'wide' ? 'border-primary/25' : 'border-muted'"
           >
-            <!-- eslint-disable vue/html-self-closing -->
             <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto"><code>{
   <span class="text-sky-400">requestId</span>: <span class="text-emerald-400">"req_8a2c"</span>,
   <span class="text-sky-400">status</span>:    <span class="text-pink-400">200</span>,
@@ -238,7 +237,6 @@ const collapsedCount = computed(() => lineCollapsed.value.filter(Boolean).length
   :class="fieldRevealed[i] ? 'opacity-100' : 'opacity-0'"
 >  <span class="text-sky-400">{{ line.fieldKey }}</span>: <span :class="valueClass(line.fieldType)">{{ line.fieldValue }}</span>{{ i < lines.length - 1 ? ',' : '' }}
 </span></template>}</code></pre>
-            <!-- eslint-enable -->
           </div>
 
           <div class="mt-3 pt-2 border-t border-default/30 flex items-center gap-2 font-mono text-[9px] text-dimmed">

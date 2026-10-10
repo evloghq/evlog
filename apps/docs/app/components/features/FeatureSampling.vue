@@ -168,7 +168,6 @@ function getLevelColor(level: string): string {
     ]
   }
 })</code></pre>
-            <!-- eslint-enable -->
           </div>
         </div>
       </Motion>

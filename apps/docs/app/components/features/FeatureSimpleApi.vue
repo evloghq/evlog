@@ -125,7 +125,6 @@ function setOutput(type: 'success' | 'error') {
 
   <span class="text-violet-400">return</span> { <span class="text-sky-400">orderId</span>: charge.id }
 })</code></pre>
-            <!-- eslint-enable -->
           </div>
         </div>
       </Motion>

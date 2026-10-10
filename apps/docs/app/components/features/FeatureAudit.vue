@@ -137,7 +137,6 @@ const benefits = [
   <span class="text-sky-400">outcome</span>: <span class="text-emerald-400">'success'</span>,
   <span class="text-sky-400">reason</span>: <span class="text-emerald-400">'Customer requested refund'</span>,
 })</code></pre>
-            <!-- eslint-enable -->
           </div>
 
           <div class="p-5 font-mono text-xs sm:text-sm leading-relaxed overflow-x-auto">

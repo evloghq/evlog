@@ -125,7 +125,6 @@ function formatCost(cost: number | undefined): string {
           <span v-if="getAiMetadata(message)?.finishReason">{{ getAiMetadata(message)?.finishReason }}</span>
         </div>
         <template v-for="(part, pi) in message.parts" :key="`${message.id}-${part.type}-${pi}`">
-          <!-- User text -->
           <div
             v-if="message.role === 'user' && part.type === 'text'"
             style="flex-shrink: 0; align-self: flex-end; max-width: 85%; padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; line-height: 1.5; background: #3182ce; color: #fff;"
@@ -133,7 +132,6 @@ function formatCost(cost: number | undefined): string {
             {{ part.text }}
           </div>
 
-          <!-- Assistant text (markdown) -->
           <div
             v-else-if="message.role === 'assistant' && part.type === 'text'"
             class="chat-md"
@@ -142,7 +140,6 @@ function formatCost(cost: number | undefined): string {
             <MDC :markdown="part.text" />
           </div>
 
-          <!-- Tool call -->
           <div
             v-else-if="isToolPart(part)"
             style="flex-shrink: 0; align-self: flex-start; max-width: 90%; border-radius: 8px; font-size: 0.8rem; overflow: hidden; border: 1px solid #e2e8f0; background: #fff;"

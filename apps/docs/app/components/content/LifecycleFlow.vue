@@ -336,7 +336,6 @@ const isDone = computed(() => phase.value >= stages.length - 1)
   <span class="text-sky-400">userAgent</span>: { browser: <span class="text-emerald-400">"chrome"</span> },
   <span class="text-sky-400">geo</span>:      { country: <span class="text-emerald-400">"FR"</span> }</span>
 }</code></pre>
-              <!-- eslint-enable -->
             </div>
           </div>
         </div>

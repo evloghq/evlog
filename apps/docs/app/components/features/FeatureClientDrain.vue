@@ -129,7 +129,6 @@ const pills = [
 })
 
 <span class="text-amber-400">initLogger</span>({ drain })</code></pre>
-            <!-- eslint-enable -->
           </div>
 
           <div class="border-t border-muted/50 px-4 sm:px-6 py-8 sm:py-10">

@@ -250,7 +250,6 @@ function statusLabel(adapter: Adapter, s: AdapterState) {
   user:     {...},
   cart:     {...}
 }</code></pre>
-            <!-- eslint-enable -->
             <div
               class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-default border font-mono text-[9px] tracking-widest transition-colors duration-500"
               :class="eventSent ? 'text-primary border-primary/30' : 'text-dimmed border-muted'"

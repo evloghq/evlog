@@ -116,9 +116,10 @@ function formatFieldValue(value: boolean | number | string) {
       <p v-if="flagEntries.length === 0" class="text-[13px] text-dimmed">
         None passed.
       </p>
-      <!-- The command line, reassembled. One mono run rather than key/value
-           chips: this is the thing the user typed, and splitting `--min-score`
-           from `90` turns a command back into a config object. -->
+      <!--
+        The command line is one mono run rather than key/value chips: this is the thing the user
+        typed, and splitting `--min-score` from `90` turns a command back into a config object.
+      -->
       <div v-else class="flex flex-wrap gap-1.5">
         <span
           v-for="[key, value] in flagEntries"

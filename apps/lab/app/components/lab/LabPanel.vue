@@ -306,26 +306,19 @@ const CONTAINERS = [
   <!-- No left border: the splitter beside it is the divider. -->
   <aside class="@container flex h-full shrink-0 flex-col bg-default">
     <header class="flex items-center justify-between gap-2 border-b border-default px-3 py-3 @min-[280px]:px-4">
-      <!--
-        The title holds one line and gives up characters before it gives up the
-        row. Wrapping "Render labs" onto two lines pushed the help button under
-        the actions and made a tidy header look broken.
-      -->
+      <!-- The title holds one line and gives up characters before it gives up the row. -->
       <span class="min-w-0 truncate font-pixel text-[11px] uppercase tracking-[0.2em] text-default">
         Render labs
       </span>
 
       <div class="flex shrink-0 items-center gap-1">
         <!--
-          Out of the menu and into the header. Behind the ellipsis, saving your
-          work was three characters wide and looked like a preference — the one
-          action in the app that decides whether anything survives the tab.
+          Out of the menu and into the header. Saving is the one action in the app that decides
+          whether anything survives the tab.
         -->
         <!--
-          Beside Projects, and not inside the menu with it. Starting something is
-          the first thing anyone does here and the last thing that should need
-          finding — it was one item down an ellipsis, which is where actions go
-          to be used once and forgotten.
+          Beside Projects, and not inside the menu with it. Starting something is the first thing
+          anyone does here, so it should not need finding.
         -->
         <button
           type="button"
@@ -348,14 +341,11 @@ const CONTAINERS = [
           <UIcon name="i-lucide-folder" class="size-3" />
         </button>
         <!--
-          In the header rather than down the menu, for the same reason Projects
-          is: a control nobody can find is a control nobody has. It also has to
-          be visible to be honest — this is the one button whose whole job is to
-          change how everything else looks, and burying it made the panel seem
-          to have no opinion about light at all.
-
-          It shows the destination, not the state. A moon on a dark panel is a
-          badge saying where you already are; a sun says what clicking does.
+          In the header rather than down the menu, for the same reason Projects is: a control nobody
+          can find is a control nobody has. It is the one button whose job is to change how
+          everything else looks, so it has to be visible. It shows the destination, not the state. A
+          moon on a dark panel is a badge saying where you already are; a sun says what clicking
+          does.
         -->
         <button
           type="button"
@@ -414,10 +404,8 @@ const CONTAINERS = [
     -->
 
     <!--
-    Above the tabs, not inside them. It is the list of what is in the picture,
-      and everything below it is a way of treating one of these — reaching a
-      layer used to mean finding it on a timeline or in a row of chips at the
-      other end of the window.
+      Above the tabs, not inside them. It is the list of what is in the picture, and everything
+      below it is a way of treating one of these.
     -->
     <LabSection title="Layers">
       <LabLayers
@@ -482,9 +470,8 @@ const CONTAINERS = [
 
     <div v-show="activeTab === 'shot' || !selectedLayer" class="min-h-0 flex-1 overflow-y-auto">
       <!--
-        Named for what it is. "Stage" was a word from the renderer's vocabulary —
-        it meant nothing to anyone opening the panel, and the two pixel fields
-        under it asked for a number without saying what the number decided.
+        Named for what it is. Not the renderer's word for it, which means nothing to someone opening
+        the panel.
       -->
       <LabSection title="Viewport">
         <p class="mb-2 font-mono text-[10px] leading-relaxed text-dimmed">
@@ -523,10 +510,6 @@ const CONTAINERS = [
       </LabSection>
 
       <LabSection title="Camera">
-        <!--
-          Framing lives with the framing controls. This sat in the stage section
-          next to "replay", where it read as one of three unrelated verbs.
-        -->
         <button
           type="button"
           data-cuelume-press
@@ -650,11 +633,9 @@ const CONTAINERS = [
       </LabSection>
 
       <!--
-        Its own section, because these are the four things glass does to a
-        picture and they compose: the bulge bends where every channel is read
-        from, and the split, the spectrum and the scatter decide how far apart
-        those reads land. Chromatic aberration sat alone under the grade, where
-        it read as a colour adjustment rather than as a lens.
+        Its own section, because these are the four things glass does to a picture and they compose:
+        the bulge bends where every channel is read from, and the split, the spectrum and the
+        scatter decide how far apart those reads land.
       -->
       <LabSection title="Lens">
         <LabNumber v-model="settings.distortion" label="Bulge" v-bind="range('distortion')" />
@@ -769,10 +750,9 @@ const CONTAINERS = [
         />
 
         <!--
-          Everything about timing, and nothing else in this section. A shot is
-          one frame: it has no rate, no speed, no container and nothing to hold
-          after it ends, and four controls that decide nothing are four ways to
-          doubt that the panel is describing the thing on screen.
+          A shot is one frame: it has no rate, no speed, no container and nothing to hold after it
+          ends, and four controls that decide nothing are four ways to doubt that the panel is
+          describing the thing on screen.
         -->
         <template v-if="mode === 'video'">
           <LabChoice

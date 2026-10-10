@@ -563,10 +563,9 @@ const seconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`
 
 <template>
   <!--
-    No top border. The splitter above already draws the hairline that divides the
-    timeline from the frame, and a border here put a second line two pixels under
-    the first — a seam where there is only one edge. A drop is announced by
-    outlining the area that accepts it, which is the truer shape of the message.
+    No top border. The splitter above already draws the hairline that divides the timeline from the
+    frame, and a second line here would be a seam where there is only one edge. A drop is announced
+    by outlining the area that accepts it, which is the truer shape of the message.
   -->
   <div
     class="flex shrink-0 flex-col overflow-hidden bg-default transition-shadow"
@@ -630,11 +629,10 @@ const seconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`
         </button>
 
         <!--
-          Rendered on the body, and positioned from the button's own rectangle.
-          The menu opens upwards, past the top of a timeline that is clipped to
-          its height — so wherever it was anchored inside, it was cut away and
-          the button read as dead. There is no ancestor here that can be relied
-          on not to clip; leaving the tree is the only fix that stays fixed.
+          Rendered on the body, and positioned from the button's own rectangle. The menu opens
+          upwards, past the top of a timeline clipped to its height, so it cannot be anchored inside
+          that tree. No ancestor here can be relied on not to clip; leaving the tree is the only fix
+          that holds.
         -->
         <Teleport to="body">
           <div
@@ -673,9 +671,8 @@ const seconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`
     </div>
 
     <!--
-      The empty space under the tracks is empty space, and clicking it clears the
-      selection. Rows and clips stop the event themselves, so only a click that
-      genuinely landed on nothing reaches here.
+      Clicking the empty space under the tracks clears the selection. Rows and clips stop the event
+      themselves, so only a click that landed on nothing reaches here.
     -->
     <div
       class="relative flex min-h-0 flex-1 overflow-y-auto pb-4"
@@ -843,13 +840,8 @@ const seconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`
               />
 
               <!--
-                The ramps, drawn from the effects that produce them.
-
-                These read `fadeIn` and `fadeOut` until now — fields the effect
-                library replaced, migrated away on load and written by no factory
-                since. So they had quietly stopped drawing on every document made
-                after that change. The sparkles icon says a clip is animated;
-                this says for how long.
+                The ramps, drawn from the effects that produce them. The sparkles icon says a clip
+                is animated; this says for how long.
               -->
               <div
                 v-if="ramps.get(layer.id)?.in"
@@ -866,11 +858,8 @@ const seconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`
         </div>
 
         <!--
-          The playhead spans every track, so alignment is visible at a glance —
-          and is clipped to the time area. Zoomed in, a position before the
-          window sits at a negative percentage, and unclipped it was drawn over
-          the track names to the left: a playhead reading 0.00s parked in a
-          column that has no time in it at all.
+          The playhead spans every track, so alignment is visible at a glance, and is clipped to the
+          time area so it never draws over the track names.
         -->
         <div class="pointer-events-none absolute inset-0 overflow-hidden">
           <div

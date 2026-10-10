@@ -192,7 +192,6 @@ function setView(view: 'without' | 'with') {
     <span class="text-sky-400">integrations</span>: [<span class="text-amber-400">createEvlogIntegration</span>(ai)],
   },
 })</code></pre>
-            <!-- eslint-enable -->
           </div>
 
           <div class="grid [&>*]:col-start-1 [&>*]:row-start-1">

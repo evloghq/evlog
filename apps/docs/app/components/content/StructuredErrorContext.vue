@@ -178,7 +178,6 @@ err.status  <span class="text-dimmed">→</span> <span class="text-rose-400/80">
 err.why     <span class="text-dimmed">→</span> <span class="text-rose-400/80">undefined</span>
 err.fix     <span class="text-dimmed">→</span> <span class="text-rose-400/80">undefined</span></code></pre>
             </div>
-            <!-- eslint-enable -->
           </div>
 
           <div
@@ -219,7 +218,6 @@ err.fix     <span class="text-dimmed">→</span> <span class="text-rose-400/80">
               <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto"><code>{ <span class="text-sky-400">message</span>, <span class="text-sky-400">status</span>, <span class="text-sky-400">why</span>, <span class="text-sky-400">fix</span>, <span class="text-sky-400">link</span> }
 <span class="text-emerald-400">all fields available · safe by default</span></code></pre>
             </div>
-            <!-- eslint-enable -->
           </div>
 
           <div

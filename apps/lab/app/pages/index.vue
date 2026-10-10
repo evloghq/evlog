@@ -2234,7 +2234,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     :data-theme="isDark ? 'dark' : 'light'"
   >
     <div class="flex min-w-0 flex-1 flex-col">
-      <!-- The margin around the frame is empty space too, and clears the selection. -->
       <main
         class="relative flex min-h-0 flex-1 items-center justify-center p-8"
         @pointerdown.self="selectedId = null"
@@ -2330,11 +2329,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             is pointing at.
           -->
           <!--
-            The reticle belongs to the act of focusing, not to the guides.
-            Two lines across the whole frame said nothing about what they were
-            for and were on whether or not anyone had asked. Focusing is a
-            question about one spot, so the instrument is a small target that
-            rides the pointer and says what clicking will do.
+            The reticle belongs to the act of focusing, not to the guides. Focusing is a question
+            about one spot, so the instrument is a small target that rides the pointer and says what
+            clicking will do.
           -->
           <div
             v-if="picking && framePointer"
@@ -2589,10 +2586,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   </div>
 
   <!--
-    The live stage. It has to be genuinely on screen and not display:none —
-    most of these components start themselves from an IntersectionObserver,
-    which reports nothing for a hidden element. So it sits pinned behind the
-    UI at near-zero opacity, where it lays out and animates normally.
+    It has to be genuinely on screen and not display:none — most of these components start
+    themselves from an IntersectionObserver, which reports nothing for a hidden element. So it sits
+    pinned behind the UI at near-zero opacity, where it lays out and animates normally.
   -->
   <!--
     Outside `lab-chrome`, and carrying no theme of its own.
@@ -2623,15 +2619,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       its source part-way through instead of replaying it from the beginning.
     -->
     <!--
-      Every stage occupies the same corner, one on top of another.
-      They used to stack down the page, which put the second one below the fold
-      of a normal window — and these components start themselves from an
-      IntersectionObserver at a 20% threshold. A clip whose stage was off screen
-      therefore never started: its plate stayed on the initial state, and the
-      take went blank for exactly the span of that clip. Capture reads each
-      stage by element, not by what is painted, so overlapping costs nothing —
-      and it means clip five sits precisely where clip one does, which is the
-      only position known to be visible.
+      Every stage occupies the same corner, one on top of another. These components start themselves
+      from an IntersectionObserver at a 20% threshold, so a stage off screen would never start.
+      Capture reads each stage by element, not by what is painted, so overlapping costs nothing, and
+      clip five sits where clip one does, which is the only position known to be visible.
     -->
     <div
       v-for="staged in stagedComponents"
