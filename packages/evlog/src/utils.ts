@@ -71,6 +71,10 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
   fatal: 4,
 }
 
+export function isLogLevel(value: unknown): value is LogLevel {
+  return typeof value === 'string' && Object.hasOwn(LEVEL_ORDER, value)
+}
+
 /**
  * True if `level` is at least as severe as `minLevel`
  * (trace and debug < info < warn < error < fatal).
