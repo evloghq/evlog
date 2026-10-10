@@ -78,6 +78,12 @@ export interface CallFact {
    * a nested or optional chain loses track of who the call is really on.
    */
   root: string | null
+  /**
+   * Factory the chain hangs on when the base is a call, e.g. `useLogger` in
+   * `useLogger(event).set({ … })`. Without it, the call has no root identifier
+   * and `set` is never credited to the logger.
+   */
+  factory?: string | null
   /** Member names from the root — `['audit', 'deny']` for `log.audit?.deny()`. */
   chain: readonly string[]
   line: number
@@ -253,7 +259,7 @@ function objectKeys(node: Node | undefined): Set<string> {
   return keys
 }
 
-type CalleeShape = Pick<CallFact, 'name' | 'member' | 'receiver' | 'root' | 'chain'>
+type CalleeShape = Pick<CallFact, 'name' | 'member' | 'receiver' | 'root' | 'chain' | 'factory'>
 
 /** Strip the wrapper oxc puts around an optional chain (`a?.b()`). */
 /**
@@ -439,6 +445,9 @@ function describeCallee(rawCallee: Node): CalleeShape | null {
   if (member === undefined) return null
   const root = current.type === 'Identifier' ? current.name : null
   const receiver = chain.length === 1 ? root : (chain.at(-2) ?? null)
+  const factory = current.type === 'CallExpression'
+    ? (describeCallee((current as { callee: Node }).callee)?.member ?? null)
+    : null
 
   return {
     name: [root, ...chain].filter(Boolean).join('.'),
@@ -446,6 +455,7 @@ function describeCallee(rawCallee: Node): CalleeShape | null {
     receiver,
     root,
     chain,
+    factory,
   }
 }
 
@@ -834,6 +844,8 @@ export function buildFileFacts(
     loggerCalls: member => calls.filter((call) => {
       if (!call.chain.includes(member)) return false
       if (call.root !== null && loggerBindings.has(call.root)) return true
+      /* `useLogger(event).set({ … })`: the chain hangs on the factory call itself. */
+      if (call.factory && LOGGER_FACTORIES.includes(call.factory) && resolvesToEvlog(call.factory)) return true
       return hasContextLoggerPath(call.chain) || callsRequestLogger(call, options.requestLoggerMember, parameters)
     }),
     callsTo: name => calls.filter(call => call.member === name),

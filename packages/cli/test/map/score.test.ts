@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getRule } from '../../src/lib/map/rules/index'
-import { gradeFromScore, scoreGlobal, scoreRoute } from '../../src/lib/map/score'
+import { gradeFromScore, hasScoredRoutes, passesMinScore, scoreGlobal, scoreRoute } from '../../src/lib/map/score'
 import type { CheckResult, RouteEntry } from '../../src/lib/map/types'
 
 /** Asked of the registry rather than hard-coded: a weight change must not read as a scoring bug. */
@@ -81,6 +81,21 @@ describe('score', () => {
 
   it('scores an empty project as perfect rather than dividing by zero', () => {
     expect(scoreGlobal([])).toBe(100)
+  })
+
+  it('knows a project with nothing to score from one with an exempt-only set', () => {
+    expect(hasScoredRoutes([])).toBe(false)
+    expect(hasScoredRoutes([route({ path: '/_evlog/ingest', file: '_evlog/ingest.post.ts' })])).toBe(false)
+    expect(hasScoredRoutes([route()])).toBe(true)
+  })
+
+  it.each([
+    ['unscored', 100, 0, false],
+    ['unscored', 100, 100, false],
+    ['excellent', 100, 100, true],
+    ['needs-work', 40, 80, false],
+  ] as const)('gates a %s score of %i against --min-score %i: passes %s', (grade, score, threshold, passes) => {
+    expect(passesMinScore(grade, score, threshold)).toBe(passes)
   })
 
   it('scores a project of nothing but exempt entry points as perfect', () => {

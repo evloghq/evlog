@@ -9,7 +9,7 @@ import type { ProjectFacts } from './project-facts'
 import { RULE_SET_VERSION, getRule, runRules } from './rules/index'
 import type { FrameworkCapabilities } from './rules/index'
 import { classifySensitivity } from './sensitivity'
-import { classifyRouteObservability, gradeFromScore, scoreGlobal, scoreRoute } from './score'
+import { classifyRouteObservability, gradeFromScore, hasScoredRoutes, scoreGlobal, scoreRoute } from './score'
 import type {
   CheckId,
   CheckResult,
@@ -120,7 +120,7 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
 
   return {
     map,
-    grade: gradeFromScore(globalScore),
+    grade: hasScoredRoutes(routes) ? gradeFromScore(globalScore) : 'unscored',
     summary: tally,
     project,
     suggestions,

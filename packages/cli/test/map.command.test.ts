@@ -45,6 +45,16 @@ afterEach(async () => {
 })
 
 describe('runMap', () => {
+  it('grades a project with nothing to scan as unscored, not excellent', async () => {
+    const cwd = await copyFixture('nuxt-basic')
+    await rm(join(cwd, 'server'), { recursive: true, force: true })
+    await rm(join(cwd, 'pages'), { recursive: true, force: true })
+    const result = await runMap(fakeContext(cwd), undefined, { noWrite: true })
+
+    expect(result.scan.map.routes).toHaveLength(0)
+    expect(result.scan.grade).toBe('unscored')
+  })
+
   it('scans a nuxt fixture and scores its routes without writing evlog.map.json', async () => {
     const cwd = join(FIXTURES, 'nuxt-basic')
     const result = await runMap(fakeContext(cwd), undefined, { noWrite: true })
@@ -351,6 +361,18 @@ describe('map command', () => {
     expect(raw.mapPath).toBeNull()
     expect(raw.summary.instrumented + raw.summary.partial + raw.summary.dark + raw.summary.exempt)
       .toBe(raw.map.routes.length)
+  })
+
+  it('exits 1 under --min-score when there are no entry points to score', async () => {
+    const cwd = await copyFixture('nuxt-basic')
+    await rm(join(cwd, 'server'), { recursive: true, force: true })
+    await rm(join(cwd, 'pages'), { recursive: true, force: true })
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--no-write', '--min-score', '0'] })
+
+    expect(process.exitCode).toBe(1)
   })
 
   it('exits 1 when the score is below --min-score', async () => {

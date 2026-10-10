@@ -3,6 +3,7 @@ import type { BaselineComparison } from './baseline'
 import { hasRegressed } from './baseline'
 import { prioritize } from './report'
 import { getRule } from './rules/index'
+import { passesMinScore } from './score'
 import type { CheckId, CheckResult, RouteEntry, ScanResult } from './types'
 
 /** One check to point at, with where it points. */
@@ -120,7 +121,7 @@ export function formatGithubAnnotations(
   const summary = `score ${score}/100 (${scan.grade}): ${instrumented} instrumented, ${partial} partial, ${dark} dark${
      hidden > 0 ? `; ${hidden} more finding${hidden === 1 ? '' : 's'} not shown` : ''}`
 
-  if (options.minScore !== undefined && score < options.minScore) {
+  if (options.minScore !== undefined && !passesMinScore(scan.grade, score, options.minScore)) {
     lines.push(annotation('error', { title: 'evlog map' }, `${summary}; below --min-score ${options.minScore}`))
   } else if (baseline && hasRegressed(baseline)) {
     lines.push(annotation('error', { title: 'evlog map' }, `${summary}; regressed against ${baseline.source.label}`))

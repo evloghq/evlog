@@ -10,7 +10,7 @@ import { isInfrastructureRoute } from './exemptions'
 import { REQUIREMENTS, getRule } from './rules/index'
 import type { FixSlot, SuggestContext } from './rules/index'
 import type { ProjectFacts } from './project-facts'
-import { classifyRouteObservability, scoreGlobal } from './score'
+import { classifyRouteObservability, passesMinScore, scoreGlobal } from './score'
 import type { CheckId, CheckResult, Framework, RouteEntry, ScanResult } from './types'
 import { indent } from './utils'
 import { MAP_FILE_NAME } from './write'
@@ -315,7 +315,7 @@ const MORE_WIDTH = 5
 /** The score, as a headline: block digits, gauge, grade, per-entry skyline. */
 function scoreHeadline(style: ReportStyle, result: ScanResult): string[] {
   const { map, grade } = result
-  const color = scoreColor(map.score)
+  const color = grade === 'unscored' ? 'dim' : scoreColor(map.score)
   const digits = bigDigits(map.score)
 
   const gaugeFilled = Math.round((map.score / 100) * 20)
@@ -335,7 +335,7 @@ function scoreHeadline(style: ReportStyle, result: ScanResult): string[] {
   return digits.map((digitRow, index) => {
     const middle = index === 0
       ? style.paint('dim', 'score /100')
-      : index === 1 ? gauge : style.paint(color, grade.replace('-', ' '))
+      : index === 1 ? gauge : style.paint(color, grade === 'unscored' ? 'nothing to scan' : grade.replace('-', ' '))
     return `${style.paint([color, 'bold'], digitRow)}   ${pad(middle, HEADLINE_GAUGE_WIDTH)}  ${side[index] ?? ''}`
   })
 }
@@ -886,12 +886,14 @@ export function formatGate(ctx: CliContext, result: ScanResult, threshold: numbe
   const style = createReportStyle(ctx)
   const { paint } = style
   const { score } = result.map
-  const passed = score >= threshold
+  const passed = passesMinScore(result.grade, score, threshold)
   const badge = paint(['bold', passed ? 'green' : 'red'], ' GATE ')
 
   const verdict = passed
     ? `${paint('green', `score ${score} meets --min-score ${threshold}`)} ${paint('dim', '— exit code 0')}`
-    : `${paint('red', `score ${score} is below --min-score ${threshold}`)} ${paint('dim', '— exit code 1')}`
+    : result.grade === 'unscored'
+      ? `${paint('red', `nothing to scan, so --min-score ${threshold} cannot be met`)} ${paint('dim', '— exit code 1')}`
+      : `${paint('red', `score ${score} is below --min-score ${threshold}`)} ${paint('dim', '— exit code 1')}`
 
   const lines = ['', `${badge} ${verdict}`]
   if (!passed) {

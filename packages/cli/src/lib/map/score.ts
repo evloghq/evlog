@@ -1,4 +1,4 @@
-import type { CheckId, CheckResult, RouteEntry } from './types'
+import type { CheckId, CheckResult, Grade, RouteEntry } from './types'
 import { isInfrastructureRoute } from './exemptions'
 import { REQUIREMENTS, getRule } from './rules/index'
 
@@ -53,6 +53,19 @@ export function scoreGlobal(routes: RouteEntry[]): number {
   }
 
   return Math.round(weightedSum / totalWeight)
+}
+
+/** Whether any entry point is one the score has an opinion about. */
+export function hasScoredRoutes(routes: RouteEntry[]): boolean {
+  return routes.some(route => classifyRouteObservability(route) !== 'exempt')
+}
+
+/**
+ * The `--min-score` gate. A run with nothing to score cannot meet a threshold:
+ * a free 100 would otherwise pass every gate a project asks for.
+ */
+export function passesMinScore(grade: Grade, score: number, threshold: number): boolean {
+  return grade !== 'unscored' && score >= threshold
 }
 
 /** Grade band a score falls into, at 90 / 70 / 50. */

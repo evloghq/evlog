@@ -1,7 +1,7 @@
 import { FRAMEWORK_IDS } from '../frameworks'
 import type { Grade } from './types'
 
-const GRADES: readonly Grade[] = ['excellent', 'good', 'needs-work', 'at-risk']
+const GRADES: readonly Grade[] = ['excellent', 'good', 'needs-work', 'at-risk', 'unscored']
 
 /** Which gate the run asked for — `--min-score`, `--baseline`, both, neither. */
 const GATES = ['none', 'min-score', 'baseline', 'both'] as const

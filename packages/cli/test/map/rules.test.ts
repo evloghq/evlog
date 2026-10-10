@@ -293,6 +293,10 @@ const CASES: Record<CheckId, RuleCases> = {
         code: 'export default defineEventHandler((event) => { const wide = useLogger(event); wide.set({ a: 1 }) })',
       },
       {
+        name: 'set called straight on the useLogger() call, with no variable',
+        code: 'export default defineEventHandler((event) => { useLogger(event).set({ a: 1 }) })',
+      },
+      {
         name: 'set on a logger taken off the request context',
         code: 'export default defineEventHandler((event) => { const log = event.context.log\nlog.set({ a: 1 }) })',
       },
@@ -305,6 +309,11 @@ const CASES: Record<CheckId, RuleCases> = {
       {
         name: 'logger with no context',
         code: 'export default defineEventHandler((event) => { const log = useLogger(event) })',
+        message: /no log\.set\(\)/,
+      },
+      {
+        name: 'set on a local useLogger() stub is not evlog\'s logger',
+        code: 'function useLogger(event) { return { set() {} } }\nexport default defineEventHandler((event) => { useLogger(event).set({ a: 1 }) })',
         message: /no log\.set\(\)/,
       },
       {

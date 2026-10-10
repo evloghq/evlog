@@ -22,6 +22,7 @@ import {
   formatMapWarnings,
 } from '../lib/map/report'
 import { scan } from '../lib/map/scan'
+import { passesMinScore } from '../lib/map/score'
 import { recordMapRun, resolveGate } from '../lib/map/telemetry'
 import type { MapView } from '../lib/map/telemetry-fields'
 import type { Framework, ScanContext, ScanResult } from '../lib/map/types'
@@ -350,7 +351,7 @@ export default defineEvlogCommand('map', {
       })
     }
 
-    if (threshold !== undefined && result.scan.map.score < threshold) {
+    if (threshold !== undefined && !passesMinScore(result.scan.grade, result.scan.map.score, threshold)) {
       ui.exit(EXIT_FAIL)
       return
     }

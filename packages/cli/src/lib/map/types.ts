@@ -154,7 +154,12 @@ export interface FrameworkAdapter {
   handlerShape: (route: RawRouteEntry, body: readonly string[]) => string[]
 }
 
-export type Grade = 'excellent' | 'good' | 'needs-work' | 'at-risk'
+/**
+ * `unscored` means the scan found no entry point the score has an opinion
+ * about. The number is still reported, but it is not a grade and never passes
+ * `--min-score`.
+ */
+export type Grade = 'excellent' | 'good' | 'needs-work' | 'at-risk' | 'unscored'
 
 /**
  * A suggestion whose work is one edit for the whole project.
