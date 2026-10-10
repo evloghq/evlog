@@ -40,7 +40,7 @@ describe('nitro modules avoid backslash paths', () => {
     expect(nitro.options.errorHandler).toMatch(/\/nitro\/errorHandler$/)
 
     const { replace } = nitro.options as { replace?: Record<string, string> }
-    expect(JSON.parse(replace!.__EVLOG_CONFIG__)).toEqual({ env: { service: 'test' }, silent: true })
+    expect(JSON.parse(replace!.__EVLOG_CONFIG__)).toEqual({ env: { service: 'test' }, silent: true, _suppressDrainWarning: true })
   })
 
   it('nitro v3 module pushes POSIX-style plugin and errorHandler paths', () => {

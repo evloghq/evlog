@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Nitro } from 'nitro/types'
 import type { NitroModuleOptions } from '../nitro'
-import { prependNitroErrorHandler } from '../nitro'
+import { prependNitroErrorHandler, serializeBundledEvlogConfig } from '../nitro'
 import { prepareRedactForBridge } from '../redact'
 import { registerEvlogConfigPlugin } from '../shared/configPlugin'
 
@@ -59,7 +59,7 @@ export default function evlog(options?: NitroModuleOptions) {
       // but on Vercel + Bun the missing virtual triggers Bun's auto-installer
       // and crashes with `ReadOnlyFileSystem` (see issue #312).
       nitro.options.replace = nitro.options.replace || {}
-      nitro.options.replace.__EVLOG_CONFIG__ = JSON.stringify(options || {})
+      nitro.options.replace.__EVLOG_CONFIG__ = serializeBundledEvlogConfig(options)
 
       // In dev mode, Nitro loads plugins externally (not bundled), so the
       // virtual runtime-config module is unreachable and useRuntimeConfig()
