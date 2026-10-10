@@ -24,6 +24,10 @@ export const subCommands = {
     { name: 'doctor', description: 'Diagnose your evlog setup' },
     () => import('./doctor'),
   ),
+  config: lazyCommand(
+    { name: 'config', description: 'Show the evlog.config that applies here and where each setting comes from' },
+    () => import('./config'),
+  ),
   logs: lazyCommand(
     { name: 'logs', description: 'Read the wide events your app wrote to .evlog/logs' },
     () => import('./logs'),

@@ -44,6 +44,7 @@ function scan(overrides: Partial<ScanResult> = {}): ScanResult {
     project: {} as ScanResult['project'],
     suggestions: [],
     warnings: [],
+    ignored: 0,
     summary: { instrumented: 1, partial: 0, dark: 0, exempt: 0, suppressedChecks: 0 },
     ...overrides,
   }
@@ -57,6 +58,7 @@ function fields(overrides: Partial<Parameters<typeof mapTelemetryFields>[0]> = {
     baseline: null,
     view: 'summary',
     wrote: true,
+    config: null,
     ...overrides,
   })
 }

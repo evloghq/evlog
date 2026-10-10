@@ -1,4 +1,5 @@
 import { telemetry } from '@evlog/telemetry'
+import { EvlogError } from 'evlog'
 import type { CliContext } from '../core/context'
 import {
   DOCS_LABEL,
@@ -10,6 +11,7 @@ import {
 } from '../core/output'
 import type { Check, CheckSummary } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
+import { loadCliConfig } from '../lib/config'
 import type { CatalogFindingSource, CliDebug } from '../lib/debug'
 import { createNoopCliDebug } from '../lib/debug'
 import { cliErrors } from '../lib/errors'
@@ -158,6 +160,26 @@ async function checkLogs(project: ProjectInfo, env: Record<string, string | unde
   return null
 }
 
+/**
+ * The `evlog.config` map and logs read. Returns `null` when there is none: the
+ * file is optional. A config the CLI cannot read fails here once rather than
+ * on every command that reads it.
+ */
+function checkConfig(project: ProjectInfo): { check: Check | null, error: EvlogError | null } {
+  try {
+    const config = loadCliConfig(project)
+    if (!config) return { check: null, error: null }
+    const parent = config.extends && (config.extends.specifier ?? prettyPath(project.cwd, config.extends.file))
+    return {
+      check: { id: 'config', status: 'ok', message: prettyPath(project.cwd, config.file), hint: parent ? `extends ${parent}` : undefined },
+      error: null,
+    }
+  } catch (error) {
+    if (!(error instanceof EvlogError)) throw error
+    return { check: { id: 'config', status: 'fail', message: error.message, hint: error.fix }, error }
+  }
+}
+
 function findingsForChecks(
   checks: Check[],
   resolved: Awaited<ReturnType<typeof resolveEvlog>>,
@@ -231,6 +253,12 @@ export async function runDoctor(
     s => ({ stack: s }),
   )
 
+  const config = checkConfig(project)
+  if (config.error) {
+    const { code, why, fix, link } = config.error
+    log.finding({ code: code ?? 'cli.CONFIG_INVALID', why, fix, link }, { id: 'config', status: 'fail' })
+  }
+
   const checks = await log.step('checks', async () => {
     const environment: Check[] = [
       checkNode(ctx),
@@ -243,6 +271,7 @@ export async function runDoctor(
     return [
       ...environment,
       checkEvlog(project, resolved),
+      ...(config.check ? [config.check] : []),
       ...(logsCheck ? [logsCheck] : []),
     ]
   })
@@ -254,7 +283,7 @@ export async function runDoctor(
     },
     {
       title: 'EVLOG',
-      checks: checks.filter(c => c.id === 'evlog' || c.id === 'logs'),
+      checks: checks.filter(c => c.id === 'evlog' || c.id === 'config' || c.id === 'logs'),
     },
   ]
 
@@ -327,6 +356,8 @@ function doctorTelemetryFields(result: DoctorResult): Record<string, boolean | n
     workspace: result.project.kind !== 'single',
     doctorEvlogFound: statusOf('evlog') === 'ok',
     doctorLogsSink: statusOf('logs') === 'ok',
+    doctorConfig: statusOf('config') === 'ok',
+    doctorConfigFailed: statusOf('config') === 'fail',
     doctorStackDetected: result.project.stack.length,
   }
 }

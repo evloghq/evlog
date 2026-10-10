@@ -43,6 +43,8 @@ export const DEFAULT_ALLOWED_CUSTOM_KEYS: Record<string, string[]> = {
     'workspace',
     'doctorEvlogFound',
     'doctorLogsSink',
+    'doctorConfig',
+    'doctorConfigFailed',
     'doctorStackDetected',
     // evlog init — which options were picked
     'initFramework',
@@ -128,6 +130,9 @@ export const DEFAULT_ALLOWED_CUSTOM_KEYS: Record<string, string[]> = {
     'mapProjectSuggestions',
     'mapGate',
     'mapGateFailed',
+    'mapConfig',
+    'mapRulesOff',
+    'mapIgnored',
     'mapMinScore',
     'mapBaselineDelta',
     'mapBaselineRegressions',

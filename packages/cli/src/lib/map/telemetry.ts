@@ -142,6 +142,8 @@ export function mapTelemetryFields(input: {
   baseline: BaselineComparison | null
   view: MapView
   wrote: boolean
+  /** What the applied `evlog.config` turned off, or `null` when the run had none. */
+  config: { rulesOff: number } | null
 }): Record<string, boolean | number | string> {
   const { scan } = input
   const { routes } = scan.map
@@ -164,12 +166,19 @@ export function mapTelemetryFields(input: {
     mapSuggestions: routes.reduce((total, route) => total + Object.keys(route.suggestions).length, 0),
     mapProjectSuggestions: scan.suggestions.length,
     mapGate: input.gate,
+    mapConfig: input.config !== null,
     ...kindTallies(routes),
     ...sensitiveTallies(routes),
     ...ruleTallies(scan),
   }
 
   if (input.minScore !== undefined) fields.mapMinScore = input.minScore
+  /* A rule turned off for a whole project is the strongest "bad rule" signal
+     there is, stronger than a per-line suppression. */
+  if (input.config) {
+    fields.mapRulesOff = input.config.rulesOff
+    fields.mapIgnored = scan.ignored
+  }
   if (input.baseline) {
     fields.mapBaselineDelta = input.baseline.delta
     fields.mapBaselineRegressions = input.baseline.regressions.length
@@ -213,6 +222,7 @@ export function mapTelemetryFieldNames(): string[] {
     project: {} as ScanResult['project'],
     suggestions: [],
     warnings: [],
+    ignored: 0,
     summary: { instrumented: 0, partial: 0, dark: 0, exempt: 0, suppressedChecks: 0 },
   }
 
@@ -236,6 +246,7 @@ export function mapTelemetryFieldNames(): string[] {
     baseline: emptyBaseline,
     view: 'summary',
     wrote: false,
+    config: { rulesOff: 0 },
   }))
 
   const tallies = [

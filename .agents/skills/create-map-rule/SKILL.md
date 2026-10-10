@@ -41,12 +41,12 @@ Current requirements: `wide-event` (40), `audit` (25), `structured-errors` (20),
 |---|------|--------|
 | 1 | `packages/cli/src/lib/map/rules/{id}.ts` | Create the rule (one exported const) |
 | 2 | `packages/cli/src/lib/map/rules/index.ts` | Import + one line in `REGISTRY` |
-| 3 | `packages/cli/src/lib/map/types.ts` | Add the id to the `CheckId` union (a type assert in `index.ts` fails the build if the registry and union drift) |
+| 3 | `packages/cli/src/lib/map/types.ts` + `packages/evlog/src/shared/define.ts` | Add the id to the `CheckId` union and to `EvlogMapRuleId`, which types `map.rules` in `evlog.config.ts` (type asserts in `index.ts` fail the build if the registry and either union drift) |
 | 4 | `packages/cli/test/map/rules.test.ts` | Add cases (the file has an ESLint-`RuleTester`-style `Case` harness (`runRuleSet` exercises one rule in isolation)) |
 | 5 | `apps/docs/content/3.cli/3.rules.md` | Add a row to the Requirements or Opportunities table + a `### {title}` section |
 | 6 | `apps/docs/content/3.cli/4.scoring.md` | Requirements only: reflect the new weight in the scoring explanation |
 | 7 | `skills/review-logging-patterns/references/code-review.md` | Add a row to the matching rules table |
-| 8 | `.changeset/{id}-map-rule.md` | Changeset for `"@evlog/cli": minor` |
+| 8 | `.changeset/{id}-map-rule.md` | Changeset for `"@evlog/cli": minor` and `"evlog": minor` (`map.rules` accepts the new id) |
 
 **Important**: Do NOT consider the task complete until all applicable touchpoints have been addressed.
 
@@ -95,9 +95,11 @@ Key rules:
 - **Weights are a scoring decision**: look at `score.ts` and the existing spread (40 down to 15) and discuss the number in the PR rather than inventing precedent.
 - Every rule id is also a suppression target (`evlog-map-disable {id}`) and part of the public `evlog.map.json` contract. Renaming later is a breaking change.
 
-## Steps 2 and 3: Registry + CheckId
+## Steps 2 and 3: Registry, CheckId and EvlogMapRuleId
 
 Add the import and one `REGISTRY` line in `rules/index.ts` (report order matters: requirements before opportunities, heaviest first), and the id to the `CheckId` union in `types.ts`. The `AssertIdsMatch` type in `index.ts` fails the build if you forget either side.
+
+The id also goes in `EvlogMapRuleId` in `packages/evlog/src/shared/define.ts`, the type behind `map.rules` in `evlog.config.ts`. `AssertConfigIdsMatch` in `index.ts` checks it against `CheckId`. The CLI reads that type from the built `evlog` package, so rebuild `evlog` before the CLI typecheck.
 
 ## Step 4: Tests
 
@@ -124,13 +126,14 @@ Read `apps/docs/AGENTS.md` before touching anything under `apps/docs/`. Then in 
 
 ## Step 8: Changeset
 
-`.changeset/{id}-map-rule.md` with `"@evlog/cli": minor`, written from the user's perspective: what the rule checks, when it fires, whether it moves the score.
+`.changeset/{id}-map-rule.md` with `"@evlog/cli": minor` and `"evlog": minor`, written from the user's perspective: what the rule checks, when it fires, whether it moves the score.
 
 ## Verification
 
 ```bash
+pnpm --filter evlog run build            # the CLI typechecks against evlog's built types
 pnpm --filter @evlog/cli run lint
-pnpm --filter @evlog/cli run typecheck   # catches REGISTRY/CheckId drift
+pnpm --filter @evlog/cli run typecheck   # catches REGISTRY/CheckId/EvlogMapRuleId drift
 pnpm --filter @evlog/cli run test
 ```
 

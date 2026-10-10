@@ -888,7 +888,7 @@ export function formatMapWarnings(ctx: CliContext, warnings: readonly string[]):
  * Spells out the exit code because this line is most often read in CI logs,
  * where the reader is looking for why the job went red.
  */
-export function formatGate(ctx: CliContext, result: ScanResult, threshold: number): string {
+export function formatGate(ctx: CliContext, result: ScanResult, threshold: number, from = '--min-score'): string {
   const style = createReportStyle(ctx)
   const { paint } = style
   const { score } = result.map
@@ -896,10 +896,10 @@ export function formatGate(ctx: CliContext, result: ScanResult, threshold: numbe
   const badge = paint(['bold', passed ? 'green' : 'red'], ' GATE ')
 
   const verdict = passed
-    ? `${paint('green', `score ${score} meets --min-score ${threshold}`)} ${paint('dim', '— exit code 0')}`
+    ? `${paint('green', `score ${score} meets ${from} ${threshold}`)} ${paint('dim', '— exit code 0')}`
     : result.grade === 'unscored'
-      ? `${paint('red', `nothing to scan, so --min-score ${threshold} cannot be met`)} ${paint('dim', '— exit code 1')}`
-      : `${paint('red', `score ${score} is below --min-score ${threshold}`)} ${paint('dim', '— exit code 1')}`
+      ? `${paint('red', `nothing to scan, so ${from} ${threshold} cannot be met`)} ${paint('dim', '— exit code 1')}`
+      : `${paint('red', `score ${score} is below ${from} ${threshold}`)} ${paint('dim', '— exit code 1')}`
 
   const lines = ['', `${badge} ${verdict}`]
   if (!passed) {
