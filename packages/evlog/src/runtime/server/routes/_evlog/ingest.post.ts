@@ -1,7 +1,7 @@
 import { createError, defineEventHandler, getHeader, getHeaders, getRequestHost, readRawBody, setResponseStatus } from 'h3'
 import { useNitroApp } from 'nitropack/runtime'
 import type { IngestPayload, WideEvent } from '../../../../types'
-import { getEnvironment, getGlobalPluginRunner } from '../../../../logger'
+import { getEnvironment, getGlobalPluginRunner, shouldSample } from '../../../../logger'
 import { filterSafeHeaders } from '../../../../utils'
 
 type IngestEvent = Parameters<typeof defineEventHandler>[0] extends (e: infer E) => unknown ? E : never
@@ -167,6 +167,11 @@ export default defineEventHandler(async (event) => {
       request,
       headers,
     })
+  }
+
+  if (!shouldSample(payload.level)) {
+    setResponseStatus(event, 204)
+    return null
   }
 
   const enrichCtx = {
