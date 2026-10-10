@@ -1,5 +1,25 @@
 # evlog
 
+## 2.31.0
+
+### Minor Changes
+
+- [#805](https://github.com/evloghq/evlog/pull/805) [`7951563`](https://github.com/evloghq/evlog/commit/7951563d3a86335249d08b4c4e55ccd8e92d5ff0) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `defineEvlog()` accepts `extends`, another config to build on, such as a preset published to npm. Objects merge key by key with the config winning on each key, lists are replaced except `redact.paths`, `redact.patterns` and `sampling.keep`, which add up, `plugins` merge by `name`, and a config extends one level only. `mergeEvlogConfig()` applies the same merge outside `defineEvlog()`. `EvlogConfig` also takes `map` and `logs`, the settings `evlog map` and `evlog logs` read from `evlog.config.ts`, and `toLoggerConfig()` and `toMiddlewareOptions()` leave them out.
+
+- [#811](https://github.com/evloghq/evlog/pull/811) [`567bc62`](https://github.com/evloghq/evlog/commit/567bc62ddd87342d20fc7a42745521beb561879d) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Apply `sampling.rates` to browser logs received on the client ingest endpoint. Client events previously skipped head sampling entirely, so `info: 0` still sent every client info log to your drains. A sampled-out client event is now dropped before enrichment and draining, with the same defaults as server events: errors and fatal are kept, trace is dropped unless `sampling.rates.trace` is set. If you tuned rates for server traffic only, check that they still fit your client volume.
+
+### Patch Changes
+
+- [#816](https://github.com/evloghq/evlog/pull/816) [`db19fc2`](https://github.com/evloghq/evlog/commit/db19fc241b6521f561e351263e8c7fb780f0dadf) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Fix `captureOutput` in `evlog/next/instrumentation` sending evlog's own events to drains a second time: in JSON mode, each wide event printed to stdout came back as a `log.info` event, and error events as `log.error` through stderr. evlog now marks its own writes so the capture passes them through.
+
+- [#810](https://github.com/evloghq/evlog/pull/810) [`d476140`](https://github.com/evloghq/evlog/commit/d476140b5ec8c39380d0582db3ecbb21cc626d0e) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Fix every client log being silently dropped in Nuxt when `minLevel` is not set: the public runtime config turns the unset value into `''`, which no level passed. The client logger now falls back to `'debug'` for any value that is not a valid level.
+
+- [#816](https://github.com/evloghq/evlog/pull/816) [`db19fc2`](https://github.com/evloghq/evlog/commit/db19fc241b6521f561e351263e8c7fb780f0dadf) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Fix every route returning 500 with `Cannot find package 'evlog'` in a Next.js app built with Turbopack and deployed without `node_modules` (Vercel, `output: 'standalone'`) when root `instrumentation.ts` uses `defineNodeInstrumentation({ ... })`. The gate loaded `evlog/next/instrumentation/create` through a computed `import()` that the build left out of the output file trace. It now imports the module behind `process.env.NEXT_RUNTIME === 'nodejs'`, so Next.js bundles it into the Node.js build and drops it from the Edge build. With webpack, the module used to load unbundled from `node_modules`, where `NEXT_RUNTIME` is unset, so `captureOutput` never applied. It applies now.
+
+- [#794](https://github.com/evloghq/evlog/pull/794) [`bd3558d`](https://github.com/evloghq/evlog/commit/bd3558dbcc56965d8ff2d57ff4d2965db7b4280b) Thanks [@evlogai](https://github.com/apps/evlogai)! - Fix custom RegExp `redact.patterns` declared in `nuxt.config.ts` (or Nitro module options) being silently dropped: patterns are now serialized as `{ source, flags }` across the config bridges and rebuilt into RegExp on the server. A pattern object without a `source` field is reported instead of skipped, and a function-valued `redact.replacement` / `redact.transform` in the Nuxt module now prints the same warning the standalone Nitro modules already print.
+
+- [#804](https://github.com/evloghq/evlog/pull/804) [`49af75e`](https://github.com/evloghq/evlog/commit/49af75eb53e3bb9bb0642c607328b04d9f0472a0) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Nuxt and Nitro apps that set `silent: true` in the module options no longer print `silent mode is enabled but no drain is configured` at startup. The logger starts from those options before the server plugins attach the drain, so the warning fired even with an `evlog:drain` hook. Standalone `initLogger({ silent: true })` without a drain still warns.
+
 ## 2.30.1
 
 ### Patch Changes
