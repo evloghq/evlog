@@ -199,7 +199,7 @@ export function getGlobalDrain(): ((ctx: DrainContext) => void | Promise<void>) 
  * Trace defaults to 0% (opt-in via `sampling.rates.trace`).
  * Fatal is force-kept regardless of the sampling configuration.
  */
-function shouldSample(level: LogLevel): boolean {
+export function shouldSample(level: LogLevel): boolean {
   if (level === 'fatal') {
     return true
   }
