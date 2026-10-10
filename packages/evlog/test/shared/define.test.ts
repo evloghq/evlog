@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { defineEvlog, mergeEvlogConfig, toLoggerConfig } from '../../src/shared/define'
 
 describe('defineEvlog extends', () => {
@@ -12,6 +12,15 @@ describe('defineEvlog extends', () => {
     const config = defineEvlog({ extends: preset, service: 'checkout' })
     expect(config).toEqual({ service: 'checkout', minLevel: 'info', pretty: false })
     expect('extends' in config).toBe(false)
+  })
+
+  it('types the keys inherited from the parent', () => {
+    const preset = defineEvlog({ minLevel: 'info', pretty: false })
+    const config = defineEvlog({ extends: preset, service: 'checkout' })
+    expectTypeOf(config).toHaveProperty('minLevel')
+    expectTypeOf(config).toHaveProperty('pretty')
+    expectTypeOf(config).not.toHaveProperty('extends')
+    expect(config.minLevel).toBe('info')
   })
 
   it('merges plain objects key by key', () => {

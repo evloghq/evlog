@@ -176,9 +176,9 @@ export function mergeEvlogConfig(parent: EvlogConfig, child: EvlogConfig): Evlog
  * app.use(evlog(toMiddlewareOptions(config)))
  * ```
  */
-export function defineEvlog<T extends EvlogConfig>(config: T): Omit<T, 'extends'> {
+export function defineEvlog<T extends EvlogConfig>(config: T): Omit<T, 'extends'> & Omit<EvlogConfig, 'extends'> {
   if (config.extends === undefined) return config
-  return mergeEvlogConfig(config.extends, config) as Omit<T, 'extends'>
+  return mergeEvlogConfig(config.extends, config) as Omit<T, 'extends'> & Omit<EvlogConfig, 'extends'>
 }
 
 /**
