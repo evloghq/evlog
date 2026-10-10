@@ -150,6 +150,10 @@ function resolveCaptureOutputOptions(
   }
 }
 
+function isEvlogOwnOutput(): boolean {
+  return (globalThis as EvlogProcessOutputGlobal).__evlogOwnOutput === true
+}
+
 function shouldIgnoreCapturedOutput(message: string, ignore: Array<string | RegExp>): boolean {
   return ignore.some((pattern) => {
     if (typeof pattern === 'string') return message.includes(pattern)
@@ -170,13 +174,13 @@ function applyCaptureOutput(config: CaptureOutputOptions, logApi: Log, silent: b
 
   if (activeCaptureOutput.stdout && !stdoutPatched) {
     const originalStdoutWrite = proc.stdout.write.bind(proc.stdout)
-    ;(globalThis as EvlogProcessOutputGlobal).__evlogNativeStdoutWrite = originalStdoutWrite
     stdoutPatched = true
     proc.stdout.write = function(chunk: unknown, ...args: unknown[]): boolean {
       const message = String(chunk).trimEnd()
       const active = activeCaptureOutput
       if (
         !patching
+        && !isEvlogOwnOutput()
         && message.length > 0
         && active?.stdout
         && !shouldIgnoreCapturedOutput(message, active.ignore)
@@ -203,6 +207,7 @@ function applyCaptureOutput(config: CaptureOutputOptions, logApi: Log, silent: b
       const active = activeCaptureOutput
       if (
         !patching
+        && !isEvlogOwnOutput()
         && message.length > 0
         && active?.stderr
         && !shouldIgnoreCapturedOutput(message, active.ignore)
