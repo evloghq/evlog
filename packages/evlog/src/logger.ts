@@ -16,15 +16,20 @@ const nativeStdoutWrite =
     ? process.stdout.write.bind(process.stdout)
     : undefined
 
-/** Cross-bundle global slot for the native stdout write registered by captureOutput patching. */
+/** Cross-bundle flag read by captureOutput patching. */
 export interface EvlogProcessOutputGlobal {
-  __evlogNativeStdoutWrite?: typeof process.stdout.write
+  /** Set while evlog writes its own output, so captureOutput passes the write through. */
+  __evlogOwnOutput?: boolean
 }
 
-function writePrettyStdout(text: string): void {
+function writeOwnOutput(write: () => void): void {
   const global = globalThis as EvlogProcessOutputGlobal
-  const write = global.__evlogNativeStdoutWrite ?? nativeStdoutWrite
-  write?.(text)
+  global.__evlogOwnOutput = true
+  try {
+    write()
+  } finally {
+    global.__evlogOwnOutput = false
+  }
 }
 
 function isPlainObject(val: unknown): val is Record<string, unknown> {
@@ -348,9 +353,9 @@ export function outputWideEvent(event: WideEvent): void {
   if (state.pretty) {
     prettyPrintWideEvent(event)
   } else if (state.stringify) {
-    console[getConsoleMethod(event.level)](JSON.stringify(event))
+    writeOwnOutput(() => console[getConsoleMethod(event.level)](JSON.stringify(event)))
   } else {
-    console[getConsoleMethod(event.level)](event)
+    writeOwnOutput(() => console[getConsoleMethod(event.level)](event))
   }
 }
 
@@ -378,7 +383,7 @@ function emitTaggedLog(level: LogLevel, tag: string, message: string): void {
     } else {
       const color = getLevelColor(level)
       const timestamp = isoNow().slice(11, 23)
-      console.log(`${colors.dim}${timestamp}${colors.reset} ${color}[${tag}]${colors.reset} ${message}`)
+      writeOwnOutput(() => console.log(`${colors.dim}${timestamp}${colors.reset} ${color}[${tag}]${colors.reset} ${message}`))
     }
 
     return
@@ -634,16 +639,15 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
 
 function flushPrettyLines(lines: string[]): void {
   if (lines.length === 0) return
-  const text = `${lines.join('\n')}\n`
   if (
     nativeStdoutWrite
     && !isBrowser()
     && process.env.VITEST !== 'true'
   ) {
-    writePrettyStdout(text)
+    writeOwnOutput(() => nativeStdoutWrite(`${lines.join('\n')}\n`))
     return
   }
-  console.log(lines.join('\n'))
+  writeOwnOutput(() => console.log(lines.join('\n')))
 }
 
 function prettyPrintWideEvent(event: Record<string, unknown>): void {

@@ -1,4 +1,6 @@
+import { Console } from 'node:console'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { waitForDrainCalls } from '../helpers/framework'
 
 // Mock next/server to prevent import errors
 vi.mock('next/server', () => ({ after: undefined }))
@@ -69,6 +71,25 @@ describe('createInstrumentation', () => {
 
   async function runRegister(register: () => void | Promise<void>) {
     await register()
+  }
+
+  /** Replace stdout/stderr with collectors and route `console` through them, as Node's console does outside Vitest. */
+  function collectProcessOutput() {
+    const stdout: string[] = []
+    const stderr: string[] = []
+    process.stdout.write = function(chunk: unknown) {
+      stdout.push(String(chunk))
+      return true
+    } as typeof process.stdout.write
+    process.stderr.write = function(chunk: unknown) {
+      stderr.push(String(chunk))
+      return true
+    } as typeof process.stderr.write
+    const nodeConsole = new Console({ stdout: process.stdout, stderr: process.stderr })
+    for (const method of ['log', 'info', 'warn', 'error'] as const) {
+      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => nodeConsole[method](...args))
+    }
+    return { stdout, stderr }
   }
 
   it('register() calls initLogger() with correct config', async () => {
@@ -412,6 +433,50 @@ describe('createInstrumentation', () => {
     logErrorSpy.mockClear()
     process.stderr.write('benign warning from dependency\n')
     expect(logErrorSpy).not.toHaveBeenCalled()
+  })
+
+  it('captureOutput passes evlog JSON events through instead of capturing them again', async () => {
+    const createInstrumentation = await loadModule()
+    process.env.NEXT_RUNTIME = 'nodejs'
+    const output = collectProcessOutput()
+    const drain = vi.fn()
+
+    const { register } = createInstrumentation({ service: 'factory', pretty: false, captureOutput: true, drain })
+    await runRegister(register)
+
+    const { createLogger } = await import('../../src/logger')
+    createLogger({ path: '/api/github/webhook' }).emit()
+    const failing = createLogger({ path: '/api/github/webhook' })
+    failing.error(new Error('boom'))
+    failing.emit()
+
+    await waitForDrainCalls(drain, 2)
+    expect(drain.mock.calls.map(([ctx]) => [ctx.event.level, ctx.event.path, ctx.event.source])).toEqual([
+      ['info', '/api/github/webhook', undefined],
+      ['error', '/api/github/webhook', undefined],
+    ])
+    expect(logInfoSpy).not.toHaveBeenCalled()
+    expect(logErrorSpy).not.toHaveBeenCalled()
+    expect(output.stdout.map(line => JSON.parse(line))).toMatchObject([{ level: 'info', path: '/api/github/webhook' }])
+    expect(output.stderr.map(line => JSON.parse(line))).toMatchObject([{ level: 'error', path: '/api/github/webhook' }])
+  })
+
+  it('captureOutput passes evlog pretty output and tagged logs through', async () => {
+    const createInstrumentation = await loadModule()
+    process.env.NEXT_RUNTIME = 'nodejs'
+    const output = collectProcessOutput()
+
+    const { register } = createInstrumentation({ service: 'factory', pretty: true, captureOutput: true })
+    await runRegister(register)
+
+    const { createLogger, log } = await import('../../src/logger')
+    createLogger({ path: '/api/github/webhook' }).emit()
+    log.info('auth', 'User logged in')
+
+    expect(logInfoSpy.mock.calls).toEqual([['auth', 'User logged in']])
+    expect(output.stdout.join('')).toContain('/api/github/webhook')
+    expect(output.stdout.join('')).toContain('[auth]')
+    expect(output.stdout.join('')).not.toContain('source')
   })
 
   it('captureOutput uses the latest registration filters without re-wrapping', async () => {

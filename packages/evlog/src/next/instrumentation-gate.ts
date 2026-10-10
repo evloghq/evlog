@@ -28,15 +28,6 @@ export interface NodeInstrumentationModule {
   ) => void | Promise<void>
 }
 
-type CreateInstrumentationModule = typeof import('./instrumentation-create')
-
-/** @internal Non-literal specifier so Turbopack does not pull the logger into the Edge bundle. */
-const CREATE_ENTRY = ['evlog', 'next', 'instrumentation', 'create'].join('/')
-
-function importCreateModule(): Promise<CreateInstrumentationModule> {
-  return import(/* webpackIgnore: true */ CREATE_ENTRY) as Promise<CreateInstrumentationModule>
-}
-
 function isLoader(
   value: (() => Promise<NodeInstrumentationModule>) | InstrumentationOptions,
 ): value is () => Promise<NodeInstrumentationModule> {
@@ -45,8 +36,13 @@ function isLoader(
 
 function createOptionsLoader(options: InstrumentationOptions): () => Promise<NodeInstrumentationModule> {
   return async () => {
-    const { createInstrumentation } = await importCreateModule()
-    return createInstrumentation(options)
+    // Next.js inlines NEXT_RUNTIME in every module it bundles: the Node.js build
+    // includes this import, the Edge build drops the branch with it.
+    if (process.env.NEXT_RUNTIME === 'nodejs') {
+      const { createInstrumentation } = await import('./instrumentation-create')
+      return createInstrumentation(options)
+    }
+    throw new Error('[evlog] createInstrumentation only runs in the Node.js runtime')
   }
 }
 
