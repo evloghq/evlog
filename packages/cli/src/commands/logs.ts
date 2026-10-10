@@ -7,6 +7,7 @@ import { readFsLogs, tailFsLogs } from 'evlog/fs'
 import type { CliContext } from '../core/context'
 import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
+import { loadCliConfig } from '../lib/config'
 import { cliErrors } from '../lib/errors'
 import { buildQuery, computeStats, select } from '../lib/logs/query'
 import type { LogsArgs, LogsQuery } from '../lib/logs/query'
@@ -102,7 +103,11 @@ const timeOf = (event: WideEvent): number => Date.parse(event.timestamp) || 0
 
 /** Read the events the query asks for. Pure with respect to the context: nothing is written. */
 export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsOptions = {}): Promise<LogsResult> {
-  const query = buildQuery(args, options.now)
+  /* `logs.dir` and `logs.limit` stand in for the flags, so a project that
+     writes somewhere unusual is read without passing `--dir` every time. */
+  const config = loadCliConfig(await resolveProject(ctx.cwd))
+  const query = buildQuery(args, options.now, config?.logs.limit)
+  const dir = options.dir ?? config?.logs.dir
   const fetchFn = options.fetchFn ?? fetch
   const inRange = (event: WideEvent): boolean => {
     const at = timeOf(event)
@@ -118,7 +123,7 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
     all = (await fetchEvents(options.url, fetchFn, options.signal)).filter(inRange)
     sources = [options.url]
   } else {
-    const found = await resolveLogsSources(ctx, options.dir)
+    const found = await resolveLogsSources(ctx, dir)
     if (!options.follow && !found.some(source => existsSync(source.dir))) throw cliErrors.LOGS_NO_SINK({ cwd: ctx.cwd })
     all = []
     for (const source of found) {
@@ -137,7 +142,7 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
        same path as the ones still to come. */
     for (const event of result.events) options.onEvent?.(event)
     if (options.url) await followUrl(options.url, all, inRange, options)
-    else await followDirs(await resolveLogsSources(ctx, options.dir), query, options)
+    else await followDirs(await resolveLogsSources(ctx, dir), query, options)
   }
   return result
 }
