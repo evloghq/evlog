@@ -9,10 +9,14 @@ import { isRelativeSpecifier, resolveModuleFile } from './modules'
 /**
  * A value the config only has once it runs: a call, a function, a binding
  * imported from a package. Kept in place of the value so the rest of the
- * config can still be read, and rendered as the code that produces it.
+ * config can still be read.
  */
 export class RuntimeValue {
-  constructor(readonly code: string) {}
+  /**
+   * @param code The source that produces the value, whitespace collapsed and cut at 60 characters.
+   * @param label What the value is, short enough for a column: `createAxiomDrain()`, `function`.
+   */
+  constructor(readonly code: string, readonly label: string = code) {}
 
   toJSON(): { runtime: string } {
     return { runtime: this.code }
@@ -24,8 +28,26 @@ export interface ConfigDocument {
   /** The file the object literal is written in. */
   file: string
   value: Record<string, unknown>
-  /** Line of each property, by dotted path. */
+  /** Line of each property, by {@link formatPath}. */
   lines: Map<string, number>
+}
+
+const PLAIN_KEY = /^[\w$-]+$/
+
+/**
+ * A setting's path as it reads in source: `sampling.rates.info`, a key that is
+ * not a plain name quoted, `routes['/api/v1.2/**'].service`, a list index in
+ * brackets, `redact.paths[0]`. Keys {@link ConfigDocument.lines}, so a route
+ * glob holding a dot stays one key.
+ */
+export function formatPath(path: readonly (string | number)[]): string {
+  let out = ''
+  for (const segment of path) {
+    if (typeof segment === 'number') out += `[${segment}]`
+    else if (PLAIN_KEY.test(segment)) out += out ? `.${segment}` : segment
+    else out += `['${segment.replaceAll('\\', '\\\\').replaceAll('\'', '\\\'')}']`
+  }
+  return out
 }
 
 export interface ReadConfigResult {
@@ -123,6 +145,35 @@ class Reader {
     return code.length > SNIPPET_LENGTH ? `${code.slice(0, SNIPPET_LENGTH - 1)}…` : code
   }
 
+  /** A call by the function it calls, a function as `function`, anything else as its code. */
+  describe(module: Module, node: Node): string {
+    const expression = node.type === 'SpreadElement' ? node.argument : node
+    const prefix = node.type === 'SpreadElement' ? '...' : ''
+    const stripped = WRAPPERS.has(expression.type) ? strip(expression as Expression) : expression
+    switch (stripped.type) {
+      case 'CallExpression':
+      case 'NewExpression': {
+        const callee = this.snippet(module, stripped.callee)
+        const args = stripped.arguments.length > 0 ? '…' : ''
+        return `${prefix}${stripped.type === 'NewExpression' ? 'new ' : ''}${callee}(${args})`
+      }
+      case 'AwaitExpression':
+        return `${prefix}await ${this.describe(module, stripped.argument)}`
+      case 'ArrowFunctionExpression':
+      case 'FunctionExpression':
+        return `${prefix}function`
+      case 'Property':
+        return stripped.kind === 'init' ? 'function' : stripped.kind
+      case 'ArrayExpression':
+        return `${prefix}[${stripped.elements.map(element => element ? this.describe(module, element) : '').join(', ')}]`
+    }
+    return prefix + this.snippet(module, stripped)
+  }
+
+  runtime(module: Module, node: Node): RuntimeValue {
+    return new RuntimeValue(this.snippet(module, node), this.describe(module, node))
+  }
+
   /** What `file` exports as `name`, following re-exports. */
   exported(file: string, name: string, hops: number): Located<Expression> | null {
     if (hops > MAX_HOPS) return null
@@ -190,7 +241,7 @@ class Reader {
     return null
   }
 
-  evaluate({ module, node }: Located<Expression>, path: string, lines: Map<string, number> | undefined, hops: number): unknown {
+  evaluate({ module, node }: Located<Expression>, path: readonly string[], lines: Map<string, number> | undefined, hops: number): unknown {
     const expression = strip(node)
     switch (expression.type) {
       case 'Literal': {
@@ -220,7 +271,7 @@ class Reader {
           /* An array is static only when every element is: a list half read
              at runtime cannot be merged or checked entry by entry. */
           if (item instanceof RuntimeValue || (element?.type === 'SpreadElement' && !Array.isArray(item))) {
-            return new RuntimeValue(this.snippet(module, expression))
+            return this.runtime(module, expression)
           }
           if (element?.type === 'SpreadElement') items.push(...(item as unknown[]))
           else items.push(item)
@@ -238,27 +289,27 @@ class Reader {
         break
       }
     }
-    return new RuntimeValue(this.snippet(module, expression))
+    return this.runtime(module, expression)
   }
 
-  object({ module, node }: Located<ObjectExpression>, prefix: string, lines: Map<string, number> | undefined, hops: number): Record<string, unknown> | RuntimeValue {
+  object({ module, node }: Located<ObjectExpression>, prefix: readonly string[], lines: Map<string, number> | undefined, hops: number): Record<string, unknown> | RuntimeValue {
     const out: Record<string, unknown> = {}
     for (const prop of node.properties) {
       const line = module.lines.lineAt(prop.start)
       if (prop.type === 'SpreadElement') {
         const spread = this.evaluate({ module, node: prop.argument }, prefix, undefined, hops)
-        if (!isPlainObject(spread)) return new RuntimeValue(this.snippet(module, node))
+        if (!isPlainObject(spread)) return this.runtime(module, node)
         Object.assign(out, spread)
-        for (const key of Object.keys(spread)) lines?.set(prefix ? `${prefix}.${key}` : key, line)
+        for (const key of Object.keys(spread)) lines?.set(formatPath([...prefix, key]), line)
         continue
       }
       const key = propertyName(prop)
       /* A computed key could be any key, so nothing about the object is known. */
-      if (key === null) return new RuntimeValue(this.snippet(module, node))
-      const path = prefix ? `${prefix}.${key}` : key
-      lines?.set(path, line)
+      if (key === null) return this.runtime(module, node)
+      const path = [...prefix, key]
+      lines?.set(formatPath(path), line)
       out[key] = prop.method || prop.kind !== 'init'
-        ? new RuntimeValue(this.snippet(module, prop))
+        ? this.runtime(module, prop)
         : this.evaluate({ module, node: prop.value }, path, lines, hops)
     }
     return out
@@ -274,7 +325,7 @@ class Reader {
       return false
     })
     const lines = new Map<string, number>()
-    const value = this.object({ module, node: { ...node, properties } }, '', lines, 0)
+    const value = this.object({ module, node: { ...node, properties } }, [], lines, 0)
     if (value instanceof RuntimeValue) {
       throw cliErrors.CONFIG_NOT_STATIC({ key: 'The config', at: `${this.label(module.file)}:${module.lines.lineAt(node.start)}` })
     }
@@ -298,6 +349,7 @@ class Reader {
       if (!target) throw cliErrors.CONFIG_EXTENDS_NOT_FOUND({ specifier: imported.source, at })
       return { specifier: imported.source, ...this.read(target, imported.imported) }
     }
+    if (node.type === 'Literal' && typeof node.value === 'string') throw cliErrors.CONFIG_EXTENDS_STRING({ specifier: node.value, at })
     const object = this.configObject(module, node, 0)
     if (!object) throw cliErrors.CONFIG_NOT_STATIC({ key: 'extends', at })
     return { specifier: null, ...this.document(object) }

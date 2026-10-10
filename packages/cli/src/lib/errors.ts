@@ -366,6 +366,15 @@ export const cliErrors = defineErrorCatalog('cli', {
     link: 'https://evlog.dev/cli/config',
     tags: ['config'],
   },
+  CONFIG_EXTENDS_STRING: {
+    status: 400,
+    message: ({ specifier, at }: { specifier: string, at: string }) =>
+      `extends in ${at} is the path '${specifier}', not a config`,
+    why: 'extends takes the config itself, the same value the app merges at runtime, so a path is never resolved',
+    fix: 'Import the config from that path as base, then set extends: base',
+    link: 'https://evlog.dev/cli/config',
+    tags: ['config'],
+  },
 })
 
 declare module 'evlog' {

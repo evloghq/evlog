@@ -273,6 +273,19 @@ export default defineEvlog({ extends: preset, map: { minScore: 70 } })
     })
   })
 
+  it('refuses a path where the config itself is expected', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.preset.ts': 'export default { map: { minScore: 50 } }\n',
+      'evlog.config.ts': 'export default { extends: \'./evlog.preset\' }\n',
+    })
+
+    await expect(load(cwd)).rejects.toMatchObject({
+      code: cliErrors.CONFIG_EXTENDS_STRING.code,
+      message: 'extends in evlog.config.ts:1 is the path \'./evlog.preset\', not a config',
+    })
+  })
+
   it('names the import it cannot resolve', async () => {
     const cwd = await makeProject({
       'package.json': PACKAGE,
@@ -489,21 +502,110 @@ describe('evlog config', () => {
 
     expect(result.file).toBe('evlog.config.ts')
     expect(result.extends).toEqual({ specifier: './evlog.preset', file: 'evlog.preset.ts' })
-    expect(result.cli).toContainEqual({ path: 'map.minScore', value: 90, source: 'evlog.preset.ts:6' })
-    expect(result.cli).toContainEqual({ path: 'map.rules.audit', value: 'on', source: 'evlog.config.ts:8' })
-    expect(result.app).toContainEqual({ path: 'sampling.rates.info', value: 50, source: 'evlog.config.ts:6' })
-    expect(result.app).toContainEqual({ path: 'sampling.rates.debug', value: 0, source: 'evlog.preset.ts:4' })
-    expect(result.app).toContainEqual({ path: 'redact.paths', value: ['user.password', 'card.number'], source: 'evlog.config.ts:7' })
+    expect(result.cli).toContainEqual({ path: ['map', 'minScore'], value: 90, source: 'evlog.preset.ts:6' })
+    expect(result.cli).toContainEqual({ path: ['map', 'rules', 'audit'], value: 'on', source: 'evlog.config.ts:8' })
+    expect(result.app).toContainEqual({ path: ['sampling', 'rates', 'info'], value: 50, source: 'evlog.config.ts:6' })
+    expect(result.app).toContainEqual({ path: ['sampling', 'rates', 'debug'], value: 0, source: 'evlog.preset.ts:4' })
   })
 
-  it('renders the settings in columns under who applies them', async () => {
+  it('credits each item of an appended list to the file that adds it', async () => {
+    const cwd = await makeProject(EXTENDED)
+    const result = await runConfig(fakeContext(cwd))
+
+    expect(result.app).toContainEqual({ path: ['redact', 'paths', 0], value: 'user.password', source: 'evlog.preset.ts:5' })
+    expect(result.app).toContainEqual({ path: ['redact', 'paths', 1], value: 'card.number', source: 'evlog.config.ts:7' })
+  })
+
+  it('lays the settings out by what they do, each with where it is written', async () => {
     const cwd = await makeProject(EXTENDED)
     const report = formatConfigReport(fakeContext(cwd), await runConfig(fakeContext(cwd)))
 
     expect(report).toContain('evlog.config.ts · extends ./evlog.preset → evlog.preset.ts')
-    expect(report).toMatch(/^CLI · applied by evlog map and evlog logs$/m)
-    expect(report).toMatch(/^APP · applied where the app imports the config$/m)
+    expect(report).toMatch(/^Sampling$/m)
+    expect(report).toMatch(/^ {2}info +50% +evlog\.config\.ts:6$/m)
+    expect(report).toMatch(/^ {2}debug +0% +evlog\.preset\.ts:4$/m)
+    expect(report).toMatch(/^Redaction$/m)
+    expect(report).toMatch(/^ {2}paths +user\.password +evlog\.preset\.ts:5$/m)
+    expect(report).toMatch(/^ {12}card\.number +evlog\.config\.ts:7$/m)
+    expect(report).toMatch(/^CLI · read by evlog map and evlog logs$/m)
     expect(report).toMatch(/^ {2}map\.minScore +90 +evlog\.preset\.ts:6$/m)
+  })
+
+  it('fills in what evlog does when the file is silent', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': 'export default { service: \'shop\' }\n',
+    })
+    const report = formatConfigReport(fakeContext(cwd), await runConfig(fakeContext(cwd)))
+
+    expect(report).toMatch(/^Service$/m)
+    expect(report).toMatch(/^ {2}service +shop +evlog\.config\.ts:1$/m)
+    expect(report).toMatch(/^ {2}environment +from NODE_ENV +default$/m)
+    expect(report).toMatch(/^ {2}trace +0% +default$/m)
+    expect(report).toMatch(/^ {2}fatal +always +default$/m)
+    expect(report).toMatch(/^ {2}redact +on in production, off in dev +default$/m)
+    expect(report).toMatch(/^ {2}drain +none in this file$/m)
+  })
+
+  it('lists routes in the order they match, a dotted glob kept whole', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': `export default {
+  service: 'shop',
+  routes: {
+    '/api/billing/v1.2/**': { service: 'billing' },
+    '/api/**': { service: 'api' },
+  },
+}
+`,
+    })
+    const result = await runConfig(fakeContext(cwd))
+    const report = formatConfigReport(fakeContext(cwd), result)
+
+    expect(configJson(result).app).toContainEqual({ path: 'routes[\'/api/billing/v1.2/**\'].service', value: 'billing', source: 'evlog.config.ts:4' })
+    expect(report).toMatch(/^Services · first matching route wins$/m)
+    expect(report).toMatch(/^ {2}\/api\/billing\/v1\.2\/\*\* +billing +evlog\.config\.ts:4\n {2}\/api\/\*\* +api +evlog\.config\.ts:5\n {2}any other route +shop +evlog\.config\.ts:2$/m)
+  })
+
+  it('shows sampling per level and warns when errors or fatal rates are lost', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': `export default {
+  minLevel: 'info',
+  sampling: {
+    rates: { error: 10, fatal: 50 },
+    keep: [{ status: 400 }, { duration: 1000, path: '/api/**' }],
+  },
+}
+`,
+    })
+    const report = formatConfigReport(fakeContext(cwd), await runConfig(fakeContext(cwd)))
+
+    expect(report).toMatch(/^ {2}debug +off, below minLevel +evlog\.config\.ts:2$/m)
+    expect(report).toMatch(/^ {2}error +10% +evlog\.config\.ts:4\n +⚠ 90% of errors are dropped$/m)
+    expect(report).toContain('⚠ rates.fatal at evlog.config.ts:4 is ignored, fatal events are always kept')
+    expect(report).toMatch(/^ {2}keep if +status ≥ 400 +evlog\.config\.ts:5$/m)
+    expect(report).toMatch(/^ {2}or +duration ≥ 1000ms or path \/api\/\*\* +evlog\.config\.ts:5$/m)
+  })
+
+  it('names runtime values by what they call', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': `import { createAxiomDrain } from 'evlog/axiom'
+import { createUserAgentEnricher } from 'evlog/enrichers'
+
+export default {
+  drain: createAxiomDrain({ dataset: 'logs' }),
+  enrich: [createUserAgentEnricher(), ctx => ctx],
+  keep: ctx => ctx,
+}
+`,
+    })
+    const report = formatConfigReport(fakeContext(cwd), await runConfig(fakeContext(cwd)))
+
+    expect(report).toMatch(/^ {2}drain +createAxiomDrain\(…\) +evlog\.config\.ts:5$/m)
+    expect(report).toMatch(/^ {2}enrich +\[createUserAgentEnricher\(\), function\] +evlog\.config\.ts:6$/m)
+    expect(report).toMatch(/^ {2}keep +function +evlog\.config\.ts:7$/m)
   })
 
   it('writes regexps and runtime values in a JSON-safe form', async () => {
@@ -514,7 +616,7 @@ describe('evlog config', () => {
     const json = JSON.parse(JSON.stringify(configJson(await runConfig(fakeContext(cwd))))) as { app: { path: string, value: unknown }[] }
 
     expect(json.app).toContainEqual(expect.objectContaining({ path: 'drain', value: { runtime: 'createAxiomDrain()' } }))
-    expect(json.app).toContainEqual(expect.objectContaining({ path: 'redact.patterns', value: [{ regexp: '/acct_\\w+/g' }] }))
+    expect(json.app).toContainEqual(expect.objectContaining({ path: 'redact.patterns[0]', value: { regexp: '/acct_\\w+/g' } }))
   })
 
   it('says where it looked when there is no config', async () => {

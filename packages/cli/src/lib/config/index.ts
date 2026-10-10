@@ -8,9 +8,9 @@ import type { CheckId } from '../map/types'
 import { prettyPath } from '../project'
 import type { ProjectInfo } from '../project'
 import type { ConfigDocument } from './read'
-import { isPlainObject, readConfig, RuntimeValue } from './read'
+import { formatPath, isPlainObject, readConfig, RuntimeValue } from './read'
 
-export { RuntimeValue } from './read'
+export { formatPath, RuntimeValue } from './read'
 
 /** Names `evlog.config` is looked up under, in order, in each directory. */
 export const CONFIG_FILES = ['evlog.config.ts', 'evlog.config.mts', 'evlog.config.js', 'evlog.config.mjs'] as const
@@ -39,7 +39,10 @@ export interface CliConfig {
   extends: { specifier: string | null, file: string } | null
   /** Every setting, merged across `extends`. Values computed at runtime are kept as {@link RuntimeValue}. */
   resolved: Record<string, unknown>
-  /** Where each setting is written, as `file:line`, by dotted path. */
+  /**
+   * Where each setting is written, as `file:line`, by {@link formatPath}. An
+   * item of a list `extends` appends to has its own entry, `redact.paths[0]`.
+   */
   sources: ReadonlyMap<string, string>
   map: MapSettings
   logs: LogsSettings
@@ -49,6 +52,20 @@ const MAP_KEYS = ['rules', 'ignore', 'minScore', 'baseline']
 /** The map sorts entry points into instrumented, partial and dark by these, so neither can be turned off. */
 const CORE_RULES: ReadonlySet<string> = new Set<CheckId>(['wide-event', 'context'])
 const LOGS_KEYS = ['dir', 'limit']
+
+/** Lists `mergeEvlogConfig` appends the child's items to instead of replacing. */
+const APPENDED_LISTS: readonly (readonly string[])[] = [['redact', 'paths'], ['redact', 'patterns'], ['sampling', 'keep']]
+
+/** True for a list whose items can come from both files of an `extends`. */
+export function isAppendedList(path: readonly (string | number)[]): boolean {
+  return APPENDED_LISTS.some(list => list.length === path.length && list.every((key, index) => key === path[index]))
+}
+
+function valueAt(value: unknown, path: readonly string[]): unknown {
+  let at = value
+  for (const key of path) at = isPlainObject(at) ? at[key] : undefined
+  return at
+}
 
 /**
  * The nearest `evlog.config` from the package directory up to the workspace
@@ -74,13 +91,14 @@ function staticValue(value: unknown, key: string, at: At): unknown {
   return value
 }
 
-function section(value: unknown, key: string, allowed: readonly string[], at: At): Record<string, unknown> {
+function section(value: unknown, path: readonly string[], allowed: readonly string[], at: At): Record<string, unknown> {
+  const key = formatPath(path)
   if (staticValue(value, key, at) === undefined) return {}
   if (!isPlainObject(value)) throw cliErrors.CONFIG_INVALID({ key, at: at(key), problem: 'must be an object' })
   for (const name of Object.keys(value)) {
     if (allowed.includes(name)) continue
-    const path = `${key}.${name}`
-    throw cliErrors.CONFIG_INVALID({ key: path, at: at(path), problem: `is not a setting; expected ${allowed.join(', ')}` })
+    const child = formatPath([...path, name])
+    throw cliErrors.CONFIG_INVALID({ key: child, at: at(child), problem: `is not a setting; expected ${allowed.join(', ')}` })
   }
   return value
 }
@@ -95,10 +113,10 @@ function wholeNumber(value: unknown, key: string, at: At, { min, max = Number.PO
 }
 
 function readMap(value: unknown, at: At): MapSettings {
-  const map = section(value, 'map', MAP_KEYS, at)
+  const map = section(value, ['map'], MAP_KEYS, at)
   const ids = RULES.map(rule => rule.id)
   const off = new Set<CheckId>()
-  for (const [id, state] of Object.entries(section(map.rules, 'map.rules', ids, at))) {
+  for (const [id, state] of Object.entries(section(map.rules, ['map', 'rules'], ids, at))) {
     const key = `map.rules.${id}`
     if (staticValue(state, key, at) !== 'on' && state !== 'off') {
       throw cliErrors.CONFIG_INVALID({ key, at: at(key), problem: 'must be \'on\' or \'off\'' })
@@ -123,7 +141,7 @@ function readMap(value: unknown, at: At): MapSettings {
 }
 
 function readLogs(value: unknown, packageDir: string, at: At): LogsSettings {
-  const logs = section(value, 'logs', LOGS_KEYS, at)
+  const logs = section(value, ['logs'], LOGS_KEYS, at)
   const dir = staticValue(logs.dir, 'logs.dir', at)
   if (dir !== undefined && (typeof dir !== 'string' || dir.length === 0)) {
     throw cliErrors.CONFIG_INVALID({ key: 'logs.dir', at: at('logs.dir'), problem: 'must be a path' })
@@ -148,12 +166,29 @@ export function loadCliConfig(project: ProjectInfo): CliConfig | null {
   const label = (path: string): string => prettyPath(project.cwd, path)
   const { config, parent } = readConfig(file, label)
 
+  const documents = parent ? [parent.document, config] : [config]
   const sources = new Map<string, string>()
-  const record = (document: ConfigDocument): void => {
+  for (const document of documents) {
     for (const [path, line] of document.lines) sources.set(path, `${label(document.file)}:${line}`)
   }
-  if (parent) record(parent.document)
-  record(config)
+  const sourceIn = (document: ConfigDocument, path: readonly string[]): string | undefined => {
+    for (let end = path.length; end > 0; end--) {
+      const line = document.lines.get(formatPath(path.slice(0, end)))
+      if (line !== undefined) return `${label(document.file)}:${line}`
+    }
+    return undefined
+  }
+  for (const list of APPENDED_LISTS) {
+    let index = 0
+    for (const document of documents) {
+      const items = valueAt(document.value, list)
+      if (!Array.isArray(items)) continue
+      const source = sourceIn(document, list)
+      for (let item = 0; item < items.length; item++, index++) {
+        if (source) sources.set(formatPath([...list, index]), source)
+      }
+    }
+  }
 
   const resolved = parent
     ? mergeEvlogConfig(parent.document.value as EvlogConfig, config.value as EvlogConfig) as Record<string, unknown>
