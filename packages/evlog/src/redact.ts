@@ -241,7 +241,8 @@ export const builtinPatterns = {
   },
   /** Email addresses → a***@***.com */
   email: {
-    pattern: /[\w.+-]+@[\w-]+\.[\w.]+/g,
+    // Letters-only TLD, so pnpm store segments like `name@1.2.3` are not treated as addresses.
+    pattern: /[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}\b/g,
     mask: (m: string) => {
       const at = m.indexOf('@')
       if (at < 1) return '***@***'
