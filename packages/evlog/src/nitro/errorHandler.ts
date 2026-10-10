@@ -8,6 +8,7 @@ import {
   extractErrorStatus,
   buildPlainNitroErrorBody,
   isSensitiveNitroError,
+  isExpectedEvlogError,
   serializeEvlogErrorResponse,
   markH3ErrorHandled,
   shouldSerializeNitroErrorAsJson,
@@ -55,7 +56,7 @@ export default defineNitroErrorHandler(async (error, event, ctx) => {
 
   // Nitro v2 always passes `ctx`, but a missing context (e.g. the handler
   // invoked directly) must degrade to a flushed response, not a crash.
-  if (!suppressOverlay && ctx?.defaultHandler) {
+  if (!suppressOverlay && !isExpectedEvlogError(evlogError) && ctx?.defaultHandler) {
     await ctx.defaultHandler(error, event, { silent: false })
   }
 

@@ -5,6 +5,7 @@ import {
   extractErrorStatus,
   buildPlainNitroErrorBody,
   isSensitiveNitroError,
+  isExpectedEvlogError,
   serializeEvlogErrorResponse,
   shouldSerializeNitroErrorAsJson,
   shouldSuppressNitroDevOverlay,
@@ -48,7 +49,7 @@ export default defineErrorHandler(async (error, event, ctx: NitroErrorHandlerCon
 
   const suppressOverlay = shouldSuppressNitroDevOverlay()
 
-  if (!suppressOverlay) {
+  if (!suppressOverlay && !isExpectedEvlogError(evlogError)) {
     await ctx.defaultHandler(error, event, { silent: false })
   }
 

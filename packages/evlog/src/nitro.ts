@@ -115,6 +115,15 @@ export function resolveEvlogError(error: Error): Error | null {
 
 export { extractErrorStatus } from './shared/errors'
 
+/**
+ * Whether an error is an EvlogError with a 4xx status: an expected outcome that
+ * the wide event already records, so Nitro's default logging is skipped for it.
+ * @internal
+ */
+export function isExpectedEvlogError(evlogError: Error | null): boolean {
+  return evlogError !== null && extractErrorStatus(evlogError) < 500
+}
+
 /** Request metadata used to decide JSON vs framework error-page rendering. */
 export interface NitroErrorRequestContext {
   pathname: string
