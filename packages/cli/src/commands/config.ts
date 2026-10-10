@@ -132,7 +132,7 @@ export function formatConfigReport(ctx: CliContext, result: ConfigResult): strin
   }
 
   group('CLI', 'applied by evlog map and evlog logs', result.cli)
-  group('APP', 'applied where the app imports the config', result.app)
+  group('APP', 'applied by the app at runtime', result.app)
   if (all.length === 0) lines.push(paint('dim', 'The config sets nothing.'), '')
   return lines.join('\n')
 }

@@ -75,12 +75,11 @@ npx evlog init --yes --drain fs  # apply
 Ask before running it. On other frameworks (or if the user declines), guide the manual setup:
 
 ```typescript
+import { defineEvlog } from 'evlog'
 import { createFsDrain } from 'evlog/fs'
 
-// Nuxt / Nitro: server/plugins/evlog-drain.ts
-export default defineNitroPlugin((nitroApp) => {
-  nitroApp.hooks.hook('evlog:drain', createFsDrain())
-})
+// Nuxt / Nitro: evlog.config.ts at the app root, which the module loads
+export default defineEvlog({ drain: createFsDrain() })
 
 // Hono / Express / Elysia: pass in middleware options
 app.use(evlog({ drain: createFsDrain() }))

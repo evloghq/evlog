@@ -4,6 +4,7 @@ import type { Nitro } from 'nitropack'
 import type { NitroModuleOptions } from '../nitro'
 import { prependNitroErrorHandler } from '../nitro'
 import { prepareRedactForBridge } from '../redact'
+import { registerEvlogConfigPlugin } from '../shared/configPlugin'
 
 export type { NitroModuleOptions }
 
@@ -23,6 +24,7 @@ export default function evlog(options?: NitroModuleOptions) {
     setup(nitro: Nitro) {
       // Push the plugin (no extension — Nitro's bundler resolves it)
       nitro.options.plugins.push(resolveModulePath('plugin'))
+      registerEvlogConfigPlugin(nitro)
 
       // Prepend so evlog runs before any framework handler (Nuxt registers its own).
       nitro.options.errorHandler = prependNitroErrorHandler(
