@@ -4,7 +4,7 @@ import { GITHUB_CONNECTOR } from '../lib/github/credentials'
 import { createLabelPolicy, writePolicy } from '../lib/github/label-approval'
 import { createPullRequestPolicy } from '../lib/github/pull-request-approval'
 import { homeRepository } from '../lib/repo'
-import { isAutonomous, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'
+import { isAutonomous, isPullRequestReview, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'
 
 /**
  * Every tool here is carried in the prompt on every turn, whatever the turn is
@@ -97,11 +97,12 @@ export default githubExtension({
   connector: GITHUB_CONNECTOR,
   context: homeRepository(),
   include: [...TOOLS],
-  // Omitted write tools keep the default always(): closeIssue, createPullRequestReview.
   // Connect scopes are derived from `include` (createLabel → issues:write) in sdk ≥ 1.11.1.
   requireApproval: {
     // Reversible and harmless on every kind of run; a card here only slows the PR flow down.
-    requestReviewers: (): ApprovalStatus => 'not-applicable',
+    requestReviewers: (ctx: ApprovalContext): ApprovalStatus => isPullRequestReview(ctx.session.auth.current) ? policy(ctx) : 'not-applicable',
+    closeIssue: (ctx: ApprovalContext): ApprovalStatus => isPullRequestReview(ctx.session.auth.current) ? policy(ctx) : 'user-approval',
+    createPullRequestReview: (ctx: ApprovalContext): ApprovalStatus => isPullRequestReview(ctx.session.auth.current) ? policy(ctx) : 'user-approval',
     createPullRequest: (ctx: ApprovalContext) => createPullRequestPolicy(ctx.session.auth.current, ctx.toolInput),
     updatePullRequest: policy,
     createIssue: autonomousWrite,

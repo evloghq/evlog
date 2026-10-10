@@ -1,6 +1,7 @@
 import type { SessionAuthContext } from 'eve/context'
 import { defineAgent, defineDynamic } from 'eve'
 import { gatewayRouting, sessionTags } from './lib/gateway'
+import { reviewStepModel } from './lib/github/external-review'
 import { MODEL } from './lib/model'
 import { isScheduleAppAuth } from './lib/trust'
 
@@ -36,6 +37,14 @@ export default defineAgent({
     events: {
       'session.started': selectModel,
       'turn.started': selectModel,
+      'step.started': (_event, ctx) => {
+        const model = reviewStepModel(ctx.session.auth.current)
+        return {
+          model,
+          modelContextWindowTokens: typeof model === 'string' ? undefined : 1_000_000,
+          modelOptions: modelOptions(ctx),
+        }
+      },
     },
   }),
   reasoning: 'high',

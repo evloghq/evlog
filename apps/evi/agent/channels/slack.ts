@@ -12,6 +12,7 @@ import { isMaintainer } from '../lib/trust'
 async function admitMaintainer(ctx: SlackInboundMessageContext, message: SlackMessage): Promise<SlackMentionResult> {
   const auth = defaultSlackAuth(message, ctx)
   if (auth === null || !isMaintainer(auth)) return null
+  if (ctx.slack.channelId === process.env.EVI_PR_REVIEW_SLACK_CHANNEL_ID) return null
   await ctx.thread.startTyping('Thinking…')
   return { auth }
 }
