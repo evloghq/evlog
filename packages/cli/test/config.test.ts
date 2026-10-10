@@ -454,7 +454,7 @@ describe('evlog config', () => {
 
     expect(report).toContain('evlog.config.ts · extends ./evlog.preset → evlog.preset.ts')
     expect(report).toMatch(/^CLI · applied by evlog map and evlog logs$/m)
-    expect(report).toMatch(/^APP · applied where the app imports the config$/m)
+    expect(report).toMatch(/^APP · applied by the app at runtime$/m)
     expect(report).toMatch(/^ {2}map\.minScore +90 +evlog\.preset\.ts:6$/m)
   })
 

@@ -140,7 +140,20 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
-Drain, enrich, and tail sampling use Nitro hooks in server plugins:
+Drain, enrich, sampling and redaction can live in `evlog.config.ts` at the app root. The module loads it on the server, and the `evlog` key in `nuxt.config.ts` overrides it. The browser logger reads only the `evlog` key.
+
+```typescript
+// evlog.config.ts
+import { defineEvlog } from 'evlog'
+import { createAxiomDrain } from 'evlog/axiom'
+
+export default defineEvlog({
+  service: 'my-app',
+  drain: createAxiomDrain(),
+})
+```
+
+Nitro hooks in server plugins keep working next to the file, and an event reaches both drains:
 
 ```typescript
 // server/plugins/evlog-drain.ts
@@ -417,7 +430,7 @@ export default defineNitroConfig({
 })
 ```
 
-Import `useLogger` from `evlog/nitro` in routes.
+Import `useLogger` from `evlog/nitro` in routes. On Nitro v2 and v3, an `evlog.config.ts` at the app root is loaded by the module, and the options passed to `evlog()` override it.
 
 ### NestJS
 
@@ -898,6 +911,8 @@ log.emit()  // Manual emit required in standalone
 ## Configuration Options
 
 All options work in Nuxt (`evlog` key), Nitro (passed to `evlog()`), Next.js (`createEvlog()`), and standalone (`initLogger()`).
+
+They can also live in `evlog.config.ts`, written with `defineEvlog()`. Nuxt and Nitro load the file on their own, with module options overriding it. Other frameworks import it and pass `toLoggerConfig(config)` to `initLogger()` and `toMiddlewareOptions(config)` to the middleware. `evlog config` prints what it resolves to, and `extends` shares a base config across apps (one level). Docs: https://www.evlog.dev/cli/config
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|

@@ -4,6 +4,7 @@ import type { Nitro } from 'nitro/types'
 import type { NitroModuleOptions } from '../nitro'
 import { prependNitroErrorHandler } from '../nitro'
 import { prepareRedactForBridge } from '../redact'
+import { registerEvlogConfigPlugin } from '../shared/configPlugin'
 
 export type { NitroModuleOptions }
 
@@ -24,6 +25,7 @@ export default function evlog(options?: NitroModuleOptions) {
       // Push the plugin (no extension — Nitro's bundler resolves it)
       nitro.options.plugins = nitro.options.plugins || []
       nitro.options.plugins.push(resolveModulePath('plugin'))
+      registerEvlogConfigPlugin(nitro)
 
       // explicitly tell nitro to bundle evlog's files to correctly resolve nitro dependencies
       if (!nitro.options.noExternals) {
