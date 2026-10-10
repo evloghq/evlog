@@ -360,6 +360,22 @@ describe('built-in smart masking', () => {
     expect(event.safe).toBe('no email here')
   })
 
+  it('leaves pnpm name@version store paths in stack traces untouched', () => {
+    let event: Record<string, unknown> = {
+      stack: [
+        'file:///app/node_modules/.pnpm/h3@1.15.11/node_modules/h3/dist/index.mjs:2007:9',
+        'node_modules/.pnpm/unctx@2.5.0/node_modules/unctx/dist/index.mjs:10:3',
+        'node_modules/.pnpm/react-dom@18.2.0_react@18.2.0/node_modules/react-dom/index.js:1:1',
+      ].join('\n'),
+    }
+    event = redactEvent(event, defined(resolveRedactConfig({ builtins: ['email'] }), 'redact config'))
+    expect(event.stack).toBe([
+      'file:///app/node_modules/.pnpm/h3@1.15.11/node_modules/h3/dist/index.mjs:2007:9',
+      'node_modules/.pnpm/unctx@2.5.0/node_modules/unctx/dist/index.mjs:10:3',
+      'node_modules/.pnpm/react-dom@18.2.0_react@18.2.0/node_modules/react-dom/index.js:1:1',
+    ].join('\n'))
+  })
+
   it('masks IPv4 addresses keeping last octet', () => {
     let event: Record<string, unknown> = {
       a: '192.168.1.1',
