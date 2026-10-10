@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { LogLevel } from '../../src/types'
 import { initLog, log, setMinLevel } from '../../src/runtime/client/log'
 
 describe('client console option', () => {
@@ -180,6 +181,18 @@ describe('client minLevel', () => {
     log.info({ action: 'x' })
     expect(infoSpy).not.toHaveBeenCalled()
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('falls back to debug when minLevel is not a valid level', () => {
+    initLog({
+      enabled: true,
+      pretty: false,
+      minLevel: '' as LogLevel,
+      transport: { enabled: true, endpoint: '/api/_evlog/ingest' },
+    })
+    log.info({ action: 'x' })
+    expect(infoSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
   it('setMinLevel enables verbose logs at runtime', () => {

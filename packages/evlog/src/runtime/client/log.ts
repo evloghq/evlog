@@ -1,5 +1,5 @@
 import type { Log, LogLevel, TransportConfig } from '../../types'
-import { cssColors, escapeFormatString, formatMessage, getCssLevelColor, hasMessageSpecifiers, isBrowser, isLevelEnabled, isoNow } from '../../utils'
+import { cssColors, escapeFormatString, formatMessage, getCssLevelColor, hasMessageSpecifiers, isBrowser, isLevelEnabled, isLogLevel, isoNow } from '../../utils'
 
 /**
  * Browser DevTools often hide or bucket `console.debug` under "Verbose" in a way that looks like
@@ -35,7 +35,8 @@ export function initLog(options: { enabled?: boolean, console?: boolean, pretty?
   clientEnabled = typeof options.enabled === 'boolean' ? options.enabled : true
   clientConsole = typeof options.console === 'boolean' ? options.console : true
   clientPretty = typeof options.pretty === 'boolean' ? options.pretty : true
-  clientMinLevel = options.minLevel ?? 'debug'
+  // Nuxt public runtime config turns an unset `minLevel` into `''`.
+  clientMinLevel = isLogLevel(options.minLevel) ? options.minLevel : 'debug'
   clientService = options.service ?? 'client'
   transportEnabled = options.transport?.enabled ?? false
   transportEndpoint = options.transport?.endpoint ?? '/api/_evlog/ingest'
