@@ -1,12 +1,14 @@
 import { EvlogError } from 'evlog'
 import type { CliContext } from '../core/context'
-import { EXIT_FAIL, EXIT_USAGE } from '../core/output'
+import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
+import { loadCliConfig } from '../lib/config'
+import type { CliConfig } from '../lib/config'
 import { FRAMEWORK_IDS, isFramework } from '../lib/frameworks'
 import type { CliDebug } from '../lib/debug'
 import { createNoopCliDebug } from '../lib/debug'
 import { cliErrors } from '../lib/errors'
-import { resolveEvlog, resolveProject } from '../lib/project'
+import { prettyPath, resolveEvlog, resolveProject } from '../lib/project'
 import type { ProjectInfo } from '../lib/project'
 import { checkBaselineVersion, compareToBaseline, hasRegressed, loadBaseline } from '../lib/map/baseline'
 import type { BaselineComparison } from '../lib/map/baseline'
@@ -43,6 +45,8 @@ export interface MapResult {
   baseline: BaselineComparison | null
   /** Baseline problems that do not stop the run — a map that predates version reporting. */
   baselineWarnings: string[]
+  /** The `evlog.config` the run applied, if any. */
+  config: CliConfig | null
 }
 
 /**
@@ -82,21 +86,30 @@ export async function runMap(
     r => ({ hasEvlog: !!r.install }),
   )
 
+  const config = await log.step(
+    'loadConfig',
+    () => loadCliConfig(project),
+    c => ({ config: c && { file: prettyPath(ctx.cwd, c.file), rulesOff: [...c.map.off], ignore: c.map.ignore.length } }),
+  )
+
   const scanCtx: ScanContext = {
     projectRoot: project.packageDir,
     framework,
     projectName: project.packageName ?? 'unknown',
     hasEvlog: !!resolved.install,
     verbose: options.verbose ?? false,
+    rulesOff: config?.map.off,
+    ignore: config?.map.ignore,
   }
 
   /* Read before the scan writes: `writeMapFile` overwrites `evlog.map.json` in
      place, so loading the baseline afterwards would compare this run against
      itself and never report a regression. */
-  const baselineMap = options.baseline
+  const baselineSpec = options.baseline ?? config?.map.baseline
+  const baselineMap = baselineSpec
     ? await log.step(
       'loadBaseline',
-      () => loadBaseline(project.packageDir, typeof options.baseline === 'string' ? options.baseline : undefined),
+      () => loadBaseline(project.packageDir, typeof baselineSpec === 'string' ? baselineSpec : undefined),
       r => ({ baselineSource: r.source.label, baselineScore: r.map.score }),
     )
     : null
@@ -143,7 +156,20 @@ export async function runMap(
     mapPath,
     baseline,
     baselineWarnings,
+    config,
   }
+}
+
+/** What the config changed about this run, so a score is never read without it. */
+function formatConfigNote(ctx: CliContext, result: MapResult): string | null {
+  const { config } = result
+  if (!config) return null
+  const changes = [
+    config.map.off.size > 0 ? `${[...config.map.off].join(', ')} off` : null,
+    result.scan.ignored > 0 ? `${result.scan.ignored} entry point${result.scan.ignored === 1 ? '' : 's'} ignored` : null,
+  ].filter(change => change !== null)
+  if (changes.length === 0) return null
+  return createStyle(ctx).paint('dim', `${prettyPath(ctx.cwd, config.file)}: ${changes.join(', ')}`)
 }
 
 /**
@@ -157,7 +183,7 @@ export async function runMap(
 export function formatMapReport(
   ctx: CliContext,
   result: MapResult,
-  options: { all?: boolean, entry?: string, minScore?: number } = {},
+  options: { all?: boolean, entry?: string, minScore?: number, minScoreFrom?: string } = {},
 ): string {
   const sections: string[] = []
 
@@ -168,6 +194,8 @@ export function formatMapReport(
   if (warnings.length > 0) {
     sections.push(formatMapWarnings(ctx, warnings))
   }
+  const note = formatConfigNote(ctx, result)
+  if (note) sections.push(note)
 
   if (options.entry) {
     const route = findEntryPoint(result.scan, options.entry)
@@ -185,7 +213,7 @@ export function formatMapReport(
   }
 
   if (options.minScore !== undefined) {
-    sections.push(formatGate(ctx, result.scan, options.minScore))
+    sections.push(formatGate(ctx, result.scan, options.minScore, options.minScoreFrom))
   }
 
   return sections.join('\n')
@@ -284,6 +312,7 @@ export default defineEvlogCommand('map', {
 
     let result: MapResult
     let threshold: number | undefined
+    let thresholdFrom = '--min-score'
     let framework: Framework | undefined
     let format: MapFormat = 'human'
     let limit = DEFAULT_LIMIT
@@ -293,7 +322,7 @@ export default defineEvlogCommand('map', {
          and writes evlog.map.json before admitting it cannot gate on it. */
       format = parseFormatArg(args.format, args.json)
       limit = parseLimitArg(args.limit)
-      threshold = parseMinScoreArg(args.minScore)
+      const minScoreFlag = parseMinScoreArg(args.minScore)
       framework = parseFrameworkArg(args.framework)
       result = await runMap(cli, log, {
         framework,
@@ -302,6 +331,8 @@ export default defineEvlogCommand('map', {
         baseline: parseBaselineArg(args.baseline),
         baselineLabel: typeof args.baselineLabel === 'string' && args.baselineLabel.length > 0 ? args.baselineLabel : undefined,
       })
+      threshold = minScoreFlag ?? result.config?.map.minScore
+      if (minScoreFlag === undefined && threshold !== undefined) thresholdFrom = 'map.minScore'
     } catch (error) {
       if (error instanceof EvlogError) {
         log.finding({ code: error.code ?? 'cli.MAP_FAILED', why: error.why, fix: error.fix, link: error.link }, { status: 'fail' })
@@ -327,14 +358,15 @@ export default defineEvlogCommand('map', {
       baseline: result.baseline,
       view,
       wrote: result.mapPath !== null,
+      config: result.config && { rulesOff: result.config.map.off.size },
     })
 
-    const human = formatMapReport(cli, result, { all: args.all, entry, minScore: threshold })
+    const human = formatMapReport(cli, result, { all: args.all, entry, minScore: threshold, minScoreFrom: thresholdFrom })
     if (format === 'github') {
       /* Annotations are the stdout contract; the report still goes to stderr so
          the job log reads the same as a local run. */
       const location = { projectRoot: result.projectRoot, workspace: cli.env.GITHUB_WORKSPACE }
-      ui.stdout(formatGithubAnnotations(result.scan, result.baseline, location, { minScore: threshold, limit }))
+      ui.stdout(formatGithubAnnotations(result.scan, result.baseline, location, { minScore: threshold, minScoreFrom: thresholdFrom, limit }))
       ui.human(human)
     } else {
       ui.done({

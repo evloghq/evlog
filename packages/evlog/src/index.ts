@@ -66,8 +66,8 @@ export type {
   RequestFinishContext,
   RequestLifecycleContext,
 } from './shared/plugin'
-export { defineEvlog, toLoggerConfig, toMiddlewareOptions } from './shared/define'
-export type { EvlogConfig } from './shared/define'
+export { defineEvlog, mergeEvlogConfig, toLoggerConfig, toMiddlewareOptions } from './shared/define'
+export type { EvlogConfig, EvlogLogsConfig, EvlogMapConfig, EvlogMapRuleId } from './shared/define'
 
 export type {
   AuditAction,

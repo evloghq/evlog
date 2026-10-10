@@ -119,6 +119,10 @@ export interface ScanContext {
    * and each file goes through oxc once. Defaults to an uncached read.
    */
   parse?: ParseFn
+  /** Checks `evlog.config` turns off: reported `n/a` on every entry point. */
+  rulesOff?: ReadonlySet<CheckId>
+  /** Entry points `evlog.config` leaves out, as globs matched against {@link RawRouteEntry.file}. */
+  ignore?: readonly string[]
 }
 
 export interface FrameworkAdapter {
@@ -178,6 +182,8 @@ export interface ScanResult {
   suggestions: ProjectSuggestion[]
   /** Problems found while scanning — a disable comment naming an unknown check. */
   warnings: string[]
+  /** Entry points `evlog.config` left out through `map.ignore`. */
+  ignored: number
   summary: {
     instrumented: number
     partial: number

@@ -69,8 +69,8 @@ export function parseOver(value: unknown): number | undefined {
 
 const DEFAULT_LIMIT = 50
 
-export function parseLimit(value: unknown): number {
-  if (typeof value !== 'string' || value.length === 0) return DEFAULT_LIMIT
+export function parseLimit(value: unknown, fallback = DEFAULT_LIMIT): number {
+  if (typeof value !== 'string' || value.length === 0) return fallback
   const limit = Number(value)
   if (!Number.isInteger(limit) || limit < 1) throw cliErrors.LOGS_INVALID_LIMIT({ value })
   return limit
@@ -232,14 +232,17 @@ export function matchesId(event: WideEvent, id: string): boolean {
   })
 }
 
-/** Turn the flags into a query. Validation happens here, before any file is read. */
-export function buildQuery(args: LogsArgs, now = new Date()): LogsQuery {
+/**
+ * Turn the flags into a query. Validation happens here, before any file is read.
+ * `defaultLimit` is what `--limit` falls back to, from `logs.limit` in evlog.config.
+ */
+export function buildQuery(args: LogsArgs, now = new Date(), defaultLimit?: number): LogsQuery {
   const since = parseTime('since', args.since, now)
   const until = parseTime('until', args.until, now)
   const level = parseLevels(args.level)
   const status = parseStatus(args.status)
   const over = parseOver(args.over) ?? DEFAULT_OVER
-  const limit = parseLimit(args.limit)
+  const limit = parseLimit(args.limit, defaultLimit)
   const path = typeof args.path === 'string' && args.path.length > 0 ? args.path : undefined
   const where = parseWheres(args.where)
 

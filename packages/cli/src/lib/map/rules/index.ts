@@ -1,3 +1,4 @@
+import type { EvlogMapRuleId } from 'evlog'
 import type { FileFacts } from '../facts'
 import type { ParseResult } from '../parse'
 import { walkAst } from '../parse'
@@ -55,6 +56,14 @@ type AssertIdsMatch = [RegisteredId] extends [CheckId]
 const idsMatch: AssertIdsMatch = true
 void idsMatch
 
+/* `map.rules` in evlog.config is typed by the core package, so its ids must
+   be the ones this registry runs. */
+type AssertConfigIdsMatch = [EvlogMapRuleId] extends [CheckId]
+  ? [CheckId] extends [EvlogMapRuleId] ? true : never
+  : never
+const configIdsMatch: AssertConfigIdsMatch = true
+void configIdsMatch
+
 /**
  * Every observability rule, in report order.
  *
@@ -75,6 +84,9 @@ export const RULES: readonly MapRule[] = REGISTRY
  * tell a stale committed map apart from a merely older one.
  */
 export const RULE_SET_VERSION = 1
+
+/** Why a check is `n/a` when `evlog.config` turns it off. */
+export const RULE_OFF_MESSAGE = 'turned off in evlog.config'
 
 const RULES_BY_ID = new Map<CheckId, MapRule>(RULES.map(rule => [rule.id, rule]))
 
@@ -171,12 +183,19 @@ export function runRuleSet(rules: readonly MapRule[], run: RuleRun): RuleResults
   /* Depends only on the route's path and file, so it holds even for a file we
      cannot read — an exempt health check stays exempt when it fails to parse. */
   const exemption = getRouteExemption(target)
+  /* A check turned off for the project is `n/a` as a requirement and silence
+     as an opportunity, the same way a check that does not apply is. */
+  const turnedOff = (rule: MapRule): boolean => {
+    if (!ctx.rulesOff?.has(rule.id)) return false
+    if (rule.category === 'requirement') results.checks[rule.id] = { status: 'n/a', message: RULE_OFF_MESSAGE }
+    return true
+  }
 
   if (!parsed || !facts) {
     /* A file that will not parse is a real failure, but only of requirements —
        we have no basis to suggest anything about code we could not read. */
     for (const rule of relevant) {
-      if (rule.category !== 'requirement') continue
+      if (rule.category !== 'requirement' || turnedOff(rule)) continue
       if (exemption && isSkipped(exemption, rule.id)) {
         results.checks[rule.id] = { status: 'n/a', message: exemption.reason }
         continue
@@ -199,6 +218,7 @@ export function runRuleSet(rules: readonly MapRule[], run: RuleRun): RuleResults
   const active: Array<{ rule: MapRule, listeners: RuleListeners, reports: RuleReport[] }> = []
 
   for (const rule of relevant) {
+    if (turnedOff(rule)) continue
     if (exemption && isSkipped(exemption, rule.id)) {
       bucket(rule)[rule.id] = { status: 'n/a', message: exemption.reason }
       continue

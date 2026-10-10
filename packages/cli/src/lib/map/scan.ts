@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { version as CLI_VERSION } from '../../../package.json'
 import { getFramework } from '../frameworks'
+import { glob } from '../glob'
 import { countSuppressed } from './directives'
 import { buildFileFacts } from './facts'
 import { createParseCache, parseFile } from './parse'
@@ -20,7 +21,7 @@ import type {
   ScanContext,
   ScanResult,
 } from './types'
-import { routeId } from './utils'
+import { relativeFromRoot, routeId } from './utils'
 
 interface AnalyseInput {
   ctx: ScanContext
@@ -93,7 +94,9 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
     evlogAutoImports: capabilities.evlogAutoImports,
   })
 
-  const rawRoutes = await adapter.extractRoutes(ctx)
+  const extracted = await adapter.extractRoutes(ctx)
+  const ignored = new Set(ctx.ignore?.length ? glob(ctx.ignore, ctx.projectRoot).map(file => relativeFromRoot(ctx.projectRoot, file)) : [])
+  const rawRoutes = extracted.filter(route => !ignored.has(route.file))
   const analysed = rawRoutes.map(raw => analyseRoute({ ctx, raw, project, capabilities }))
   const routes = analysed.map(entry => entry.route)
   const warnings = analysed.flatMap(entry => entry.warnings)
@@ -125,6 +128,7 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
     project,
     suggestions,
     warnings,
+    ignored: extracted.length - rawRoutes.length,
   }
 }
 

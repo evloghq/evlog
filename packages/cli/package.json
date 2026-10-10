@@ -61,7 +61,7 @@
     "oxc-parser": "^0.152.0"
   },
   "peerDependencies": {
-    "evlog": ">=2.29.0"
+    "evlog": ">=2.31.0"
   },
   "devDependencies": {
     "evlog": "workspace:*",

@@ -312,6 +312,60 @@ export const cliErrors = defineErrorCatalog('cli', {
     fix: 'Pass a whole number of 1 or more, e.g. --limit 20',
     tags: ['logs'],
   },
+  CONFIG_PARSE_FAILED: {
+    status: 400,
+    message: ({ file, reason }: { file: string, reason: string }) =>
+      `Could not parse ${file}: ${reason}`,
+    why: 'The CLI reads evlog.config without running it, so the file has to parse on its own',
+    fix: 'Fix the syntax error and run the command again',
+    link: 'https://evlog.dev/cli/config',
+    tags: ['config'],
+  },
+  CONFIG_NO_EXPORT: {
+    status: 400,
+    message: ({ file, name }: { file: string, name: string }) =>
+      `${file} has no ${name === 'default' ? 'default export' : `export named ${name}`} the CLI can read`,
+    why: 'The CLI reads the object literal passed to defineEvlog, through same-file consts and relative imports',
+    fix: 'Write the config as export default defineEvlog({ ... })',
+    link: 'https://evlog.dev/cli/config',
+    tags: ['config'],
+  },
+  CONFIG_NOT_STATIC: {
+    status: 400,
+    message: ({ key, at }: { key: string, at: string }) =>
+      `${key} in ${at} is computed at runtime`,
+    why: 'The CLI reads evlog.config without running it, so map and logs settings have to be literals',
+    fix: 'Write the value inline, as a const, or import it from a local file',
+    link: 'https://evlog.dev/cli/config',
+    tags: ['config'],
+  },
+  CONFIG_INVALID: {
+    status: 400,
+    message: ({ key, at, problem }: { key: string, at: string, problem: string }) =>
+      `${key} in ${at} ${problem}`,
+    why: 'A setting the CLI cannot read would silently fall back to its default',
+    fix: 'Use a setting and a value the config reference lists',
+    link: 'https://evlog.dev/cli/config',
+    tags: ['config'],
+  },
+  CONFIG_EXTENDS_NOT_FOUND: {
+    status: 404,
+    message: ({ specifier, at }: { specifier: string, at: string }) =>
+      `Cannot resolve "${specifier}", extended in ${at}`,
+    why: 'The CLI follows extends to read the parent config, and the import does not lead to a file',
+    fix: 'Install the package, or correct the import path',
+    link: 'https://evlog.dev/cli/config',
+    tags: ['config'],
+  },
+  CONFIG_EXTENDS_DEPTH: {
+    status: 400,
+    message: ({ parent, at }: { parent: string, at: string }) =>
+      `${parent} extends another config, so ${at} cannot extend it`,
+    why: 'A config extends one level only, so every setting is at most one file away from where it applies',
+    fix: 'Extend the config it extends directly, or copy the settings you need into one of the two files',
+    link: 'https://evlog.dev/cli/config',
+    tags: ['config'],
+  },
 })
 
 declare module 'evlog' {
