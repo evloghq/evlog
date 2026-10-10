@@ -9,6 +9,7 @@ import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
 import { shouldLog, getServiceForPath, extractErrorStatus } from '../nitro'
 import { extendDeferredDrain } from '../nitro/deferred-drain'
 import { normalizeRedactConfig } from '../redact'
+import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import type { EnrichContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
 import { elapsedMs, filterSafeHeaders } from '../utils'
@@ -202,7 +203,7 @@ async function callEnrichAndDrain(
  */
 export default definePlugin(async (nitroApp) => {
   setActiveNitroRuntime('v3')
-  const evlogConfig = await resolveEvlogConfigForNitroPlugin()
+  const evlogConfig = withEvlogFileConfig(await resolveEvlogConfigForNitroPlugin())
 
   const redact = normalizeRedactConfig(evlogConfig?.redact as boolean | Record<string, unknown> | undefined)
 
@@ -216,11 +217,14 @@ export default definePlugin(async (nitroApp) => {
     silent: evlogConfig?.silent,
     sampling: evlogConfig?.sampling,
     minLevel: evlogConfig?.minLevel,
+    stringify: evlogConfig?.stringify,
     redact,
+    plugins: evlogFileConfigPlugins(),
     _suppressDrainWarning: true,
   })
 
   const hooks = nitroApp.hooks as unknown as Hooks
+  hooks.hook('close', flushEvlogFileConfigDrain)
 
   // When globally disabled, createRequestLogger returns a no-op logger — still
   // attach it so handlers can call useLogger without throwing.

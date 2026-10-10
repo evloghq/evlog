@@ -28,7 +28,7 @@ export interface ConfigResult {
   extends: { specifier: string | null, file: string } | null
   /** Settings the CLI applies itself (`map`, `logs`). */
   cli: ConfigEntry[]
-  /** Settings the app reads where it imports the config. */
+  /** Settings the app applies at runtime. */
   app: ConfigEntry[]
   /** Where each key is written, by {@link formatPath}, for rows that stand for a whole object such as `redact`. */
   sources: ReadonlyMap<string, string>

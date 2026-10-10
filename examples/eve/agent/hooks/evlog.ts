@@ -1,19 +1,8 @@
-import type { DrainContext } from 'evlog'
 import { defineEvlogHook } from 'evlog/eve'
-import { createFsDrain } from 'evlog/fs'
-import { createDrainPipeline } from 'evlog/pipeline'
-
-const batchedFsDrain = createDrainPipeline<DrainContext>({
-  batch: { size: 5, intervalMs: 2000 },
-})(createFsDrain())
+import config from '../../evlog.config'
 
 export default defineEvlogHook({
-  init: { env: { service: 'clearbill-support-agent' } },
-  drain: batchedFsDrain,
-  enrich: (ctx) => {
-    ctx.event.runtime = process.env.VERCEL_REGION ?? 'local'
-    ctx.event.demo = 'evlog-eve-support-refund'
-  },
+  ...config,
   keep: (ctx) => {
     const { context } = ctx
     const tools = (context.ai as { tools?: Array<{ success: boolean }> } | undefined)?.tools

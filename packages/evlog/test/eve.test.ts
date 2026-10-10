@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookContext, HookEventMap } from 'eve/hooks'
-import { initLogger } from '../src/logger'
+import { getEnvironment, getGlobalDrain, initLogger, log } from '../src/logger'
+import { defineEvlog } from '../src/shared/define'
+import { resetGlobalRegistry } from '../src/shared/globalRegistry'
 import {
   resetEvlogEveForTests,
   defineEvlogHook,
@@ -2071,5 +2073,73 @@ describe('evlogRuntimeContext', () => {
   it('spreads to nothing outside a tracked turn', () => {
     expect(evlogRuntimeContext(stepStartedInput())).toBeUndefined()
     expect({ ...evlogRuntimeContext(stepStartedInput()) }).toEqual({})
+  })
+})
+
+describe('evlog.config settings', () => {
+  beforeEach(() => {
+    resetEvlogEveForTests()
+    resetGlobalRegistry()
+  })
+
+  afterEach(() => {
+    resetEvlogEveForTests()
+    resetGlobalRegistry()
+  })
+
+  it('initialises the logger from the config on the first turn', async () => {
+    const spies = createPipelineSpies()
+    const config = defineEvlog({
+      service: 'support-agent',
+      environment: 'staging',
+      silent: true,
+      drain: spies.drain,
+      map: { minScore: 80 },
+      logs: { dir: '.evlog/logs' },
+    })
+
+    await runTurn(defineEvlogHook({ ...config, message: 'preview' }), { message: 'hello' })
+
+    expect(getEnvironment()).toMatchObject({ service: 'support-agent', environment: 'staging' })
+    expect(getGlobalDrain()).toBe(spies.drain)
+    await waitForDrainCalls(spies.drain)
+    expect(spies.drain).toHaveBeenCalledTimes(1)
+    expect(spies.drain.mock.calls[0]![0].event).toMatchObject({
+      service: 'support-agent',
+      message: { received: 'hello' },
+    })
+  })
+
+  it('sends events emitted outside a turn to the same drain', async () => {
+    const spies = createPipelineSpies()
+    await runTurn(defineEvlogHook({ service: 'support-agent', silent: true, drain: spies.drain }))
+    await waitForDrainCalls(spies.drain)
+
+    log.info({ job: 'nightly-digest' })
+
+    await waitForDrainCalls(spies.drain, 2)
+    expect(findEventViaDrain(spies.drain, e => e.job === 'nightly-digest')).toMatchObject({ service: 'support-agent' })
+  })
+
+  it('names the service eve-agent when the config has none', async () => {
+    await runTurn(defineEvlogHook({ silent: true, drain: createPipelineSpies().drain }))
+    expect(getEnvironment().service).toBe('eve-agent')
+  })
+
+  it('keeps a service set through env', async () => {
+    await runTurn(defineEvlogHook({ env: { service: 'from-env' }, silent: true, drain: createPipelineSpies().drain }))
+    expect(getEnvironment().service).toBe('from-env')
+  })
+
+  it('initialises from init alone when it is set', async () => {
+    const turnDrain = createPipelineSpies().drain
+    await runTurn(defineEvlogHook({
+      service: 'from-options',
+      drain: turnDrain,
+      init: { env: { service: 'from-init' }, silent: true, _suppressDrainWarning: true },
+    }))
+
+    expect(getEnvironment().service).toBe('from-init')
+    expect(getGlobalDrain()).toBeUndefined()
   })
 })
