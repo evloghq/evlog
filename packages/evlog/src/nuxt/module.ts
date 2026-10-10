@@ -12,7 +12,7 @@ import {
 import type { NitroConfig } from 'nitropack'
 import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from '../types'
 import type { DevTerminalInput } from '../shared/dev-terminal'
-import { prependNitroErrorHandler } from '../nitro'
+import { prependNitroErrorHandler, serializeBundledEvlogConfig } from '../nitro'
 import { prepareRedactForBridge } from '../redact'
 import { createStripPlugin } from '../vite/strip'
 import { createSourceLocationPlugin } from '../vite/source-location'
@@ -378,10 +378,9 @@ export default defineNuxtModule<ModuleOptions>({
 
       const evlogForNitro = nuxt.options.runtimeConfig.evlog ?? options
       if (evlogForNitro !== undefined && typeof evlogForNitro === 'object') {
-        const serialized = JSON.stringify(evlogForNitro)
         nitroConfig.replace = nitroConfig.replace || {}
-        nitroConfig.replace.__EVLOG_CONFIG__ = serialized
-        process.env.__EVLOG_CONFIG = serialized
+        nitroConfig.replace.__EVLOG_CONFIG__ = serializeBundledEvlogConfig(evlogForNitro)
+        process.env.__EVLOG_CONFIG = JSON.stringify(evlogForNitro)
       }
     })
     nuxt.options.runtimeConfig.public.evlog = {

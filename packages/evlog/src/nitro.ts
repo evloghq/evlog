@@ -196,6 +196,17 @@ export function prependNitroErrorHandler(
 }
 
 /**
+ * Serialize module options into the config literal the Nitro and Nuxt modules
+ * bake into the bundle. The logger initializes from it on import, before any
+ * drain hook is registered, so the silent-without-drain warning is suppressed
+ * as it is in the plugin.
+ * @internal
+ */
+export function serializeBundledEvlogConfig(options: object | undefined): string {
+  return JSON.stringify({ ...options, _suppressDrainWarning: true })
+}
+
+/**
  * Whether the Nitro dev Youch overlay should be suppressed for this process.
  * @internal
  */
