@@ -941,12 +941,16 @@ describe('a lib/evlog.ts that is already there (Next.js)', () => {
     expect(plan.manual.find(step => step.title === `Read evlog.config.ts in ${join('lib', 'evlog.ts')}`)).toMatchObject({
       snippet: expect.stringContaining(`import config from '../evlog.config'`),
     })
+    /* The instrumentation.ts init writes loads this file, so the one step also carries its hooks. */
+    expect(plan.manual.find(step => step.title === `Read evlog.config.ts in ${join('lib', 'evlog.ts')}`)?.snippet)
+      .toContain('export const { register, onRequestError } = createInstrumentation({')
+    expect(plan.manual.filter(step => step.file === join('lib', 'evlog.ts'))).toHaveLength(1)
     /* The answers still land, in the config. */
     expect(action(plan, 'evlog.config.ts').contents).toContain('createAxiomDrain()')
     expect(action(plan, 'evlog.config.ts').contents).toContain('rates: { info: 25')
   })
 
-  it('stays quiet when it already imports the config', async () => {
+  it('does not ask for the config import when it is already there', async () => {
     const root = await project({
       'package.json': '{"name":"web"}',
       'lib/evlog.ts': `import { createEvlog } from 'evlog/next'\nimport config from '../evlog.config'\n\nexport const { withEvlog } = createEvlog(config)\n`,
@@ -955,6 +959,74 @@ describe('a lib/evlog.ts that is already there (Next.js)', () => {
     const plan = await planWiring({ root, framework: 'next', service: 'web', ...wiring(), nitroMajor: 3 })
 
     expect(plan.manual.map(step => step.title)).not.toContain(`Read evlog.config.ts in ${join('lib', 'evlog.ts')}`)
+  })
+
+  it('asks for the hooks the generated instrumentation calls on it', async () => {
+    const root = await project({
+      'package.json': '{"name":"web"}',
+      'lib/evlog.ts': `import { createEvlog } from 'evlog/next'\nimport config from '../evlog.config'\n\nexport const { withEvlog } = createEvlog(config)\n`,
+    })
+
+    const plan = await planWiring({ root, framework: 'next', service: 'web', ...wiring(), nitroMajor: 3 })
+    const step = plan.manual.find(candidate => candidate.title === `Export register and onRequestError from ${join('lib', 'evlog.ts')}`)
+
+    expect(action(plan, 'instrumentation.ts').contents).toContain(`import('./lib/evlog')`)
+    expect(step?.file).toBe(join('lib', 'evlog.ts'))
+    expect(step?.snippet).toContain(`import { createInstrumentation } from 'evlog/next/instrumentation/create'`)
+    expect(step?.snippet).toContain('export const { register, onRequestError } = createInstrumentation({')
+    expect(step?.snippet).not.toContain('createEvlog(')
+  })
+
+  it('adds only the hook that is missing', async () => {
+    const root = await project({
+      'package.json': '{"name":"web"}',
+      'lib/evlog.ts': `import config from '../evlog.config'\n\nexport async function register() {}\n`,
+    })
+
+    const plan = await planWiring({ root, framework: 'next', service: 'web', ...wiring(), nitroMajor: 3 })
+
+    expect(plan.manual.find(step => step.title === `Export onRequestError from ${join('lib', 'evlog.ts')}`)?.snippet)
+      .toContain('export const { onRequestError } = createInstrumentation({')
+  })
+
+  it('stays quiet when it exports both hooks, and only points the instrumentation at it', async () => {
+    const root = await project({
+      'package.json': '{"name":"web"}',
+      'instrumentation.ts': 'export function register() {}\n',
+      'lib/evlog.ts': `import { toLoggerConfig } from 'evlog'\nimport { createInstrumentation } from 'evlog/next/instrumentation/create'\nimport config from '../evlog.config'\n\nexport const { register, onRequestError } = createInstrumentation({\n  ...toLoggerConfig(config),\n})\n`,
+    })
+
+    const plan = await planWiring({ root, framework: 'next', service: 'web', ...wiring(), nitroMajor: 3 })
+    const instrumentation = plan.manual.find(step => step.title === 'Start the logger from evlog.config.ts')
+
+    expect(plan.manual.filter(step => step.file === join('lib', 'evlog.ts'))).toEqual([])
+    expect(instrumentation?.snippet).toContain(`defineNodeInstrumentation(() => import('./lib/evlog'))`)
+    expect(instrumentation?.snippet).not.toContain('createInstrumentation(')
+  })
+
+  it('does not ask for the hooks when the instrumentation reads the config itself', async () => {
+    const root = await project({
+      'package.json': '{"name":"web"}',
+      'instrumentation.ts': `import { toLoggerConfig } from 'evlog'\nimport { createInstrumentation } from 'evlog/next/instrumentation/create'\nimport config from './evlog.config'\n\nexport const { register, onRequestError } = createInstrumentation(toLoggerConfig(config))\n`,
+      'lib/evlog.ts': `import { createEvlog } from 'evlog/next'\nimport config from '../evlog.config'\n\nexport const { withEvlog } = createEvlog(config)\n`,
+    })
+
+    const plan = await planWiring({ root, framework: 'next', service: 'web', ...wiring(), nitroMajor: 3 })
+
+    expect(plan.manual.filter(step => step.file === join('lib', 'evlog.ts'))).toEqual([])
+  })
+
+  it('does not ask for the hooks when the instrumentation loads it its own way', async () => {
+    const root = await project({
+      'package.json': '{"name":"web"}',
+      'instrumentation.ts': `export async function register() {\n  if (process.env.NEXT_RUNTIME === 'nodejs') await import('./lib/evlog')\n}\n`,
+      'lib/evlog.ts': `import { createEvlog } from 'evlog/next'\nimport config from '../evlog.config'\n\nexport const { withEvlog } = createEvlog(config)\n`,
+    })
+
+    const plan = await planWiring({ root, framework: 'next', service: 'web', ...wiring(), nitroMajor: 3 })
+
+    expect(plan.manual.filter(step => step.file === join('lib', 'evlog.ts'))).toEqual([])
+    expect(plan.manual.map(step => step.title)).not.toContain('Start the logger from evlog.config.ts')
   })
 })
 
