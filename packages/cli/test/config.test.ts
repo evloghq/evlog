@@ -416,6 +416,18 @@ describe('evlog map with evlog.config', () => {
     expect(out.stdout()).toMatch(/^::error title=evlog map::score \d+\/100 .*below map\.minScore 100$/m)
   })
 
+  it('reports the entry points map.ignore left out in --json', async () => {
+    const cwd = await copyFixture('nuxt-basic')
+    await writeFile(join(cwd, 'evlog.config.ts'), 'export default { map: { ignore: [\'server/**\', \'pages/**\'] } }\n')
+    const out = silence()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--no-write'] })
+
+    const raw = JSON.parse(out.stdout()) as { ignored: number, map: { routes: unknown[] } }
+    expect(raw.map.routes).toHaveLength(0)
+    expect(raw.ignored).toBeGreaterThan(0)
+  })
+
   it('fails on an invalid config before it scans anything', async () => {
     const cwd = await copyFixture('nuxt-basic')
     await writeFile(join(cwd, 'evlog.config.ts'), 'export default { map: { minScore: \'high\' } }\n')

@@ -367,6 +367,7 @@ describe('map command', () => {
       environment: string
       map: { version: number, framework: string, routes: unknown[] }
       summary: { instrumented: number, partial: number, dark: number, exempt: number }
+      ignored: number
       mapPath: string | null
     }
 
@@ -377,6 +378,7 @@ describe('map command', () => {
     expect(raw.mapPath).toBeNull()
     expect(raw.summary.instrumented + raw.summary.partial + raw.summary.dark + raw.summary.exempt)
       .toBe(raw.map.routes.length)
+    expect(raw.ignored).toBe(0)
   })
 
   it('exits 1 under --min-score when there are no entry points to score', async () => {

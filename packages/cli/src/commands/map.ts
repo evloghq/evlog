@@ -376,6 +376,7 @@ export default defineEvlogCommand('map', {
           map: result.scan.map,
           grade: result.scan.grade,
           summary: result.scan.summary,
+          ignored: result.scan.ignored,
           mapPath: result.mapPath,
           ...(result.baseline ? { baseline: result.baseline } : {}),
         },
