@@ -6,6 +6,7 @@ import { globallyRedacted } from '../../src/redact'
 import { createMiddlewareLogger } from '../../src/shared/middleware'
 import { defined } from '../helpers/defined'
 import { createPipelineSpies, waitForDrainCalls } from '../helpers/framework'
+import { createDeferredStream } from '../helpers/stream'
 import { withFakeTimers } from '../helpers/timers'
 
 describe('createMiddlewareLogger', () => {
@@ -557,6 +558,34 @@ describe('createMiddlewareLogger', () => {
       await finish({ status: 200 })
 
       expect(drainSettled).toBe(true)
+      expect(drain).toHaveBeenCalledOnce()
+    })
+
+    it('registers a streamed response with waitUntil before the body completes', async () => {
+      const drain = vi.fn()
+      const waitUntil = vi.fn()
+
+      const { finishResponse } = createMiddlewareLogger({
+        method: 'GET',
+        path: '/api/stream',
+        drain,
+        waitUntil,
+      })
+
+      const { stream, close } = createDeferredStream()
+      const response = await finishResponse(
+        new Response(stream, { headers: { 'content-type': 'text/event-stream' } }),
+      )
+
+      expect(waitUntil).toHaveBeenCalledOnce()
+      expect(drain).not.toHaveBeenCalled()
+
+      close()
+      await response.text()
+      const [[scheduled]] = waitUntil.mock.calls
+      await scheduled
+
+      expect(waitUntil).toHaveBeenCalledOnce()
       expect(drain).toHaveBeenCalledOnce()
     })
 

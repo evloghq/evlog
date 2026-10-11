@@ -271,17 +271,41 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
       return response
     }
 
-    return bindStreamingResponseLifecycle(response, async (meta) => {
-      await performFinish(logger, {
-        status: meta.status ?? status,
-        error: meta.error,
+    const { waitUntil } = options
+    if (!waitUntil) {
+      return bindStreamingResponseLifecycle(response, async (meta) => {
+        await performFinish(logger, { status: meta.status ?? status, error: meta.error })
       })
+    }
+
+    // Hosts like Next's `after()` only accept `waitUntil` while the handler is in
+    // scope, so the stream's lifetime is registered now and its drains join it later.
+    const drains: Array<Promise<unknown>> = []
+    let markFinished!: () => void
+    const finished = new Promise<void>((resolve) => {
+      markFinished = resolve
+    })
+    waitUntil(finished.then(() => Promise.allSettled(drains)))
+
+    const drainOptions: MiddlewareLoggerOptions = {
+      ...options,
+      waitUntil: (promise) => {
+        drains.push(promise)
+      },
+    }
+    return bindStreamingResponseLifecycle(response, async (meta) => {
+      try {
+        await performFinish(logger, { status: meta.status ?? status, error: meta.error }, drainOptions)
+      } finally {
+        markFinished()
+      }
     })
   }
 
   async function performFinish(
     requestLogger: RequestLogger,
     opts?: { status?: number; error?: Error },
+    drainOptions: MiddlewareLoggerOptions = options,
   ): Promise<WideEvent | null> {
     const { status, error } = opts ?? {}
 
@@ -320,7 +344,7 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
 
     if (emittedEvent) {
       if (options.enrich || options.drain || pluginRunner.hasEnrich || pluginRunner.hasDrain || getGlobalDrain() || hasWideEventPublisher()) {
-        await runEnrichAndDrain(emittedEvent, options, requestInfo, resolvedStatus, pluginRunner)
+        await runEnrichAndDrain(emittedEvent, drainOptions, requestInfo, resolvedStatus, pluginRunner)
       } else {
         outputWideEvent(emittedEvent)
       }
