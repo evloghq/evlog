@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
+import { mergeEvlogConfig } from 'evlog'
+import type { EvlogConfig } from 'evlog'
 import { DOCS_URL } from '../../core/output'
 import { readConfig as readEvlogConfig } from '../config/read'
 import { getFramework } from '../frameworks'
@@ -170,12 +172,18 @@ export function factoryParts(input: WiringInput, settings: readonly ConfigSettin
      have no `import.meta.dev`. */
   const nitro = isNitroFamily(input.framework)
 
-  if (dev && prod.length > 0) {
+  if (dev && prod.length === 1) {
+    options.push(nitro
+      ? `  drain: import.meta.dev ? ${dev.factory} : ${prodList},`
+      : `  drain: process.env.NODE_ENV === 'production' ? ${prodList} : ${dev.factory},`)
+  } else if (dev && prod.length > 1) {
     blocks.push(nitro
       ? `const drains = import.meta.dev\n  ? [${dev.factory}]\n  : [${prodList}]`
       : `const drains = process.env.NODE_ENV === 'production'\n  ? [${prodList}]\n  : [${dev.factory}]`)
     options.push('  drain: async ctx => void await Promise.all(drains.map(drain => drain(ctx))),')
-  } else if (prod.length > 0) {
+  } else if (prod.length === 1) {
+    options.push(`  drain: ${prodList},`)
+  } else if (prod.length > 1) {
     blocks.push(`const drains = [${prodList}]`)
     options.push('  drain: async ctx => void await Promise.all(drains.map(drain => drain(ctx))),')
   } else if (dev) {
@@ -221,7 +229,9 @@ type ConfigTarget =
   | { kind: 'create', file: string, parent: string | null }
   | { kind: 'parent', file: string, reason: string }
 
-function configTarget(input: WiringInput): ConfigTarget {
+type ConfigLocation = Pick<WiringInput, 'root' | 'workspaceRoot'>
+
+function configTarget(input: ConfigLocation): ConfigTarget {
   const own = firstExisting(input.root, configCandidates('evlog.config'))
   if (own) return { kind: 'own', file: own }
 
@@ -234,7 +244,7 @@ function configTarget(input: WiringInput): ConfigTarget {
 }
 
 /** The nearest `evlog.config` above the package, up to the workspace root. */
-function parentConfig(input: WiringInput): string | null {
+function parentConfig(input: ConfigLocation): string | null {
   const top = input.workspaceRoot ?? input.root
   if (relative(top, input.root).startsWith('..')) return null
 
@@ -262,6 +272,27 @@ function configKeys(file: string): Set<string> | null {
   try {
     const { config, parent } = readEvlogConfig(file, path => path)
     return new Set([...Object.keys(parent?.document.value ?? {}), ...Object.keys(config.value)])
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The service named by an `evlog.config` that init leaves as it is, so the run
+ * defaults to the name events already carry. `null` when init writes the
+ * config, or when the service is computed at runtime or the file cannot be
+ * read without running it.
+ */
+export function configuredService(input: ConfigLocation): string | null {
+  const target = configTarget(input)
+  if (target.kind === 'create') return null
+  try {
+    const { config, parent } = readEvlogConfig(target.file, path => path)
+    const resolved = (parent
+      ? mergeEvlogConfig(parent.document.value as EvlogConfig, config.value as EvlogConfig)
+      : config.value) as EvlogConfig
+    const service = resolved.service ?? resolved.env?.service
+    return typeof service === 'string' ? service : null
   } catch {
     return null
   }

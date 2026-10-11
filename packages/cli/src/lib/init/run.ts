@@ -13,7 +13,7 @@ import { resolveEvlog, resolveProject } from '../project'
 import type { PackageJson, ProjectInfo } from '../project'
 import { getFramework, isInitFramework } from '../frameworks'
 import type { DrainId, EnricherId, ExtraId, OfferContext, SamplingProfile } from './catalog'
-import { planWiring } from './wiring'
+import { configuredService, planWiring } from './wiring'
 import type { FileAction, ManualStep } from './wiring'
 import { readProject } from './insight'
 import type { ProjectInsight } from './insight'
@@ -204,7 +204,7 @@ export async function runInit(
 
   const base = {
     framework: detection.framework,
-    defaultService: defaultService(project),
+    defaultService: configuredService({ root: project.packageDir, workspaceRoot: project.root }) ?? defaultService(project),
     evlogInstalled,
     install: options.install !== false,
     agentGuide: options.agentGuide !== false,

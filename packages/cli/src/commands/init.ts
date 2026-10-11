@@ -48,7 +48,7 @@ export default defineEvlogCommand('init', {
   skipHeader: (ctx, args) => args.json !== true && args.yes !== true && canPrompt(ctx),
   args: {
     framework: { type: 'string', description: `Override framework detection (${INIT_FRAMEWORK_IDS.join(', ')})` },
-    service: { type: 'string', description: 'Service name on every wide event (default: package name)' },
+    service: { type: 'string', description: 'Service name on every wide event (default: the one evlog.config sets, else the package name)' },
     drain: { type: 'string', description: 'Development sink: fs (default) or none' },
     prodDrain: { type: 'string', description: 'Production destinations, comma-separated: axiom, otlp, posthog, sentry, better-stack, datadog, hyperdx' },
     extras: { type: 'string', description: 'Comma-separated: enrichers, pipeline, sampling, vite, error-catalog, audit-catalog, ai, better-auth' },

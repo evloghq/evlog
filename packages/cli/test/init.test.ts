@@ -7,7 +7,7 @@ import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
 import { readConfig, RuntimeValue } from '../src/lib/config/read'
 import { formatInitReport } from '../src/lib/init/report'
-import { planWiring } from '../src/lib/init/wiring'
+import { configuredService, planWiring } from '../src/lib/init/wiring'
 import type { FileAction, WiringPlan } from '../src/lib/init/wiring'
 import { detectPackageManager, installCommand } from '../src/lib/init/pm'
 import { detectNitroMajor, runInit } from '../src/lib/init/run'
@@ -298,6 +298,19 @@ describe('runInit', () => {
     expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(false)
   })
 
+  it('defaults to the service an existing evlog.config.ts sets', async () => {
+    const cwd = await project({
+      'package.json': '{"name":"evlog-nuxt-try","dependencies":{"nuxt":"^4.0.0"}}',
+      'nuxt.config.ts': 'export default defineNuxtConfig({})\n',
+      'evlog.config.ts': `${DEFINE}export default defineEvlog({\n  service: 'review',\n})\n`,
+    })
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, dryRun: true, yes: true })
+
+    expect(result.answers.service).toBe('review')
+    expect(formatInitReport(fakeContext(cwd), result)).toContain('service review')
+  })
+
   it('is safe to run twice — the second run changes nothing', async () => {
     const cwd = await project({
       'package.json': '{"name":"shop","dependencies":{"nuxt":"^4.0.0"}}',
@@ -530,10 +543,44 @@ describe('evlog.config.ts drains', () => {
     const { contents } = action(plan, 'evlog.config.ts')
 
     expect(contents).toContain(`import { createAxiomDrain } from 'evlog/axiom'`)
-    expect(contents).toContain('const drains = [createAxiomDrain()]')
+    expect(contents).toContain('  drain: createAxiomDrain(),')
+    expect(contents).not.toContain('const drains')
     /* Nothing gates it: a hosted destination is the one you picked to receive
        production traffic. */
     expect(contents).not.toContain('import.meta.dev')
+  })
+
+  it('sends to every production destination when there are several', async () => {
+    const root = await project({ 'package.json': '{"name":"api"}' })
+
+    const plan = await planWiring({
+      root,
+      framework: 'nitro',
+      service: 'api',
+      ...wiring({ devDrain: 'none', prodDrains: ['axiom', 'sentry'] }),
+      nitroMajor: 3,
+    })
+    const { contents } = action(plan, 'evlog.config.ts')
+
+    expect(contents).toContain('const drains = [createAxiomDrain(), createSentryDrain()]')
+    expect(contents).toContain('drain: async ctx => void await Promise.all(drains.map(drain => drain(ctx))),')
+  })
+
+  it('picks the drain with a ternary when each side has one', async () => {
+    const root = await project({ 'package.json': '{"name":"api"}' })
+
+    const plan = await planWiring({
+      root,
+      framework: 'nuxt',
+      service: 'api',
+      ...wiring({ devDrain: 'fs', prodDrains: ['axiom'] }),
+      nitroMajor: 3,
+    })
+    const { contents } = action(plan, 'evlog.config.ts')
+
+    expect(contents).toContain('  drain: import.meta.dev ? createFsDrain() : createAxiomDrain(),')
+    expect(contents).not.toContain('const drains')
+    expect(contents).not.toContain('Promise.all')
   })
 
   it('branches on import.meta.dev for the Nitro-based frameworks', async () => {
@@ -558,7 +605,7 @@ describe('evlog.config.ts drains', () => {
     const plan = await planWiring({ root, framework: 'hono', service: 'api', ...wiring({ prodDrains: ['axiom'] }), nitroMajor: 3 })
     const { contents } = action(plan, 'evlog.config.ts')
 
-    expect(contents).toContain(`const drains = process.env.NODE_ENV === 'production'\n  ? [createAxiomDrain()]\n  : [createFsDrain()]`)
+    expect(contents).toContain(`  drain: process.env.NODE_ENV === 'production' ? createAxiomDrain() : createFsDrain(),`)
     expect(contents).not.toContain('import.meta.dev')
   })
 
@@ -577,8 +624,7 @@ describe('evlog.config.ts drains', () => {
     const { contents } = action(plan, 'evlog.config.ts')
 
     expect(contents).toContain('createDrainPipeline<DrainContext>')
-    expect(contents).toContain('[createFsDrain()]')
-    expect(contents).toContain('[pipeline(createAxiomDrain())]')
+    expect(contents).toContain('  drain: import.meta.dev ? createFsDrain() : pipeline(createAxiomDrain()),')
   })
 
   it('scopes the filesystem drain to development', async () => {
@@ -676,6 +722,57 @@ describe('sampling tiers', () => {
     })
 
     expect(action(plan, 'evlog.config.ts').contents).not.toContain('sampling:')
+  })
+})
+
+describe('the service a config already sets', () => {
+  it('reads it at the top level or under env', async () => {
+    for (const setting of [`service: 'review'`, `env: { service: 'review' }`]) {
+      const root = await project({
+        'package.json': '{"name":"shop"}',
+        'evlog.config.ts': `${DEFINE}export default defineEvlog({\n  ${setting},\n})\n`,
+      })
+
+      expect(configuredService({ root }), setting).toBe('review')
+    }
+  })
+
+  it('reads it from the config an existing one extends', async () => {
+    const root = await project({
+      'package.json': '{"name":"shop"}',
+      'presets/base.ts': `${DEFINE}export default defineEvlog({\n  service: 'review',\n})\n`,
+      'evlog.config.ts': `import base from './presets/base'\n${DEFINE}export default defineEvlog({\n  extends: base,\n  redact: true,\n})\n`,
+    })
+
+    expect(configuredService({ root })).toBe('review')
+  })
+
+  it('reads it from a workspace config the package cannot extend', async () => {
+    const workspace = await project({
+      'presets/org.ts': `${DEFINE}export default defineEvlog({\n  service: 'review',\n})\n`,
+      'evlog.config.ts': `import org from './presets/org'\n${DEFINE}export default defineEvlog({\n  extends: org,\n})\n`,
+      'apps/shop/package.json': '{"name":"shop"}',
+    })
+
+    expect(configuredService({ root: join(workspace, 'apps', 'shop'), workspaceRoot: workspace })).toBe('review')
+  })
+
+  it('has none for a config init writes, which names the service itself', async () => {
+    const workspace = await project({
+      'evlog.config.ts': `${DEFINE}export default defineEvlog({\n  service: 'acme',\n})\n`,
+      'apps/shop/package.json': '{"name":"shop"}',
+    })
+
+    expect(configuredService({ root: join(workspace, 'apps', 'shop'), workspaceRoot: workspace })).toBeNull()
+  })
+
+  it('has none when the config computes it at runtime', async () => {
+    const root = await project({
+      'package.json': '{"name":"shop"}',
+      'evlog.config.ts': `${DEFINE}export default defineEvlog({\n  service: process.env.SERVICE,\n})\n`,
+    })
+
+    expect(configuredService({ root })).toBeNull()
   })
 })
 
