@@ -283,6 +283,17 @@ describe('log', () => {
     expect(serialized).not.toHaveProperty('cause')
   })
 
+  it('keeps fatal and unhandled from the h3 options cause it drops', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    log.error(h3CreateError({ statusCode: 500, message: 'Failure', fatal: true, unhandled: true }) as any)
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    const serialized = JSON.parse(JSON.stringify(event.error))
+    expect(serialized).toMatchObject({ message: 'Failure', statusCode: 500, fatal: true, unhandled: true })
+    expect(serialized).not.toHaveProperty('cause')
+  })
+
   it('keeps an h3 options cause that carries fields the error does not', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, drain })

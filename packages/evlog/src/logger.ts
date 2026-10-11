@@ -866,7 +866,13 @@ function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<s
   const errRecord = err as unknown as Record<string, unknown>
   ancestors.add(err)
   for (const k of ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'cause', 'internal'] as const) {
-    if (k === 'cause' && isH3InputOf(err, err.cause)) continue
+    if (k === 'cause' && isH3InputOf(err, err.cause)) {
+      const cause = err.cause as Record<string, unknown>
+      for (const flag of ['fatal', 'unhandled'] as const) {
+        if (cause[flag] !== undefined) errorObj[flag] = cause[flag]
+      }
+      continue
+    }
     if (k in err) errorObj[k] = removeErrorCycles(errRecord[k], ancestors)
   }
   ancestors.delete(err)
