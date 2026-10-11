@@ -337,6 +337,17 @@ describe('runInit — agent guidelines', () => {
     expect(await readFile(join(cwd, 'AGENTS.md'), 'utf8')).toContain('## Logging with evlog')
   })
 
+  it('names the already-installed skills once in the report', async () => {
+    const cwd = await nuxtProject({ '.claude/skills/review-logging-patterns/SKILL.md': '# x\n' })
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: true, install: false, yes: true })
+    const report = formatInitReport(fakeContext(cwd), result)
+
+    /* The plan entry and the skills status describe the same fact: one line each would repeat it. */
+    expect(report.match(/skills already installed/g)).toHaveLength(1)
+    expect(report).toContain('npx skills update')
+  })
+
   it('never writes skill files itself', async () => {
     const cwd = await nuxtProject({ '.claude/skills/analyze-logs/SKILL.md': '# x\n' })
 
