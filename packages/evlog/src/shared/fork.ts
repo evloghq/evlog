@@ -95,32 +95,30 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): Prom
     lifecycle?.onChildEnter?.(child)
     return Promise.resolve()
       .then(() => fn())
-      .then(async () => {
+      .then(
+        () => {
+          const ctxStatus = child.getContext().status
+          return typeof ctxStatus === 'number' ? ctxStatus : undefined
+        },
+        (err: unknown) => {
+          const error = err instanceof Error ? err : new Error(String(err))
+          const status = extractErrorStatus(error)
+          child.error(error)
+          child.set({ status })
+          return status
+        },
+      )
+      .then(async (status) => {
         const emittedEvent = child.emit()
-        const ctxStatus = child.getContext().status
-        const status = (emittedEvent?.status
-          ?? (typeof ctxStatus === 'number' ? ctxStatus : undefined)) as number | undefined
-        if (emittedEvent) {
-          if (middlewareOptions.enrich || middlewareOptions.drain || getGlobalDrain()) {
-            await runEnrichAndDrain(emittedEvent, middlewareOptions, childRequestInfo, status)
-          } else {
-            outputWideEvent(emittedEvent)
-          }
+        if (!emittedEvent) return
+        if (middlewareOptions.enrich || middlewareOptions.drain || getGlobalDrain()) {
+          await runEnrichAndDrain(emittedEvent, middlewareOptions, childRequestInfo, (emittedEvent.status as number | undefined) ?? status)
+        } else {
+          outputWideEvent(emittedEvent)
         }
       })
-      .catch(async (err: unknown) => {
-        const error = err instanceof Error ? err : new Error(String(err))
-        child.error(error)
-        child.set({ status: extractErrorStatus(error) })
-        const emittedEvent = child.emit()
-        const status = extractErrorStatus(error)
-        if (emittedEvent) {
-          if (middlewareOptions.enrich || middlewareOptions.drain || getGlobalDrain()) {
-            await runEnrichAndDrain(emittedEvent, middlewareOptions, childRequestInfo, status)
-          } else {
-            outputWideEvent(emittedEvent)
-          }
-        }
+      .catch((err: unknown) => {
+        console.error('[evlog] log.fork() failed to emit the child event:', err)
       })
       .finally(() => {
         lifecycle?.onChildExit?.(child)

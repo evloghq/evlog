@@ -1,13 +1,14 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import type { RequestLogger, WideEvent } from '../../src/types'
+import type { DrainContext, RequestLogger, WideEvent } from '../../src/types'
 import { createRequestLogger, initLogger } from '../../src/logger'
+import { createDrainPipeline } from '../../src/pipeline'
 import type { ForkLifecycle } from '../../src/shared/fork'
 import { attachForkToLogger, forkBackgroundLogger } from '../../src/shared/fork'
 import type { MiddlewareLoggerOptions } from '../../src/shared/middleware'
 import { createMiddlewareLogger } from '../../src/shared/middleware'
 import { defined } from '../helpers/defined'
-import { flushMicrotasks } from '../helpers/timers'
+import { flushMicrotasks, withFakeTimers } from '../helpers/timers'
 
 function createGate() {
   let open!: () => void
@@ -218,29 +219,46 @@ describe('log.fork() lifetime', () => {
     expect(order).toEqual(['fn', 'drain', 'onChildExit'])
   })
 
-  it('extends waitUntil to a pipeline drain buffer without making the fork wait for it', async () => {
-    const delivered = createGate()
-    const registered: Array<Promise<unknown>> = []
-    const drain = Object.assign(() => {}, { settled: () => delivered.opened })
-    const fork = startRequest({
-      drain,
-      waitUntil: (promise) => {
-        registered.push(promise)
-      },
+  it('logs a failure after the child has emitted instead of recording it on the child', async () => {
+    const drain = vi.fn()
+    const fork = startRequest({ drain })
+    const outputError = new Error('stdout closed')
+    vi.mocked(console.info).mockImplementationOnce(() => {
+      throw outputError
     })
 
-    await fork('enqueue', () => {})
+    await expect(fork('orders.cancel', () => {})).resolves.toBeUndefined()
 
-    const lifetime = defined(registered[0], 'registered lifetime')
-    let lifetimeSettled = false
-    const tracked = lifetime.then(() => {
-      lifetimeSettled = true
+    expect(console.error).toHaveBeenCalledWith('[evlog] log.fork() failed to emit the child event:', outputError)
+    expect(drain).not.toHaveBeenCalled()
+  })
+
+  it('keeps waitUntil open until a pipeline drain delivers the child event, without making the fork wait for it', async () => {
+    await withFakeTimers(async () => {
+      const send = vi.fn<(batch: DrainContext[]) => Promise<void>>().mockResolvedValue(undefined)
+      const registered: Array<Promise<unknown>> = []
+      const fork = startRequest({
+        drain: createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(send),
+        waitUntil: (promise) => {
+          registered.push(promise)
+        },
+      })
+
+      await fork('enqueue', () => {})
+      expect(send).not.toHaveBeenCalled()
+
+      let delivered = false
+      void defined(registered[0], 'registered lifetime').then(() => {
+        delivered = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(delivered).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(delivered).toBe(true)
+      expect(send).toHaveBeenCalledOnce()
+      expect(send.mock.calls[0]?.[0][0]?.event).toMatchObject({ operation: 'enqueue' })
+      expect(registered).toHaveLength(1)
     })
-    await flushMicrotasks(10)
-    expect(lifetimeSettled).toBe(false)
-
-    delivered.open()
-    await tracked
-    expect(registered).toHaveLength(1)
   })
 })
