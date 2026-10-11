@@ -709,6 +709,38 @@ export default defineConfig({
     expect(result.app).toContainEqual({ path: ['env', 'service'], value: 'nitro-wins', source: 'nitro.config.ts:5', overrides: { value: 'review', source: 'evlog.config.ts:1' } })
   })
 
+  it('reads the Nitro modules from a variable', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': 'export default { service: \'review\' }\n',
+      'nitro.config.ts': `import evlog from 'evlog/nitro'
+const modules = [evlog({ env: { service: 'nitro-wins' } })]
+export default defineNitroConfig({ modules })
+`,
+    })
+    const result = await runConfig(fakeContext(cwd))
+
+    expect(result.moduleOptions).toEqual({ file: 'nitro.config.ts', readable: true })
+    expect(result.app).toContainEqual({ path: ['env', 'service'], value: 'nitro-wins', source: 'nitro.config.ts:2', overrides: { value: 'review', source: 'evlog.config.ts:1' } })
+  })
+
+  it('attributes redaction to the module options when they turn it back on', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': 'export default { redact: false }\n',
+      'nuxt.config.ts': `export default defineNuxtConfig({
+  modules: ['evlog/nuxt'],
+  evlog: {
+    redact: { paths: ['card.number'] },
+  },
+})
+`,
+    })
+    const report = formatConfigReport(fakeContext(cwd), await runConfig(fakeContext(cwd)))
+
+    expect(report).toMatch(/^ {2}redact +on +nuxt\.config\.ts:4$/m)
+  })
+
   it('says the module options override the file when they are computed', async () => {
     const cwd = await makeProject({
       'package.json': PACKAGE,

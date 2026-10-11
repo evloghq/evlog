@@ -267,21 +267,24 @@ class Reader {
     return null
   }
 
-  /** Nuxt's `evlog` key, or the argument of the `evlog/nitro` module in `modules`. */
-  moduleOptionsNode({ module, node }: Located<ObjectExpression>): Expression | null {
+  /** Nuxt's `evlog` key, or the argument of the `evlog/nitro` module in `modules`, written inline or through a named list. */
+  moduleOptionsNode({ module, node }: Located<ObjectExpression>): Located<Expression> | null {
     for (const prop of node.properties) {
       if (prop.type !== 'Property') continue
       const key = propertyName(prop)
-      if (key === 'evlog') return prop.value
-      const list = key === 'modules' ? strip(prop.value) : null
-      if (list?.type !== 'ArrayExpression') continue
+      if (key === 'evlog') return { module, node: prop.value }
+      if (key !== 'modules') continue
+      const value = strip(prop.value)
+      const target = value.type === 'Identifier' ? this.binding(module, value.name, 0) : { module, node: value }
+      const list = target && strip(target.node)
+      if (!target || list?.type !== 'ArrayExpression') continue
       for (const element of list.elements) {
         const call = element && element.type !== 'SpreadElement' ? strip(element) : null
         if (call?.type !== 'CallExpression' || call.callee.type !== 'Identifier') continue
-        const imported = module.imports.get(call.callee.name)
+        const imported = target.module.imports.get(call.callee.name)
         if (!imported || !NITRO_MODULE_SOURCES.has(imported.source)) continue
         const [argument] = call.arguments
-        return argument && argument.type !== 'SpreadElement' ? argument : null
+        return argument && argument.type !== 'SpreadElement' ? { module: target.module, node: argument } : null
       }
     }
     return null
@@ -438,9 +441,9 @@ export function readModuleOptions(file: string, label: (file: string) => string)
   const reader = new Reader(label)
   const exported = reader.exported(file, 'default', 0)
   const object = exported && reader.frameworkObject(exported.module, exported.node, 0)
-  const node = object && reader.moduleOptionsNode(object)
-  if (!object || !node) return null
+  const options = object && reader.moduleOptionsNode(object)
+  if (!object || !options) return null
   const lines = new Map<string, number>()
-  const value = reader.evaluate({ module: object.module, node }, [], lines, 0)
+  const value = reader.evaluate(options, [], options.module === object.module ? lines : undefined, 0)
   return isPlainObject(value) || value instanceof RuntimeValue ? { file, value, lines } : null
 }

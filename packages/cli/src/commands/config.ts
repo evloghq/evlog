@@ -102,6 +102,12 @@ function layerEntries(file: ConfigEntry[], options: ConfigEntry[]): ConfigEntry[
   return out
 }
 
+/** A key keeps the file's source while one of the file's settings at or below it is still in effect, and takes the option's once the options replace them. */
+function layerSources(file: ReadonlyMap<string, string>, options: ReadonlyMap<string, string>, kept: ConfigEntry[]): Map<string, string> {
+  const live = new Set(kept.flatMap(entry => entry.path.map((_, end) => formatPath(entry.path.slice(0, end + 1)))))
+  return new Map([...options, ...[...file].filter(([key]) => live.has(key) || !options.has(key))])
+}
+
 /**
  * Read the `evlog.config` that applies to `ctx.cwd`, merged across `extends`,
  * with where each setting is written. Pure with respect to the context.
@@ -118,14 +124,15 @@ export async function runConfig(ctx: CliContext, log: CliDebug = createNoopCliDe
 
   const entries = entriesFor(config.resolved, config.sources)
   const app = entries.filter(entry => !CLI_SECTIONS.has(entry.path[0]))
+  const layeredApp = layered ? layerEntries(app, entriesFor(layered.value, layered.sources).filter(entry => !CLI_SECTIONS.has(entry.path[0]))) : app
   return {
     searched,
     file: prettyPath(ctx.cwd, config.file),
     extends: config.extends && { specifier: config.extends.specifier, file: prettyPath(ctx.cwd, config.extends.file) },
     moduleOptions: options && { file: prettyPath(ctx.cwd, options.file), readable: layered !== null },
     cli: entries.filter(entry => CLI_SECTIONS.has(entry.path[0])),
-    app: layered ? layerEntries(app, entriesFor(layered.value, layered.sources).filter(entry => !CLI_SECTIONS.has(entry.path[0]))) : app,
-    sources: layered ? new Map([...layered.sources, ...config.sources]) : config.sources,
+    app: layeredApp,
+    sources: layered ? layerSources(config.sources, layered.sources, entries.filter(entry => CLI_SECTIONS.has(entry.path[0]) || layeredApp.includes(entry))) : config.sources,
   }
 }
 
