@@ -124,6 +124,16 @@ export function isExpectedEvlogError(evlogError: Error | null): boolean {
   return evlogError !== null && extractErrorStatus(evlogError) < 500
 }
 
+/**
+ * Whether the evlog plugin records this request's error in its wide event, so
+ * Nitro's default `[request error]` log would print it a second time. False when
+ * evlog is disabled, the route is excluded, or the plugin is not registered.
+ * @internal
+ */
+export function isRecordedByEvlog(context: { _evlogShouldEmit?: unknown } | undefined): boolean {
+  return context?._evlogShouldEmit === true
+}
+
 /** Request metadata used to decide JSON vs framework error-page rendering. */
 export interface NitroErrorRequestContext {
   pathname: string

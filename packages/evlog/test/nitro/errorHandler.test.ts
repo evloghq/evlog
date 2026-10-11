@@ -334,6 +334,26 @@ describe('errorHandler', () => {
 
       expect(defaultHandlerMock).toHaveBeenCalledWith(evlogError, mockEvent, { silent: false })
     })
+
+    it('skips Nitro default logging for any error the evlog plugin records', async () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const event = { ...mockEvent, context: { _evlogShouldEmit: true } } as typeof mockEvent
+
+      await testErrorHandler(new TypeError('Cannot read properties of undefined'), event, { defaultHandler: defaultHandlerMock })
+      await testErrorHandler(Object.assign(new Error('Upstream unavailable'), { statusCode: 503, fatal: true }), event, { defaultHandler: defaultHandlerMock })
+
+      expect(defaultHandlerMock).not.toHaveBeenCalled()
+    })
+
+    it('keeps Nitro default logging when the route is excluded from evlog', async () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const event = { ...mockEvent, context: { _evlogShouldEmit: false } } as typeof mockEvent
+      const error = new TypeError('Cannot read properties of undefined')
+
+      await testErrorHandler(error, event, { defaultHandler: defaultHandlerMock })
+
+      expect(defaultHandlerMock).toHaveBeenCalledWith(error, event, { silent: false })
+    })
   })
 
   describe('HTML page delegation (#390)', () => {
