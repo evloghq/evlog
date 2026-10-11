@@ -1,4 +1,4 @@
-import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig } from './types'
+import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from './types'
 import type { DevTerminalInput, DevTerminalResolveInput } from './shared/dev-terminal'
 import { extractErrorStatus } from './shared/errors'
 import { resolveDevTerminal, shouldShowFrameworkOverlay } from './shared/dev-terminal'
