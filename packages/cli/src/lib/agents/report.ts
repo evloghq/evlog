@@ -27,11 +27,10 @@ export function skillsReportLines(ctx: CliContext, skills: SkillsLines): string[
 
   switch (skills.status) {
     case 'already':
-      return [
-        `${paint('green', '✓')} ${paint('dim', `evlog skills already installed${skills.dirs?.length ? ` · ${skills.dirs.join(', ')}` : ''}`)}`,
-        /* The skills CLI owns their lifecycle, so the refresh command is theirs. */
-        command('refresh', 'npx skills update'),
-      ]
+      /* The "already installed" fact is the run's plan entry, printed once there:
+         repeating it here reads as two events. The refresh command is the part
+         this line adds, and the skills CLI owns their lifecycle, so it is theirs. */
+      return [command('refresh', 'npx skills update')]
     case 'installed':
       return [
         `${paint('green', '✓')} ${paint('dim', 'installed the evlog skills')}`,

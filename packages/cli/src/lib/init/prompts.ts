@@ -287,7 +287,7 @@ export function noteSkills(ctx: CliContext, note: SkillsNote): void {
 
   switch (note.status) {
     case 'already':
-      clackLog.success(`evlog skills already installed${note.dirs?.length ? ` · ${paint('dim', note.dirs.join(', '))}` : ''}`)
+      /* The plan above already said they were installed; this is only the refresh hint. */
       clackLog.message(command(ctx, 'refresh', 'npx skills update'))
       return
     case 'installed':
