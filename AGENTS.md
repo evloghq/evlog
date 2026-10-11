@@ -63,7 +63,7 @@ skills/                     Published skills (analyze-logs, build-audit-logs, re
 - `evlog/browser` is deprecated, use `evlog/http` instead.
 - Every framework integration exposes the **same contract**: `evlog()` middleware, `useLogger()`, `log.fork()`, and the full `BaseEvlogOptions` surface. Framework-native accessors (`c.get('log')`, `req.log`, `event.locals.log`, `context.get(loggerContext)`) stay alongside it. They are the idiomatic path inside handlers, `useLogger()` is for the layers underneath. When adding an integration, provide both.
 - `useLogger()` is backed by `AsyncLocalStorage`. On Cloudflare Workers that needs the `nodejs_compat` / `nodejs_als` flag, so `evlog/workers` deliberately has no `useLogger()` and passes the logger as the handler's fourth argument instead.
-- New export? Update `packages/evlog/package.json` exports, its `typesVersions`, and `packages/evlog/tsdown.config.ts`. A subpath missing from `typesVersions` resolves at runtime and fails to type-check.
+- New export? Update `packages/evlog/package.json` exports, its `typesVersions`, and `packages/evlog/tsdown.config.ts`. A subpath missing from `typesVersions` resolves at runtime and fails to type-check. `packages/evlog/test/toolkit/entrypoint-registry.test.ts` catches the mismatch without a build.
 - Creating a new adapter, enricher, or framework integration? Read the matching skill at `.agents/skills/` **before starting**:
   - `.agents/skills/create-adapter/SKILL.md`
   - `.agents/skills/create-enricher/SKILL.md`

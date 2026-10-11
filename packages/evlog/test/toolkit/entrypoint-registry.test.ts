@@ -2,29 +2,32 @@ import { describe, expect, it } from 'vitest'
 import pkg from '../../package.json' with { type: 'json' }
 import tsdownConfig from '../../tsdown.config'
 
-/**
- * A public subpath is registered in three places: `package.json#exports`,
- * `package.json#typesVersions`, and `tsdown.config.ts`. A subpath missing from
- * `typesVersions` resolves at runtime and only fails to type-check, so the
- * three must agree. The check starts from `exports`: tsdown also carries
- * internal build entries that are never exported.
- */
-
 const DIST_TYPES = /^\.\/dist\/(.+)\.d\.mts$/
 
+type ExportEntry = string | { types?: string, import?: string, default?: string }
+
 interface Registries {
-  exports: Record<string, string | { types?: string }>
+  exports: Record<string, ExportEntry>
   typesVersions: Record<string, string[]>
   tsdownEntries: string[]
 }
 
+/**
+ * Lists every disagreement between `package.json#exports`, `typesVersions["*"]` and `tsdown.config.ts`.
+ * A tsdown entry with no export is an internal chunk, so the walk starts from `exports`.
+ */
 function registryDrift({ exports, typesVersions, tsdownEntries }: Registries): string[] {
   const problems: string[] = []
   const tsdown = new Set(tsdownEntries)
   const exposed = new Set<string>()
 
   for (const [subpath, entry] of Object.entries(exports)) {
-    if (typeof entry === 'string') continue
+    if (typeof entry === 'string') {
+      if (subpath !== './package.json') {
+        problems.push(`${subpath} in package.json#exports is a string, expected { types, import, default }`)
+      }
+      continue
+    }
 
     const { types } = entry
     const match = types?.match(DIST_TYPES)
@@ -35,7 +38,17 @@ function registryDrift({ exports, typesVersions, tsdownEntries }: Registries): s
 
     const versionsKey = subpath === '.' ? '.' : subpath.slice(2)
     const [, distKey] = match
+    const js = `./dist/${distKey}.mjs`
     exposed.add(versionsKey)
+
+    for (const condition of ['import', 'default'] as const) {
+      const target = entry[condition]
+      if (target === undefined) {
+        problems.push(`${subpath} in package.json#exports has no ${condition} condition, expected "${js}"`)
+      } else if (target !== js) {
+        problems.push(`${subpath} in package.json#exports has ${condition} "${target}", expected "${js}" to match its types`)
+      }
+    }
 
     if (!Object.hasOwn(typesVersions, versionsKey)) {
       problems.push(`${subpath} is in package.json#exports but missing from package.json#typesVersions["*"] (add "${versionsKey}")`)
@@ -57,42 +70,76 @@ function registryDrift({ exports, typesVersions, tsdownEntries }: Registries): s
   return problems
 }
 
+function namedEntries(entry: typeof tsdownConfig.entry): string[] {
+  if (!entry || typeof entry === 'string' || Array.isArray(entry)) {
+    throw new TypeError('tsdown.config.ts must declare entry as an object of named entries')
+  }
+  return Object.keys(entry)
+}
+
+function distEntry(key: string) {
+  return { types: `./dist/${key}.d.mts`, import: `./dist/${key}.mjs`, default: `./dist/${key}.mjs` }
+}
+
 describe('entrypoint registries', () => {
   it('package.json#exports, typesVersions and tsdown.config.ts agree', () => {
     expect(registryDrift({
       exports: pkg.exports,
       typesVersions: pkg.typesVersions['*'],
-      tsdownEntries: Object.keys(tsdownConfig.entry ?? {}),
+      tsdownEntries: namedEntries(tsdownConfig.entry),
     })).toEqual([])
   })
 
   const aligned: Registries = {
-    exports: { '.': { types: './dist/index.d.mts' }, './new': { types: './dist/new.d.mts' } },
+    exports: { '.': distEntry('index'), './package.json': './package.json', './new': distEntry('new') },
     typesVersions: { '.': ['./dist/index.d.mts'], 'new': ['./dist/new.d.mts'] },
     tsdownEntries: ['index', 'new'],
   }
 
-  it.each([
-    [
-      'typesVersions',
-      { ...aligned, typesVersions: { '.': ['./dist/index.d.mts'] } },
-      './new is in package.json#exports but missing from package.json#typesVersions["*"] (add "new")'
-    ],
-    [
-      'tsdown.config.ts',
-      { ...aligned, tsdownEntries: ['index'] },
-      './new builds to dist/new but tsdown.config.ts has no entry "new"'
-    ],
-    [
-      'exports',
-      { ...aligned, exports: { '.': { types: './dist/index.d.mts' } } },
-      'package.json#typesVersions["*"]["new"] has no matching package.json#exports entry'
-    ],
-  ])('names the registry missing a subpath (%s)', (_registry, drift, message) => {
-    expect(registryDrift(drift)).toEqual([message])
-  })
-
   it('keeps the aligned fixture clean', () => {
     expect(registryDrift(aligned)).toEqual([])
+  })
+
+  it.each([
+    [
+      'missing from typesVersions',
+      { ...aligned, typesVersions: { '.': ['./dist/index.d.mts'] } },
+      ['./new is in package.json#exports but missing from package.json#typesVersions["*"] (add "new")'],
+    ],
+    [
+      'typesVersions pointing elsewhere',
+      { ...aligned, typesVersions: { ...aligned.typesVersions, new: ['./dist/old.d.mts'] } },
+      ['package.json#typesVersions["*"]["new"] must be ["./dist/new.d.mts"]'],
+    ],
+    [
+      'missing from tsdown.config.ts',
+      { ...aligned, tsdownEntries: ['index'] },
+      ['./new builds to dist/new but tsdown.config.ts has no entry "new"'],
+    ],
+    [
+      'missing from exports',
+      { ...aligned, exports: { '.': distEntry('index') } },
+      ['package.json#typesVersions["*"]["new"] has no matching package.json#exports entry'],
+    ],
+    [
+      'import pointing at another build',
+      { ...aligned, exports: { ...aligned.exports, './new': { ...distEntry('new'), import: './dist/old.mjs' } } },
+      ['./new in package.json#exports has import "./dist/old.mjs", expected "./dist/new.mjs" to match its types'],
+    ],
+    [
+      'default condition missing',
+      { ...aligned, exports: { ...aligned.exports, './new': { types: './dist/new.d.mts', import: './dist/new.mjs' } } },
+      ['./new in package.json#exports has no default condition, expected "./dist/new.mjs"'],
+    ],
+    [
+      'subpath declared as a string',
+      { ...aligned, exports: { ...aligned.exports, './new': './dist/new.mjs' } },
+      [
+        './new in package.json#exports is a string, expected { types, import, default }',
+        'package.json#typesVersions["*"]["new"] has no matching package.json#exports entry',
+      ],
+    ],
+  ])('reports drift: %s', (_case, drift, messages) => {
+    expect(registryDrift(drift)).toEqual(messages)
   })
 })

@@ -97,7 +97,8 @@ In `packages/evlog/package.json`, add two entries (after the last adapter, and c
 ```json
 "./{name}": {
   "types": "./dist/adapters/{name}.d.mts",
-  "import": "./dist/adapters/{name}.mjs"
+  "import": "./dist/adapters/{name}.mjs",
+  "default": "./dist/adapters/{name}.mjs"
 }
 ```
 
@@ -109,7 +110,7 @@ In `packages/evlog/package.json`, add two entries (after the last adapter, and c
 ]
 ```
 
-Any export added to `package.json` without a matching `tsdown.config.ts` entry (and vice versa) fails `test/toolkit/api-surface.test.ts`, which is touchpoint 6.
+`test/toolkit/entrypoint-registry.test.ts` checks the three registrations against each other and runs without a build. It fails when the subpath is missing from `typesVersions["*"]` or `tsdown.config.ts`, or when `import` and `default` do not point at the `.mjs` next to `types`. A tsdown entry with no export is not reported, because internal chunks are built that way.
 
 ## Step 4: Unit Tests
 

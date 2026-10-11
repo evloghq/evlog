@@ -55,7 +55,7 @@ the real-runtime version catches integration regressions.
 2. Re-implementing `shouldLog` / `getServiceForPath` / similar source helpers locally to "test the logic". Import the real export — anything else is a false-green machine.
 3. `await new Promise(r => setTimeout(r, N))` for timing assertions. Use fake timers; `setTimeout` couples the test to wall-clock and CI load.
 4. `expect(x).toBeDefined()` as the *only* assertion. Always drill at least one level deeper.
-5. Adding a new export to `package.json` without updating `tsdown.config.ts` and re-running `pnpm test` so `api-surface.test.ts` snapshots the new surface.
+5. Adding a new export to `package.json` without its `typesVersions` and `tsdown.config.ts` entries (`entrypoint-registry.test.ts` fails), or without rebuilding and re-running `pnpm test` so `api-surface.test.ts` snapshots the new surface.
 6. Non-null assertions (`!`) and type casts (`as`) when a helper or guard can express the same intent — use `defined()`, `getDrainCallArg()`, `useLogger()`, or `expect(...).toEqual(...)`.
 
 ## File layout
@@ -124,6 +124,7 @@ test/
     toolkit.test.ts                # defineEvlog, defineHttpDrain, plugins, composers
     barrel.test.ts                 # exports smoke
     api-surface.test.ts            # snapshot of every public subpath export (gated on dist/)
+    entrypoint-registry.test.ts    # exports, typesVersions and tsdown entries agree (no build needed)
     enrichers.test.ts              # built-in enrichers
 
   adapters/                # one file per drain adapter (axiom, posthog, otlp, sentry, datadog, ...)

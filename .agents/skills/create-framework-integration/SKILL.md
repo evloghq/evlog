@@ -192,7 +192,8 @@ In `packages/evlog/package.json`:
 ```json
 "./{framework}": {
   "types": "./dist/{framework}/index.d.mts",
-  "import": "./dist/{framework}/index.mjs"
+  "import": "./dist/{framework}/index.mjs",
+  "default": "./dist/{framework}/index.mjs"
 }
 ```
 
@@ -200,7 +201,7 @@ In `packages/evlog/package.json`:
 
 **In `peerDependencies`** (version range) + **`peerDependenciesMeta`** (`"optional": true`), and add the framework name to `keywords`.
 
-Exports without matching `tsdown.config.ts` entries fail `test/toolkit/api-surface.test.ts`.
+`test/toolkit/entrypoint-registry.test.ts` fails when an export has no matching `typesVersions["*"]` or `tsdown.config.ts` entry, or when its `import` and `default` do not point at the `.mjs` next to `types`. It runs without a build.
 
 ## Step 4: Tests
 
