@@ -476,6 +476,58 @@ describe('redactEvent - edge cases', () => {
   })
 })
 
+describe('redactEvent - secrets built-in', () => {
+  const redact = (event: Record<string, unknown>, input: Parameters<typeof resolveRedactConfig>[0] = true) =>
+    redactEvent(event, defined(resolveRedactConfig(input), 'redact config'))
+
+  it('replaces keys ending in password, passwd, secret or token at any depth', () => {
+    const result = redact({
+      password: 'hunter2',
+      user: { newPassword: 'n3w', db_passwd: 'pw' },
+      oauth: { client_secret: 'cs_1', accessToken: 'at_1', refresh_token: 'rt_1' },
+      env: { API_TOKEN: 'tok', SECRET: 's' },
+      sessions: [{ token: 'abc' }],
+    })
+    expect(result).toEqual({
+      password: '[REDACTED]',
+      user: { newPassword: '[REDACTED]', db_passwd: '[REDACTED]' },
+      oauth: { client_secret: '[REDACTED]', accessToken: '[REDACTED]', refresh_token: '[REDACTED]' },
+      env: { API_TOKEN: '[REDACTED]', SECRET: '[REDACTED]' },
+      sessions: [{ token: '[REDACTED]' }],
+    })
+  })
+
+  it('keeps token counters and keys that only start with a secret word', () => {
+    const event = {
+      ai: { totalTokens: 1200, inputTokens: 800, tokensPerSecond: 42 },
+      auth: { tokenType: 'Bearer', passwordChangedAt: '2026-01-01' },
+    }
+    expect(redact(event)).toEqual(event)
+  })
+
+  it('keeps booleans and null, and replaces numbers and objects whole', () => {
+    const result = redact({ hasPassword: true, secret: null, pinPassword: 1234, token: { value: 'abc', expiresIn: 60 } })
+    expect(result).toEqual({ hasPassword: true, secret: null, pinPassword: '[REDACTED]', token: '[REDACTED]' })
+  })
+
+  it('uses the configured replacement', () => {
+    expect(redact({ password: 'hunter2' }, { replacement: '***' })).toEqual({ password: '***' })
+  })
+
+  it('is on by default and off when not listed in builtins', () => {
+    expect(redact({ password: 'x' }, {}).password).toBe('[REDACTED]')
+    expect(redact({ password: 'x' }, { builtins: ['email'] }).password).toBe('x')
+    expect(redact({ password: 'x' }, { builtins: ['secrets'] }).password).toBe('[REDACTED]')
+    expect(redact({ password: 'x' }, { builtins: false }).password).toBe('x')
+  })
+
+  it('survives the JSON config bridge', () => {
+    const config = defined(normalizeRedactConfig({ builtins: ['secrets'] }), 'redact config')
+    expect(config._maskers).toHaveLength(0)
+    expect(redactEvent({ password: 'x', email: 'a@b.com' }, config)).toEqual({ password: '[REDACTED]', email: 'a@b.com' })
+  })
+})
+
 describe('resolveRedactConfig', () => {
   it('returns undefined for false', () => {
     expect(resolveRedactConfig(false)).toBeUndefined()

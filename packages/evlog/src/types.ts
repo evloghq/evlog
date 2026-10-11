@@ -150,9 +150,13 @@ export interface RedactConfig {
    * - `false` → no built-ins, only custom `paths` and `patterns`
    * - `['email', 'creditCard', ...]` → only the listed built-ins
    *
-   * Available: `'creditCard'`, `'email'`, `'ipv4'`, `'phone'`, `'jwt'`, `'bearer'`, `'iban'`
+   * Available: `'creditCard'`, `'email'`, `'ipv4'`, `'phone'`, `'jwt'`, `'bearer'`, `'iban'`, `'secrets'`
+   *
+   * `'secrets'` matches key names instead of values: any key ending in `password`,
+   * `passwd`, `secret` or `token` (case-insensitive) has its value replaced with
+   * `replacement`. Booleans and `null` are kept.
    */
-  builtins?: false | Array<'creditCard' | 'email' | 'ipv4' | 'phone' | 'jwt' | 'bearer' | 'iban'>
+  builtins?: false | Array<'creditCard' | 'email' | 'ipv4' | 'phone' | 'jwt' | 'bearer' | 'iban' | 'secrets'>
   /**
    * Replacement used for path- and custom pattern redaction.
    * Built-in patterns use smart partial masking instead (e.g. `****1111` for credit cards).
@@ -202,6 +206,8 @@ export interface RedactConfig {
   transform?: (event: WideEvent) => void
   /** @internal Resolved masker functions from built-in patterns. Not user-facing. */
   _maskers?: Array<[RegExp, (match: string) => string]>
+  /** @internal Whether the `secrets` built-in is on, set by `resolveRedactConfig`. Not user-facing. */
+  _secretKeys?: boolean
   /** @internal Precompiled matchers for `paths`, built once by `resolveRedactConfig`. Not user-facing. */
   _pathMatchers?: {
     exactPaths: Set<string>

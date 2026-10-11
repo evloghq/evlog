@@ -193,7 +193,7 @@ interface Section {
 const DEFAULT = 'default'
 const LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const
 /** evlog's builtin redaction patterns, by name. */
-const BUILTIN_PATTERNS = ['creditCard', 'email', 'ipv4', 'phone', 'jwt', 'bearer', 'iban']
+const BUILTIN_PATTERNS = ['creditCard', 'email', 'ipv4', 'phone', 'jwt', 'bearer', 'iban', 'secrets']
 const PIPELINE = ['drain', 'enrich', 'keep', 'plugins', 'waitUntil']
 const KEEP_FIELDS: ReadonlySet<string> = new Set(['status', 'duration', 'path'])
 /** Keys the app sections above lay out; anything else lands in Other. */

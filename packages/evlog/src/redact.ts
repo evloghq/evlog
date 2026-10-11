@@ -302,6 +302,43 @@ export const builtinPatterns = {
 
 export type BuiltinPatternName = keyof typeof builtinPatterns
 
+/** Every name accepted by `RedactConfig.builtins`: the value patterns plus key-based `secrets`. */
+export type BuiltinRedactName = BuiltinPatternName | 'secrets'
+
+/**
+ * Keys whose name ends in `password`, `passwd`, `secret` or `token`, case-insensitive:
+ * `password`, `newPassword`, `client_secret`, `accessToken`, `API_TOKEN`. Plural
+ * counters such as `totalTokens` or `tokensPerSecond` do not match.
+ */
+const SECRET_KEY = /(?:password|passwd|secret|token)$/i
+
+/**
+ * Replace every value stored under a {@link SECRET_KEY} key, at any depth.
+ * Booleans and `null` carry no secret (`hasPassword: true`) and are kept.
+ * Mutates `obj` in place (use on a clone).
+ */
+function redactSecretKeys(obj: unknown, replacement: RedactReplacement, prefix = ''): void {
+  if (obj === null || typeof obj !== 'object') return
+
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      redactSecretKeys(obj[i], replacement, prefix ? `${prefix}.${i}` : String(i))
+    }
+    return
+  }
+
+  const record = obj as Record<string, unknown>
+  for (const key of redactableKeys(record)) {
+    const fullPath = prefix ? `${prefix}.${key}` : key
+    const value = record[key]
+    if (SECRET_KEY.test(key) && value !== null && value !== undefined && typeof value !== 'boolean') {
+      setRedacted(record, key, resolveReplacement(replacement, value, { path: fullPath, key }), fullPath)
+    } else {
+      redactSecretKeys(value, replacement, fullPath)
+    }
+  }
+}
+
 /**
  * Resolve a `redact` option (boolean or object) into a concrete `RedactConfig`.
  *
@@ -313,7 +350,7 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
   if (input === undefined || input === false) return undefined
 
   if (input === true) {
-    return { _maskers: allBuiltinMaskers() }
+    return { _maskers: allBuiltinMaskers(), _secretKeys: true }
   }
 
   if (input.builtins === false) {
@@ -325,14 +362,15 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
 
   const maskers = Array.isArray(input.builtins)
     ? input.builtins
+      .filter((name): name is BuiltinPatternName => name in builtinPatterns)
       .map(name => builtinPatterns[name])
-      .filter(Boolean)
       .map(b => [cloneRegex(b.pattern), b.mask] as Masker)
     : allBuiltinMaskers()
 
   return {
     ...input,
     _maskers: maskers,
+    _secretKeys: !Array.isArray(input.builtins) || input.builtins.includes('secrets'),
     _pathMatchers: compileRedactPathMatchers(input.paths),
   }
 }
@@ -381,6 +419,7 @@ function cloneForRedaction(event: Record<string, unknown>): Record<string, unkno
  * Returns a deep clone with redaction applied. Strategies run in order:
  * 0. **Transform**: user hook, sees raw values so it can derive replacements; the stages below still run after it.
  * 1. **Path-based**: dot-notation paths with optional globs (`password`, `**.password`, `*_token`, `user.*`) — full value replacement.
+ *    The `secrets` built-in adds every key ending in `password`, `passwd`, `secret` or `token`.
  * 2. **Masker-based**: built-in patterns with smart partial masking (e.g. `****1111`).
  * 3. **Pattern-based**: custom RegExp patterns on string values replaced with `replacement`.
  *
@@ -407,6 +446,10 @@ export function redactEvent(event: Record<string, unknown>, config: RedactConfig
   const pathMatchers = config._pathMatchers ?? compileRedactPathMatchers(config.paths)
   if (pathMatchers) {
     redactPathsInTree(clone, pathMatchers, replacement)
+  }
+
+  if (config._secretKeys) {
+    redactSecretKeys(clone, replacement)
   }
 
   if (config._maskers?.length) {
@@ -589,7 +632,7 @@ export function normalizeRedactConfig(raw: boolean | Record<string, unknown> | u
   if (raw.builtins === false) {
     config.builtins = false
   } else if (Array.isArray(raw.builtins)) {
-    config.builtins = raw.builtins as BuiltinPatternName[]
+    config.builtins = raw.builtins as BuiltinRedactName[]
   }
 
   if (Array.isArray(raw.patterns)) {
