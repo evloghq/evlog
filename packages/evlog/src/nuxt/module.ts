@@ -386,7 +386,7 @@ export default defineNuxtModule<ModuleOptions>({
       }
     })
     nuxt.options.runtimeConfig.public.evlog = {
-      enabled: options.enabled ?? true,
+      enabled: options.enabled,
       console: options.console,
       pretty: options.pretty,
       minLevel: options.minLevel,
@@ -419,6 +419,7 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     addServerPlugin(resolver.resolve('../nitro/plugin'))
+    addServerPlugin(resolver.resolve('../runtime/server/public-config'))
     // @ts-expect-error nitro:init hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:init', (nitro: Nitro) => {
       registerEvlogConfigPlugin(nitro)
