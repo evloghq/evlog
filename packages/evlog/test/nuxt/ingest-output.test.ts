@@ -64,6 +64,23 @@ describe('client ingest stdout output', () => {
     expect(callHook.mock.calls.filter(([name]) => name === 'evlog:drain')).toHaveLength(1)
   })
 
+  it('redacts a client event before stdout, enrichers and drains', async () => {
+    initLogger({ pretty: false, stringify: false, redact: true })
+
+    await handler(new Request('http://localhost/api/_evlog/ingest', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'origin': 'http://localhost' },
+      body: JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', message: 'checkout', user: { email: 'jane@example.com' }, card: '4242 4242 4242 4242' }),
+    }))
+
+    const [[printed]] = info.mock.calls
+    expect(printed).toMatchObject({ user: { email: 'j***@***.com' }, card: '****4242' })
+    for (const name of ['evlog:enrich', 'evlog:drain']) {
+      const ctx = callHook.mock.calls.find(([hook]) => hook === name)?.[1] as { event: Record<string, unknown> }
+      expect(ctx.event).toMatchObject({ user: { email: 'j***@***.com' }, card: '****4242' })
+    }
+  })
+
   it('does not print when the logger is silent', async () => {
     initLogger({ pretty: false, stringify: false, silent: true })
 

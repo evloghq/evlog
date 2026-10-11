@@ -1,7 +1,7 @@
 import { createError, defineEventHandler, getHeader, getHeaders, getRequestHost, readRawBody, setResponseStatus } from 'h3'
 import { useNitroApp } from 'nitropack/runtime'
 import type { IngestPayload, WideEvent } from '../../../../types'
-import { getEnvironment, getGlobalPluginRunner, outputWideEvent, shouldSample } from '../../../../logger'
+import { getEnvironment, getGlobalPluginRunner, outputWideEvent, redactWithGlobalConfig, shouldSample } from '../../../../logger'
 import { filterSafeHeaders } from '../../../../utils'
 
 type IngestEvent = Parameters<typeof defineEventHandler>[0] extends (e: infer E) => unknown ? E : never
@@ -151,11 +151,11 @@ export default defineEventHandler(async (event) => {
 
   const { service: _clientService, ...sanitizedPayload } = payload
 
-  const wideEvent: WideEvent = {
+  const wideEvent: WideEvent = redactWithGlobalConfig({
     ...sanitizedPayload,
     ...env,
     source: 'client',
-  }
+  })
 
   const headers = getSafeHeaders(event)
   const request = { method: 'POST' as const, path: event.path }

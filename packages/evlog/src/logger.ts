@@ -344,6 +344,19 @@ function emitWideEvent(
 }
 
 /**
+ * Apply the global `redact` config to a wide event built outside the logger,
+ * such as a client event received by the ingest endpoint. Returns the event
+ * unchanged when redaction is off.
+ * @internal
+ */
+export function redactWithGlobalConfig(event: WideEvent): WideEvent {
+  if (!state.redact) return event
+  const redacted = redactEvent(event, state.redact) as WideEvent
+  markGloballyRedacted(redacted)
+  return redacted
+}
+
+/**
  * Write an emitted wide event to the console, honoring `silent`, `pretty` and
  * `stringify`. Runners call it once enrichers have run.
  * @internal
