@@ -683,7 +683,7 @@ export interface InternalFields {
  * Request-scoped log entry captured during a request lifecycle.
  */
 export interface RequestLogEntry {
-  level: 'info' | 'warn' | 'fatal' | 'trace'
+  level: 'info' | 'warn' | 'fatal' | 'debug' | 'trace'
   message: string
   timestamp: string
 }
@@ -701,7 +701,7 @@ export type FieldContext<T extends object = Record<string, unknown>> =
  * Request-scoped logger for building wide events
  *
  * After {@link RequestLogger.emit} runs (including when head sampling drops the event),
- * the logger is **sealed**: further `set`, `error`, `fatal`, `info`, `warn`, and `trace` calls log a
+ * the logger is **sealed**: further `set`, `error`, `fatal`, `info`, `warn`, `debug`, and `trace` calls log a
  * console warning and do not mutate the wide event. A second `emit` is ignored with
  * a warning. Use {@link RequestLogger.fork} on supported integrations for intentional
  * background work that needs its own wide event.
@@ -794,6 +794,16 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * No-ops with a console warning after the wide event has been emitted.
    */
   warn: (message: string, context?: FieldContext<T>) => void
+
+  /**
+   * Capture a debug message inside the request wide event.
+   *
+   * Never raises the event level. The `evlog/vite` plugin strips `log.debug()`
+   * calls from production builds by default.
+   *
+   * No-ops with a console warning after the wide event has been emitted.
+   */
+  debug: (message: string, context?: FieldContext<T>) => void
 
   /**
    * Capture a trace message inside the request wide event.

@@ -259,6 +259,18 @@ describe('createRequestLogger', () => {
     expect(logs.map(entry => entry.level)).toEqual(['info', 'trace'])
   })
 
+  it('records debug entries in requestLogs without escalating the event level', () => {
+    const logger = createRequestLogger({})
+
+    logger.debug('Cart validated', { cart: { validated: true } })
+    const result = logger.emit()
+
+    expect(result).toHaveProperty('level', 'info')
+    expect(result?.cart).toEqual({ validated: true })
+    const logs = (result?.requestLogs as Array<Record<string, unknown>>)
+    expect(logs.map(entry => entry.level)).toEqual(['debug'])
+  })
+
   it('merges context passed to trace()', () => {
     const logger = createRequestLogger({})
 

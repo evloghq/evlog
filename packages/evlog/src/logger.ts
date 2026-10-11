@@ -1,5 +1,5 @@
 import type { AuditableLogger, AuditInput, AuditMethod } from './audit'
-import type { DrainContext, EnvironmentContext, FieldContext, Log, LogLevel, LoggerConfig, RequestLogger, RequestLoggerOptions, TailSamplingContext, WideEvent } from './types'
+import type { DrainContext, EnvironmentContext, FieldContext, Log, LogLevel, LoggerConfig, RequestLogEntry, RequestLogger, RequestLoggerOptions, TailSamplingContext, WideEvent } from './types'
 import { buildAuditFields, consumeAuditForceKeep, finalizeAudit } from './audit'
 import { markGloballyRedacted, redactEvent, resolveRedactConfig } from './redact'
 import type { PluginRunner } from './shared/plugin'
@@ -948,6 +948,7 @@ export const noopLogger: AuditableLogger = {
   fatal() {},
   info() {},
   warn() {},
+  debug() {},
   trace() {},
   emit() {
     return null
@@ -1002,7 +1003,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
   let emitted = false
   let pendingWideEvent: WideEvent | null = null
 
-  function addLog(level: 'info' | 'warn' | 'fatal' | 'trace', message: string): void {
+  function addLog(level: RequestLogEntry['level'], message: string): void {
     if (!Array.isArray(context.requestLogs)) {
       context.requestLogs = []
     }
@@ -1128,6 +1129,21 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       addLog('warn', message)
       if (warnContext) {
         const { requestLogs: _, ...rest } = warnContext as Record<string, unknown>
+        mergeFields(context, rest)
+      }
+    },
+
+    debug(message: string, debugContext?: FieldContext<T>): void {
+      if (emitted) {
+        const keys = debugContext
+          ? ['message', ...Object.keys(debugContext as Record<string, unknown>).filter(k => k !== 'requestLogs')]
+          : ['message']
+        warnPostEmit('log.debug()', `Keys dropped: ${keys.join(', ')}.`)
+        return
+      }
+      addLog('debug', message)
+      if (debugContext) {
+        const { requestLogs: _, ...rest } = debugContext as Record<string, unknown>
         mergeFields(context, rest)
       }
     },
