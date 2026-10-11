@@ -50,6 +50,15 @@ export function formatPath(path: readonly (string | number)[]): string {
   return out
 }
 
+/** The options a framework config passes to the evlog module, as written. */
+export interface ModuleOptionsDocument {
+  file: string
+  /** A {@link RuntimeValue} when the options are computed at runtime. */
+  value: Record<string, unknown> | RuntimeValue
+  /** Line of each option, by {@link formatPath}. */
+  lines: Map<string, number>
+}
+
 export interface ReadConfigResult {
   config: ConfigDocument
   /** The config `config` extends, with the specifier it was imported from (`null` when it is defined in the same file). */
@@ -75,6 +84,7 @@ interface Located<T> {
 /** Bounds how far a name is followed through bindings and re-exports, so a cycle ends. */
 const MAX_HOPS = 8
 const DEFINE_SOURCES = new Set(['evlog', 'evlog/toolkit'])
+const NITRO_MODULE_SOURCES = new Set(['evlog/nitro', 'evlog/nitro/v3'])
 const WRAPPERS = new Set(['ParenthesizedExpression', 'TSAsExpression', 'TSSatisfiesExpression', 'TSNonNullExpression', 'TSTypeAssertion'])
 const SNIPPET_LENGTH = 60
 
@@ -241,6 +251,42 @@ class Reader {
     return null
   }
 
+  /** The object literal a framework config exports, through its `define*Config(...)` call and named bindings. */
+  frameworkObject(module: Module, node: Expression, hops: number): Located<ObjectExpression> | null {
+    if (hops > MAX_HOPS) return null
+    const expression = strip(node)
+    if (expression.type === 'ObjectExpression') return { module, node: expression }
+    if (expression.type === 'CallExpression') {
+      const [argument] = expression.arguments
+      return argument && argument.type !== 'SpreadElement' ? this.frameworkObject(module, argument, hops + 1) : null
+    }
+    if (expression.type === 'Identifier') {
+      const target = this.binding(module, expression.name, hops + 1)
+      return target ? this.frameworkObject(target.module, target.node, hops + 1) : null
+    }
+    return null
+  }
+
+  /** Nuxt's `evlog` key, or the argument of the `evlog/nitro` module in `modules`. */
+  moduleOptionsNode({ module, node }: Located<ObjectExpression>): Expression | null {
+    for (const prop of node.properties) {
+      if (prop.type !== 'Property') continue
+      const key = propertyName(prop)
+      if (key === 'evlog') return prop.value
+      const list = key === 'modules' ? strip(prop.value) : null
+      if (list?.type !== 'ArrayExpression') continue
+      for (const element of list.elements) {
+        const call = element && element.type !== 'SpreadElement' ? strip(element) : null
+        if (call?.type !== 'CallExpression' || call.callee.type !== 'Identifier') continue
+        const imported = module.imports.get(call.callee.name)
+        if (!imported || !NITRO_MODULE_SOURCES.has(imported.source)) continue
+        const [argument] = call.arguments
+        return argument && argument.type !== 'SpreadElement' ? argument : null
+      }
+    }
+    return null
+  }
+
   evaluate({ module, node }: Located<Expression>, path: readonly string[], lines: Map<string, number> | undefined, hops: number): unknown {
     const expression = strip(node)
     switch (expression.type) {
@@ -379,4 +425,22 @@ export function readConfig(file: string, label: (file: string) => string): ReadC
     })
   }
   return { config: document, parent: { specifier: parent.specifier, document: parent.document } }
+}
+
+/**
+ * Read the options `nuxt.config` or `nitro.config` passes to the evlog module
+ * without running the file: Nuxt's `evlog` key, or the argument of the
+ * `evlog/nitro` module in `modules`. `null` when it passes none.
+ *
+ * @throws a `cli.CONFIG_PARSE_FAILED` error when the file does not parse.
+ */
+export function readModuleOptions(file: string, label: (file: string) => string): ModuleOptionsDocument | null {
+  const reader = new Reader(label)
+  const exported = reader.exported(file, 'default', 0)
+  const object = exported && reader.frameworkObject(exported.module, exported.node, 0)
+  const node = object && reader.moduleOptionsNode(object)
+  if (!object || !node) return null
+  const lines = new Map<string, number>()
+  const value = reader.evaluate({ module: object.module, node }, [], lines, 0)
+  return isPlainObject(value) || value instanceof RuntimeValue ? { file, value, lines } : null
 }

@@ -81,6 +81,26 @@ export default defineEvlog({
 `,
 }
 
+/** A Nuxt app whose nuxt.config passes evlog options over the file, as the module layers them. */
+const NUXT_OVERRIDES = {
+  'package.json': PACKAGE,
+  'evlog.config.ts': `export default {
+  service: 'review',
+  sampling: { rates: { warn: 50 } },
+  redact: { paths: ['user.password'] },
+}
+`,
+  'nuxt.config.ts': `export default defineNuxtConfig({
+  modules: ['evlog/nuxt'],
+  evlog: {
+    env: { service: 'nuxt-wins' },
+    sampling: { rates: { warn: 10 } },
+    redact: { paths: ['card.number'] },
+  },
+})
+`,
+}
+
 /** A config extending a package whose package.json is cut off mid-object. */
 const MALFORMED_PRESET = {
   'package.json': PACKAGE,
@@ -644,6 +664,74 @@ export default {
 
     expect(json.app).toContainEqual(expect.objectContaining({ path: 'drain', value: { runtime: 'createAxiomDrain()' } }))
     expect(json.app).toContainEqual(expect.objectContaining({ path: 'redact.patterns[0]', value: { regexp: '/acct_\\w+/g' } }))
+  })
+
+  it('layers the options nuxt.config passes to the module over the file', async () => {
+    const cwd = await makeProject(NUXT_OVERRIDES)
+    const result = await runConfig(fakeContext(cwd))
+
+    expect(result.moduleOptions).toEqual({ file: 'nuxt.config.ts', readable: true })
+    expect(result.app).toContainEqual({ path: ['env', 'service'], value: 'nuxt-wins', source: 'nuxt.config.ts:4', overrides: { value: 'review', source: 'evlog.config.ts:2' } })
+    expect(result.app).toContainEqual({ path: ['sampling', 'rates', 'warn'], value: 10, source: 'nuxt.config.ts:5', overrides: { value: 50, source: 'evlog.config.ts:3' } })
+    expect(result.app).toContainEqual({ path: ['redact', 'paths', 0], value: 'user.password', source: 'evlog.config.ts:4' })
+    expect(result.app).toContainEqual({ path: ['redact', 'paths', 1], value: 'card.number', source: 'nuxt.config.ts:6' })
+    expect(result.app.map(entry => entry.path)).not.toContainEqual(['service'])
+  })
+
+  it('shows what the app runs with and the file value each option replaces', async () => {
+    const cwd = await makeProject(NUXT_OVERRIDES)
+    const result = await runConfig(fakeContext(cwd))
+    const report = formatConfigReport(fakeContext(cwd), result)
+
+    expect(report).toMatch(/^evlog\.config\.ts\nnuxt\.config\.ts passes options to the evlog module, and they override this file$/m)
+    expect(report).toMatch(/^ {2}service +nuxt-wins +nuxt\.config\.ts:4\n +overrides 'review' at evlog\.config\.ts:2$/m)
+    expect(report).toMatch(/^ {2}warn +10% +nuxt\.config\.ts:5\n +overrides 50 at evlog\.config\.ts:3$/m)
+    expect(report).toMatch(/^ {12}card\.number +nuxt\.config\.ts:6$/m)
+    expect(configJson(result)).toMatchObject({ moduleOptions: { file: 'nuxt.config.ts', readable: true } })
+    expect(configJson(result).app).toContainEqual({ path: 'env.service', value: 'nuxt-wins', source: 'nuxt.config.ts:4', overrides: { value: 'review', source: 'evlog.config.ts:2' } })
+  })
+
+  it('reads the options passed to the Nitro module', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': 'export default { service: \'review\' }\n',
+      'nitro.config.ts': `import evlog from 'evlog/nitro/v3'
+import { defineConfig } from 'nitro'
+
+export default defineConfig({
+  modules: [evlog({ env: { service: 'nitro-wins' } })],
+})
+`,
+    })
+    const result = await runConfig(fakeContext(cwd))
+
+    expect(result.moduleOptions).toEqual({ file: 'nitro.config.ts', readable: true })
+    expect(result.app).toContainEqual({ path: ['env', 'service'], value: 'nitro-wins', source: 'nitro.config.ts:5', overrides: { value: 'review', source: 'evlog.config.ts:1' } })
+  })
+
+  it('says the module options override the file when they are computed', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': 'export default { service: \'review\' }\n',
+      'nuxt.config.ts': 'import { evlogOptions } from \'@acme/config\'\n\nexport default defineNuxtConfig({ evlog: evlogOptions() })\n',
+    })
+    const result = await runConfig(fakeContext(cwd))
+
+    expect(result.moduleOptions).toEqual({ file: 'nuxt.config.ts', readable: false })
+    expect(result.app).toContainEqual({ path: ['service'], value: 'review', source: 'evlog.config.ts:1' })
+    expect(formatConfigReport(fakeContext(cwd), result)).toContain('nuxt.config.ts passes options to the evlog module that are computed at runtime, and they override this file')
+  })
+
+  it('says nothing about a module registered without options', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': 'export default { service: \'review\' }\n',
+      'nitro.config.ts': 'import evlog from \'evlog/nitro\'\n\nexport default defineNitroConfig({ modules: [evlog()] })\n',
+    })
+    const result = await runConfig(fakeContext(cwd))
+
+    expect(result.moduleOptions).toBeNull()
+    expect(formatConfigReport(fakeContext(cwd), result)).not.toContain('evlog module')
   })
 
   it('says where it looked when there is no config', async () => {

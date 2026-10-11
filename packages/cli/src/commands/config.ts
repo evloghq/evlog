@@ -1,7 +1,7 @@
 import type { CliContext } from '../core/context'
 import { createStyle } from '../core/output'
 import { defineEvlogCommand, failWith } from '../lib/command'
-import { formatPath, isAppendedList, loadCliConfig, RuntimeValue } from '../lib/config'
+import { formatPath, isAppendedList, loadCliConfig, loadModuleOptions, RuntimeValue } from '../lib/config'
 import { isPlainObject } from '../lib/config/read'
 import type { CliDebug } from '../lib/debug'
 import { createNoopCliDebug } from '../lib/debug'
@@ -17,6 +17,8 @@ export interface ConfigEntry {
   value: unknown
   /** Where the setting is written, as `file:line`, or `null` when it comes from a file that only contributes values. */
   source: string | null
+  /** What `evlog.config` sets at the same path, when the module options replace it. */
+  overrides?: { value: unknown, source: string | null }
 }
 
 /** Typed result of `evlog config`, rendered by {@link formatConfigReport}. */
@@ -26,9 +28,15 @@ export interface ConfigResult {
   /** Relative to the working directory, or `null` when no config applies. */
   file: string | null
   extends: { specifier: string | null, file: string } | null
+  /**
+   * The framework config that passes options to the evlog module, which win
+   * over the file key by key. `readable` is false when they are computed at
+   * runtime, so `app` shows the file alone.
+   */
+  moduleOptions: { file: string, readable: boolean } | null
   /** Settings the CLI applies itself (`map`, `logs`). */
   cli: ConfigEntry[]
-  /** Settings the app applies at runtime. */
+  /** Settings the app applies at runtime, with the module options laid over the file. */
   app: ConfigEntry[]
   /** Where each key is written, by {@link formatPath}, for rows that stand for a whole object such as `redact`. */
   sources: ReadonlyMap<string, string>
@@ -55,6 +63,45 @@ function entriesOf(value: unknown, path: ConfigPath, sources: ReadonlyMap<string
   return [{ path, value, source: sourceOf(path, sources) }]
 }
 
+function entriesFor(value: Record<string, unknown>, sources: ReadonlyMap<string, string>): ConfigEntry[] {
+  return Object.entries(value).flatMap(([key, child]) => entriesOf(child, [key], sources))
+}
+
+/** The path a setting reaches the app under: the module folds `service` and `environment` into `env`. */
+function runtimePath(path: ConfigPath): ConfigPath {
+  return path.length === 1 && (path[0] === 'service' || path[0] === 'environment') ? ['env', path[0]] : path
+}
+
+/**
+ * Lay the module options over the file's settings the way the module does: an
+ * option replaces what the file sets at its path and below, objects merge key
+ * by key, and the items of an appended list follow the file's.
+ */
+function layerEntries(file: ConfigEntry[], options: ConfigEntry[]): ConfigEntry[] {
+  let out = [...file]
+  for (const option of options) {
+    if (option.value === undefined) continue
+    const index = option.path.at(-1)
+    const list = option.path.slice(0, -1)
+    const path = typeof index === 'number' && isAppendedList(list)
+      ? [...list, index + file.filter(entry => entry.path.length === option.path.length && startsWith(entry.path, list)).length]
+      : option.path
+    const below = out.filter(entry => startsWith(runtimePath(entry.path), path))
+    /* An empty object adds nothing, and `redact: true` keeps a redact object the file sets. */
+    const keepsFile = isPlainObject(option.value)
+      || (option.value === true && path.length === 1 && path[0] === 'redact' && below.some(entry => entry.path.length > 1 || isPlainObject(entry.value)))
+    if (below.length > 0 && keepsFile) continue
+    const replaced = out.filter(entry => startsWith(runtimePath(entry.path), path) || startsWith(path, runtimePath(entry.path)))
+    const exactly = replaced.filter(entry => runtimePath(entry.path).length === path.length)
+    /* A top-level `service` wins over the file's own `env.service`, so it is the value the option replaces. */
+    const previous = exactly.find(entry => entry.path.length === 1) ?? exactly[0]
+    const at = replaced.length > 0 ? out.indexOf(replaced[0]!) : out.length
+    out = out.filter(entry => !replaced.includes(entry))
+    out.splice(at, 0, { ...option, path, ...(previous && { overrides: { value: previous.value, source: previous.source } }) })
+  }
+  return out
+}
+
 /**
  * Read the `evlog.config` that applies to `ctx.cwd`, merged across `extends`,
  * with where each setting is written. Pure with respect to the context.
@@ -65,16 +112,20 @@ export async function runConfig(ctx: CliContext, log: CliDebug = createNoopCliDe
   const project = await log.step('resolveProject', () => resolveProject(ctx.cwd), p => ({ project: { root: p.root, packageDir: p.packageDir } }))
   const searched = { from: prettyPath(ctx.cwd, project.packageDir), to: prettyPath(ctx.cwd, project.root) }
   const config = await log.step('loadConfig', () => loadCliConfig(project), c => ({ config: c && { file: c.file, extends: c.extends?.file ?? null } }))
-  if (!config) return { searched, file: null, extends: null, cli: [], app: [], sources: new Map() }
+  if (!config) return { searched, file: null, extends: null, moduleOptions: null, cli: [], app: [], sources: new Map() }
+  const options = await log.step('loadModuleOptions', () => loadModuleOptions(project), o => ({ moduleOptions: o && { file: o.file, readable: !(o.value instanceof RuntimeValue) } }))
+  const layered = options && !(options.value instanceof RuntimeValue) ? { value: options.value, sources: options.sources } : null
 
-  const entries = Object.entries(config.resolved).flatMap(([key, value]) => entriesOf(value, [key], config.sources))
+  const entries = entriesFor(config.resolved, config.sources)
+  const app = entries.filter(entry => !CLI_SECTIONS.has(entry.path[0]))
   return {
     searched,
     file: prettyPath(ctx.cwd, config.file),
     extends: config.extends && { specifier: config.extends.specifier, file: prettyPath(ctx.cwd, config.extends.file) },
+    moduleOptions: options && { file: prettyPath(ctx.cwd, options.file), readable: layered !== null },
     cli: entries.filter(entry => CLI_SECTIONS.has(entry.path[0])),
-    app: entries.filter(entry => !CLI_SECTIONS.has(entry.path[0])),
-    sources: config.sources,
+    app: layered ? layerEntries(app, entriesFor(layered.value, layered.sources).filter(entry => !CLI_SECTIONS.has(entry.path[0]))) : app,
+    sources: layered ? new Map([...layered.sources, ...config.sources]) : config.sources,
   }
 }
 
@@ -101,8 +152,13 @@ function jsonValue(value: unknown): unknown {
 
 /** The `--json` payload: entries keyed by path, values JSON-safe. */
 export function configJson(result: ConfigResult): Record<string, unknown> {
-  const settings = (entries: ConfigEntry[]) => entries.map(entry => ({ path: formatPath(entry.path), value: jsonValue(entry.value), source: entry.source }))
-  return { file: result.file, extends: result.extends, cli: settings(result.cli), app: settings(result.app) }
+  const settings = (entries: ConfigEntry[]) => entries.map(entry => ({
+    path: formatPath(entry.path),
+    value: jsonValue(entry.value),
+    source: entry.source,
+    ...(entry.overrides && { overrides: { value: jsonValue(entry.overrides.value), source: entry.overrides.source } }),
+  }))
+  return { file: result.file, extends: result.extends, moduleOptions: result.moduleOptions, cli: settings(result.cli), app: settings(result.app) }
 }
 
 interface Row {
@@ -116,6 +172,8 @@ interface Row {
   /** What the setting covers, under the row. */
   note?: string
   warning?: string
+  /** The file's value the module options replace, under the row. */
+  overrides?: string
 }
 
 interface Section {
@@ -145,13 +203,17 @@ function exact(entries: ConfigEntry[], path: ConfigPath): ConfigEntry | undefine
   return entries.find(entry => entry.path.length === path.length && startsWith(entry.path, path))
 }
 
+function overridesNote(entry: ConfigEntry | undefined): string | undefined {
+  return entry?.overrides && `overrides ${formatValue(entry.overrides.value)} at ${entry.overrides.source ?? 'the config'}`
+}
+
 function settingRow(entry: ConfigEntry, label = formatPath(entry.path)): Row {
-  return { label, value: formatValue(entry.value), source: entry.source, runtime: entry.value instanceof RuntimeValue }
+  return { label, value: formatValue(entry.value), source: entry.source, runtime: entry.value instanceof RuntimeValue, overrides: overridesNote(entry) }
 }
 
 /** A setting that reads as text, a service name or a path, so a string goes unquoted. */
 function textRow(entry: ConfigEntry, label: string): Row {
-  return typeof entry.value === 'string' ? { label, value: entry.value, source: entry.source } : settingRow(entry, label)
+  return typeof entry.value === 'string' ? { label, value: entry.value, source: entry.source, overrides: overridesNote(entry) } : settingRow(entry, label)
 }
 
 /** Rows for a list, the label on the first item only. */
@@ -211,7 +273,7 @@ function samplingSection(app: ConfigEntry[]): Section {
     } else if (!rate) {
       rows.push({ label: level, value: level === 'trace' ? '0%' : '100%', source: DEFAULT })
     } else if (typeof rate.value === 'number') {
-      rows.push({ label: level, value: `${rate.value}%`, source: rate.source, warning: level === 'error' ? errorWarning(rate.value) : undefined })
+      rows.push({ label: level, value: `${rate.value}%`, source: rate.source, warning: level === 'error' ? errorWarning(rate.value) : undefined, overrides: overridesNote(rate) })
     } else {
       rows.push(settingRow(rate, level))
     }
@@ -236,8 +298,8 @@ function redactionSection(app: ConfigEntry[], sources: ReadonlyMap<string, strin
     ] }
   }
   if (root && !isPlainObject(root.value)) {
-    if (root.value === false) return { title: 'Redaction', rows: [{ label: 'redact', value: 'off', source: root.source }] }
-    if (root.value === true) return { title: 'Redaction', rows: [{ label: 'redact', value: 'on', source: root.source }, { label: 'builtins', value: all, source: root.source }] }
+    if (root.value === false) return { title: 'Redaction', rows: [{ label: 'redact', value: 'off', source: root.source, overrides: overridesNote(root) }] }
+    if (root.value === true) return { title: 'Redaction', rows: [{ label: 'redact', value: 'on', source: root.source, overrides: overridesNote(root) }, { label: 'builtins', value: all, source: root.source }] }
     return { title: 'Redaction', rows: [settingRow(root, 'redact')] }
   }
 
@@ -254,7 +316,7 @@ function redactionSection(app: ConfigEntry[], sources: ReadonlyMap<string, strin
         : settingRow(builtins, 'builtins')
   return { title: 'Redaction', rows: [
     { label: 'redact', value: 'on', source },
-    builtinsRow,
+    { ...builtinsRow, overrides: overridesNote(builtins) },
     ...listRows(paths, 'paths', value => typeof value === 'string' ? value : formatValue(value)),
     ...listRows(patterns, 'patterns', formatValue),
     ...restRows(scope, new Set([root, builtins, ...paths, ...patterns])),
@@ -277,6 +339,7 @@ function renderSection(section: Section, paint: Paint): string[] {
     const value = row.runtime ? paint('magenta', row.value) : row.muted ? paint('dim', row.value) : row.value
     const source = row.source ? `${' '.repeat(valueWidth - row.value.length)}  ${paint('dim', row.source)}` : ''
     lines.push(`  ${paint('cyan', row.label.padEnd(labelWidth))}  ${value}${source}`)
+    if (row.overrides) lines.push(`  ${' '.repeat(labelWidth)}  ${paint('dim', row.overrides)}`)
     if (row.warning) lines.push(`  ${' '.repeat(labelWidth)}  ${paint('yellow', `⚠ ${row.warning}`)}`)
     if (row.note) lines.push(`  ${' '.repeat(labelWidth)}  ${paint('dim', row.note)}`)
   }
@@ -301,6 +364,12 @@ export function formatConfigReport(ctx: CliContext, result: ConfigResult): strin
 
   const parent = result.extends && (result.extends.specifier ? `${result.extends.specifier} → ${result.extends.file}` : result.extends.file)
   const lines = [result.file + (parent ? paint('dim', ` · extends ${parent}`) : '')]
+  if (result.moduleOptions) {
+    const { file, readable } = result.moduleOptions
+    lines.push(paint('dim', readable
+      ? `${file} passes options to the evlog module, and they override this file`
+      : `${file} passes options to the evlog module that are computed at runtime, and they override this file`))
+  }
   const sections: Section[] = []
   if (result.app.length > 0) {
     sections.push(serviceSection(result.app), samplingSection(result.app), redactionSection(result.app, result.sources), pipelineSection(result.app))

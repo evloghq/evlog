@@ -8,7 +8,7 @@ import type { CheckId } from '../map/types'
 import { prettyPath } from '../project'
 import type { ProjectInfo } from '../project'
 import type { ConfigDocument } from './read'
-import { formatPath, isPlainObject, readConfig, RuntimeValue } from './read'
+import { formatPath, isPlainObject, readConfig, readModuleOptions, RuntimeValue } from './read'
 
 export { formatPath, RuntimeValue } from './read'
 
@@ -48,6 +48,18 @@ export interface CliConfig {
   logs: LogsSettings
 }
 
+/** The options a framework config passes to the evlog module, which the module lays over `evlog.config`. */
+export interface ModuleOptions {
+  file: string
+  /** A {@link RuntimeValue} when the options are computed at runtime. */
+  value: Record<string, unknown> | RuntimeValue
+  /** Where each option is written, as `file:line`, by {@link formatPath}. */
+  sources: ReadonlyMap<string, string>
+}
+
+/** Framework configs that can pass options to the evlog module, looked up in the package directory. */
+const MODULE_CONFIG_FILES = ['nuxt.config', 'nitro.config'].flatMap(base => ['ts', 'mts', 'js', 'mjs'].map(extension => `${base}.${extension}`))
+
 const MAP_KEYS = ['rules', 'ignore', 'minScore', 'baseline']
 /** The map sorts entry points into instrumented, partial and dark by these, so neither can be turned off. */
 const CORE_RULES: ReadonlySet<string> = new Set<CheckId>(['wide-event', 'context'])
@@ -82,6 +94,21 @@ export function findConfigFile(project: ProjectInfo): string | null {
     if (dir === project.root || parent === dir) return null
     dir = parent
   }
+}
+
+/**
+ * Read the options `nuxt.config` or `nitro.config` passes to the evlog module
+ * in `project`, or `null` when it passes none. The module lays them over
+ * `evlog.config`, so they win key by key.
+ *
+ * @throws a `cli.CONFIG_PARSE_FAILED` error when the framework config does not parse.
+ */
+export function loadModuleOptions(project: ProjectInfo): ModuleOptions | null {
+  const file = MODULE_CONFIG_FILES.map(name => join(project.packageDir, name)).find(path => existsSync(path))
+  const options = file ? readModuleOptions(file, path => prettyPath(project.cwd, path)) : null
+  if (!options) return null
+  const label = prettyPath(project.cwd, options.file)
+  return { file: options.file, value: options.value, sources: new Map([...options.lines].map(([path, line]) => [path, `${label}:${line}`])) }
 }
 
 type At = (path: string) => string
