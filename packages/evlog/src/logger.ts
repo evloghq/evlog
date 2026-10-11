@@ -814,6 +814,38 @@ function isWrapperOf(err: Error, cause: unknown): cause is Error {
     && cause.stack === err.stack
 }
 
+const H3_INPUT_FIELDS: Record<string, string> = {
+  message: 'message',
+  stack: 'stack',
+  statusCode: 'statusCode',
+  status: 'statusCode',
+  statusMessage: 'statusMessage',
+  statusText: 'statusMessage',
+  data: 'data',
+  fatal: 'fatal',
+  unhandled: 'unhandled',
+}
+
+/**
+ * h3's `createError({ statusCode, message })` keeps the options object itself
+ * as `cause`. It only restates fields the error already carries, so it counts
+ * as a copy when every key is one h3 reads and every value matches the error.
+ */
+function isH3InputOf(err: Error, cause: unknown): boolean {
+  if (typeof cause !== 'object' || cause === null || cause instanceof Error || Array.isArray(cause)) return false
+  const keys = Object.keys(cause)
+  if (keys.length === 0) return false
+  const errRecord = err as unknown as Record<string, unknown>
+  const causeRecord = cause as Record<string, unknown>
+  return keys.every((key) => {
+    const target = H3_INPUT_FIELDS[key]
+    if (!target) return false
+    const value = causeRecord[key]
+    if (value === undefined || value === errRecord[target]) return true
+    return target === 'statusCode' && Number(value) === errRecord.statusCode
+  })
+}
+
 function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<string, unknown> {
   if (isWrapperOf(err, err.cause) && !ancestors.has(err.cause)) {
     ancestors.add(err)
@@ -834,6 +866,7 @@ function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<s
   const errRecord = err as unknown as Record<string, unknown>
   ancestors.add(err)
   for (const k of ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'cause', 'internal'] as const) {
+    if (k === 'cause' && isH3InputOf(err, err.cause)) continue
     if (k in err) errorObj[k] = removeErrorCycles(errRecord[k], ancestors)
   }
   ancestors.delete(err)
