@@ -115,14 +115,22 @@ describe('evlogConfigPluginSource', () => {
     expect(source).toContain('"C:/app/evlog.config.ts"')
     expect(source).not.toMatch(/\\/)
   })
+
+  it('empties the global slot when there is no file', () => {
+    expect(evlogConfigPluginSource(undefined)).toBe([
+      'globalThis[Symbol.for("evlog.config.file")] = undefined',
+      'export default function evlogConfig() {}',
+      '',
+    ].join('\n'))
+  })
 })
 
 describe('registerEvlogConfigPlugin', () => {
-  it('leaves Nitro untouched when the app has no config', () => {
+  it('registers a plugin that empties the slot when the app has no config', () => {
     const nitro = makeNitroStub(makeDir())
     expect(registerEvlogConfigPlugin(nitro)).toBeUndefined()
-    expect(nitro.options.plugins).toEqual([])
-    expect(nitro.options.virtual).toEqual({})
+    expect(nitro.options.plugins).toEqual([EVLOG_CONFIG_PLUGIN_ID])
+    expect(nitro.options.virtual[EVLOG_CONFIG_PLUGIN_ID]).toBe(evlogConfigPluginSource(undefined))
   })
 
   it('registers the virtual plugin first, before plugins already registered', () => {

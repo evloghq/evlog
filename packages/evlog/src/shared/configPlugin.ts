@@ -44,15 +44,18 @@ export function findEvlogConfigFile(rootDir: string): string | undefined {
   }
 }
 
-/** Source of the server plugin that imports `file` and hands its default export to the evlog Nitro plugin. */
-export function evlogConfigPluginSource(file: string): string {
-  // Raw-interpolated into a JS string literal: POSIX separators keep Windows backslashes from reading as escapes.
-  return [
-    `import config from ${JSON.stringify(file.replace(/\\/g, '/'))}`,
-    `globalThis[Symbol.for(${JSON.stringify(EVLOG_FILE_CONFIG_KEY)})] = config`,
-    'export default function evlogConfig() {}',
-    '',
-  ].join('\n')
+/**
+ * Source of the server plugin that imports `file` and hands its default export
+ * to the evlog Nitro plugin. Without a file it empties the slot, so a config
+ * loaded by another server in the same process does not apply.
+ */
+export function evlogConfigPluginSource(file: string | undefined): string {
+  const slot = `globalThis[Symbol.for(${JSON.stringify(EVLOG_FILE_CONFIG_KEY)})]`
+  const load = file
+    // Raw-interpolated into a JS string literal: POSIX separators keep Windows backslashes from reading as escapes.
+    ? [`import config from ${JSON.stringify(file.replace(/\\/g, '/'))}`, `${slot} = config`]
+    : [`${slot} = undefined`]
+  return [...load, 'export default function evlogConfig() {}', ''].join('\n')
 }
 
 /** The slice of Nitro options the config plugin is registered on, shared by nitropack v2 and Nitro v3. */
@@ -65,15 +68,14 @@ interface NitroOptionsTarget {
 }
 
 /**
- * Load `evlog.config.ts` into the server bundle when the app has one, through
- * a virtual plugin placed first so the file is evaluated before any plugin
- * runs. Call it once options are resolved (from a Nitro module's `setup` or
- * Nuxt's `nitro:init`): a plugin id added earlier is resolved as a path.
- * Returns the file it registered.
+ * Load `evlog.config.ts` into the server bundle through a virtual plugin
+ * placed first, so the file is evaluated before any plugin runs. The plugin is
+ * registered without a file too, to empty the slot. Call it once options are
+ * resolved (from a Nitro module's `setup` or Nuxt's `nitro:init`): a plugin id
+ * added earlier is resolved as a path. Returns the file it loads.
  */
 export function registerEvlogConfigPlugin(nitro: NitroOptionsTarget): string | undefined {
   const file = findEvlogConfigFile(nitro.options.rootDir)
-  if (!file) return undefined
   nitro.options.virtual[EVLOG_CONFIG_PLUGIN_ID] = evlogConfigPluginSource(file)
   nitro.options.plugins.unshift(EVLOG_CONFIG_PLUGIN_ID)
   return file
