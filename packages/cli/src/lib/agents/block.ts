@@ -104,18 +104,3 @@ export function upsertBlock(source: string, block: string): string | null {
 export function renderAgentsFile(projectName: string, block: string): string {
   return `# ${projectName}\n\nInstructions for AI coding agents working in this repository.\n\n${block}`
 }
-
-/** The line that points Claude Code at `AGENTS.md` instead of duplicating it. */
-export const CLAUDE_POINTER = '@AGENTS.md'
-
-/**
- * Add the pointer to a `CLAUDE.md`, or `null` when it already refers to AGENTS.md.
- *
- * Matches any mention rather than the exact line: a file that already says
- * "see AGENTS.md" in prose does not need a second instruction.
- */
-export function upsertClaudePointer(source: string | null): string | null {
-  if (source === null) return `${CLAUDE_POINTER}\n`
-  if (source.includes('AGENTS.md')) return null
-  return `${source.endsWith('\n') ? source : `${source}\n`}\n${CLAUDE_POINTER}\n`
-}

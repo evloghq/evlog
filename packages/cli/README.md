@@ -48,11 +48,11 @@ pnpm evlog map
 | `evlog init --dry-run` | Print the plan without touching a file |
 | `evlog init --service <name>` | Service name on every wide event (default: package name, unscoped) |
 | `evlog init --no-install` | Print the install command instead of running it |
-| `evlog init --no-agents` | Skip all of it — no `AGENTS.md`, no `CLAUDE.md`, no skills |
-| `evlog agents` | Write the evlog conventions into `AGENTS.md`, point `CLAUDE.md` at it, install the skills via `npx skills add` |
+| `evlog init --no-agents` | Skip all of it: no `AGENTS.md`, no skills |
+| `evlog agents` | Write the evlog conventions into `AGENTS.md`, install the skills globally via `npx skills add` |
 | `evlog agents --skills <a,b>` | Install only these skills (default: every published one) |
-| `evlog agents --no-skills` | Still write `AGENTS.md` and `CLAUDE.md`; skip only the skills — nothing is spawned |
-| `evlog agents --global` | Install the skills for every project instead of just this one |
+| `evlog agents --no-skills` | Still write `AGENTS.md`; skip only the skills, so nothing is spawned |
+| `evlog agents --local` | Install the skills into this project instead of for every project (default: global) |
 | `evlog agents --source <url>` | Where the skills are published — a plain http(s) origin (default: `https://www.evlog.dev`) |
 | `evlog agents --dry-run` | Print the plan without touching a file or spawning anything |
 | `evlog agents --yes` | Apply without confirming (also implied by `--json`, no TTY, or `CI`) |

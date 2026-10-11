@@ -3,7 +3,7 @@ import { basename, join, relative } from 'node:path'
 import { cliErrors } from '../errors'
 import type { FileAction } from '../init/wiring'
 import type { Framework } from '../map/types'
-import { renderAgentsFile, renderBlock, upsertBlock, upsertClaudePointer } from './block'
+import { renderAgentsFile, renderBlock, upsertBlock } from './block'
 
 export interface AgentsPlanInput {
   /** Package root — where `AGENTS.md` belongs. */
@@ -68,11 +68,6 @@ export function planAgents(input: AgentsPlanInput): AgentsPlan {
     if (next === null) already.push('AGENTS.md is up to date')
     else actions.push(action(input.root, 'AGENTS.md', next))
   }
-
-  const claudePath = join(input.root, 'CLAUDE.md')
-  const claude = upsertClaudePointer(read(claudePath))
-  if (claude === null) already.push('CLAUDE.md already points at AGENTS.md')
-  else actions.push(action(input.root, 'CLAUDE.md', claude))
 
   return { actions, already }
 }

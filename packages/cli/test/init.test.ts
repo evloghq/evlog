@@ -439,7 +439,7 @@ describe('runInit — agent guidelines', () => {
     /* Reported, not silent: doing nothing quietly reads as a forgotten step. */
     expect(result.already).toContain('evlog skills already installed · .claude/skills')
     expect(result.written.map(action => action.relative)).toEqual(
-      expect.arrayContaining(['AGENTS.md', 'CLAUDE.md']),
+      expect.arrayContaining(['AGENTS.md']),
     )
     /* The wiring and the guidelines land in the same plan, not two runs. */
     expect(await readFile(join(cwd, 'nuxt.config.ts'), 'utf8')).toContain('evlog/nuxt')
@@ -488,7 +488,7 @@ describe('runInit — agent guidelines', () => {
     expect(skills.calls).toBe(1)
     /* The files land before the spawn, so a dead subprocess cannot cost them. */
     expect(await readFile(join(cwd, 'AGENTS.md'), 'utf8')).toContain('## Logging with evlog')
-    expect(existsSync(join(cwd, 'CLAUDE.md'))).toBe(true)
+    expect(existsSync(join(cwd, 'CLAUDE.md'))).toBe(false)
   })
 
   it('keeps the wiring and the block when the skills install fails', async () => {

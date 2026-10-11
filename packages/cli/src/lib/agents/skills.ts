@@ -116,13 +116,14 @@ function checkSource(value: string): string {
 /**
  * The agents the skills are installed for, passed explicitly with `--agent`.
  *
- * `codex` owns the canonical copy: with `--global` it lands in
- * `~/.agents/skills`, and `claude-code` gets a relative symlink into it in
- * `~/.claude/skills`. `universal` is left out on purpose, because its global
- * directory is `~/.config/agents/skills`, not `~/.agents/skills`. `cursor` is
- * left out because it would be a second copy of the same skills.
+ * `universal` is the shared `.agents/skills` directory: a global install lands
+ * in `~/.agents/skills`, a local one in the project's `.agents/skills`, and the
+ * agents that read that directory (Codex among them) find the skills there.
+ * `claude-code` gets a relative symlink into it, in `.claude/skills` or
+ * `~/.claude/skills`. Naming the agents keeps the skills CLI from copying into
+ * every agent directory it detects; `cursor` is left out for the same reason.
  */
-export const AGENT_TARGETS = ['claude-code', 'codex'] as const
+export const AGENT_TARGETS = ['universal', 'claude-code'] as const
 
 /**
  * Build the `npx skills add` invocation.
@@ -133,7 +134,8 @@ export const AGENT_TARGETS = ['claude-code', 'codex'] as const
 export function skillsCommand(options: {
   source?: string
   skills?: readonly string[]
-  global?: boolean
+  /** Install into this project instead of for every project. */
+  local?: boolean
   interactive: boolean
 }): SkillsCommand {
   const args = ['--yes', 'skills', 'add', checkSource(options.source ?? DEFAULT_SOURCE)]
@@ -144,7 +146,7 @@ export function skillsCommand(options: {
     args.push('--skill', ...options.skills)
   }
   for (const agent of AGENT_TARGETS) args.push('--agent', agent)
-  if (options.global) args.push('--global')
+  if (!options.local) args.push('--global')
   if (!options.interactive) args.push('--yes')
 
   /* Every argument, including npx's own `--yes`: this string is what the plan

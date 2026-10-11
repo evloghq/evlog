@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
-import { MARKER_END, MARKER_START, renderBlock, upsertBlock, upsertClaudePointer } from '../src/lib/agents/block'
+import { MARKER_END, MARKER_START, renderBlock, upsertBlock } from '../src/lib/agents/block'
 import { planAgents } from '../src/lib/agents/plan'
 import { formatAgentsReport } from '../src/lib/agents/report'
 import { agentsTelemetryFieldNames, runAgents } from '../src/lib/agents/run'
@@ -113,20 +113,6 @@ describe('upsertBlock', () => {
   })
 })
 
-describe('upsertClaudePointer', () => {
-  it('creates the pointer when there is no file', () => {
-    expect(upsertClaudePointer(null)).toBe('@AGENTS.md\n')
-  })
-
-  it('leaves a file that already mentions AGENTS.md alone', () => {
-    expect(upsertClaudePointer('See AGENTS.md for the rules.\n')).toBeNull()
-  })
-
-  it('appends to a file that does not', () => {
-    expect(upsertClaudePointer('# rules\n')).toBe('# rules\n\n@AGENTS.md\n')
-  })
-})
-
 describe('findInstalledSkills', () => {
   /* Owned by the suite rather than a fixed temp path: a stray
      `evlog-cli-agents-no-home/.claude/skills/<name>` on the build machine would
@@ -178,8 +164,8 @@ describe('findInstalledSkills', () => {
 })
 
 describe('skillsCommand', () => {
-  it('adds every published skill from the docs site by default', () => {
-    expect(skillsCommand({ interactive: true }).display).toBe('npx --yes skills add https://www.evlog.dev --agent claude-code --agent codex')
+  it('adds every published skill from the docs site, globally, by default', () => {
+    expect(skillsCommand({ interactive: true }).display).toBe('npx --yes skills add https://www.evlog.dev --agent universal --agent claude-code --global')
   })
 
   it('shows the command it actually runs, argument for argument', () => {
@@ -195,28 +181,32 @@ describe('skillsCommand', () => {
        --yes, the one aimed at the skills CLI, appears only when nobody can
        answer. The leading one is npx's and is always there. */
     expect(skillsCommand({ interactive: true }).display)
-      .toBe('npx --yes skills add https://www.evlog.dev --agent claude-code --agent codex')
+      .toBe('npx --yes skills add https://www.evlog.dev --agent universal --agent claude-code --global')
     expect(skillsCommand({ interactive: false }).display)
-      .toBe('npx --yes skills add https://www.evlog.dev --agent claude-code --agent codex --yes')
+      .toBe('npx --yes skills add https://www.evlog.dev --agent universal --agent claude-code --global --yes')
   })
 
-  it('passes the scope and the skill selection through', () => {
-    const command = skillsCommand({ interactive: true, global: true, skills: ['analyze-logs'] })
+  it('passes the skill selection through', () => {
+    const command = skillsCommand({ interactive: true, skills: ['analyze-logs'] })
 
-    expect(command.display).toBe('npx --yes skills add https://www.evlog.dev --skill analyze-logs --agent claude-code --agent codex --global')
+    expect(command.display).toBe('npx --yes skills add https://www.evlog.dev --skill analyze-logs --agent universal --agent claude-code --global')
   })
 
-  it('targets the canonical codex copy and claude-code, not every detected agent', () => {
-    /* `universal` writes globally to ~/.config/agents/skills, and cursor
-       duplicates what codex already keeps in ~/.agents/skills. Both are left
-       out on purpose; the symlink into ~/.claude/skills is what Claude Code reads. */
-    const { args } = skillsCommand({ interactive: true, global: true })
+  it('installs into the project only with local, and leaves out --global', () => {
+    expect(skillsCommand({ interactive: true, local: true }).display)
+      .toBe('npx --yes skills add https://www.evlog.dev --agent universal --agent claude-code')
+  })
+
+  it('targets universal and claude-code, not every detected agent', () => {
+    /* `universal` is the shared .agents/skills directory that Codex reads, and
+       claude-code gets a symlink into it. cursor would be a second copy. */
+    const { args } = skillsCommand({ interactive: true })
 
     expect(args.filter(arg => arg === '--agent')).toHaveLength(2)
+    expect(args).toContain('universal')
     expect(args).toContain('claude-code')
-    expect(args).toContain('codex')
     expect(args).not.toContain('cursor')
-    expect(args).not.toContain('universal')
+    expect(args).not.toContain('codex')
   })
 
   it('runs npx rather than depending on the package', () => {
@@ -255,17 +245,17 @@ describe('skillsCommand', () => {
 
   it('accepts a self-hosted origin', () => {
     expect(skillsCommand({ interactive: true, source: 'http://localhost:3000' }).display)
-      .toBe('npx --yes skills add http://localhost:3000 --agent claude-code --agent codex')
+      .toBe('npx --yes skills add http://localhost:3000 --agent universal --agent claude-code --global')
   })
 })
 
 describe('planAgents', () => {
-  it('creates both files in a project that has neither', async () => {
+  it('creates AGENTS.md in a project that has none', async () => {
     const root = await project({ 'package.json': '{"name":"shop"}' })
 
     const plan = planAgents({ root, projectName: 'shop', framework: 'nuxt', hasSkills: false })
 
-    expect(plan.actions.map(action => action.relative)).toEqual(['AGENTS.md', 'CLAUDE.md'])
+    expect(plan.actions.map(action => action.relative)).toEqual(['AGENTS.md'])
     expect(plan.actions.every(action => action.kind === 'create')).toBe(true)
     expect(plan.actions[0]!.contents).toContain('# shop')
   })
@@ -296,14 +286,24 @@ describe('agents telemetry fields', () => {
 })
 
 describe('runAgents', () => {
-  it('writes the block and the pointer, and delegates the skills', async () => {
+  it('writes the block and nothing else, and reports the skills it skipped', async () => {
     const root = await project({ 'package.json': '{"name":"shop"}' })
 
     const result = await runAgents(fakeContext(root), undefined, { noSkills: true })
 
     expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toContain(MARKER_START)
-    expect(await readFile(join(root, 'CLAUDE.md'), 'utf8')).toBe('@AGENTS.md\n')
-    expect(result.skills).toMatchObject({ status: 'skipped', command: 'npx --yes skills add https://www.evlog.dev --agent claude-code --agent codex --yes' })
+    expect(existsSync(join(root, 'CLAUDE.md'))).toBe(false)
+    expect(result.skills).toMatchObject({ status: 'skipped', command: 'npx --yes skills add https://www.evlog.dev --agent universal --agent claude-code --global --yes' })
+  })
+
+  it('never touches an existing CLAUDE.md', async () => {
+    /* Claude Code reads AGENTS.md when no CLAUDE.md sits above it, so a file
+       someone wrote is theirs to keep. We neither edit it nor add a pointer. */
+    const root = await project({ 'package.json': '{"name":"shop"}', 'CLAUDE.md': '# Mine\n' })
+
+    await runAgents(fakeContext(root), undefined, { noSkills: true })
+
+    expect(await readFile(join(root, 'CLAUDE.md'), 'utf8')).toBe('# Mine\n')
   })
 
   it('is safe to run twice — the second run changes nothing', async () => {
@@ -315,7 +315,7 @@ describe('runAgents', () => {
     const second = await runAgents(fakeContext(root), undefined, { noSkills: true })
 
     expect(second.written).toHaveLength(0)
-    expect(second.already).toEqual(['AGENTS.md is up to date', 'CLAUDE.md already points at AGENTS.md'])
+    expect(second.already).toEqual(['AGENTS.md is up to date'])
     expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toBe(first)
   })
 

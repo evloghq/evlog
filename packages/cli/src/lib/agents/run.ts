@@ -28,8 +28,8 @@ export interface AgentsOptions {
   skills?: string[]
   /** Do not touch the skills at all — write the block and stop. */
   noSkills?: boolean
-  /** Install the skills for every project rather than this one. */
-  global?: boolean
+  /** Install the skills into this project rather than for every project. */
+  local?: boolean
   /** Where the skills are published. */
   source?: string
   /** Plan everything, write nothing, run nothing. */
@@ -82,8 +82,8 @@ function detectSoftly(project: ProjectInfo): Framework | null {
 /**
  * Teach the agents working in this project how to use evlog.
  *
- * Writes a marker-delimited block into `AGENTS.md`, points `CLAUDE.md` at it,
- * and hands the skills to `npx skills add`. Safe to re-run: anything already
+ * Writes a marker-delimited block into `AGENTS.md` and hands the skills to
+ * `npx skills add`. Safe to re-run: anything already
  * saying exactly this is reported rather than rewritten, and skills already on
  * disk are left for `npx skills update`.
  */
@@ -112,7 +112,7 @@ export async function runAgents(
   const command = skillsCommand({
     source: options.source,
     skills: options.skills,
-    global: options.global,
+    local: options.local,
     interactive,
   })
 

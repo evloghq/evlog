@@ -1,5 +1,7 @@
 ---
-'@evlog/cli': patch
+'@evlog/cli': minor
 ---
 
-`evlog agents` and `evlog init` now pass explicit `--agent` targets to `npx skills add`: `claude-code` and `codex`. Codex keeps the canonical copy (`.agents/skills`, or `~/.agents/skills` with `--global`) and Claude Code gets a symlink to it, so the skills are no longer copied into every detected agent directory. `cursor` is no longer targeted explicitly. Skills already installed are still detected in every agent directory and either scope.
+`evlog agents` and `evlog init` now install the agent skills globally by default, for `universal` (the shared `.agents/skills` directory that Codex and the other agents read) and `claude-code` (a symlink into it). Pass `--local` to install into the project instead, with `.agents/skills` and `.claude/skills` at the project root.
+
+Breaking: `--global` is removed, since global is now the default. `evlog agents` no longer writes `CLAUDE.md`. Most agents read `AGENTS.md` directly, and Claude Code does too unless a `CLAUDE.md` sits above it. Add a one-line `@AGENTS.md` yourself if you want one; an existing `CLAUDE.md` is left alone.
