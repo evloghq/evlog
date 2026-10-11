@@ -417,8 +417,9 @@ check('init never overwrites, never silently drops a destination', (dir) => {
   expect(readFileSync(join(dir, 'lib/evlog.ts'), 'utf8') === '// pre-existing\n', 'lib/evlog.ts was modified')
   expect(readFileSync(join(dir, 'server/plugins/evlog-drain.ts'), 'utf8') === '// pre-existing\n', 'the drain plugin was modified')
 
-  const landed = payload.written.some(file => /evlog-drain-|lib\/evlog|(^|\/)evlog\.ts$/.test(file.file))
-    || payload.manual.some(step => /destination|factory/i.test(step.title))
+  const landed = payload.written.some(file => !file.file.endsWith('.env.example')
+    && readFileSync(join(dir, file.file), 'utf8').includes('createAxiomDrain'))
+    || payload.manual.some(step => /^Send events to .*Axiom/.test(step.title))
   expect(landed, 'Axiom was asked for and went nowhere')
 })
 
