@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createError as h3CreateError } from 'h3'
 import { createError } from '../../src/error'
 import { createLogger, createRequestLogger, getEnvironment, initLogger, isEnabled, log } from '../../src/logger'
 import { withFakeTimers } from '../helpers/timers'
@@ -224,6 +225,50 @@ describe('log', () => {
     expect(serialized.error).toEqual(expected)
     expect(serialized.job.failure).toEqual(expected)
     expect(serialized.message).toBe('Job failed')
+  })
+
+  it('serializes an h3 wrapper once, keeping its status and the original error', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const original = createError({ message: 'Payment failed', status: 402, why: 'Card declined by the issuer', fix: 'Use a different payment method' })
+    log.error(h3CreateError(original as any) as any)
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    const serialized = JSON.parse(JSON.stringify(event.error))
+    expect(serialized).toEqual({
+      name: 'EvlogError',
+      message: 'Payment failed',
+      stack: original.stack,
+      status: 402,
+      why: 'Card declined by the issuer',
+      fix: 'Use a different payment method',
+      statusCode: 402,
+      statusMessage: 'Payment failed',
+      data: { why: 'Card declined by the issuer', fix: 'Use a different payment method' },
+    })
+    expect(serialized).not.toHaveProperty('cause')
+  })
+
+  it('serializes a plain error wrapped by h3 once, keeping the h3 status code', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const original = new Error('kaboom')
+    log.error(h3CreateError(original as any) as any)
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    const serialized = JSON.parse(JSON.stringify(event.error))
+    expect(serialized).toMatchObject({ name: 'Error', message: 'kaboom', stack: original.stack, statusCode: 500 })
+    expect(serialized).not.toHaveProperty('cause')
+  })
+
+  it('keeps cause when it is a different error with the same message', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const cause = new Error('Payment failed')
+    log.error(new Error('Payment failed', { cause }))
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ message: 'Payment failed', cause: { name: 'Error', message: 'Payment failed', stack: cause.stack } })
   })
 
   it('serializes a cyclic cause chain', () => {
