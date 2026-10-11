@@ -113,6 +113,8 @@ interface Row {
   runtime?: boolean
   /** Not a setting, a note about one (`none in this file`). */
   muted?: boolean
+  /** What the setting covers, under the row. */
+  note?: string
   warning?: string
 }
 
@@ -124,8 +126,6 @@ interface Section {
 
 const DEFAULT = 'default'
 const LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const
-/** The order evlog compares `minLevel` against: trace and debug rank together. */
-const LEVEL_RANK: Record<string, number> = { trace: 0, debug: 0, info: 1, warn: 2, error: 3, fatal: 4 }
 /** evlog's builtin redaction patterns, by name. */
 const BUILTIN_PATTERNS = ['creditCard', 'email', 'ipv4', 'phone', 'jwt', 'bearer', 'iban']
 const PIPELINE = ['drain', 'enrich', 'keep', 'plugins', 'waitUntil']
@@ -201,7 +201,6 @@ function describeKeep(value: unknown): string {
 function samplingSection(app: ConfigEntry[]): Section {
   const used = new Set<ConfigEntry | undefined>()
   const minLevel = exact(app, ['minLevel'])
-  const floor = typeof minLevel?.value === 'string' ? LEVEL_RANK[minLevel.value] : undefined
   const rows: Row[] = []
 
   for (const level of LEVELS) {
@@ -209,8 +208,6 @@ function samplingSection(app: ConfigEntry[]): Section {
     used.add(rate)
     if (level === 'fatal') {
       rows.push({ label: level, value: 'always', source: DEFAULT, warning: rate && `rates.fatal at ${rate.source ?? 'the config'} is ignored, fatal events are always kept` })
-    } else if (minLevel && floor !== undefined && LEVEL_RANK[level]! < floor) {
-      rows.push({ label: level, value: 'off, below minLevel', source: minLevel.source, warning: level === 'error' ? 'every error is dropped' : undefined })
     } else if (!rate) {
       rows.push({ label: level, value: level === 'trace' ? '0%' : '100%', source: DEFAULT })
     } else if (typeof rate.value === 'number') {
@@ -220,7 +217,7 @@ function samplingSection(app: ConfigEntry[]): Section {
     }
   }
 
-  if (minLevel) rows.push(textRow(minLevel, 'minLevel'))
+  if (minLevel) rows.push({ ...textRow(minLevel, 'minLevel'), note: 'applies to the global log API only, not request wide events' })
   used.add(minLevel)
   const keep = under(app, ['sampling', 'keep'])
   for (const entry of keep) used.add(entry)
@@ -281,6 +278,7 @@ function renderSection(section: Section, paint: Paint): string[] {
     const source = row.source ? `${' '.repeat(valueWidth - row.value.length)}  ${paint('dim', row.source)}` : ''
     lines.push(`  ${paint('cyan', row.label.padEnd(labelWidth))}  ${value}${source}`)
     if (row.warning) lines.push(`  ${' '.repeat(labelWidth)}  ${paint('yellow', `⚠ ${row.warning}`)}`)
+    if (row.note) lines.push(`  ${' '.repeat(labelWidth)}  ${paint('dim', row.note)}`)
   }
   return lines
 }

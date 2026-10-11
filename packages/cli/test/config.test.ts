@@ -593,11 +593,26 @@ describe('evlog config', () => {
     })
     const report = formatConfigReport(fakeContext(cwd), await runConfig(fakeContext(cwd)))
 
-    expect(report).toMatch(/^ {2}debug +off, below minLevel +evlog\.config\.ts:2$/m)
     expect(report).toMatch(/^ {2}error +10% +evlog\.config\.ts:4\n +⚠ 90% of errors are dropped$/m)
     expect(report).toContain('⚠ rates.fatal at evlog.config.ts:4 is ignored, fatal events are always kept')
     expect(report).toMatch(/^ {2}keep if +status ≥ 400 +evlog\.config\.ts:5$/m)
     expect(report).toMatch(/^ {2}or +duration ≥ 1000ms or path \/api\/\*\* +evlog\.config\.ts:5$/m)
+  })
+
+  it('keeps the rates below minLevel, which only gates the global log API', async () => {
+    const cwd = await makeProject({
+      'package.json': PACKAGE,
+      'evlog.config.ts': `export default {
+  minLevel: 'warn',
+  sampling: { rates: { info: 50 } },
+}
+`,
+    })
+    const report = formatConfigReport(fakeContext(cwd), await runConfig(fakeContext(cwd)))
+
+    expect(report).toMatch(/^ {2}debug +100% +default$/m)
+    expect(report).toMatch(/^ {2}info +50% +evlog\.config\.ts:3$/m)
+    expect(report).toMatch(/^ {2}minLevel +warn +evlog\.config\.ts:2\n +applies to the global log API only, not request wide events$/m)
   })
 
   it('names runtime values by what they call', async () => {
