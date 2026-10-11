@@ -802,7 +802,30 @@ function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown 
   return changed ? copy : value
 }
 
+/**
+ * h3 wraps a thrown error in an H3Error that keeps the original as `cause` and
+ * reads its stack from it, so the pair describe the same failure. Serializing
+ * both repeats the message, the stack and the payload.
+ */
+function isWrapperOf(err: Error, cause: unknown): cause is Error {
+  return cause instanceof Error
+    && cause !== err
+    && cause.message === err.message
+    && cause.stack === err.stack
+}
+
 function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<string, unknown> {
+  if (isWrapperOf(err, err.cause) && !ancestors.has(err.cause)) {
+    ancestors.add(err)
+    const errorObj = serializeError(err.cause, ancestors)
+    ancestors.delete(err)
+    const wrapper = err as unknown as Record<string, unknown>
+    for (const k of ['statusCode', 'statusMessage', 'data'] as const) {
+      if (wrapper[k] !== undefined) errorObj[k] = removeErrorCycles(wrapper[k], ancestors)
+    }
+    return errorObj
+  }
+
   const errorObj: Record<string, unknown> = {
     name: err.name,
     message: err.message,

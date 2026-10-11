@@ -243,6 +243,7 @@ describe('log', () => {
       why: 'Card declined by the issuer',
       fix: 'Use a different payment method',
       statusCode: 402,
+      statusText: 'Payment failed',
       statusMessage: 'Payment failed',
       data: { why: 'Card declined by the issuer', fix: 'Use a different payment method' },
     })
