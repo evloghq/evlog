@@ -774,6 +774,14 @@ export default defineNitroConfig({ modules })
     expect(formatConfigReport(fakeContext(cwd), result)).toContain('No evlog.config from .')
   })
 
+  it('still reports the module options in the JSON when there is no config', async () => {
+    const cwd = await makeProject({ 'package.json': PACKAGE, 'nuxt.config.ts': NUXT_OVERRIDES['nuxt.config.ts'] })
+    const result = await runConfig(fakeContext(cwd))
+
+    expect(configJson(result)).toMatchObject({ file: null, moduleOptions: { file: 'nuxt.config.ts', readable: true }, cli: [], app: [] })
+    expect(formatConfigReport(fakeContext(cwd), result)).toContain('No evlog.config from .')
+  })
+
   it('exits 1 with the catalog error on a config it cannot read', async () => {
     const cwd = await makeProject({ 'package.json': PACKAGE, 'evlog.config.ts': 'export default { map: { minScore: 101 } }\n' })
     const out = silence()

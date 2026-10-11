@@ -118,9 +118,10 @@ export async function runConfig(ctx: CliContext, log: CliDebug = createNoopCliDe
   const project = await log.step('resolveProject', () => resolveProject(ctx.cwd), p => ({ project: { root: p.root, packageDir: p.packageDir } }))
   const searched = { from: prettyPath(ctx.cwd, project.packageDir), to: prettyPath(ctx.cwd, project.root) }
   const config = await log.step('loadConfig', () => loadCliConfig(project), c => ({ config: c && { file: c.file, extends: c.extends?.file ?? null } }))
-  if (!config) return { searched, file: null, extends: null, moduleOptions: null, cli: [], app: [], sources: new Map() }
   const options = await log.step('loadModuleOptions', () => loadModuleOptions(project), o => ({ moduleOptions: o && { file: o.file, readable: !(o.value instanceof RuntimeValue) } }))
   const layered = options && !(options.value instanceof RuntimeValue) ? { value: options.value, sources: options.sources } : null
+  const moduleOptions = options && { file: prettyPath(ctx.cwd, options.file), readable: layered !== null }
+  if (!config) return { searched, file: null, extends: null, moduleOptions, cli: [], app: [], sources: new Map() }
 
   const entries = entriesFor(config.resolved, config.sources)
   const app = entries.filter(entry => !CLI_SECTIONS.has(entry.path[0]))
@@ -129,7 +130,7 @@ export async function runConfig(ctx: CliContext, log: CliDebug = createNoopCliDe
     searched,
     file: prettyPath(ctx.cwd, config.file),
     extends: config.extends && { specifier: config.extends.specifier, file: prettyPath(ctx.cwd, config.extends.file) },
-    moduleOptions: options && { file: prettyPath(ctx.cwd, options.file), readable: layered !== null },
+    moduleOptions,
     cli: entries.filter(entry => CLI_SECTIONS.has(entry.path[0])),
     app: layeredApp,
     sources: layered ? layerSources(config.sources, layered.sources, entries.filter(entry => CLI_SECTIONS.has(entry.path[0]) || layeredApp.includes(entry))) : config.sources,
