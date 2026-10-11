@@ -1,259 +1,71 @@
 # Repo health sweep ledger
 
-Coverage record of the `repo-health-sweep` schedule. A run reads this file first and picks cohorts the earlier runs did not reach.
-
-- One section per run, newest at the bottom, headed `## Run YYYY-MM-DD, revision <short sha>`. Append a new section; never edit or reword an earlier one.
-- A section records: revision and date, exact code, test, architecture, and communication cohorts, skipped areas and why, confirmed findings and their destination, rejected findings with the verifier's reason, questions and blockers, and next cohorts.
-- A rejected finding is durable evidence. Do not raise it again unless the relevant source or a maintainer decision changed.
-
-Sections below the line were migrated unchanged from the comments on Linear issue EVL-449, oldest first. Times are UTC.
-
----
-
-## Entry 1, 2026-09-25 08:34
-
-**Run 2026-09-25, revision e0738603b94844e06a7abd2e61d4ff234b2aace8 (main), writes enabled.**
-
-Cohorts:
-- Code: `packages/evlog/src/shared/`
-- Test: `packages/evlog/src/adapters/` + `packages/evlog/test/adapters/`
-- Architecture: CLI scoring rules (`packages/cli/src/commands/`) vs the package surface they score (`packages/evlog/src/index.ts`, `packages/evlog/package.json`)
-- Communication: `skills/review-logging-patterns/SKILL.md` + PR #731 and #729 bodies (excerpts included verbatim in the workflow input)
-
-Skipped: none. First run; the ledger did not exist and was created this run as EVL-449.
-
-Outcome: `simplification-sweep` was called three times with identical scopes. All three failed during result assembly after the specialist fan-out completed. Errors verbatim, in order:
-1. `Verification result PE-1 changed candidate field evidence.`
-2. `Duplicate proposed finding id: F1.`
-3. Schema validation failure: `Invalid input: expected object, received string` (root path).
-
-No status, reviewer health, counts, or findings were ever returned. No workflow-confirmed candidates exist, so parent verification never ran. **0 PR-ready.**
-
-Confirmed findings and destination: none.
-
-Rejected findings: none recorded; no structured result surfaced any candidates to reject.
-
-Questions and blockers: the workflow's result-assembly path appears broken at this revision (main merged the sweep feature itself in PR #725). Tracked in EVL-450. Full report document: "Repo health sweep run report: 2026-09-25" (https://linear.app/hrcd/document/repo-health-sweep-run-report-2026-09-25-5de43a6d4acc).
-
-Next cohorts: the four cohorts above were never actually reviewed (no report returned), so they stay as the next cohorts; rerun unchanged once the workflow returns a structured result.
-
----
-
-## Entry 2, 2026-09-25 17:57
-
-**Run 2026-09-25 (second of day), revision ab63002182641d3d8459f4b67764fcb730ca3640 (main), writes enabled.**
-
-Cohorts: identical to the first run of the day (code `packages/evlog/src/shared/`, test `packages/evlog/src/adapters/` + `packages/evlog/test/adapters/`, architecture CLI scoring rules vs package surface, communication `skills/review-logging-patterns/SKILL.md` + PR #731 and #729 bodies). The first run had never actually reviewed them, since it failed result assembly three times (EVL-450, fixed by #725).
-
-Skipped: none. All five specialists returned `complete`; the result assembled on the first call.
-
-Counts: 13 proposed, 12 confirmed, 1 rejected, 0 questions, 8 PR candidates, 4 proposals.
-
-Confirmed findings and destination:
-- **Shipped as PRs** (candidate re-verified against current main before opening; CI green on both; hugorcd requested):
-  - `code-1` → [#735](https://github.com/evloghq/evlog/pull/735), dead `/node_modules/` check subsumed by `SKIP_PATH_RE` in `pretty-error.ts`. Empty changeset.
-  - `tests-1` → [#736](https://github.com/evloghq/evlog/pull/736), duplicate unknown-store-read test in the memory adapter suite. Test-only, no changeset.
-- **Carryover (verified, not shipped; two-PR budget):** `code-3`, `code-4`, `code-5`, `tests-2` (0.6, admitted risk), `tests-3`, `tests-4`, `architecture-1` (0.85), `architecture-2` (0.8; coordinate with open PR #647, which adds express/fastify/elysia map adapters).
-
-Rejected findings: `code-2`, rejected by the verifier with a counterexample (the rewrite changes evidence sensitivity). Do not re-propose.
-
-Reviewer limitations: static review only (no builds or tests run by reviewers); code reviewers declined several plausible candidates because behavior is pinned by tests/snapshots (composeDrains allSettled wrapper, headers.ts fast paths, pretty-error's looser isPlainObject, bindAsyncLocalStorage's two callers, public exports under api-surface snapshots).
-
-Questions and blockers: none raised this run.
-
-Full report: "Repo health sweep run report: 2026-09-25 (assembly-fix rerun)" (https://linear.app/hrcd/document/repo-health-sweep-run-report-2026-09-25-assembly-fix-rerun-391113a09ddf).
-
-**Next cohorts:** `packages/evlog/src/{runtime,nuxt,nitro,vite}/` plus any remaining `src/adapters/` sources not covered here, and one non-`review-logging-patterns` skill for the communication reviewer. Carryover candidates listed above are first in line for the next PR budget, priority on `code-3`, `architecture-1`, `architecture-2` (with the #647 coordination note).
-
----
-
-## Entry 3, 2026-10-02 09:05
-
-**Run 2026-10-02, revision `7f4a26fa192faaf0a359140c97b9c1e294609344` (main), writes enabled.**
-
-Cohorts:
-- **Code:** `packages/evlog/src/runtime/` (client/log.ts, client/plugin.ts, server/useLogger.ts, server/routes/_evlog/ingest.post.ts, server/routes/_evlog/stream-info.get.ts, utils/parseError.ts). First review of this area.
-- **Test:** `packages/evlog/test/vite/` (index, auto-init, auto-imports, strip, source-location, client-inject) plus the sources they exercise, `packages/evlog/src/vite/`.
-- **Architecture:** Eve wiring under `apps/evi/agent/` (agent.ts, channels/, connections/, extensions/, hooks/, instrumentation/, memory.ts, sandbox.ts, schedules/, instructions/) vs `apps/evi/agent/lib/`, invariant: policy and stateful logic lives in lib/ with a colocated test. **Reviewer failed before returning a result. Cohort not reviewed; first in line next run.**
-- **Communication:** `apps/evi/agent/skills/contributing/SKILL.md` + issue reply [#737 (comment)](https://github.com/evloghq/evlog/issues/737#issuecomment-5869316746) + PR [#747](https://github.com/evloghq/evlog/pull/747) body (complete excerpts were passed into the run).
-
-Skipped: none beyond the failed architecture cohort; all other specialists returned `complete`.
-
-Reviewer health: code complete (3 limitations, see report), tests complete (2 limitations), architecture **failed, no result**, communication complete (4 limitations), verifier complete. All 10 confirmed candidates cleared adversarial verification, and every one was re-verified against current `main` in the sandbox (line-level and grep-level reproduction) before any PR was opened.
-
-Counts: 15 proposed, 10 confirmed, 5 rejected, 2 declined, 3 PR batches.
-
-Confirmed findings and destination (all shipped; CI green on all three, hugorcd review auto-requested by the repo workflow):
-- `code-2`, `code-3` (ingest.post.ts) → [#757](https://github.com/evloghq/evlog/pull/757): `IngestEvent` alias replaces three copies of the conditional event type; one-caller `hasWaitUntil` deleted, check inlined at the call site. Empty changeset.
-- `code-4` (parseError.ts) → [#756](https://github.com/evloghq/evlog/pull/756): three comments deleted that restated the fallback chains they annotated. Empty changeset.
-- `tests-1`…`tests-7` (test/vite/) → [#755](https://github.com/evloghq/evlog/pull/755): seven redundant tests removed, each subsumed by a strictly stronger survivor named in the PR body. Test-only, no changeset.
-
-Rejected findings: `code-1`, `tests-8`, `communication-1`…`communication-3`. **Run limitation:** the workflow result was compacted out of context after the PRs shipped but before this ledger could transcribe the five rejection reasons verbatim. Ids are recorded; reasons are lost. The rejections still bind (do not re-raise without new evidence), but a future run that needs to judge one of these five again must re-derive the analysis rather than trust a reconstruction. `code-1`'s subject is retained: it was a `remove` finding on `runtime/client/plugin.ts` (the plugin restating `initLog` defaults). Subjects of the other four were not retained.
-
-Questions and blockers: the architecture reviewer failure is the only blocker. Any questions or proposals the run raised were not retained past compaction; the report documents what is known.
-
-Next cohorts:
-1. **Architecture (retry first):** the same Eve-wiring vs `lib/` invariant, unreviewed.
-2. **Code:** `packages/evlog/src/nitro/` (the 2026-09-25 ledger's remaining list also names `nuxt/module.ts` and `nitro-v3/`).
-3. **Test:** pair with the code cohort; verify a nitro test directory exists before assigning.
-4. **Communication:** one non-contributing skill (`content-pass` or `before-after`) plus a post-EVL-471 output sample.
-
-<details>
-<summary>ELI5</summary>
-
-This is the log of a regular cleanup pass over the codebase. Five independent reviewers looked at different parts; three shipped small cleanups as pull requests, five suggestions were rejected after checking, and one reviewer crashed before finishing, so that part goes first next time.
-
-</details>
-
----
-
-## Entry 4, 2026-10-02 09:29
-
-**Run 2026-10-02 (second of day), revision `7f4a26fa192faaf0a359140c97b9c1e294609344` (main), writes enabled.**
-
-Cohorts:
-- **Code:** `packages/evlog/src/nitro/` (5 files: plugin.ts, enrich-drain.ts, module.ts and two siblings).
-- **Test:** `packages/evlog/test/nuxt/` plus `packages/evlog/src/nuxt/module.ts`. **Clean: no findings.**
-- **Architecture:** Eve wiring under `apps/evi/agent/` vs `apps/evi/agent/lib/`, invariant: policy and stateful logic lives in lib/ with a colocated test. Retry of the cohort that failed on the morning run; succeeded this time.
-- **Communication:** `skills/before-after/SKILL.md` + the PR #757 body.
-
-Skipped: none. Reviewer health: code complete (3 limitations, below), tests complete, architecture complete, communication complete, verifier complete with none. Every confirmed candidate was re-verified line-level against current `main` in the sandbox before any PR work.
-
-Counts: 15 proposed, 12 confirmed, 3 rejected, 0 questions, 9 PR candidates, 3 PR batches, 3 proposals.
-
-Confirmed findings and destination (all shipped; CI green on all three, hugorcd review auto-requested by the repo workflow):
-- Batch 1, `remove` in `src/nitro` → [#759](https://github.com/evloghq/evlog/pull/759): unused `markWideEventDrainStarted` import in `plugin.ts`; three dead `|| {}` fallbacks in `module.ts` (`plugins`, `runtimeConfig`, `replace`); the `hasEnrich`/`hasDrain` gates and try/catch wrappers in `enrich-drain.ts` (the runner already absorbs errors). Empty changeset.
-- Batch 2, `dedupe` in `src/nitro` → [#760](https://github.com/evloghq/evlog/pull/760): `getSafeHeaders`/`getResponseStatus` moved to their single owner in `enrich-drain.ts`; the duplicated Cloudflare `cf-ray` override block and tail-sampling emit sequence collapsed into `createDeferredRequestLogger` and `emitWithTailSampling` in `plugin.ts`. Empty changeset.
-- Batch 3, `dedupe` in `apps/evi/agent/tools` → [#761](https://github.com/evloghq/evlog/pull/761): `canShip` in `tools/git.ts` replaced by `canAccessAdminTools` from `lib/trust.ts` (4 call sites); `gatewayFetch` + constants moved to `lib/gateway.ts`; `captureFrame`/`SCREENSHOT_DIR`/`FrameRequest` moved to `lib/capture.ts`. Six new colocated tests in `gateway.test.ts` and `capture.test.ts`. No changeset (apps/* only).
-
-Code-reviewer limitations, preserved verbatim:
-1. Nitropack evidence for the `module.ts` fallback finding comes from shipped `.d.ts`/`dist/core/index.mjs`, not the executed install path.
-2. No test directly imports `nitro/plugin.ts` hooks — `test/nitro/plugin.test.ts` replicates hook logic locally.
-3. The v2/non-defer `waitUntil` resolution at `enrich-drain.ts:123-125` was deliberately NOT merged with `resolveDeferredWaitUntil` (59-66): the defer path is Cloudflare-gated (pinned by `plugin-enrichment.test.ts:222`) while the non-defer path accepts any runtime's `waitUntil`; merging would change behavior. Both PR bodies carry this note.
-
-Run limitation: the workflow result was compacted out of context after the batches were verified and before the ledger was written. The three code limitations above were transcribed in time; the tests/architecture/communication limitation texts, the rejected findings' ids and reasons, and the three proposals' contents are lost. The rejections still bind (do not re-raise without new evidence), but they cannot be cited. The three proposals are the biggest loss: they were confirmed as needing product judgement, but their boundaries and evidence were never transcribed. If they resurface, they must be re-derived from the cohort sources, not reconstructed from memory.
-
-Questions and blockers: none raised this run; the lost proposals are the only unrecovered material.
-
-Next cohorts:
-1. **Code:** `packages/evlog/src/nitro-v3/` — it carries the same three dead fallbacks in `module.ts` that this run removed from `src/nitro/module.ts` (out of the code cohort's scope at this revision).
-2. **Test:** pair with the code cohort (`packages/evlog/test/nitro-v3/` if it exists, else another unreviewed test directory).
-3. **Architecture:** the next Eve-wiring/lib slice (channels/, schedules/ were reviewed 2026-10-02 morning; connections/, extensions/, hooks/ remain).
-4. **Communication:** one non-contributing skill (`content-pass`) plus a post-#761 output sample.
-
-Full report: "Repo health sweep run report: 2026-10-02 (afternoon)" (linked in the Evi project).
-
----
-
-## Entry 5, 2026-10-06 08:36
-
-**Run 2026-10-06, revision `88d2c9f2254a41e6ff7b744b4cbeac844a6b0023` (main), writes enabled. Workflow status: DEGRADED, zero PRs shipped.**
-
-Cohorts:
-- **Code:** `packages/evlog/src/nitro-v3/` (6 files), first review; the ledger's prediction (same dead fallbacks as #759) confirmed.
-- **Test:** `packages/evlog/test/nitro-v3/` plus the sources it exercises. Clean except one question.
-- **Architecture:** Eve wiring `apps/evi/agent/connections/` vs `lib/`, invariant held, no findings. Remaining slices: `extensions/`, `hooks/`.
-- **Communication:** `apps/evi/agent/skills/content-pass/SKILL.md` + PR #783 body as output sample.
-
-Reviewer health: code complete (3 limitations, in the report), tests complete, architecture complete, communication **incomplete** (its PR #783 evidence was a caller-supplied excerpt with the diff elided; the live PR was not fetched), verifier complete. The communication incompleteness degraded the run: per the sweep rules a degraded run cannot produce a PR-ready finding, so all confirmed candidates were parent-verified in the sandbox and carry over instead of shipping. Parent verification passed for both batches, so the next run's first act can be opening them after re-checking the revision.
-
-Counts: 15 proposed, 8 confirmed, 3 rejected, 4 questions, 3 PR candidates, 2 PR batches, 5 proposals.
-
-Confirmed and verified (carryover, next run opens them):
-- code-3 (remove, `plugin.ts:242-247` dead `!ctx` branch): evidence reproduced, scratch edit passed eslint and the full nitro-v3 integration suite (8/8 with edit and on clean main). PR-ready pending the fresh-revision gate.
-- code-5 + code-6 (dedupe in `plugin.ts`: cf-ray request-id gate and tail-sampling emit sequence, each duplicated, identical modulo caveats in the report): reproduced mechanically; extraction is the next run's PR work.
-
-Proposals filed:
-- [EVL-505](https://linear.app/hrcd/issue/EVL-505): nitro-v3 errorHandler JSDoc names an unresolvable subpath (`evlog/nitro/v3/errorHandler` is not exported); fix JSDoc or add the export, maintainer's call.
-- [EVL-506](https://linear.app/hrcd/issue/EVL-506): four wording fixes to the content-pass skill (stale ~120-file corpus count vs the 155 the scanner actually ranks; PR-body template missing the checks slot step 6 requires; "blocked" in two senses at line 66; ready/CI wording at line 90 implying the draft flow line 100 forbids).
-
-Questions (4, unresolved): code-1 and code-2 (the workflow checkout lacked node_modules, so the nitro normalization evidence was missing; closed in the sandbox against the installed nitro dist: types require the fields, `loadOptions` runs all resolvers including `resolveErrorOptions` before `installModules` at line 860, so setup() never sees unnormalized options; code-2 additionally needs the deliberately written stub at `test/nitro/module-paths.test.ts:49-53` changed, so both await a maintainer decision, not a unilateral PR); tests-1 (verbatim-duplicated errorHandler test body shared by `test/nitro-v3/` and `test/nitro/`, may be bound by the lost 2026-10-02 afternoon rejections); communication-1 (content-pass contract vs scanner vs blocked handling, may be bound by the lost morning rejections).
-
-Rejected (binding): code-4 (the defensive `result?.catch` and length-0 handling are load-bearing; counterexample reproduced in the shipped fixture build, hookable.mjs:33-36, `callHook` returns undefined with no listeners); communication-3 (merged PR body, no surface); communication-7 (taste).
-
-Full report: https://linear.app/hrcd/document/repo-health-sweep-run-report-2026-10-06-7f7e63dd7dc1
-
-Next cohorts: (1) code: re-enter the two verified nitro-v3 batches, then the module.ts questions with a maintainer decision; (2) test: `packages/evlog/test/nitro/` paired with the module carryover, resolve tests-1's binding question; (3) architecture: `apps/evi/agent/extensions/` (or `hooks/`), same invariant; (4) communication: retry with the live PR body fetched complete, diff included, else a fresher artifact.
-
----
-
-## Entry 6, 2026-10-09 08:27
-
-**Run 2026-10-09, revision `54dcc504d4926cf0f24e945db3cc770497b593f1` (main), writes enabled. Workflow status: GREEN, 3 PRs shipped.**
-
-Cohorts:
-- **Code:** `packages/evlog/src/nitro-v3/` (6 files), second review; the 2026-10-06 carryover batches re-confirmed at this revision.
-- **Test:** `packages/evlog/test/nitro/` (6 files) plus the `packages/evlog/src/nitro/` sources they exercise; the open tests-1 duplication question was re-judged conservatively.
-- **Architecture:** `apps/evi/agent/extensions/` (`browser.ts`, `github.ts`) vs `agent/lib/`, first review; `hooks/` still unreviewed.
-- **Communication:** `apps/evi/agent/skills/content-pass/SKILL.md` (post-#787) plus PR #790's body and complete diff, fetched live (the failure mode of the 2026-10-06 run, a diff-elided excerpt, was avoided).
-
-Reviewer health: code, test, architecture and communication specialists all **complete**, verifier **complete**. No degraded run this time.
-
-Counts: 10 proposed, 10 confirmed, 0 rejected, 0 questions, 6 PR candidates, 4 batches, 4 proposals.
-
-Parent verification (sandbox at the same revision, before any PR opened): all six PR candidates reproduced against the actual files; the type landscape was verified against the installed `nitro@3.0.260903-beta` / `h3@2.0.1-rc.31` / `srvx@1.0.3` (`req.context` is optional `ServerRequestContext` with an index signature); the TypeScript narrowing through the compound negated optional chain was confirmed by an actual typecheck run, not by reasoning; open issue/PR conflict search came back clean; matching tests identified before editing.
-
-Shipped (CI green on all, `hugorcd` requested on all after CI passed):
-- [PR #795](https://github.com/evloghq/evlog/pull/795) dedupe, nitro-v3: `resolveRequestId()` and `emitWithTailSampling()` extracted (code-2 + code-3). Focused suite 29/29, lint/typecheck/full test exit 0.
-- [PR #796](https://github.com/evloghq/evlog/pull/796) remove, nitro-v3: dead `!ctx` operand dropped in the response hook (code-1). Same gate; typecheck was the load-bearing check and is green.
-- [PR #797](https://github.com/evloghq/evlog/pull/797) remove, test/nitro: the two implementation-mirroring tests deleted (tests-1 + tests-2). Focused run before 37 passed, after 43 across both files; full suite 2,012 (exactly the two removed tests fewer than 2,014).
-
-Held, not PR-ready:
-- Batch 3 (clarify, nitro-v3, comment-only): below the high-confidence gate. Kept as a candidate.
-- **Record-keeping incident, disclosed:** the full verbatim texts of the held clarify candidate and the four proposals below were lost to a caller-side context compaction after the workflow returned. Two recovery re-invocations of the workflow on the same revision both failed with schema errors, so they are recorded as pointers, not with their texts. Nothing was reconstructed from memory.
-
-Proposals (pointers for the next run, not filed as detail-bearing issues):
-- **tests-3** (proposal, test/nitro area).
-- **architecture-1** and **architecture-2** (proposals, `apps/evi/agent/extensions/` slice, thin-wiring invariant). One is safety-relevant (blocking an autonomous write without an enforcement option) and is a maintainer decision.
-- **communication-1** (proposal, content-pass skill / PR #790 sample).
-
-Questions: 0. Rejected findings: 0 (the verifier confirmed all 10 proposals).
-
-Limitations: the code reviewer could not see the installed nitro/h3 types and could not execute tests; both were resolved in parent verification (types read from `node_modules`, all tests executed). Two transient pnpm races during sandbox checks (concurrent lint+test runs colliding on the deps-status check) were rerun serially and are not findings.
-
-Next cohorts:
-1. **Code:** re-confirm the held clarify candidate from scratch (fresh reviewer pass, not from the lost text), then move to an unreviewed `packages/evlog/src` directory (candidates: `vite/`, `ai/`).
-2. **Test:** re-review `test/nitro/` for the tests-3 proposal, and re-judge the open tests-1 duplication question between `test/nitro-v3/` and `test/nitro/` (still pending a maintainer decision from 2026-10-06).
-3. **Architecture:** re-review `apps/evi/agent/extensions/` to recover the two proposals with full texts; then `apps/evi/agent/hooks/`.
-4. **Communication:** content-pass skill against a fresh PR body fetched complete (check whether the #787 wording fixes hold).
-
----
-
-## Entry 7, 2026-10-09 18:40
-
-**Repo-health-sweep run, 2026-10-09, revision `a34dffd`**
-
-**Sweep.** One `simplification-sweep` call for the run. Scopes: code `packages/evlog/src/ai/index.ts`; tests `packages/evlog/test/ai/ai.test.ts`; architecture `apps/evi/agent/hooks/evlog.ts` against `apps/evi/agent/lib/`; communication `apps/evi/agent/instructions.md` and PR bodies.
-
-**Reviewer health and exact counts.** Not available to this run. The full result of the earlier sweep call was not in the context I carried into this session, so I did not reconstruct the counts. Please read them from that result before using this entry.
-
-**Limitations.**
-- `@ai-sdk/provider` is not installed in the sandbox, so the stream usage type could not be compared to `LanguageModelV4Usage`. The structural-typing claim (code-3) is unverified.
-- The sweep reviewer had no shell, so no tests ran during the sweep.
-- The reviewer read `ai.test.ts` only at lines 2320 to 2560. Public API snapshots were not inspected.
-- `tsc --noEmit` on the package reports 298 errors, none in `src/ai/index.ts`. The package's `typecheck` script is a no-op, so the build is the typecheck. I did not run `tsc` on `main` for a baseline.
-
-**Shipped (both need Hugo's review, both green).**
-- #800 `refactor(ai): reuse formatTelemetryError and the recordModel resolution` (code-1, code-2). Review requested from `hugorcd`.
-- #801 `test(ai): drop three tests that duplicate surviving assertions` (tests-1, tests-2, tests-3). Review requested from `hugorcd`. Mutation checks on the steps gate, the stream `tool-input-start` branch and tool-call accumulation each fail at least one surviving assertion.
-
-**Proposals, not applied.**
-- code-3: needs a typecheck with `@ai-sdk/provider` installed first.
-- code-4 to code-6: the removed members are not pinned by any test. Needs a check before any removal.
-- architecture: the `hooks/evlog.ts` and `lib/` items include a safety-relevant one, about blocking an autonomous write without an enforcement option. This needs a maintainer decision. No change made.
-- communication (`instructions.md`, PR bodies): findings recorded from the sweep. Not re-verified in this run.
-
-**Rejected findings.** The list from the previous ledger entry stands. I did not add to it, because I did not have this run's rejected list.
-
-**Questions for Hugo.**
-1. Decision on the architecture safety item in `hooks/evlog.ts`.
-2. Should test-only removals batch with source dedupes, or stay as their own PR? This run kept them separate.
-
-**Next cohorts.** code: `ai/index.ts` items code-3 to code-6 after the typecheck gap is closed. architecture: `hooks/evlog.ts` and `lib/`, after the decision above. communication: `instructions.md` and recent PR bodies. Scheduled next run: 2026-10-13.
-
-<details>
-<summary>ELI5</summary>
-
-The weekly cleanup pass found some duplicated code and redundant tests in the AI logger. Two pull requests now tidy those up, and both are green and waiting on Hugo's review. Some other findings need a decision or a setup step before they can be changed safely, so they are noted here and not touched yet.
-
-</details>
+Compact current state of the `repo-health-sweep` schedule. **Hard cap: 150 lines.** A run reads this file in full at the start and rewrites it in full at the end, so it never grows with the number of runs.
+
+- Holds only: last review per area, open questions and blockers, next cohorts. Nothing else.
+- Past runs live in `archive/YYYY-MM.md` (append-only). Open one only for a specific detail, never by default.
+- Rejected findings live in `repo-health-sweep-rejected.jsonl`, one JSON object per line. Search it with `rg` for the paths and areas about to be reviewed. Never read it in full.
+- If a rewrite would pass the cap, drop the oldest reviewed rows into the archive section instead of trimming the open questions.
+
+Last rewritten by: the run of 2026-10-09 18:40 UTC, revision `a34dffd` (archive/2026-10.md, Entry 7). Migrated from the EVL-449 comments; nothing was reconstructed. Counts and the rejected list of that run were not available to it.
+
+## Last reviewed
+
+Rev = revision of the review (short sha). Archive = where the detail is. Ref numbers are entries in that archive file.
+
+### Code and tests
+
+| Area | Last reviewed | Rev | Outcome | Archive |
+| --- | --- | --- | --- | --- |
+| `packages/evlog/src/shared/` | 2026-09-25 | `ab63002` | #735 shipped. Carryover code-3, code-4, code-5 verified, never recorded as shipped | 2026-09 #2 |
+| `packages/evlog/src/adapters/` + `test/adapters/` | 2026-09-25 | `ab63002` | #736 shipped. Carryover tests-2 to tests-4 | 2026-09 #2 |
+| `packages/evlog/src/runtime/` | 2026-10-02 | `7f4a26f` | #756, #757 shipped | 2026-10 #3 |
+| `packages/evlog/test/vite/` + `src/vite/` | 2026-10-02 | `7f4a26f` | #755 shipped | 2026-10 #3 |
+| `packages/evlog/src/nitro/` | 2026-10-02 | `7f4a26f` | #759, #760 shipped | 2026-10 #4 |
+| `packages/evlog/test/nuxt/` + `src/nuxt/module.ts` | 2026-10-02 | `7f4a26f` | Clean | 2026-10 #4 |
+| `packages/evlog/src/nitro-v3/` | 2026-10-09 | `54dcc50` | #795, #796 shipped. One clarify candidate held, text lost | 2026-10 #6 |
+| `packages/evlog/test/nitro-v3/` | 2026-10-06 | `88d2c9f` | Clean except the tests-1 question | 2026-10 #5 |
+| `packages/evlog/test/nitro/` + `src/nitro/` | 2026-10-09 | `54dcc50` | #797 shipped. tests-3 proposal, text lost | 2026-10 #6 |
+| `packages/evlog/src/ai/index.ts` + `test/ai/ai.test.ts` | 2026-10-09 | `a34dffd` | #800, #801 shipped. code-3 to code-6 not applied | 2026-10 #7 |
+| `packages/cli/src/commands/` vs `packages/evlog/src/index.ts`, `package.json` | 2026-09-25 | `ab63002` | architecture-1 (0.85), architecture-2 (0.8, coordinate with #647) carried over | 2026-09 #2 |
+
+### Architecture (Eve wiring under `apps/evi/agent/` vs `agent/lib/`)
+
+| Area | Last reviewed | Rev | Outcome | Archive |
+| --- | --- | --- | --- | --- |
+| `apps/evi/agent/` wiring, `tools/` | 2026-10-02 | `7f4a26f` | #761 shipped. 3 proposals, text lost | 2026-10 #4 |
+| `channels/`, `schedules/` | 2026-10-02 | `7f4a26f` | No finding recorded | 2026-10 #4 |
+| `connections/` | 2026-10-06 | `88d2c9f` | Invariant held | 2026-10 #5 |
+| `extensions/` (`browser.ts`, `github.ts`) | 2026-10-09 | `54dcc50` | 2 proposals, text lost | 2026-10 #6 |
+| `hooks/evlog.ts` vs `lib/` | 2026-10-09 | `a34dffd` | Proposals, one safety-relevant | 2026-10 #7 |
+
+### Communication
+
+| Area | Last reviewed | Rev | Outcome | Archive |
+| --- | --- | --- | --- | --- |
+| `skills/review-logging-patterns/SKILL.md` + PR #731, #729 | 2026-09-25 | `ab63002` | Reviewed | 2026-09 #2 |
+| `skills/contributing/SKILL.md` + #737 reply + PR #747 | 2026-10-02 | `7f4a26f` | Reviewed | 2026-10 #3 |
+| `skills/before-after/SKILL.md` + PR #757 | 2026-10-02 | `7f4a26f` | Reviewed | 2026-10 #4 |
+| `skills/content-pass/SKILL.md` + PR #783 | 2026-10-06 | `88d2c9f` | Incomplete, diff was elided. EVL-506 filed | 2026-10 #5 |
+| `skills/content-pass/SKILL.md` + PR #790 | 2026-10-09 | `54dcc50` | communication-1 proposal, text lost | 2026-10 #6 |
+| `apps/evi/agent/instructions.md` + PR bodies | 2026-10-09 | `a34dffd` | Findings recorded, not re-verified | 2026-10 #7 |
+
+## Open questions and blockers
+
+1. **Safety-relevant architecture item** (`hooks/evlog.ts`, `extensions/`): blocking an autonomous write without an enforcement option. Needs a maintainer decision. 2026-10 #6, #7.
+2. **nitro `module.ts` normalization** (code-1, code-2 of 2026-10-06): needs a maintainer decision and a change to the stub at `test/nitro/module-paths.test.ts:49-53`. 2026-10 #5.
+3. **tests-1**: verbatim-duplicated errorHandler test between `test/nitro-v3/` and `test/nitro/`. Judged conservatively on 2026-10-09, still pending a maintainer decision. 2026-10 #5, #6.
+4. **Filed proposals**: EVL-505 (nitro-v3 errorHandler JSDoc subpath), EVL-506 (content-pass skill wording).
+5. **ai/index.ts**: code-3 needs a typecheck with `@ai-sdk/provider` installed. code-4 to code-6 removals are not pinned by any test. `tsc --noEmit` has no baseline on `main` (298 errors, none in `src/ai/index.ts`). 2026-10 #7.
+6. **Test-only removals**: batch with source dedupes or keep separate? Kept separate so far. 2026-10 #7.
+7. **Awaiting review**: #795, #796, #797, #800, #801. Merge state is not recorded here.
+8. **Lost material, never reconstruct**: the texts of the 2026-10-09 held clarify candidate, tests-3, architecture-1, architecture-2 and communication-1, and the proposals of 2026-10-02. Re-derive from the sources with a fresh reviewer pass.
+9. **Counts and rejected list of the 2026-10-09 18:40 run** were not carried into that session and are not in the archive.
+
+## Next cohorts
+
+1. **Code**: re-confirm the held nitro-v3 clarify candidate from scratch, then `ai/index.ts` code-3 to code-6 once the typecheck gap is closed, then an unreviewed `packages/evlog/src/` directory (`ai/` is covered, `vite/` only as a test source).
+2. **Test**: `packages/evlog/test/nitro/` for tests-3 and the tests-1 question.
+3. **Architecture**: `extensions/` to recover its two proposals. `hooks/evlog.ts` and `lib/` after the decision in question 1.
+4. **Communication**: `instructions.md` and recent PR bodies, then `skills/content-pass/SKILL.md` against a fresh, complete PR body.
+5. Scheduled next run: 2026-10-13.

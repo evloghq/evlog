@@ -7,7 +7,7 @@ description: Twice-weekly, coverage-led simplification audit over the whole evlo
 
 This pass makes the repository easier to understand without changing what it means. It is not a search for short code at any cost. A smaller implementation that hides a protocol constraint, changes public behavior, or moves complexity elsewhere is worse. A comment that is shorter but no clearer is not a win either; the goal is that a reader stops re-reading.
 
-The pass runs twice a week. Each run reviews bounded cohorts, not the whole tree. Coverage accumulates in `apps/evi/agent/ledgers/repo-health-sweep.md` so the next run reaches code the previous one did not.
+The pass runs twice a week. Each run reviews bounded cohorts, not the whole tree. Coverage is kept in a compact ledger, `apps/evi/agent/ledgers/repo-health-sweep.md`, so the next run reaches code the previous one did not. The ledger stays small however many runs happen: past runs go to an archive and rejected findings go to a searchable file, and neither is read by default.
 
 ## What counts
 
@@ -79,19 +79,28 @@ Anything claimed about an API, option, export, adapter, example, or framework co
 
 ## 2. Read the coverage ledger
 
-The ledger is `apps/evi/agent/ledgers/repo-health-sweep.md` in the repository. Read it from the checkout in step 1, in full, before choosing cohorts. The previous run's ledger pull request may still be open, so its section is not on `main` yet: search for an open pull request titled `docs(evi): record repo health sweep run` and read the file at that branch's head too.
+The ledger is three kinds of file in `apps/evi/agent/ledgers/`. Context cost depends on what the run is about to review, not on how many runs came before.
 
-Each run section records:
+| File | Holds | How a run uses it |
+| --- | --- | --- |
+| `repo-health-sweep.md` | Compact current state: last revision and date per area, open questions and blockers, next cohorts. Hard cap 150 lines, stated in its header | Read in full at the start, rewritten in full at the end |
+| `repo-health-sweep-rejected.jsonl` | One JSON object per rejected finding | Searched with `rg`, never read in full, new lines appended |
+| `archive/YYYY-MM.md` | Append-only history, one section per run | Opened only for a specific detail, never by default |
 
-- revision and date;
-- exact code, test, architecture, and communication cohorts;
-- skipped areas and why;
-- confirmed findings and their destination;
-- rejected findings with the verifier's reason;
-- questions and blockers;
+Read the compact file from the checkout in step 1 before choosing cohorts. The previous run's ledger pull request may still be open, so its changes are not on `main` yet: search for an open pull request titled `docs(evi): record repo health sweep run` and, when there is one, read the compact file from that branch's head instead.
+
+The compact file records, per area: the revision and date of its last review and the outcome in a few words, with a pointer to the archive entry. It also records:
+
+- open questions and blockers;
 - next cohorts.
 
+It does not record run narratives, counts, finding lists, or rejection reasons. Those belong in the archive and the rejected file.
+
+### Rejected findings
+
 A rejected finding is durable evidence. Do not raise it again unless the relevant source or maintainer decision changed.
+
+Once the cohorts are chosen, search the rejected file for each exact path and each area in scope, for example `rg -F -e '<path>' -e '<area>' apps/evi/agent/ledgers/repo-health-sweep-rejected.jsonl`. When a previous ledger pull request is open, search its head too with `git grep -F -e '<path>' <branch> -- apps/evi/agent/ledgers/repo-health-sweep-rejected.jsonl`. Do not open the file otherwise. Each line is one object with `area`, `paths`, `claim`, `reason`, `date`, `revision` and `source`. A `reason` of `not recovered` means the rejection still binds but its analysis was lost, so re-derive the analysis before judging that ground again. `source` names the archive section; open it only when the line is not enough.
 
 ## 3. Choose bounded cohorts
 
@@ -113,7 +122,7 @@ Call `simplification-sweep` with:
 
 - the recorded revision;
 - the four exact scopes;
-- every relevant rejected finding or maintainer decision from the ledger.
+- every rejected finding the search above returned for the scoped paths and areas, and every maintainer decision recorded in the compact ledger.
 
 The tool first verifies that the shared checkout matches the supplied full commit SHA. A mismatch ends the run before any specialist starts. It then fans out to hidden read-only specialists:
 
@@ -165,7 +174,7 @@ Immediately before pushing or opening the pull request, run `git merge-base HEAD
 
 Open a normal, ready pull request, not a draft. Title it by kind and area (`refactor(core): drop paraphrasing comments in shared/`, `docs(evi): clarify the sweep delivery rules`). The body lists each candidate with its before and after. Read CI once it settles and fix any failure before requesting review from `hugorcd`. If the branch cannot meet the readiness gate, do not open a half-finished pull request. Keep the result as a blocker or proposal in the report.
 
-Open at most three pull requests per run. One batch per pull request; never mix kinds or directories. Batches past the cap go to the ledger as next cohorts.
+Open at most three pull requests per run. One batch per pull request; never mix kinds or directories. Batches past the cap go to the compact ledger as next cohorts.
 
 ### Proposal or question
 
@@ -173,9 +182,13 @@ An architectural decision, uncertain reduction, or finding that needs product ju
 
 ### Report and ledger
 
-Write the full run report as a Linear document. Then append the compact coverage section to the bottom of the ledger file, headed `## Run YYYY-MM-DD, revision <short sha>`, and link the report and every pull request the run opened. Never edit an earlier section.
+Write the full run report as a Linear document. Then record the run in the ledger with three changes, all under `apps/evi/agent/ledgers/`:
 
-The ledger section is its own pull request, not a batch. Branch from current `origin/main`, change only the ledger file, and title it `docs(evi): record repo health sweep run YYYY-MM-DD`. It needs no changeset, does not count toward the three-pull-request cap, and is exempt from the reviewed-revision checks above, which guard the batches. Open it ready and request review from `hugorcd` once CI passes. Post one line per artifact in the schedule thread, with links inline.
+1. **Rewrite** `repo-health-sweep.md` in full: update the last review of each area the run covered, replace the open questions and next cohorts, and refresh the header line. Keep it under the cap in its header. Never append to it.
+2. **Append** one section to `archive/YYYY-MM.md` for the month of the run, creating the file when the month is new, headed `## Run YYYY-MM-DD, revision <short sha>`. It holds what used to be the whole ledger entry: cohorts, reviewer health, exact counts, confirmed findings and their destination, limitations, and a link to the report and every pull request the run opened. Never edit an earlier section.
+3. **Append** one line to `repo-health-sweep-rejected.jsonl` per finding the verifier or parent verification rejected, with `area`, `paths`, `claim`, `reason`, `date`, `revision` and `source` (the archive section). Never edit or delete an existing line. Write only what the result states, and use `not recovered` for a reason that was lost.
+
+The ledger change is its own pull request, not a batch. Branch from current `origin/main`, or from the open previous ledger pull request's head when there is one, so the rewrite builds on it. Change only the ledger files above, and title it `docs(evi): record repo health sweep run YYYY-MM-DD`. It needs no changeset, does not count toward the three-pull-request cap, and is exempt from the reviewed-revision checks above, which guard the batches. Open it ready and request review from `hugorcd` once CI passes. Post one line per artifact in the schedule thread, with links inline.
 
 Use this order in the final response:
 
@@ -203,4 +216,4 @@ Useful eval coverage includes:
 
 ## When nothing survives
 
-Record the cohorts and rejected candidates in the ledger, then say the lenses ran and nothing warranted a change. A clean cohort advances coverage. Never invent a finding to fill the run.
+Record the cohorts in the compact ledger and the run in the archive, add any rejected candidates to the rejected file, then say the lenses ran and nothing warranted a change. A clean cohort advances coverage. Never invent a finding to fill the run.

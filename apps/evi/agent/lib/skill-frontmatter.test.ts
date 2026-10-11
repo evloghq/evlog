@@ -1,4 +1,4 @@
-import { globSync, readFileSync } from 'node:fs'
+import { globSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { describe, expect, it } from 'vitest'
@@ -41,16 +41,42 @@ describe('authored skill frontmatter', () => {
     expect(skill).toContain('git diff <reviewed-revision>...HEAD')
   })
 
-  it('keeps the sweep coverage ledger in the repository', () => {
+  it('keeps the sweep ledger compact, with history in an archive and rejected findings in a searchable file', () => {
     const agentDir = join(import.meta.dirname, '..')
-    const ledgerPath = 'apps/evi/agent/ledgers/repo-health-sweep.md'
+    const ledgers = join(agentDir, 'ledgers')
+    const compactPath = 'apps/evi/agent/ledgers/repo-health-sweep.md'
+    const rejectedPath = 'apps/evi/agent/ledgers/repo-health-sweep-rejected.jsonl'
     const skill = readFileSync(join(agentDir, 'skills', 'repo-health-sweep', 'SKILL.md'), 'utf8')
     const schedule = readFileSync(join(agentDir, 'schedules', 'repo-health-sweep.ts'), 'utf8')
-    const ledger = readFileSync(join(agentDir, 'ledgers', 'repo-health-sweep.md'), 'utf8')
+    const compact = readFileSync(join(ledgers, 'repo-health-sweep.md'), 'utf8')
+    const rejected = readFileSync(join(ledgers, 'repo-health-sweep-rejected.jsonl'), 'utf8')
+    const archives = readdirSync(join(ledgers, 'archive')).filter(name => /^\d{4}-\d{2}\.md$/.test(name))
 
-    expect(skill).toContain(ledgerPath)
-    expect(schedule).toContain(ledgerPath)
+    for (const text of [skill, schedule]) {
+      expect(text).toContain(compactPath)
+      expect(text).toContain(rejectedPath)
+      expect(text).toContain('archive')
+    }
     expect(`${skill}\n${schedule}`).not.toMatch(/ledger issue|linear__list_comments/)
-    expect(ledger).toMatch(/^## Entry 1, /m)
+
+    const cap = Number(compact.match(/Hard cap: (\d+) lines/)?.[1])
+    expect(cap).toBeGreaterThan(0)
+    expect(compact.trimEnd().split('\n').length).toBeLessThanOrEqual(cap)
+    expect(compact).not.toMatch(/^## Entry \d+/m)
+
+    const archived = archives.map(name => readFileSync(join(ledgers, 'archive', name), 'utf8')).join('\n')
+    expect(archives.length).toBeGreaterThan(0)
+    expect(archived.match(/^## (Entry \d+|Run \d{4}-\d{2}-\d{2})/gm)?.length).toBeGreaterThanOrEqual(7)
+
+    const lines = rejected.split('\n').filter(Boolean)
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) {
+      const finding = JSON.parse(line) as Record<string, unknown>
+      expect(Object.keys(finding).sort()).toEqual(['area', 'claim', 'date', 'paths', 'reason', 'revision', 'source'])
+      expect(Array.isArray(finding.paths)).toBe(true)
+      const [file, section] = String(finding.source).split('#')
+      expect(archives).toContain(file!.replace('archive/', ''))
+      expect(archived).toContain(`## ${section}`)
+    }
   })
 })
