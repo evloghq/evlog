@@ -39,10 +39,7 @@ export function attachForkToLogger(
   middlewareOptions: MiddlewareLoggerOptions,
   lifecycle?: ForkLifecycle,
 ): void {
-  const log = parent as RequestLogger & { fork?: (label: string, fn: () => void | Promise<void>) => void }
-  log.fork = (label: string, fn: () => void | Promise<void>) => {
-    forkBackgroundLogger({ storage, parent, middlewareOptions, label, fn, lifecycle })
-  }
+  parent.fork = (label, fn) => forkBackgroundLogger({ storage, parent, middlewareOptions, label, fn, lifecycle })
 }
 
 /**
@@ -50,11 +47,17 @@ export function attachForkToLogger(
  * child while `fn` runs. The child emits a separate wide event when `fn` settles,
  * with `operation` and `_parentRequestId` set for correlation.
  *
+ * Returns the child's lifetime: it resolves once `fn` has settled and the child
+ * event has been enriched and drained, and never rejects. When `waitUntil` is set,
+ * that lifetime is registered with it synchronously, while the caller is still in
+ * the request scope.
+ *
  * @beta Part of `evlog/toolkit` — used by framework integrations; prefer `log.fork()`
  * on the request logger when available.
  */
-export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): void {
-  const { storage, parent, middlewareOptions, label, fn, lifecycle } = options
+export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): Promise<void> {
+  const { storage, parent, label, fn, lifecycle } = options
+  const { waitUntil, ...middlewareOptions } = options.middlewareOptions
 
   const parentCtx = parent.getContext() as Record<string, unknown>
   const parentRequestId = parentCtx.requestId
@@ -88,9 +91,9 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): void
     requestId: child.getContext().requestId as string,
   }
 
-  storage.run(child, () => {
+  const lifetime = storage.run(child, () => {
     lifecycle?.onChildEnter?.(child)
-    void Promise.resolve()
+    return Promise.resolve()
       .then(() => fn())
       .then(async () => {
         const emittedEvent = child.emit()
@@ -123,4 +126,12 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): void
         lifecycle?.onChildExit?.(child)
       })
   })
+
+  if (waitUntil) {
+    // Covers a pipeline's batch delivery without making an awaited fork wait for it.
+    const { settled } = (middlewareOptions.drain ?? getGlobalDrain() ?? {}) as { settled?: () => Promise<void> }
+    waitUntil(typeof settled === 'function' ? lifetime.then(() => settled()) : lifetime)
+  }
+
+  return lifetime
 }

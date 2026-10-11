@@ -579,8 +579,11 @@ function getHeader(headers: Record<string, string> | undefined, name: string): s
 /** Options accepted by {@link auditOnly}. */
 export interface AuditOnlyOptions {
   /**
-   * When true, the wrapper awaits the wrapped drain so the event is flushed
-   * before the request resolves. Use for crash-safe audit storage.
+   * When true, the wrapper awaits the wrapped drain, so the drain step that
+   * carries the event finishes only once the write has landed. Use for
+   * crash-safe audit storage. With `waitUntil` set, that step runs after the
+   * response and the runtime is kept alive until it finishes. An audit recorded
+   * inside `log.fork()` lands before the response only when the fork is awaited.
    * @default false
    */
   await?: boolean

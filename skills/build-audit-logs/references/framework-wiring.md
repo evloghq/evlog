@@ -94,4 +94,5 @@ audit({
 
 - Failure isolation between drains comes from `initLogger({ drain: [...] })` invoking each drain independently. If you instead use `Promise.all`, a single rejection takes the others down. Wrap in `Promise.allSettled` and log failures, or stick with the array form.
 - `await: true` on `auditOnly` makes the wrapped drain block the request until the event is flushed. Use it for the tamper-evident drain so you don't lose audits on crash; the queryable drain can stay async.
+- An audit recorded inside `log.fork()` is drained by the child event, not the request. `await log.fork(label, fn)` when that audit must be written before the handler returns. An unawaited fork still drains, and on `waitUntil` runtimes it is registered with `waitUntil` when `log.fork()` is called.
 - For multi-process deployments behind hash-chain, persist `state.{load,save}` (Redis is the common choice) so the chain survives restarts and rolling deploys.

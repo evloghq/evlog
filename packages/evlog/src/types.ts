@@ -829,6 +829,9 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * @param label - Value stored as `operation` on the child wide event.
    * @param fn - Function to run; may return a Promise. Errors are captured on the
    *   child logger and emitted.
+   * @returns A promise that resolves once the child event has been drained. It never
+   *   rejects. Leave it unawaited for background work, or await it when the child's
+   *   drain (an audit write, for example) must finish before the response.
    *
    * @example
    * ```ts
@@ -838,7 +841,7 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * })
    * ```
    */
-  fork?: (label: string, fn: () => void | Promise<void>) => void
+  fork?: (label: string, fn: () => void | Promise<void>) => Promise<void>
 
   /**
    * Record an audit event on this wide event. Strictly equivalent to
