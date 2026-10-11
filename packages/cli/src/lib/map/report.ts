@@ -95,11 +95,15 @@ const DIGITS: Record<string, readonly string[]> = {
   7: ['▀▀█', '  █', '  ▀'],
   8: ['█▀█', '█▀█', '▀▀▀'],
   9: ['█▀█', '▀▀█', '▀▀▀'],
+  '-': ['   ', '▀▀▀', '   '],
 }
 
-/** The score as three rows of block art. */
-function bigDigits(value: number): string[] {
-  const chars = String(value).split('')
+/**
+ * The score as three rows of block art. An unscored scan has no score, so the
+ * banner draws the dashes the gate reports instead of a number.
+ */
+function bigDigits(text: string): string[] {
+  const chars = text.split('')
   return [0, 1, 2].map(row => chars.map(char => DIGITS[char]![row]).join(' '))
 }
 
@@ -316,9 +320,9 @@ const MORE_WIDTH = 5
 function scoreHeadline(style: ReportStyle, result: ScanResult): string[] {
   const { map, grade } = result
   const color = grade === 'unscored' ? 'dim' : scoreColor(map.score)
-  const digits = bigDigits(map.score)
+  const digits = bigDigits(grade === 'unscored' ? '--' : String(map.score))
 
-  const gaugeFilled = Math.round((map.score / 100) * 20)
+  const gaugeFilled = grade === 'unscored' ? 0 : Math.round((map.score / 100) * 20)
   const gauge = style.paint(color, '▰'.repeat(gaugeFilled))
     + style.paint('dim', '▱'.repeat(20 - gaugeFilled))
 
@@ -601,7 +605,9 @@ export function formatMapMatrix(ctx: CliContext, result: ScanResult): string {
 
   lines.push([
     paint('dim', `${map.projectName} · ${getFramework(map.framework).label} ·`),
-    `${paint([scoreColor(map.score), 'bold'], String(map.score))}${paint('dim', '/100')}`,
+    result.grade === 'unscored'
+      ? paint('dim', '--')
+      : `${paint([scoreColor(map.score), 'bold'], String(map.score))}${paint('dim', '/100')}`,
     paint('dim', `· ${map.routes.length} entry points, worst first`),
   ].join(' '))
   lines.push('')
