@@ -55,6 +55,22 @@ describe('runMap', () => {
     expect(result.scan.grade).toBe('unscored')
   })
 
+  it('draws no score for an unscored scan, in the banner or the matrix', async () => {
+    const cwd = await copyFixture('nuxt-basic')
+    await rm(join(cwd, 'server'), { recursive: true, force: true })
+    await rm(join(cwd, 'pages'), { recursive: true, force: true })
+    const ctx = fakeContext(cwd)
+    const result = await runMap(ctx, undefined, { noWrite: true })
+
+    /* The block digits for 100, the first row of the banner. */
+    const banner = formatMapReport(ctx, result)
+    expect(banner).not.toContain(' ▄█ █▀█ █▀█')
+    expect(banner).not.toContain('▰')
+    expect(banner).toContain('nothing to scan')
+
+    expect(formatMapReport(ctx, result, { all: true })).not.toContain('100/100')
+  })
+
   it('scans a nuxt fixture and scores its routes without writing evlog.map.json', async () => {
     const cwd = join(FIXTURES, 'nuxt-basic')
     const result = await runMap(fakeContext(cwd), undefined, { noWrite: true })
