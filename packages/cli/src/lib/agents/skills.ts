@@ -114,10 +114,21 @@ function checkSource(value: string): string {
 }
 
 /**
+ * The agents the skills are installed for, passed explicitly with `--agent`.
+ *
+ * `codex` owns the canonical copy: with `--global` it lands in
+ * `~/.agents/skills`, and `claude-code` gets a relative symlink into it in
+ * `~/.claude/skills`. `universal` is left out on purpose, because its global
+ * directory is `~/.config/agents/skills`, not `~/.agents/skills`. `cursor` is
+ * left out because it would be a second copy of the same skills.
+ */
+export const AGENT_TARGETS = ['claude-code', 'codex'] as const
+
+/**
  * Build the `npx skills add` invocation.
  *
- * `--yes` only when nobody is watching: interactively, the skills CLI asks
- * which agents to install for, and that question is its to ask.
+ * `--yes` only when nobody is watching. Interactively the skills CLI may still
+ * ask questions of its own, and those are its to ask.
  */
 export function skillsCommand(options: {
   source?: string
@@ -132,6 +143,7 @@ export function skillsCommand(options: {
     }
     args.push('--skill', ...options.skills)
   }
+  for (const agent of AGENT_TARGETS) args.push('--agent', agent)
   if (options.global) args.push('--global')
   if (!options.interactive) args.push('--yes')
 

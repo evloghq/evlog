@@ -179,7 +179,7 @@ describe('findInstalledSkills', () => {
 
 describe('skillsCommand', () => {
   it('adds every published skill from the docs site by default', () => {
-    expect(skillsCommand({ interactive: true }).display).toBe('npx --yes skills add https://www.evlog.dev')
+    expect(skillsCommand({ interactive: true }).display).toBe('npx --yes skills add https://www.evlog.dev --agent claude-code --agent codex')
   })
 
   it('shows the command it actually runs, argument for argument', () => {
@@ -195,15 +195,28 @@ describe('skillsCommand', () => {
        --yes, the one aimed at the skills CLI, appears only when nobody can
        answer. The leading one is npx's and is always there. */
     expect(skillsCommand({ interactive: true }).display)
-      .toBe('npx --yes skills add https://www.evlog.dev')
+      .toBe('npx --yes skills add https://www.evlog.dev --agent claude-code --agent codex')
     expect(skillsCommand({ interactive: false }).display)
-      .toBe('npx --yes skills add https://www.evlog.dev --yes')
+      .toBe('npx --yes skills add https://www.evlog.dev --agent claude-code --agent codex --yes')
   })
 
   it('passes the scope and the skill selection through', () => {
     const command = skillsCommand({ interactive: true, global: true, skills: ['analyze-logs'] })
 
-    expect(command.display).toBe('npx --yes skills add https://www.evlog.dev --skill analyze-logs --global')
+    expect(command.display).toBe('npx --yes skills add https://www.evlog.dev --skill analyze-logs --agent claude-code --agent codex --global')
+  })
+
+  it('targets the canonical codex copy and claude-code, not every detected agent', () => {
+    /* `universal` writes globally to ~/.config/agents/skills, and cursor
+       duplicates what codex already keeps in ~/.agents/skills. Both are left
+       out on purpose; the symlink into ~/.claude/skills is what Claude Code reads. */
+    const { args } = skillsCommand({ interactive: true, global: true })
+
+    expect(args.filter(arg => arg === '--agent')).toHaveLength(2)
+    expect(args).toContain('claude-code')
+    expect(args).toContain('codex')
+    expect(args).not.toContain('cursor')
+    expect(args).not.toContain('universal')
   })
 
   it('runs npx rather than depending on the package', () => {
@@ -242,7 +255,7 @@ describe('skillsCommand', () => {
 
   it('accepts a self-hosted origin', () => {
     expect(skillsCommand({ interactive: true, source: 'http://localhost:3000' }).display)
-      .toBe('npx --yes skills add http://localhost:3000')
+      .toBe('npx --yes skills add http://localhost:3000 --agent claude-code --agent codex')
   })
 })
 
@@ -290,7 +303,7 @@ describe('runAgents', () => {
 
     expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toContain(MARKER_START)
     expect(await readFile(join(root, 'CLAUDE.md'), 'utf8')).toBe('@AGENTS.md\n')
-    expect(result.skills).toMatchObject({ status: 'skipped', command: 'npx --yes skills add https://www.evlog.dev --yes' })
+    expect(result.skills).toMatchObject({ status: 'skipped', command: 'npx --yes skills add https://www.evlog.dev --agent claude-code --agent codex --yes' })
   })
 
   it('is safe to run twice — the second run changes nothing', async () => {
