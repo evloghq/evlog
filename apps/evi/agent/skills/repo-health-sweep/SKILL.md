@@ -7,7 +7,7 @@ description: Twice-weekly, coverage-led simplification audit over the whole evlo
 
 This pass makes the repository easier to understand without changing what it means. It is not a search for short code at any cost. A smaller implementation that hides a protocol constraint, changes public behavior, or moves complexity elsewhere is worse. A comment that is shorter but no clearer is not a win either; the goal is that a reader stops re-reading.
 
-The pass runs twice a week. Each run reviews bounded cohorts, not the whole tree. Coverage accumulates in Linear so the next run reaches code the previous one did not.
+The pass runs twice a week. Each run reviews bounded cohorts, not the whole tree. Coverage accumulates in `apps/evi/agent/ledgers/repo-health-sweep.md` so the next run reaches code the previous one did not.
 
 ## What counts
 
@@ -79,9 +79,9 @@ Anything claimed about an API, option, export, adapter, example, or framework co
 
 ## 2. Read the coverage ledger
 
-Keep one Linear issue on the evlog team titled `Evi simplification coverage ledger`. Search that exact title once with `linear__list_issues`, including closed issues. Keep the returned issue ID for every read and write in the run, then read its comments with `linear__list_comments`. In a real run, create the issue when the exact search returns none, and reopen it when it was closed; the ledger is never Done while the schedule runs. In a dry run, report the missing or closed ledger and do not change it.
+The ledger is `apps/evi/agent/ledgers/repo-health-sweep.md` in the repository. Read it from the checkout in step 1, in full, before choosing cohorts. The previous run's ledger pull request may still be open, so its section is not on `main` yet: search for an open pull request titled `docs(evi): record repo health sweep run` and read the file at that branch's head too.
 
-Each run comment records:
+Each run section records:
 
 - revision and date;
 - exact code, test, architecture, and communication cohorts;
@@ -173,7 +173,9 @@ An architectural decision, uncertain reduction, or finding that needs product ju
 
 ### Report and ledger
 
-Write the full run report as a Linear document. Then append the compact coverage entry to the ledger issue. Post one line per artifact in the schedule thread, with links inline.
+Write the full run report as a Linear document. Then append the compact coverage section to the bottom of the ledger file, headed `## Run YYYY-MM-DD, revision <short sha>`, and link the report and every pull request the run opened. Never edit an earlier section.
+
+The ledger section is its own pull request, not a batch. Branch from current `origin/main`, change only the ledger file, and title it `docs(evi): record repo health sweep run YYYY-MM-DD`. It needs no changeset, does not count toward the three-pull-request cap, and is exempt from the reviewed-revision checks above, which guard the batches. Open it ready and request review from `hugorcd` once CI passes. Post one line per artifact in the schedule thread, with links inline.
 
 Use this order in the final response:
 

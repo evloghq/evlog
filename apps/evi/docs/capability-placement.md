@@ -105,7 +105,7 @@ replayable. The result includes reviewer health, evidence limitations, and
 programmatic finding counts so the parent does not infer readiness from prose.
 Before fan-out, the verifier checks the supplied full commit SHA against the
 shared checkout and a mismatch ends the run. The parent chooses bounded cohorts
-from a persistent coverage ledger and remains the only writer. All five children
+from the coverage ledger file `agent/ledgers/repo-health-sweep.md` and remains the only writer. All five children
 share its checkout through
 `agent/lib/review-sandbox.ts`; shell and file writes are disabled.
 
