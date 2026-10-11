@@ -116,11 +116,14 @@ jobs:
       # The sandbox smoke runs every non-interactive CLI command against a real
       # app per framework — the end-to-end seam (detect → init → doctor → map →
       # baseline) that unit tests cover only piecewise. Gated to changes that
-      # can affect it, so a docs-only pull request skips the cost.
+      # can affect it, so a docs-only pull request skips the cost. Like the
+      # coverage step it bypasses turbo, so it prepares the CLI and the
+      # workspace packages it imports.
       - name: CLI sandbox smoke
         if: github.event_name == 'pull_request'
         run: |
           if git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs | grep -q .; then
+            pnpm exec turbo run dev:prepare --filter=@evlog/cli
             node scripts/cli-sandbox.mjs --smoke
           else
             echo "CLI untouched — smoke skipped"
