@@ -295,6 +295,8 @@ export default defineWorkerFetch(async (request, _env, _ctx, log) => {
 })
 ```
 
+`evlog.config.ts` is bundled into the Worker and evaluated there, so `process.env` reads in it (such as the `NODE_ENV` check for `sampling` above) only see your Worker's variables with Cloudflare's [`nodejs_compat`](https://developers.cloudflare.com/workers/runtime-apis/nodejs/) compatibility flag. Without it, set those options inline instead.
+
 If you keep a raw `export default { fetch }`, pass `{ executionCtx: ctx }` to `createWorkersLogger` or `waitUntil` on `createRequestLogger`.
 
 ```typescript
