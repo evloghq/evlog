@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ensureFullHistory, readContentCommitDates } from '../config/content-dates'
+import { UNSHALLOW_TIMEOUT_MS, ensureFullHistory, readContentCommitDates } from '../config/content-dates'
 import { collectSitemapUrls } from '../server/utils/sitemap'
 
 describe('collectSitemapUrls', () => {
@@ -98,6 +98,16 @@ describe('per-file lastmod', () => {
     })
 
     expect(calls).toHaveLength(1)
+  })
+
+  it('bounds the unshallow fetch with a timeout', () => {
+    let fetchTimeout: number | undefined
+    ensureFullHistory('/repo', (args, _cwd, options) => {
+      if (args[0] === 'fetch') fetchTimeout = options?.timeout
+      return 'true\n'
+    })
+
+    expect(fetchTimeout).toBe(UNSHALLOW_TIMEOUT_MS)
   })
 
   it('keeps building when the fetch fails', () => {

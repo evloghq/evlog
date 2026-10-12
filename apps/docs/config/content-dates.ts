@@ -29,12 +29,16 @@ export function parseCommitDates(gitLog: string): Record<string, string> {
   return dates
 }
 
-type GitRunner = (args: string[], cwd: string) => string
+type GitRunner = (args: string[], cwd: string, options?: { timeout?: number }) => string
 
-const runGit: GitRunner = (args, cwd) => execFileSync('git', args, {
+/** A stalled remote must not hang the build: past this, the fetch is killed and the shallow dates are kept. */
+export const UNSHALLOW_TIMEOUT_MS = 60_000
+
+const runGit: GitRunner = (args, cwd, options) => execFileSync('git', args, {
   cwd,
   encoding: 'utf8',
   maxBuffer: 64 * 1024 * 1024,
+  timeout: options?.timeout,
 })
 
 /**
@@ -46,7 +50,7 @@ const runGit: GitRunner = (args, cwd) => execFileSync('git', args, {
 export function ensureFullHistory(cwd: string, git: GitRunner = runGit): void {
   try {
     if (git(['rev-parse', '--is-shallow-repository'], cwd).trim() !== 'true') return
-    git(['fetch', '--unshallow', '--filter=blob:none', '--quiet'], cwd)
+    git(['fetch', '--unshallow', '--filter=blob:none', '--quiet'], cwd, { timeout: UNSHALLOW_TIMEOUT_MS })
   } catch {
     // Offline or no remote: fall back to whatever history the clone has.
   }
