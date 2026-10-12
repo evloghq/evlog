@@ -51,10 +51,12 @@ useHead({
 
 useSeo({
   title:
-    page.value?.title
+    page.value?.seo?.title
+    || page.value?.title
     || `evlog — Digging through logs is not observability. It's hope.`,
   description:
-    page.value?.description
+    page.value?.seo?.description
+    || page.value?.description
     || 'A modern TypeScript logger built for everything you ship — scripts, libraries, jobs, edge, requests. Simple logs, wide events, and structured errors in one API.',
   type: 'website',
   ogImage: '/og.png',
