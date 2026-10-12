@@ -69,97 +69,164 @@ const footerColumns: FooterColumn[] = [
 ]
 
 const year = new Date().getFullYear()
+
+// Live HH:MM:SS for the log-line timestamps; empty during SSR to avoid a hydration mismatch.
+const time = ref('')
+let clock: ReturnType<typeof setInterval> | undefined
+function tick() {
+  time.value = new Date().toTimeString().slice(0, 8)
+}
+onMounted(() => {
+  tick()
+  clock = setInterval(tick, 1000)
+})
+onBeforeUnmount(() => clearInterval(clock))
+
+function linkAttrs(link: FooterLink) {
+  return link.external ? { target: '_blank', rel: 'noopener noreferrer' } : {}
+}
 </script>
 
 <template>
-  <footer class="bg-default border-t border-default" aria-labelledby="landing-footer-title">
+  <!-- The footer reads as one evlog log event: a request line, its link groups as a tree, and a closing line. -->
+  <footer class="footer bg-default font-mono text-[12.5px] leading-5 text-toned" aria-labelledby="landing-footer-title">
     <h2 id="landing-footer-title" class="sr-only">
       Site links
     </h2>
-    <UContainer class="py-12 lg:py-16">
-      <!-- Desktop and tablet: every group open -->
-      <nav aria-label="Footer" class="hidden sm:grid sm:grid-cols-3 lg:grid-cols-5 gap-x-8 gap-y-10">
-        <div v-for="column in footerColumns" :key="column.label">
-          <p class="text-xs font-mono uppercase tracking-wider text-highlighted">
-            {{ column.label }}
+    <UContainer class="pt-7 pb-9 sm:pt-9 sm:pb-11">
+      <p class="log-line" aria-hidden="true">
+        <span class="text-muted">{{ time || '--:--:--' }}</span>
+        <span class="text-primary tracking-wide">INFO</span>
+        <span><span class="text-highlighted">GET</span> /footer <span class="text-highlighted">200</span> <span class="text-muted">in 0.4ms</span></span>
+      </p>
+
+      <nav aria-label="Footer" class="groups">
+        <div
+          v-for="(column, i) in footerColumns"
+          :key="column.label"
+          class="group"
+          :class="{ 'is-last': i === footerColumns.length - 1 }"
+        >
+          <span class="caret" aria-hidden="true">›</span>
+          <p class="key">
+            {{ column.label.toLowerCase() }}
           </p>
-          <ul class="mt-4 space-y-3">
-            <li v-for="link in column.links" :key="link.label">
-              <NuxtLink
-                :to="link.to"
-                :target="link.external ? '_blank' : undefined"
-                :rel="link.external ? 'noopener noreferrer' : undefined"
-                class="footer-link text-sm text-muted hover:text-highlighted"
-              >
-                {{ link.label }}
+          <ul class="items">
+            <li v-for="link in column.links" :key="link.label" class="item">
+              <NuxtLink :to="link.to" v-bind="linkAttrs(link)" class="link">
+                {{ link.label }}<template v-if="link.external">
+                  <span class="ext" aria-hidden="true">↗</span><span class="sr-only"> (opens in a new tab)</span>
+                </template>
               </NuxtLink>
             </li>
           </ul>
         </div>
       </nav>
 
-      <!-- Mobile: one collapsible group per column -->
-      <nav aria-label="Footer" class="sm:hidden divide-y divide-default border-y border-default">
-        <details v-for="column in footerColumns" :key="column.label" class="group">
-          <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between py-3 text-xs font-mono uppercase tracking-wider text-highlighted [&::-webkit-details-marker]:hidden">
-            {{ column.label }}
-            <UIcon name="i-lucide-chevron-down" class="size-4 text-muted transition-transform group-open:rotate-180" aria-hidden="true" />
-          </summary>
-          <ul class="pb-3">
-            <li v-for="link in column.links" :key="link.label">
-              <NuxtLink
-                :to="link.to"
-                :target="link.external ? '_blank' : undefined"
-                :rel="link.external ? 'noopener noreferrer' : undefined"
-                class="footer-link flex min-h-11 items-center text-sm text-muted hover:text-highlighted"
-              >
-                {{ link.label }}
-              </NuxtLink>
-            </li>
-          </ul>
-        </details>
-      </nav>
-
-      <div class="mt-4 sm:mt-12 pt-4 sm:pt-6 sm:border-t border-default flex items-center justify-between gap-4">
-        <p class="text-xs font-mono text-muted">
-          &copy; {{ year }} - Made by
-          <a href="https://hrcd.fr/" target="_blank" rel="noopener noreferrer" class="footer-link text-muted hover:text-highlighted underline-offset-4 hover:underline">HugoRCD</a>
+      <div class="log-line meta-line mt-5">
+        <span class="text-muted" aria-hidden="true">{{ time || '--:--:--' }}</span>
+        <span class="text-muted tracking-wide" aria-hidden="true">DEBUG</span>
+        <p class="meta text-muted">
+          <span class="tap">&copy; {{ year }} evlog</span>
+          <a href="https://hrcd.fr/" target="_blank" rel="noopener noreferrer" class="link">HugoRCD</a>
+          <a href="https://x.com/hugorcd" target="_blank" rel="noopener noreferrer" class="link" aria-label="HugoRCD on X">x.com</a>
+          <a href="https://github.com/evloghq/evlog" target="_blank" rel="noopener noreferrer" class="link" aria-label="evlog on GitHub">github<span class="cursor" aria-hidden="true" /></a>
         </p>
-        <div class="flex items-center gap-1">
-          <UButton
-            to="https://x.com/hugorcd"
-            target="_blank"
-            icon="i-simple-icons-x"
-            color="neutral"
-            variant="ghost"
-            size="lg"
-            class="size-11 justify-center"
-            aria-label="evlog author on X"
-          />
-          <UButton
-            to="https://github.com/evloghq/evlog"
-            target="_blank"
-            icon="i-simple-icons-github"
-            color="neutral"
-            variant="ghost"
-            size="lg"
-            class="size-11 justify-center"
-            aria-label="evlog on GitHub"
-          />
-        </div>
       </div>
     </UContainer>
   </footer>
 </template>
 
 <style scoped>
-.footer-link {
-  transition: color 0.15s ease;
+.footer {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.055);
+  --rail: rgb(255 255 255 / 0.14);
 }
 
-.footer-link:focus-visible {
-  outline: 2px solid var(--ui-primary);
-  outline-offset: 2px;
+/* timestamp · level · message, aligned on the character grid */
+.log-line {
+  display: grid;
+  grid-template-columns: 10ch 7ch minmax(0, 1fr);
+  align-items: baseline;
+}
+.meta { grid-column: 1 / -1; margin-top: 10px; display: flex; flex-wrap: wrap; column-gap: 2ch; }
+
+.link {
+  color: var(--ui-text-toned);
   border-radius: 2px;
+  text-decoration: underline 1px transparent;
+  text-underline-offset: 4px;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.link:hover,
+.link:focus-visible {
+  color: var(--ui-text-highlighted);
+  text-decoration-color: rgb(255 255 255 / 0.5);
+}
+.link:focus-visible { outline: 1px solid var(--ui-primary); outline-offset: 2px; }
+.ext { margin-left: 0.25ch; font-size: 10px; color: var(--ui-text-muted); }
+.key { color: var(--ui-text-muted); transition: color 0.15s; }
+.group:hover .key,
+.group:focus-within .key { color: var(--ui-text-toned); }
+
+.cursor {
+  display: inline-block;
+  width: 1ch;
+  height: 1.1em;
+  margin-left: 1ch;
+  vertical-align: -2px;
+  background: var(--ui-text-toned);
+  animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .cursor { animation: none; }
+  .link, .key, .caret, .group::after { transition: none; }
+}
+
+/* One tree: a 1px rail with an elbow into each group's key; the last group ends like └ */
+.group { position: relative; }
+.group::before { content: ''; position: absolute; left: 0.5ch; top: 0; bottom: 0; width: 1px; background: var(--rail); }
+.group.is-last::before { bottom: auto; }
+.group::after { content: ''; position: absolute; left: 0.5ch; width: 1.6ch; height: 1px; background: var(--rail); transition: background 0.15s; }
+.items { display: flex; flex-wrap: wrap; }
+.caret { display: none; }
+
+/* Mobile: keys above wrapping values, 44px tap rows */
+@media (max-width: 639px) {
+  .groups { margin-top: 8px; }
+  .group { padding: 0 0 6px 3ch; }
+  .group.is-last::before { height: 16px; }
+  .group::after { top: 16px; }
+  .key { line-height: 32px; }
+  .items { column-gap: 2.5ch; }
+  .item { padding-block: 2px; }
+  .link, .tap { display: inline-flex; align-items: center; min-height: 44px; margin-block: -8px; }
+}
+
+/* Tablet and desktop: key and values on one line, aligned under the message column */
+@media (min-width: 640px) {
+  .log-line { grid-template-columns: 10ch 8ch minmax(0, 1fr); }
+  .meta { grid-column: auto; margin-top: 0; }
+  .groups { margin-left: 15ch; }
+  .group { display: grid; grid-template-columns: 15ch minmax(0, 1fr); padding-left: 3ch; }
+  .group.is-last::before { height: 10.5px; }
+  .group::after { top: 10px; }
+  .items { column-gap: 2ch; }
+  .caret {
+    display: block;
+    position: absolute;
+    left: -2.5ch;
+    color: var(--ui-text-highlighted);
+    opacity: 0;
+    transform: translateX(-3px);
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  .group:hover .caret,
+  .group:focus-within .caret { opacity: 1; transform: none; }
+  .group:hover::after,
+  .group:focus-within::after { background: rgb(255 255 255 / 0.55); }
 }
 </style>
