@@ -1,6 +1,8 @@
 import type { ServerResponse } from 'node:http'
 import type { Request } from 'express'
-import type { DynamicModule, MiddlewareConsumer, NestModule } from '@nestjs/common'
+import type { DynamicModule, MiddlewareConsumer, NestModule, Provider } from '@nestjs/common'
+import { HttpAdapterHost } from '@nestjs/core'
+import type { FastifyInstance } from 'fastify'
 import type { AuditableLogger } from '../audit'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
@@ -37,6 +39,13 @@ declare module 'express-serve-static-core' {
   }
 }
 
+declare module 'fastify' {
+  interface FastifyRequest {
+    // @ts-expect-error intentionally overrides Fastify's built-in pino logger with evlog's AuditableLogger
+    log: AuditableLogger
+  }
+}
+
 const integration = defineFrameworkIntegration<Request>({
   name: 'nestjs',
   extractRequest: (req) => ({
@@ -67,11 +76,33 @@ function createEvlogMiddleware(getOptions: () => EvlogNestJSOptions) {
 }
 
 /**
+ * On `@nestjs/platform-fastify`, Nest middleware runs through `@fastify/middie`
+ * on the raw `IncomingMessage`, while handlers receive a `FastifyRequest` whose
+ * `log` is Fastify's own logger. A `preHandler` hook copies the evlog logger
+ * across before guards, interceptors, pipes, and controllers run.
+ */
+const fastifyRequestLogProvider: Provider = {
+  provide: 'EVLOG_FASTIFY_REQUEST_LOG',
+  inject: [HttpAdapterHost],
+  useFactory: (host: HttpAdapterHost) => ({
+    onModuleInit: () => {
+      // `httpAdapter` is unset in standalone application contexts.
+      if (host.httpAdapter?.getType() !== 'fastify') return
+      host.httpAdapter.getInstance<FastifyInstance>().addHook('preHandler', (request, _reply, done) => {
+        if (request.raw.log) request.log = request.raw.log
+        done()
+      })
+    },
+  }),
+}
+
+/**
  * NestJS module for evlog wide event logging.
  *
  * Registers a global middleware that creates a request-scoped logger
  * for every incoming request. Use `useLogger()` to access it anywhere
- * in the call stack, or `req.log` directly in controllers.
+ * in the call stack, or `req.log` directly in controllers, on both
+ * `@nestjs/platform-express` and `@nestjs/platform-fastify`.
  *
  * @example
  * ```ts
@@ -109,6 +140,7 @@ export class EvlogModule implements NestModule {
     EvlogModule.options = options
     return {
       module: EvlogModule,
+      providers: [fastifyRequestLogProvider],
       global: true,
     }
   }
@@ -140,6 +172,7 @@ export class EvlogModule implements NestModule {
           },
           inject: asyncOptions.inject || [],
         },
+        fastifyRequestLogProvider,
       ],
       global: true,
     }

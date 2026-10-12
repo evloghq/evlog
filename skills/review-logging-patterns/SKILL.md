@@ -445,7 +445,7 @@ import { EvlogModule } from 'evlog/nestjs'
 export class AppModule {}
 ```
 
-`EvlogModule.forRoot()` registers a global middleware. Use `useLogger()` to access the request-scoped logger from any controller or service:
+`EvlogModule.forRoot()` registers a global middleware, on both `@nestjs/platform-express` and `@nestjs/platform-fastify`. `req.log` in controllers is the evlog logger on both platforms. Do not also register `evlog/fastify` on a Nest Fastify app, or every request emits two wide events. Use `useLogger()` to access the request-scoped logger from any controller or service:
 
 ```typescript
 import { useLogger } from 'evlog/nestjs'

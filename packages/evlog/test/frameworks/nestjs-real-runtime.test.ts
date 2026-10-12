@@ -1,6 +1,9 @@
-import { Controller, Get } from '@nestjs/common'
-import type { INestApplication } from '@nestjs/common'
+import { Controller, Get, Req } from '@nestjs/common'
+import type { CanActivate, ExecutionContext, INestApplication } from '@nestjs/common'
+import { FastifyAdapter } from '@nestjs/platform-fastify'
+import type { NestFastifyApplication } from '@nestjs/platform-fastify'
 import { Test } from '@nestjs/testing'
+import type { FastifyRequest } from 'fastify'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { initLogger } from '../../src/logger'
@@ -134,5 +137,115 @@ describe('evlog/nestjs (real NestJS runtime)', () => {
       'wide event for /api/users',
     )
     expect(event.requestId).toBe('real-nest-req')
+  })
+
+  it('initializes in a standalone application context without an HTTP adapter', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [EvlogModule.forRoot()],
+    }).compile()
+
+    await expect(moduleRef.init()).resolves.toBe(moduleRef)
+    await moduleRef.close()
+  })
+})
+
+@Controller()
+class FastifyTestController {
+
+  @Get('/api/web-vitals')
+  webVitals(@Req() request: FastifyRequest) {
+    request.log.set({ metric: 'LCP' })
+    return { ok: true }
+  }
+
+}
+
+class TagGuard implements CanActivate {
+
+  canActivate(context: ExecutionContext): boolean {
+    context.switchToHttp().getRequest<FastifyRequest>().log.set({ guard: 'tag' })
+    return true
+  }
+
+}
+
+async function bootFastifyApp(
+  evlogModule: ReturnType<typeof EvlogModule.forRoot>,
+  setup?: (app: NestFastifyApplication) => void,
+): Promise<NestFastifyApplication> {
+  const moduleRef = await Test.createTestingModule({
+    imports: [evlogModule],
+    controllers: [FastifyTestController],
+  }).compile()
+
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
+  setup?.(app)
+  await app.init()
+  await app.getHttpAdapter().getInstance().ready()
+  return app
+}
+
+describe('evlog/nestjs (real NestJS runtime, Fastify platform)', () => {
+  let app: NestFastifyApplication | undefined
+
+  beforeEach(() => {
+    initLogger({ env: { service: 'nestjs-fastify-test' }, pretty: false })
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(async () => {
+    if (app) {
+      await app.close()
+      app = undefined
+    }
+    vi.restoreAllMocks()
+  })
+
+  it('exposes the evlog logger on FastifyRequest.log in controllers', async () => {
+    const { drain } = createPipelineSpies()
+    app = await bootFastifyApp(EvlogModule.forRoot({ drain }))
+
+    const res = await app.inject({ method: 'GET', url: '/api/web-vitals' })
+    expect(res.statusCode).toBe(200)
+    await waitForDrainCalls(drain)
+
+    const event = defined(
+      findEventViaDrain(drain, e => e.path === '/api/web-vitals'),
+      'wide event for /api/web-vitals',
+    )
+    expect(event.metric).toBe('LCP')
+    expect(event.status).toBe(200)
+  })
+
+  it('exposes the evlog logger on FastifyRequest.log to global guards', async () => {
+    const { drain } = createPipelineSpies()
+    app = await bootFastifyApp(EvlogModule.forRoot({ drain }), a => a.useGlobalGuards(new TagGuard()))
+
+    await app.inject({ method: 'GET', url: '/api/web-vitals' })
+    await waitForDrainCalls(drain)
+
+    const event = defined(
+      findEventViaDrain(drain, e => e.path === '/api/web-vitals'),
+      'wide event for /api/web-vitals',
+    )
+    expect(event.guard).toBe('tag')
+    expect(event.metric).toBe('LCP')
+  })
+
+  it('exposes the evlog logger on FastifyRequest.log with forRootAsync()', async () => {
+    const { drain } = createPipelineSpies()
+    app = await bootFastifyApp(EvlogModule.forRootAsync({ useFactory: () => ({ drain }) }))
+
+    await app.inject({ method: 'GET', url: '/api/web-vitals' })
+    await waitForDrainCalls(drain)
+
+    const event = defined(
+      findEventViaDrain(drain, e => e.path === '/api/web-vitals'),
+      'wide event for /api/web-vitals',
+    )
+    expect(event.metric).toBe('LCP')
   })
 })

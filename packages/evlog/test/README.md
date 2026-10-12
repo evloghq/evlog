@@ -29,7 +29,7 @@ verify the test really exercises the framework's runtime, not a substitute.
 | `frameworks/elysia.test.ts` | `app.handle(new Request(...))` | Real Elysia handler |
 | `shared/bun-import.test.ts` | Bun subprocesses importing Elysia and eve | Top-level await, `bun:test` lifecycle hooks, and a real Elysia request with `useLogger()` |
 | `frameworks/nestjs.test.ts` | Extracts middleware via `EvlogModule.configure()` and mounts on Express | Module API + the Connect-style middleware itself; **does NOT boot NestFactory** |
-| `frameworks/nestjs-real-runtime.test.ts` | `Test.createTestingModule(...)` + `app.init()` + supertest | **Real NestFactory boot, real DI, real exception filter pipeline** |
+| `frameworks/nestjs-real-runtime.test.ts` | `Test.createTestingModule(...)` + `app.init()` + supertest (Express) or `app.inject(...)` (`FastifyAdapter`) | **Real NestFactory boot, real DI, real exception filter pipeline, on both Nest HTTP platforms** |
 | `frameworks/react-router.test.ts` | Calls middleware directly with `new RouterContextProvider()` from `react-router` | Real react-router context provider (set/get semantics, throws on missing) |
 | `frameworks/sveltekit.test.ts` | Calls handle directly with `{ event, resolve }` | The SvelteKit-recommended testing contract; cannot run through `sequence()` because that needs the SvelteKit request-store runtime |
 | `next/handler.test.ts` | `await handler(new Request(...))` | Identical to how Next App Router invokes route handlers |

@@ -106,8 +106,10 @@ describe('evlog/nestjs', () => {
       })
       expect(result).toHaveProperty('module', EvlogModule)
       expect(result).toHaveProperty('global', true)
-      expect(result.providers).toBeDefined()
-      expect(defined(result.providers).length).toBe(1)
+      expect(result.providers).toMatchObject([
+        { provide: 'EVLOG_OPTIONS' },
+        { provide: 'EVLOG_FASTIFY_REQUEST_LOG' },
+      ])
     })
 
     it('forRootAsync() includes imports when provided', () => {
