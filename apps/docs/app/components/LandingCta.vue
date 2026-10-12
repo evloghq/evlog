@@ -18,6 +18,64 @@ function updateShipByTime() {
   shipByTime.value = `${h}:${m}`
 }
 
+// Every internal route here has a page under `content/`; keep them in sync when pages move.
+const footerColumns = [
+  {
+    label: 'Docs',
+    links: [
+      { label: 'Introduction', to: '/start/introduction' },
+      { label: 'Quick start', to: '/start/quick-start' },
+      { label: 'Configuration', to: '/reference/configuration' },
+      { label: 'CLI', to: '/cli/overview' },
+      { label: 'Performance', to: '/reference/performance' },
+      { label: 'Log cost', to: '/reference/cost' },
+    ],
+  },
+  {
+    label: 'Guides',
+    links: [
+      { label: 'Structured logging in Node.js', to: '/use-cases/structured-logging-nodejs' },
+      { label: 'Wide events', to: '/learn/wide-events' },
+      { label: 'Structured errors', to: '/learn/structured-errors' },
+      { label: 'Sampling', to: '/learn/sampling' },
+      { label: 'Client logging', to: '/use-cases/client-logging' },
+      { label: 'Enrichers', to: '/use-cases/enrichers' },
+    ],
+  },
+  {
+    label: 'Integrations',
+    links: [
+      { label: 'Nuxt', to: '/integrate/frameworks/nuxt' },
+      { label: 'Next.js', to: '/integrate/frameworks/nextjs' },
+      { label: 'TanStack Start', to: '/integrate/frameworks/tanstack-start' },
+      { label: 'Hono', to: '/integrate/frameworks/hono' },
+      { label: 'Express', to: '/integrate/frameworks/express' },
+      { label: 'Drains & adapters', to: '/integrate/adapters/overview' },
+    ],
+  },
+  {
+    label: 'Compare',
+    links: [
+      { label: 'vs Pino', to: '/compare/pino' },
+      { label: 'vs Winston', to: '/compare/winston' },
+      { label: 'vs LogTape', to: '/compare/logtape' },
+      { label: 'vs Consola', to: '/compare/consola' },
+      { label: 'OpenTelemetry', to: '/compare/opentelemetry' },
+      { label: 'All loggers', to: '/reference/vs-other-loggers' },
+    ],
+  },
+  {
+    label: 'Resources',
+    links: [
+      { label: 'GitHub', to: 'https://github.com/evloghq/evlog', external: true },
+      { label: 'Releases', to: 'https://github.com/evloghq/evlog/releases', external: true },
+      { label: 'npm', to: 'https://www.npmjs.com/package/evlog', external: true },
+      { label: 'llms.txt', to: '/llms.txt', external: true },
+      { label: 'Sitemap', to: '/sitemap.xml', external: true },
+    ],
+  },
+]
+
 onMounted(() => {
   updateShipByTime()
   clockInterval = setInterval(updateShipByTime, 1_000)
@@ -103,22 +161,46 @@ onBeforeUnmount(() => {
       </Motion>
     </div>
 
-    <div class="relative z-10 mt-auto pt-32 md:pt-44 pb-4">
-      <div class="max-w-4xl mx-auto px-6 flex items-center justify-between">
-        <div class="text-xs font-mono italic tracking-tight text-muted">
-          &copy; {{ new Date().getFullYear() }} - Made by
-          <a href="https://hrcd.fr/" target="_blank" rel="noopener noreferrer" class="hover:underline text-muted">HugoRCD</a>
-        </div>
-        <div class="flex items-center gap-3">
-          <a href="https://x.com/hugorcd" target="_blank" rel="noopener noreferrer" aria-label="X" class="text-muted hover:text-dimmed transition-colors">
-            <UIcon name="i-simple-icons-x" class="size-4" />
-          </a>
-          <a href="https://github.com/evloghq/evlog" target="_blank" rel="noopener noreferrer" aria-label="GitHub" class="text-muted hover:text-dimmed transition-colors">
-            <UIcon name="i-simple-icons-github" class="size-4" />
-          </a>
+    <footer class="relative z-10 mt-auto pt-32 md:pt-44 pb-6" aria-labelledby="landing-footer-title">
+      <h2 id="landing-footer-title" class="sr-only">
+        Site links
+      </h2>
+      <div class="max-w-5xl mx-auto px-6">
+        <nav aria-label="Footer" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-8 pb-8 border-b border-black/10">
+          <div v-for="column in footerColumns" :key="column.label">
+            <p class="text-xs font-mono uppercase tracking-wider text-black/60">
+              {{ column.label }}
+            </p>
+            <ul class="mt-3 space-y-2">
+              <li v-for="link in column.links" :key="link.label">
+                <NuxtLink
+                  :to="link.to"
+                  :target="link.external ? '_blank' : undefined"
+                  :rel="link.external ? 'noopener noreferrer' : undefined"
+                  class="text-sm font-mono tracking-tight text-black/70 hover:text-black focus-visible:text-black focus-visible:underline outline-none transition-colors"
+                >
+                  {{ link.label }}
+                </NuxtLink>
+              </li>
+            </ul>
+          </div>
+        </nav>
+        <div class="pt-4 flex items-center justify-between">
+          <div class="text-xs font-mono italic tracking-tight text-black/60">
+            &copy; {{ new Date().getFullYear() }} - Made by
+            <a href="https://hrcd.fr/" target="_blank" rel="noopener noreferrer" class="hover:underline text-black/60">HugoRCD</a>
+          </div>
+          <div class="flex items-center gap-3">
+            <a href="https://x.com/hugorcd" target="_blank" rel="noopener noreferrer" aria-label="X" class="text-black/60 hover:text-black transition-colors">
+              <UIcon name="i-simple-icons-x" class="size-4" />
+            </a>
+            <a href="https://github.com/evloghq/evlog" target="_blank" rel="noopener noreferrer" aria-label="GitHub" class="text-black/60 hover:text-black transition-colors">
+              <UIcon name="i-simple-icons-github" class="size-4" />
+            </a>
+          </div>
         </div>
       </div>
-    </div>
+    </footer>
   </section>
 </template>
 
