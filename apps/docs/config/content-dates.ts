@@ -41,31 +41,61 @@ const runGit: GitRunner = (args, cwd, options) => execFileSync('git', args, {
   timeout: options?.timeout,
 })
 
+type Env = Record<string, string | undefined>
+
 /**
- * Vercel builds from a shallow clone, and the ignore step's `git fetch --unshallow`
- * does not reach the build (it exits early when there is no previous SHA), so every
- * file used to collapse onto the build commit's date. Fetch the full history here,
- * best effort: a failed fetch keeps the shallow dates rather than failing the build.
+ * Vercel's clone has no `origin` remote, so a bare `git fetch --unshallow` always
+ * failed and every page kept a shallow-history date. Fetch from the public GitHub URL
+ * instead. Vercel sets the owner and slug; the defaults cover local and CI builds.
  */
-export function ensureFullHistory(cwd: string, git: GitRunner = runGit): void {
+export function historySource(env: Env = process.env): { url: string, ref: string } {
+  const owner = env.VERCEL_GIT_REPO_OWNER || 'evloghq'
+  const slug = env.VERCEL_GIT_REPO_SLUG || 'evlog'
+  return { url: `https://github.com/${owner}/${slug}.git`, ref: env.VERCEL_GIT_COMMIT_REF || 'HEAD' }
+}
+
+/**
+ * Fetches the full history when the clone is shallow. Best effort: a failed fetch keeps
+ * the shallow dates rather than failing the build. Returns the outcome for the build log.
+ */
+export function ensureFullHistory(cwd: string, git: GitRunner = runGit, env: Env = process.env): string {
   try {
-    if (git(['rev-parse', '--is-shallow-repository'], cwd).trim() !== 'true') return
-    git(['fetch', '--unshallow', '--filter=blob:none', '--quiet'], cwd, { timeout: UNSHALLOW_TIMEOUT_MS })
-  } catch {
-    // Offline or no remote: fall back to whatever history the clone has.
+    if (git(['rev-parse', '--is-shallow-repository'], cwd).trim() !== 'true') return 'full clone'
+  } catch (error) {
+    return `not a git checkout (${errorReason(error)})`
   }
+
+  const { url, ref } = historySource(env)
+  try {
+    git(['fetch', '--unshallow', '--filter=blob:none', '--quiet', url, ref], cwd, { timeout: UNSHALLOW_TIMEOUT_MS })
+    return `unshallowed from ${url}`
+  } catch (error) {
+    return `unshallow from ${url} failed (${errorReason(error)}), keeping shallow dates`
+  }
+}
+
+function errorReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.split('\n')[0]!.slice(0, 200)
 }
 
 /**
  * Sitemap `lastmod` is the recrawl signal Google acts on, and no content file carries
  * `modifiedAt` frontmatter, so the date comes from each file's last commit.
  */
-export function readContentCommitDates(cwd: string, git: GitRunner = runGit): Record<string, string> {
-  ensureFullHistory(cwd, git)
+export function readContentCommitDates(
+  cwd: string,
+  git: GitRunner = runGit,
+  { env = process.env, log = console.log }: { env?: Env, log?: (line: string) => void } = {},
+): Record<string, string> {
+  const history = ensureFullHistory(cwd, git, env)
   const gitLog = git(
     ['log', '--format=%cs', '--name-only', '--relative', '--diff-filter=d', '--', CONTENT_PREFIX],
     cwd,
   )
 
-  return parseCommitDates(gitLog)
+  const dates = parseCommitDates(gitLog)
+  const distinct = new Set(Object.values(dates)).size
+  log(`[content-dates] ${history}; ${Object.keys(dates).length} files, ${distinct} distinct dates`)
+  return dates
 }

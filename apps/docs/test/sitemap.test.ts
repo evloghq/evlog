@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { UNSHALLOW_TIMEOUT_MS, ensureFullHistory, readContentCommitDates } from '../config/content-dates'
+import { UNSHALLOW_TIMEOUT_MS, ensureFullHistory, historySource, readContentCommitDates } from '../config/content-dates'
 import { collectSitemapUrls } from '../server/utils/sitemap'
 
 describe('collectSitemapUrls', () => {
@@ -117,5 +117,39 @@ describe('per-file lastmod', () => {
     }
 
     expect(Object.keys(readContentCommitDates('/repo', git))).toHaveLength(2)
+  })
+
+  it('fetches from the public GitHub URL, since Vercel clones without a remote', () => {
+    const calls: string[][] = []
+    const env = { VERCEL_GIT_REPO_OWNER: 'acme', VERCEL_GIT_REPO_SLUG: 'docs', VERCEL_GIT_COMMIT_REF: 'main' }
+    ensureFullHistory('/repo', (args) => {
+      calls.push(args)
+      return 'true\n'
+    }, env)
+
+    expect(calls[1]).toEqual(['fetch', '--unshallow', '--filter=blob:none', '--quiet', 'https://github.com/acme/docs.git', 'main'])
+  })
+
+  it('defaults to evloghq/evlog outside Vercel', () => {
+    expect(historySource({})).toEqual({ url: 'https://github.com/evloghq/evlog.git', ref: 'HEAD' })
+  })
+
+  it('logs one line with the outcome and the number of distinct dates', () => {
+    const lines: string[] = []
+    const git = (args: string[]) => args[0] === 'log' ? log : 'true\n'
+    readContentCommitDates('/repo', git, { env: {}, log: line => lines.push(line) })
+
+    expect(lines).toEqual(['[content-dates] unshallowed from https://github.com/evloghq/evlog.git; 2 files, 2 distinct dates'])
+  })
+
+  it('logs the failure reason when the fetch fails', () => {
+    const lines: string[] = []
+    const git = (args: string[]) => {
+      if (args[0] === 'fetch') throw new Error('fatal: unable to access\nmore detail')
+      return args[0] === 'log' ? log : 'true\n'
+    }
+    readContentCommitDates('/repo', git, { env: {}, log: line => lines.push(line) })
+
+    expect(lines[0]).toBe('[content-dates] unshallow from https://github.com/evloghq/evlog.git failed (fatal: unable to access), keeping shallow dates; 2 files, 2 distinct dates')
   })
 })
