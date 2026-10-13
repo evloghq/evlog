@@ -18,7 +18,7 @@
     "evlog": "workspace:*",
     "mdc-syntax": "^1.0.0",
     "nostics": "^1.3.0",
-    "nuxt": "^4.4.2",
+    "nuxt": "^4.6.1",
     "zod": "^4.6.5"
   }
 }

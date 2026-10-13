@@ -6,7 +6,7 @@ const contentCommitDates = readContentCommitDates(import.meta.dirname)
 export default defineNuxtConfig({
   extends: ['docus'],
 
-  docus: {
+  agentDiscovery: {
     skills: {
       // The published skills live at the repo root (`skills/`) so a bare
       // `npx skills add evloghq/evlog` discovers them: the installer only scans
@@ -34,19 +34,17 @@ export default defineNuxtConfig({
     ...rawRedirects,
   },
 
-  // Docus defaults to allowing everything. Keep non-content routes (the MCP
-  // JSON-RPC endpoint, the Studio CMS editor) out of the crawl — they 405/302
-  // on a GET and only add noise to Search Console Coverage.
+  // Docus defaults to allowing everything. Keep the MCP JSON-RPC endpoint out
+  // of the crawl: it 405s on a GET and only adds noise to Search Console Coverage.
   // Top-level `disallow` merges into Docus's `*` group; declaring our own group
   // would append a second `User-agent: *` block instead of extending theirs.
   robots: {
-    disallow: ['/mcp', '/_studio'],
+    disallow: ['/mcp'],
   },
 
   modules: [
     '@nuxt/fonts',
     'motion-v/nuxt',
-    'nuxt-studio',
     '@vercel/analytics',
     '@vercel/speed-insights',
   ],
@@ -186,17 +184,6 @@ export default defineNuxtConfig({
     },
     security: {
       renderTimeout: 60_000,
-    },
-  },
-
-  studio: {
-    development: {
-      sync: false,
-    },
-    repository: {
-      owner: 'evloghq',
-      repo: 'evlog',
-      rootDir: 'apps/docs',
     },
   },
 

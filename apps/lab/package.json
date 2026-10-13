@@ -20,7 +20,7 @@
     "cuelume": "^0.2.4",
     "motion-v": "^2.5.1",
     "nostics": "^1.3.0",
-    "nuxt": "^4.4.4"
+    "nuxt": "^4.6.1"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

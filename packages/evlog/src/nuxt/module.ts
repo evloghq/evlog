@@ -10,6 +10,7 @@ import {
   createResolver,
   defineNuxtModule,
 } from '@nuxt/kit'
+import type { NuxtModule } from '@nuxt/schema'
 import type { Nitro, NitroConfig } from 'nitropack'
 import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from '../types'
 import type { DevTerminalInput } from '../shared/dev-terminal'
@@ -322,7 +323,7 @@ export interface ModuleOptions {
   retention?: string
 }
 
-export default defineNuxtModule<ModuleOptions>({
+const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtModule<ModuleOptions>({
   meta: {
     name,
     version,
@@ -551,3 +552,5 @@ export {}
     }
   },
 })
+
+export default evlogModule

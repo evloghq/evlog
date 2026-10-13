@@ -1,4 +1,4 @@
-import posthog, { type CaptureResult } from 'posthog-js'
+import type { CaptureResult } from 'posthog-js'
 
 /**
  * Uncaught errors from browser extensions surface through `capture_exceptions`
@@ -28,27 +28,34 @@ function isExtensionException(properties: CaptureResult['properties']): boolean 
  * heatmaps run without a consent step. Session replay itself waits for the
  * project's remote config, so it starts only when enabled in the PostHog
  * project settings.
+ *
+ * The SDK loads once the app is idle after hydration, so it stays out of the
+ * entry chunk every page downloads first.
  */
 export default defineNuxtPlugin(() => {
   const key = useRuntimeConfig().public.posthogKey
   if (!key) return
 
-  posthog.init(key, {
-    // Ingestion through the site's own origin; blockers drop the PostHog one.
-    api_host: '/_ph',
-    ui_host: 'https://eu.posthog.com',
-    // Carries `capture_pageview: 'history_change'`, so posthog-js already
-    // captures every SPA navigation. A router hook on top of it counts each
-    // page twice.
-    defaults: '2026-05-30',
-    // Off in the local dev server: a Vite module error or any other dev-only
-    // failure must not ship to the same error tracking project as production.
-    capture_exceptions: !import.meta.dev,
-    // Drop uncaught exceptions thrown by browser extensions on the page; they
-    // are not the site's code and only add noise to error tracking.
-    before_send: (event) => {
-      if (event?.event === '$exception' && isExtensionException(event.properties)) return null
-      return event
-    },
+  onNuxtReady(async () => {
+    const { default: posthog } = await import('posthog-js')
+    posthog.init(key, {
+      // Ingestion through the site's own origin; blockers drop the PostHog one.
+      api_host: '/_ph',
+      ui_host: 'https://eu.posthog.com',
+      // Carries `capture_pageview: 'history_change'`, so posthog-js already
+      // captures every SPA navigation. A router hook on top of it counts each
+      // page twice.
+      defaults: '2026-05-30',
+      // Off in the local dev server: a Vite module error or any other dev-only
+      // failure must not ship to the same error tracking project as production.
+      capture_exceptions: !import.meta.dev,
+      // Drop uncaught exceptions thrown by browser extensions on the page; they
+      // are not the site's code and only add noise to error tracking.
+      before_send: (event) => {
+        if (event?.event === '$exception' && isExtensionException(event.properties)) return null
+        return event
+      },
+    })
+    setPostHogClient(posthog)
   })
 })

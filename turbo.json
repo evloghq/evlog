@@ -25,9 +25,6 @@
       ],
       "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
       "env": [
-        "NUXT_STUDIO_SSO_URL",
-        "NUXT_STUDIO_SSO_CLIENT_ID",
-        "NUXT_STUDIO_SSO_CLIENT_SECRET",
         "NUXT_SITE_URL",
         "AI_GATEWAY_API_KEY",
         "AXIOM_TOKEN",
