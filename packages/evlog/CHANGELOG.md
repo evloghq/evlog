@@ -1,5 +1,15 @@
 # evlog
 
+## 2.32.0
+
+### Minor Changes
+
+- [#852](https://github.com/evloghq/evlog/pull/852) [`0f5970d`](https://github.com/evloghq/evlog/commit/0f5970d0e0c17cea249751819b5c521136b3e330) Thanks [@alex-holovach](https://github.com/alex-holovach)! - Add the Sazabi drain adapter (`evlog/sazabi`). It sends wide events to a Sazabi log stream over OTLP/HTTP, reusing the OTLP adapter's encoding. The stream's intake URL carries its key, so configuration is one variable: `SAZABI_INTAKE_URL` (optional `SAZABI_SERVICE_NAME`, falling back to `OTEL_SERVICE_NAME`). `createSazabiDrain()` also accepts `endpoint`, `serviceName`, `resourceAttributes`, `timeout` and `retries`, and an intake URL pasted with its `/v1/logs` suffix is used as is. Records use the compact OTLP shape by default (a one-line summary body and dotted attributes); `recordShape: 'json'` sends the serialized event instead. `sendToSazabi` and `sendBatchToSazabi` send events directly.
+
+### Patch Changes
+
+- [#843](https://github.com/evloghq/evlog/pull/843) [`f3541b1`](https://github.com/evloghq/evlog/commit/f3541b1573a9482abc16f09365ed7076c6bc4f62) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Fix `request.log` on `@nestjs/platform-fastify`. `EvlogModule` now sets the evlog logger on `FastifyRequest.log` before guards, interceptors, pipes, and controllers run, so `request.log.set(...)` no longer throws `TypeError: request.log.set is not a function`. `FastifyRequest.log` is typed as the evlog logger when `evlog/nestjs` is imported.
+
 ## 2.31.0
 
 ### Minor Changes
