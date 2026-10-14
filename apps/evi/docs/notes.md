@@ -70,7 +70,13 @@ DeepSeek V4 Flash advertises only `high` and `xhigh`. Setting `low` or `medium`
 produced erratic, non-monotonic reasoning volume rather than an error.
 
 **Session limits default to 40M input tokens and no output cap**, which puts one
-runaway session near $8 at current prices.
+runaway session near $8 at current prices. Evi keeps the 40M input cap and sets
+1M output. Output counts reasoning, and at each model step eve gives the
+children an even split of the parent's remaining window, so a 250k cap kept
+stopping a content pass that spent about 460k reasoning tokens across its
+reviewers: children got windows of about 14k and asked for approval in a
+thread nobody was watching. Approving grants a fresh window of the same size, so the
+cap sets the prompt cadence, not the total spend.
 
 **Eval runs leak sessions.** `t.succeeded()` accepts a healthy open session, so
 each run leaves a `sessionTimeoutWorkflow` queued against a dead dev server. Later
@@ -144,10 +150,14 @@ Reconstructing an observed turn from it matched eve's reported `costUsd` to four
 decimals, which is how the overspend was found.
 
 **`group_by: tag` on the report returns one row per tag value.** Scoped to
-`evi:env:*`, that is the env total row plus one `evi:surface:*` row per surface,
-each with cost, token and `request_count` columns, so the surface breakdown and
-the per-model mix (`group_by: model`) are two calls away. The cost-watchdog
-skill reads both; the surface set must be taken from the rows, never assumed.
+`evi:env:*`, that is the env total row plus one `evi:surface:*` row per surface
+and one `evi:agent:*` row per agent, each with cost, token and `request_count`
+columns, so the surface and agent breakdowns and the per-model mix
+(`group_by: model`) are two calls away. Rows of different dimensions overlap:
+sum within one prefix, never across. The cost-watchdog skill reads both; the
+surface and agent sets must be taken from the rows, never assumed. The report
+has no session dimension: `group_by` rejects `session_id`, and a `session_id`
+filter is silently ignored.
 
 ## github-tools
 

@@ -7,7 +7,7 @@ export default defineAgent({
   reasoning: 'xhigh',
   tool: false,
   modelOptions: {
-    providerOptions: { gateway: { ...gatewayRouting(), tags: sessionTags('simplification') } },
+    providerOptions: { gateway: { ...gatewayRouting(), tags: sessionTags('simplification', 'communication_reviewer') } },
   },
   description: 'Inspect Evi\'s bounded communication cohort: instructions, skills, evals, issue replies, review comments, and PR bodies supplied by the parent. Finds ambiguity, repeated conclusions, internal detail without user action, overlong commentary, and unsupported polish without rewriting artifacts.',
 })

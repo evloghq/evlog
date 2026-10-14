@@ -11,9 +11,9 @@ The core question: for every surface, is the model it runs still a sensible buy?
 
 ## What the report gives you
 
-`ai_gateway__report` with `groupBy: 'tag'` returns one row per tag value scoped to the current environment: the `evi:env:*` row (the total) plus one `evi:surface:*` row per surface. Each row carries `total_cost`, `market_cost`, `input_tokens`, `output_tokens`, `cached_input_tokens`, `reasoning_tokens` and `request_count`. `groupBy: 'model'` returns one row per model.
+`ai_gateway__report` with `groupBy: 'tag'` returns one row per tag value scoped to the current environment: the `evi:env:*` row (the total), one `evi:surface:*` row per surface, and one `evi:agent:*` row per agent (`evi` for the root, the directory name for each subagent). Each row carries `total_cost`, `market_cost`, `input_tokens`, `output_tokens`, `cached_input_tokens`, `reasoning_tokens` and `request_count`. `groupBy: 'model'` returns one row per model.
 
-The surface list is whatever `evi:surface:*` rows the report actually returns. Do not assume the set; read it from the data.
+The surface and agent lists are whatever `evi:surface:*` and `evi:agent:*` rows the report actually returns. Do not assume either set; read them from the data. The dimensions overlap, so sum within one prefix and never across: the `evi:surface:*` rows add up to the total, and so do the `evi:agent:*` rows. Weeks before the agent tag existed have no `evi:agent:*` rows; say so instead of reporting a drift.
 
 ## Resources
 
@@ -38,6 +38,7 @@ Run Monday morning. Cover the last 7 full days ending yesterday, and pull the 7 
 - `ai_gateway__report` for both windows, `groupBy: 'tag'`. That is the spend and token picture per surface and the total.
 - `ai_gateway__report` for both windows, `groupBy: 'model'`. The per-model mix (today this is usually one model everywhere).
 - For any surface worth a closer look, `ai_gateway__report` scoped to that surface (`tags: ['evi:env:<env>', 'evi:surface:<name>'])` with `groupBy: 'model'` to see what it runs and at what cost.
+- The `evi:agent:*` rows show which subagent carries a surface's spend. A reviewer whose share keeps growing is a prompt or scope question before it is a model question.
 
 Use the eval environment tag to keep benchmark and eval traffic out of the production read when the report lets you.
 

@@ -9,10 +9,19 @@ What Evi records today, what it cannot, and the gaps worth closing upstream.
 `ai.{calls,steps,inputTokens,outputTokens,cacheReadTokens,costUsd,model,tools[],finishReason}`,
 `channel.kind`, `status`, `durationMs`, plus `service` and `environment`.
 
-That is enough to answer, from the log alone: what a turn cost, which tools it
-called and whether each succeeded, how much of the context was cache-served, and
-which surface it came from. Every cost claim in this project was measured from
-these events rather than estimated.
+That is enough to answer, from the log alone: which tools a turn called and
+whether each succeeded, how much of the context was cache-served, and which
+surface it came from. What a turn cost only lands when the gateway bills the
+call: on BYOK traffic `ai.costUsd` is absent (see the proposal below), and the
+spend report is the only cost source.
+
+The spend report groups by gateway tag, one dimension per tag:
+`evi:env:*`, `evi:surface:*` (the channel, or `content`/`simplification` for
+subagents) and `evi:agent:*` (`evi` for the root, the directory name for each
+subagent). It cannot group or filter by session: eve stamps the root session id
+on every call as `providerOptions.gateway.sessionId`, but `/v1/report` ignores a
+`session_id` parameter, so the cost of one run comes from the turn events or
+not at all.
 
 Tool executes enrich the same event with their outcome, in the pattern
 `tools/git.ts` set: one namespace per domain, holding counts, reason codes,
@@ -132,6 +141,17 @@ rather than written blank: an empty attribute reads as a caller whose id happens
 to be empty.
 
 ## Proposals
+
+### eve + evlog/eve: per-turn cost on BYOK traffic
+
+eve's `extractGatewayCostUsd` reads `providerMetadata.gateway.cost`, which is
+what the gateway billed. On BYOK that is the gateway fee alone, so a
+production turn of 1.2M input tokens recorded no `ai.costUsd` while the report
+put the day at $3.88 `market_cost` against $0.06 `total_cost`. The fallback,
+evlog's `cost` pricing map, prices every input token at the uncached rate and
+has no tiers, so on a cache-heavy agent it overstates by an order of magnitude.
+Either eve exposing the market cost per step, or evlog pricing
+`cacheReadTokens` and tiers, would make the turn event a cost source again.
 
 ### eve: preserve a thrown error's `code` on tool results and `turn.failed`
 

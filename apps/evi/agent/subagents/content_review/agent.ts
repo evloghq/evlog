@@ -7,7 +7,7 @@ export default defineAgent({
   /** Judging a candidate against its twin is the hardest call in the pass. */
   reasoning: 'xhigh',
   modelOptions: {
-    providerOptions: { gateway: { ...gatewayRouting(), tags: sessionTags('content') } },
+    providerOptions: { gateway: { ...gatewayRouting(), tags: sessionTags('content', 'content_review') } },
   },
   description:
     'Requires the content_snapshot result; calls content_load to verify the page digest and source revision in the shared parent workspace. '

@@ -60,10 +60,12 @@ export function gatewayRouting(unattended = false) {
 
 /**
  * Tags stamped on every gateway request. One tag per dimension, not a compound
- * string: the spend report groups by a single dimension at a time.
+ * string: the spend report groups by a single dimension at a time. `agent` is
+ * the root (`evi`) or the subagent directory name, so a reviewer that burns the
+ * budget shows up as its own row instead of hiding inside its surface.
  */
-export function sessionTags(kind?: string): string[] {
-  return [`evi:env:${environment()}`, `evi:surface:${channelName(kind)}`]
+export function sessionTags(kind: string | undefined, agent: string): string[] {
+  return [`evi:env:${environment()}`, `evi:surface:${channelName(kind)}`, `evi:agent:${agent}`]
 }
 
 /** The Evi attribution tag for the environment this agent runs in. */

@@ -19,7 +19,7 @@ function modelOptions(ctx: ModelContext) {
     providerOptions: {
       gateway: {
         ...gatewayRouting(isScheduleAppAuth(ctx.session.auth.current)),
-        tags: sessionTags(ctx.channel.kind),
+        tags: sessionTags(ctx.channel.kind, 'evi'),
       },
     },
   }
@@ -39,15 +39,18 @@ export default defineAgent({
     },
   }),
   reasoning: 'high',
-  /** Bounds a runaway session, not cost: one real thread runs a few million in. */
   /**
    * A million-token window means eve's default (90%) never compacts here, so a
    * long turn re-sends its whole history on every step. Compacting past 100k
    * keeps the prefill bounded while a normal turn stays untouched.
    */
   compaction: { thresholdPercent: 0.1 },
+  /**
+   * Bounds a runaway session, not cost: one real thread runs a few million in.
+   * Output includes reasoning, and a run that fans out to reviewers spends ~500k.
+   */
   limits: {
     maxInputTokensPerSession: 40_000_000,
-    maxOutputTokensPerSession: 250_000,
+    maxOutputTokensPerSession: 1_000_000,
   },
 })

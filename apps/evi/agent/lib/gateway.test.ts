@@ -1,3 +1,5 @@
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getVercelOidcToken = vi.hoisted(() => vi.fn<() => Promise<string>>())
@@ -60,19 +62,31 @@ describe('gatewayRouting', () => {
 })
 
 describe('sessionTags', () => {
-  it('tags one dimension per tag: environment and surface', async () => {
+  it('tags one dimension per tag: environment, surface and agent', async () => {
     const { sessionTags } = await loadGateway({ VERCEL_ENV: 'production' })
-    expect(sessionTags('channel:github')).toEqual(['evi:env:production', 'evi:surface:github'])
+    expect(sessionTags('channel:github', 'evi')).toEqual(['evi:env:production', 'evi:surface:github', 'evi:agent:evi'])
   })
 
   it('labels eval runs from EVE_RUN_MODE ahead of VERCEL_ENV', async () => {
     const { sessionTags } = await loadGateway({ EVE_RUN_MODE: 'eval', VERCEL_ENV: 'production' })
-    expect(sessionTags('http')).toEqual(['evi:env:eval', 'evi:surface:http'])
+    expect(sessionTags('http', 'evi')).toEqual(['evi:env:eval', 'evi:surface:http', 'evi:agent:evi'])
   })
 
   it('falls back to local environment and unknown surface', async () => {
     const { sessionTags } = await loadGateway({})
-    expect(sessionTags()).toEqual(['evi:env:local', 'evi:surface:unknown'])
+    expect(sessionTags(undefined, 'evi')).toEqual(['evi:env:local', 'evi:surface:unknown', 'evi:agent:evi'])
+  })
+
+  it('tags every subagent with its own directory name', async () => {
+    vi.stubEnv('VERCEL_ENV', 'production')
+    const dir = join(import.meta.dirname, '..', 'subagents')
+    const names = readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
+    expect(names.length).toBeGreaterThan(0)
+    for (const name of names) {
+      vi.resetModules()
+      const { default: agent } = await import(join(dir, name, 'agent.ts'))
+      expect(agent.modelOptions.providerOptions.gateway.tags, name).toContain(`evi:agent:${name}`)
+    }
   })
 })
 
