@@ -61,6 +61,11 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is the engines floor; 24 is the .node-version pin
+        node-version: ['22', '24']
     permissions:
       contents: read
       id-token: write # remote cache OIDC
@@ -79,6 +84,8 @@ jobs:
 
           - name: Set up pnpm and Node
             uses: ./.github/actions/setup
+            with:
+              node-version: ${{ matrix.node-version }}
 
       - name: Set up Bun for import regressions
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2

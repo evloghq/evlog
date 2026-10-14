@@ -37,7 +37,7 @@
   "type": "module",
   "sideEffects": false,
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "bin": {
     "evlog": "./bin/evlog.mjs"
