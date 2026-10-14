@@ -69,6 +69,7 @@ export default defineConfig({
     'better-auth/index': 'src/better-auth/index.ts',
   },
   format: 'esm',
+  sourcemap: false,
   dts: true,
   clean: true,
   fixedExtension: true,

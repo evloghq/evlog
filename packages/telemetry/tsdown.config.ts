@@ -6,6 +6,7 @@ export default defineConfig({
     ingest: 'src/ingest.ts',
   },
   format: 'esm',
+  sourcemap: false,
   dts: true,
   clean: true,
   fixedExtension: true,
