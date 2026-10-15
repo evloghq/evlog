@@ -442,6 +442,35 @@ describe('built-in smart masking', () => {
     expect(event.safe).toBe('no jwt here')
   })
 
+  it('keeps the character before a masked email or JWT', () => {
+    const token = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiIxIn0', 'X'.repeat(43)].join('.')
+    let event: Record<string, unknown> = {
+      to: 'to=<alice@example.com>',
+      query: `?a=1&t=${token}`,
+      list: 'alice@example.com,bob@example.org',
+    }
+    event = redactEvent(event, defined(resolveRedactConfig({ builtins: ['email', 'jwt'] }), 'redact config'))
+    expect(event.to).toBe('to=<a***@***.com>')
+    expect(event.query).toBe('?a=1&t=eyJ***.***')
+    expect(event.list).toBe('a***@***.com,b***@***.org')
+  })
+
+  it('masks long attacker-controlled strings in linear time', () => {
+    const config = defined(resolveRedactConfig(true), 'redact config')
+    const inputs = [
+      'A'.repeat(65_536),
+      `a@${'a.'.repeat(32_768)}`,
+      'eyJ-'.repeat(16_384),
+      'eyJ.'.repeat(16_384),
+      `${'x'.repeat(64)}@${`${'a'.repeat(63)}.`.repeat(1_024)}`,
+    ]
+    for (const input of inputs) {
+      const start = performance.now()
+      redactEvent({ input }, config)
+      expect(performance.now() - start, input.slice(0, 16)).toBeLessThan(100)
+    }
+  })
+
   it('masks Bearer tokens keeping prefix', () => {
     // Stripe-shaped key built from fragments to avoid secret-scanner alarms.
     const fakeStripeKey = ['sk', 'live', 'abc123def456ghi789'].join('_')

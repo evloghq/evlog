@@ -3,7 +3,7 @@ import { globToRegExp } from './utils'
 
 const DEFAULT_REPLACEMENT = '[REDACTED]'
 
-export type Masker = [RegExp, (match: string) => string]
+export type Masker = [RegExp, (match: string, ...groups: string[]) => string]
 
 /** Compiled matchers for {@link RedactConfig.paths} glob patterns. */
 export interface RedactPathMatchers {
@@ -232,6 +232,10 @@ export function redactValueByPaths(
 /**
  * Built-in PII detection patterns with smart masking.
  * Each builtin preserves just enough signal for debugging while scrubbing PII.
+ *
+ * They run on every string of every wide event, so each must stay linear in the input length.
+ * `email` and `jwt` match from the start of a token by capturing the character before it:
+ * lookbehind would do the same, but Safari before 16.4 cannot parse it.
  */
 export const builtinPatterns = {
   /** Credit card numbers → ****1111 (PCI DSS: last 4 allowed) */
@@ -242,12 +246,10 @@ export const builtinPatterns = {
   /** Email addresses → a***@***.com */
   email: {
     // Letters-only TLD, so pnpm store segments like `name@1.2.3` are not treated as addresses.
-    pattern: /[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}\b/g,
-    mask: (m: string) => {
-      const at = m.indexOf('@')
-      if (at < 1) return '***@***'
-      const tld = m.slice(m.lastIndexOf('.'))
-      return `${m[0]}***@***${tld}`
+    pattern: /(^|[^\w.+-])([\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}\b)/g,
+    mask: (_match: string, before: string, address: string) => {
+      const tld = address.slice(address.lastIndexOf('.'))
+      return `${before}${address[0]}***@***${tld}`
     },
   },
   /** IPv4 addresses → ***.***.***.100 (last octet only) */
@@ -282,8 +284,8 @@ export const builtinPatterns = {
   },
   /** JWT tokens → eyJ***.*** */
   jwt: {
-    pattern: /\beyJ[\w-]*\.[\w-]*\.[\w-]*\b/g,
-    mask: () => 'eyJ***.***',
+    pattern: /(^|[^\w-])eyJ[\w-]*\.[\w-]*\.[\w-]*\b/g,
+    mask: (_match: string, before: string) => `${before}eyJ***.***`,
   },
   /** Bearer tokens → Bearer *** */
   bearer: {
