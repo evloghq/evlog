@@ -5,6 +5,7 @@ import type { HttpDrainRequest } from '../shared/drain'
 import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { parseStackFrames } from '../shared/pretty-error'
 import { OTEL_SEVERITY_NUMBER } from '../shared/severity'
+import { EVLOG_VERSION } from '../shared/http'
 
 export interface SentryConfig {
   /** Sentry DSN */
@@ -38,6 +39,8 @@ export interface SentryAttributeValue {
 export interface SentryLog {
   timestamp: number
   trace_id: string
+  /** The active span, when the wide event has one */
+  span_id?: string
   level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
   body: string
   severity_number: number
@@ -140,6 +143,9 @@ function nonEmptyString(value: unknown): string | undefined {
 
 // Generated ids are cached per event so a retried batch resends the same ids and Sentry drops the duplicate issue.
 const tracedEvents = new WeakMap<WideEvent, WideEvent>()
+/** SDK identity Sentry expects on every log (`sentry.sdk.*` attributes) and on envelope headers. */
+const SENTRY_SDK = { name: 'evlog', version: EVLOG_VERSION } as const
+
 const issueIds = new WeakMap<WideEvent, { eventId: string, spanId: string }>()
 
 function cached<T>(cache: WeakMap<WideEvent, T>, event: WideEvent, create: () => T): T {
@@ -252,9 +258,15 @@ export function toSentryLog(event: WideEvent, config: SentryConfig): SentryLog {
     }
   }
 
+  attributes['sentry.sdk.name'] = { value: SENTRY_SDK.name, type: 'string' }
+  attributes['sentry.sdk.version'] = { value: SENTRY_SDK.version, type: 'string' }
+
+  const spanId = nonEmptyString(event.spanId)
+
   return {
     timestamp: new Date(timestamp).getTime() / 1000,
     trace_id: traceId,
+    ...(spanId ? { span_id: spanId } : {}),
     level: level as SentryLog['level'],
     body,
     severity_number: OTEL_SEVERITY_NUMBER[level] ?? 9,
@@ -315,13 +327,14 @@ export function toSentryErrorEvent(event: WideEvent, config: SentryConfig): Sent
  * Build the Sentry Envelope body for a list of logs.
  *
  * Envelope format (line-delimited):
- * - Line 1: Envelope headers (dsn, sent_at)
+ * - Line 1: Envelope headers (dsn, sdk, sent_at)
  * - Line 2: Item header (type: log, item_count, content_type)
  * - Line 3: Item payload ({"items": [...]})
  */
 function buildEnvelopeBody(logs: SentryLog[], dsn: string): string {
   const envelopeHeader = JSON.stringify({
     dsn,
+    sdk: SENTRY_SDK,
     sent_at: new Date().toISOString(),
   })
 
@@ -402,7 +415,7 @@ const SENTRY_MAX_LOGS_PER_ENVELOPE = 100
 
 /** An envelope holds at most one error event, so each issue gets its own request. */
 function encodeSentryErrorEventRequest(event: SentryErrorEvent, config: SentryConfig): HttpDrainRequest {
-  const envelopeHeader = JSON.stringify({ event_id: event.event_id, dsn: config.dsn, sent_at: new Date().toISOString() })
+  const envelopeHeader = JSON.stringify({ event_id: event.event_id, dsn: config.dsn, sdk: SENTRY_SDK, sent_at: new Date().toISOString() })
   const itemHeader = JSON.stringify({ type: 'event', content_type: 'application/json' })
   return getSentryEnvelopeRequest(config, `${envelopeHeader}\n${itemHeader}\n${JSON.stringify(event)}\n`)
 }
