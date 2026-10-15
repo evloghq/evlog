@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { defined } from '../helpers/defined'
+import { EVLOG_VERSION } from '../../src/shared/http'
 import { sendBatchToSentry, sendToSentry, toSentryErrorEvent, toSentryLog, createSentryDrain } from '../../src/adapters/sentry'
 
 describe('sentry adapter', () => {
@@ -146,6 +147,25 @@ describe('sentry adapter', () => {
       expect(result.attributes?.traceId).toBeUndefined()
       expect(result.attributes?.spanId).toBeUndefined()
     })
+
+    it('attaches the SDK identity to every log', () => {
+      const result = toSentryLog(createTestEvent(), { dsn: 'https://public@o0.ingest.sentry.io/123' })
+
+      expect(result.attributes?.['sentry.sdk.name']).toEqual({ value: 'evlog', type: 'string' })
+      expect(result.attributes?.['sentry.sdk.version']).toEqual({ value: EVLOG_VERSION, type: 'string' })
+    })
+
+    it('sets span_id from the event span', () => {
+      const result = toSentryLog(createTestEvent({ traceId: 'a'.repeat(32), spanId: 'b'.repeat(16) }), { dsn: 'https://public@o0.ingest.sentry.io/123' })
+
+      expect(result.span_id).toBe('b'.repeat(16))
+    })
+
+    it('omits span_id when the event has no span', () => {
+      const result = toSentryLog(createTestEvent(), { dsn: 'https://public@o0.ingest.sentry.io/123' })
+
+      expect(result).not.toHaveProperty('span_id')
+    })
   })
 
   describe('sendToSentry', () => {
@@ -226,6 +246,16 @@ describe('sentry adapter', () => {
       expect(log.body).toBe('boom')
       expect(log.trace_id).toMatch(/^[a-f0-9]{32}$/)
       expect(log.timestamp).toBeGreaterThan(0)
+    })
+
+    it('identifies the SDK in the envelope header', async () => {
+      await sendToSentry(createTestEvent({ level: 'info' }), {
+        dsn: 'https://public@o123.ingest.sentry.io/456',
+      })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      const envelopeHeader = JSON.parse(String(options.body).split('\n')[0] ?? '')
+      expect(envelopeHeader.sdk).toEqual({ name: 'evlog', version: EVLOG_VERSION })
     })
 
     it('throws error on non-OK response', async () => {
@@ -325,6 +355,13 @@ describe('sentry adapter', () => {
         return { header: JSON.parse(header ?? ''), item: JSON.parse(item ?? ''), payload: JSON.parse(payload ?? '') }
       })
     }
+
+    it('identifies the SDK in the error event envelope header', async () => {
+      await sendBatchToSentry([createTestEvent({ level: 'error', traceId, error: { name: 'Error', message: 'boom' } })], { dsn, issues: true })
+
+      const issue = envelopes().find(e => e.item.type === 'event')
+      expect(defined(issue, 'issue envelope').header.sdk).toEqual({ name: 'evlog', version: EVLOG_VERSION })
+    })
 
     it('maps an error wide event to a Sentry error event in its trace', () => {
       const result = toSentryErrorEvent(createTestEvent({
