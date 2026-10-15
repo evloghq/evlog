@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import {
@@ -13,6 +14,10 @@ import {
 } from '../../src/adapters/datadog'
 
 describe('datadog adapter', () => {
+  /** Request bodies are gzipped: inflate before parsing. */
+  const readBody = (options: RequestInit) =>
+    JSON.parse(gunzipSync(options.body as Uint8Array).toString('utf8'))
+
   let fetchSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -301,7 +306,7 @@ describe('datadog adapter', () => {
       })
 
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
-      const body = JSON.parse(options.body as string)
+      const body = readBody(options)
       expect(body).toHaveLength(1)
       expect(body[0].service).toBe('test-service')
       expect(body[0].ddsource).toBe('evlog')
@@ -330,7 +335,7 @@ describe('datadog adapter', () => {
 
       const sizes = fetchSpy.mock.calls.map((call) => {
         const [, options] = call as [string, RequestInit]
-        return JSON.parse(options.body as string).length
+        return readBody(options).length
       })
       expect(sizes).toEqual([1000, 500])
     })
@@ -345,8 +350,17 @@ describe('datadog adapter', () => {
 
       expect(fetchSpy).toHaveBeenCalledTimes(1)
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
-      const body = JSON.parse(options.body as string)
+      const body = readBody(options)
       expect(body).toHaveLength(2)
+    })
+
+    it('gzips the body and sets Content-Encoding: gzip', async () => {
+      await sendBatchToDatadog([createTestEvent({ requestId: 'r1' })], { apiKey: 'test-key' })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      expect(options.headers).toEqual(expect.objectContaining({ 'Content-Encoding': 'gzip' }))
+      const body = JSON.parse(gunzipSync(options.body as Uint8Array).toString('utf8'))
+      expect(body).toHaveLength(1)
     })
 
     it('skips fetch when events array is empty', async () => {

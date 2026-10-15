@@ -203,6 +203,7 @@ function encodeDatadogRequest(events: WideEvent[], config: DatadogConfig): HttpD
       'DD-API-KEY': config.apiKey,
     },
     body: JSON.stringify(events.map(toDatadogLog)),
+    compression: 'gzip',
   }
 }
 
