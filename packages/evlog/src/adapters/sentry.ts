@@ -397,6 +397,9 @@ function encodeSentryRequest(events: WideEvent[], config: SentryConfig): HttpDra
   return getSentryEnvelopeRequest(config, buildEnvelopeBody(logs, config.dsn))
 }
 
+/** Sentry's log protocol caps a log envelope at 100 items: larger batches are split into several envelopes. */
+const SENTRY_MAX_LOGS_PER_ENVELOPE = 100
+
 /** An envelope holds at most one error event, so each issue gets its own request. */
 function encodeSentryErrorEventRequest(event: SentryErrorEvent, config: SentryConfig): HttpDrainRequest {
   const envelopeHeader = JSON.stringify({ event_id: event.event_id, dsn: config.dsn, sent_at: new Date().toISOString() })
@@ -436,7 +439,9 @@ export async function sendBatchToSentry(events: WideEvent[], config: SentryConfi
   if (events.length === 0) return
   const traced = events.map(withTraceId)
   const options = { label: 'Sentry', source: 'sentry', timeout: config.timeout, retries: config.retries }
-  await sendEncodedDrainRequest(encodeSentryRequest(traced, config), options)
+  for (let start = 0; start < traced.length; start += SENTRY_MAX_LOGS_PER_ENVELOPE) {
+    await sendEncodedDrainRequest(encodeSentryRequest(traced.slice(start, start + SENTRY_MAX_LOGS_PER_ENVELOPE), config), options)
+  }
   if (!config.issues) return
 
   const issues = traced.filter(event => (event.level === 'error' || event.level === 'fatal') && !isClientError(event))

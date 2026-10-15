@@ -265,6 +265,21 @@ describe('sentry adapter', () => {
       expect(itemPayload.items).toHaveLength(3)
     })
 
+    it('splits more than 100 logs into several envelopes', async () => {
+      const events = Array.from({ length: 250 }, (_, index) => createTestEvent({ requestId: String(index) }))
+
+      await sendBatchToSentry(events, {
+        dsn: 'https://public@o123.ingest.sentry.io/456',
+      })
+
+      const counts = fetchSpy.mock.calls.map((call) => {
+        const [, options] = call as [string, RequestInit]
+        const lines = (options.body as string).split('\n').filter(line => line.length > 0)
+        return JSON.parse(lines[1]).item_count
+      })
+      expect(counts).toEqual([100, 100, 50])
+    })
+
     it('does not send request for empty events array', async () => {
       await sendBatchToSentry([], {
         dsn: 'https://public@o123.ingest.sentry.io/456',
