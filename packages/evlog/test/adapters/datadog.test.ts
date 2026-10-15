@@ -323,6 +323,18 @@ describe('datadog adapter', () => {
   })
 
   describe('sendBatchToDatadog', () => {
+    it('splits more than 1000 events into several requests', async () => {
+      const events = Array.from({ length: 1500 }, (_, index) => createTestEvent({ requestId: String(index) }))
+
+      await sendBatchToDatadog(events, { apiKey: 'test-key' })
+
+      const sizes = fetchSpy.mock.calls.map((call) => {
+        const [, options] = call as [string, RequestInit]
+        return JSON.parse(options.body as string).length
+      })
+      expect(sizes).toEqual([1000, 500])
+    })
+
     it('sends multiple events in one request', async () => {
       const events = [
         createTestEvent({ requestId: '1' }),

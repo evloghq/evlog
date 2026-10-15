@@ -2,7 +2,7 @@ import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
-import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { formatEventSummary } from '../shared/event'
 
 export interface DatadogConfig {
@@ -172,7 +172,7 @@ export function resolveDatadogIntakeUrl(config: Pick<DatadogConfig, 'site' | 'in
  * ```
  */
 export function createDatadogDrain(overrides?: Partial<DatadogConfig>) {
-  return defineHttpDrain<DatadogConfig>({
+  return defineDrain<DatadogConfig>({
     name: 'datadog',
     resolve: async () => {
       const config = await resolveAdapterConfig<DatadogConfig>('datadog', DATADOG_FIELDS, overrides)
@@ -182,10 +182,14 @@ export function createDatadogDrain(overrides?: Partial<DatadogConfig>) {
       }
       return config as DatadogConfig
     },
-    label: 'Datadog',
-    encode: encodeDatadogRequest,
+    send: sendBatchToDatadog,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToDatadog(events, { ...config, retries: config.retries ?? 0 }),
   })
 }
+
+/** Datadog's Logs intake accepts at most 1000 entries per request: larger batches are split. */
+const DATADOG_MAX_ENTRIES_PER_REQUEST = 1000
 
 /**
  * Encode a batch of wide events into the Datadog Logs intake request. Shared by
@@ -210,14 +214,12 @@ export async function sendToDatadog(event: WideEvent, config: DatadogConfig): Pr
 }
 
 /**
- * Send a batch of wide events to Datadog in one request.
+ * Send a batch of wide events to Datadog, one request per 1000 events.
  */
 export async function sendBatchToDatadog(events: WideEvent[], config: DatadogConfig): Promise<void> {
   if (events.length === 0) return
-  await sendEncodedDrainRequest(encodeDatadogRequest(events, config), {
-    label: 'Datadog',
-    source: 'datadog',
-    timeout: config.timeout,
-    retries: config.retries,
-  })
+  const options = { label: 'Datadog', source: 'datadog', timeout: config.timeout, retries: config.retries }
+  for (let start = 0; start < events.length; start += DATADOG_MAX_ENTRIES_PER_REQUEST) {
+    await sendEncodedDrainRequest(encodeDatadogRequest(events.slice(start, start + DATADOG_MAX_ENTRIES_PER_REQUEST), config), options)
+  }
 }
