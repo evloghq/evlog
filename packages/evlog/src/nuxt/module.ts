@@ -20,6 +20,7 @@ import { findEvlogConfigFile, registerEvlogConfigPlugin } from '../shared/config
 import { createStripPlugin } from '../vite/strip'
 import { createSourceLocationPlugin } from '../vite/source-location'
 import { name, version } from '../../package.json'
+import { warnDeprecated } from '../shared/deprecate'
 
 interface ModuleAxiomBaseConfig {
   /** Axiom dataset name */
@@ -27,7 +28,7 @@ interface ModuleAxiomBaseConfig {
   /** Axiom API token (evlog field `apiKey`) */
   apiKey?: string
   /**
-   * @deprecated Renamed to `apiKey`. Will be removed in the next major version.
+   * @deprecated Removed in evlog v3. Use `apiKey` instead.
    */
   token?: string
   /** Organization ID (required for Personal Access Tokens) */
@@ -333,6 +334,10 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
   defaults: {},
   setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
+
+    if (options.axiom?.token !== undefined) {
+      warnDeprecated('nuxt:axiom.token', '[evlog/nuxt] evlog.axiom.token is deprecated and removed in v3, use evlog.axiom.apiKey.')
+    }
 
     const transportEnabled = options.transport?.enabled ?? false
     const transportEndpoint = options.transport?.endpoint ?? '/api/_evlog/ingest'

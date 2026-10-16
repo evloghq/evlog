@@ -1,4 +1,5 @@
 import { getNitroRuntimeConfigRecord } from './nitroConfigBridge'
+import { warnDeprecated } from './deprecate'
 
 /** Read the full Nitro `useRuntimeConfig()` record (or `undefined` outside Nitro). */
 export function getRuntimeConfig(): Promise<Record<string, any> | undefined> {
@@ -62,8 +63,6 @@ export function formatPublicEnvKeys(...envLists: (string[] | undefined)[]): stri
     .join('/')
 }
 
-const warnedDeprecatedAliases = new Set<string>()
-
 /**
  * Copy a deprecated config field onto its replacement when the replacement is
  * unset, warning once per adapter/field pair.
@@ -80,11 +79,10 @@ export function applyDeprecatedAlias<T extends object>(
   if (record[opts.to] === undefined || record[opts.to] === null) {
     const fromValue = record[opts.from]
     if (fromValue !== undefined && fromValue !== null) {
-      const warnKey = `${opts.adapter}:${opts.from}`
-      if (!warnedDeprecatedAliases.has(warnKey)) {
-        warnedDeprecatedAliases.add(warnKey)
-        console.warn(`[evlog/${opts.adapter}] \`${opts.from}\` is deprecated, use \`${opts.to}\` instead.`)
-      }
+      warnDeprecated(
+        `${opts.adapter}:${opts.from}`,
+        `[evlog/${opts.adapter}] '${opts.from}' is deprecated and removed in v3, use '${opts.to}' instead.`,
+      )
       record[opts.to] = fromValue
     }
   }

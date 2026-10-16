@@ -100,7 +100,7 @@ export interface NitroPluginEvlogConfig extends DevTerminalResolveInput {
   redact?: boolean | RedactConfig | Record<string, unknown>
 }
 
-/** @deprecated Renamed to {@link NitroPluginEvlogConfig}. Kept for backward compat. */
+/** @deprecated Removed in evlog v3. Use {@link NitroPluginEvlogConfig} instead. */
 export type EvlogConfig = NitroPluginEvlogConfig
 
 /**

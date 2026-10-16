@@ -58,6 +58,11 @@ interface EvlogRegistry {
   config: EvlogGlobalConfig
   /** Request-scoped `AsyncLocalStorage` instances, keyed by integration id. */
   storages: Map<string, AsyncLocalStorageLike<unknown>>
+  /**
+   * Deprecation ids already reported in this process (see `shared/deprecate.ts`).
+   * Created lazily: an older copy of evlog that built this registry does not set it.
+   */
+  warnedDeprecations?: Set<string>
 }
 
 type RegistryHost = typeof globalThis & {
@@ -133,6 +138,18 @@ export function getSharedStorage<T>(
 }
 
 /**
+ * Record that a deprecation warning is about to be shown. Returns `false` when
+ * this process already showed it, so duplicated evlog copies warn once.
+ */
+export function claimDeprecationWarning(id: string): boolean {
+  const registry = getRegistry()
+  const warned = (registry.warnedDeprecations ??= new Set<string>())
+  if (warned.has(id)) return false
+  warned.add(id)
+  return true
+}
+
+/**
  * @internal Reset shared state between tests. Also drops the recorded majors so
  * the multi-major warning can fire again — `vi.resetModules()` re-evaluates
  * modules but leaves `globalThis` untouched.
@@ -141,5 +158,6 @@ export function resetGlobalRegistry(): void {
   const host = globalThis as RegistryHost
   Object.assign(globalConfig, createConfig())
   host[REGISTRY_KEY]?.storages.clear()
+  host[REGISTRY_KEY]?.warnedDeprecations?.clear()
   host[MAJORS_KEY]?.clear()
 }

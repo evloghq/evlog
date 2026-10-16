@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { sendBatchToAxiom, sendToAxiom, createAxiomDrain } from '../../src/adapters/axiom'
+import { enableDeprecationWarnings } from '../helpers/deprecations'
 
 describe('axiom adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -279,7 +280,10 @@ describe('axiom adapter', () => {
       headers: {},
     })
 
+    beforeEach(enableDeprecationWarnings)
+
     afterEach(() => {
+      vi.unstubAllEnvs()
       delete process.env.NUXT_AXIOM_API_KEY
       delete process.env.AXIOM_API_KEY
       delete process.env.NUXT_AXIOM_DATASET
@@ -309,7 +313,7 @@ describe('axiom adapter', () => {
       const drain = createAxiomDrain({ token: 'legacy-key', dataset: 'logs' })
       await drain(createDrainContext())
       expect(warnSpy).toHaveBeenCalledWith(
-        '[evlog/axiom] `token` is deprecated, use `apiKey` instead.',
+        '[evlog/axiom] \'token\' is deprecated and removed in v3, use \'apiKey\' instead.',
       )
     })
 

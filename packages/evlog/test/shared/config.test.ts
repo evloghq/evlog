@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { applyDeprecatedAlias, formatPublicEnvKeys } from '../../src/shared/config'
+import { enableDeprecationWarnings } from '../helpers/deprecations'
 
 describe('formatPublicEnvKeys', () => {
   it('drops NUXT_* aliases and keeps canonical names', () => {
@@ -26,8 +27,11 @@ describe('formatPublicEnvKeys', () => {
 })
 
 describe('applyDeprecatedAlias', () => {
+  beforeEach(enableDeprecationWarnings)
+
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
   })
 
   it('warns about the deprecated config field only', () => {
@@ -41,7 +45,7 @@ describe('applyDeprecatedAlias', () => {
       },
     )
     expect(warnSpy).toHaveBeenCalledWith(
-      '[evlog/test-config-warn] `sourceToken` is deprecated, use `apiKey` instead.',
+      '[evlog/test-config-warn] \'sourceToken\' is deprecated and removed in v3, use \'apiKey\' instead.',
     )
   })
 
