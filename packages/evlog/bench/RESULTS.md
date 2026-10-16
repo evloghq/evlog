@@ -1,6 +1,6 @@
 # Benchmark results
 
-> Generated on 2026-10-01
+> Generated on 2026-10-16
 
 ## Bundle size
 
@@ -120,229 +120,245 @@
 
 ## Core benchmarks
 
+### multi-step agent flush throughput
+
+| Benchmark | ops/sec | Mean | p99 | Samples |
+|-----------|--------:|-----:|----:|--------:|
+| 6 steps, with subscriber | **3.0K** | 330.73µs | 624.27µs | 3,023 |
+| 6 steps, no subscriber | **2.1K** | 473.03µs | 897.43µs | 2,114 |
+| 50 steps, no subscriber | **1.3K** | 754.87µs | 3.088ms | 1,324 |
+| 50 steps, with subscriber | **1.2K** | 846.61µs | 3.037ms | 1,181 |
+
 ### client log serialization
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| JSON.stringify — minimal log | **5.97M** | 168ns | 250ns | 5,969,107 |
-| JSON.stringify — rich log | **2.13M** | 469ns | 584ns | 2,132,306 |
-| JSON.stringify — batch of 10 | **275.7K** | 3.63µs | 4.83µs | 275,731 |
-| JSON.stringify — batch of 50 | **55.9K** | 17.90µs | 29.21µs | 55,862 |
+| JSON.stringify — minimal log | **958.6K** | 1.04µs | 1.76µs | 958,577 |
+| JSON.stringify — rich log | **367.3K** | 2.72µs | 4.32µs | 367,299 |
+| JSON.stringify — batch of 10 | **53.5K** | 18.69µs | 24.14µs | 53,502 |
+| JSON.stringify — batch of 50 | **11.1K** | 90.08µs | 127.03µs | 11,101 |
 
 ### client log formatting
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| build formatted log object (minimal) | **2.45M** | 408ns | 542ns | 2,451,522 |
-| build formatted log object (with identity spread) | **2.18M** | 459ns | 584ns | 2,179,945 |
-| build + serialize (rich log) | **1.39M** | 720ns | 917ns | 1,388,077 |
+| build formatted log object (minimal) | **937.6K** | 1.07µs | 1.91µs | 937,631 |
+| build formatted log object (with identity spread) | **865.2K** | 1.16µs | 2.07µs | 865,240 |
+| build + serialize (rich log) | **485.2K** | 2.06µs | 3.68µs | 485,165 |
 
 ### pipeline — push throughput
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| push 1 event (no flush) | **1.26M** | 796ns | 1.42µs | 1,256,009 |
-| push 100 events (no flush) | **28.8K** | 34.73µs | 72.38µs | 28,792 |
-| push 1000 events (no flush) | **9.0K** | 110.99µs | 430.21µs | 9,010 |
+| push 1 event (no flush) | **306.0K** | 3.27µs | 5.89µs | 306,001 |
+| push 100 events (no flush) | **10.1K** | 99.15µs | 188.07µs | 10,085 |
+| push 1000 events (no flush) | **2.5K** | 396.94µs | 440.50µs | 2,519 |
 
 ### pipeline — push + batch trigger
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| push 50 events (triggers 1 batch flush) | **35.6K** | 28.11µs | 114.33µs | 35,573 |
-| push 200 events (triggers 4 batch flushes) | **4.9K** | 203.08µs | 5.059ms | 4,924 |
+| push 50 events (triggers 1 batch flush) | **31.7K** | 31.52µs | 47.62µs | 31,729 |
+| push 200 events (triggers 4 batch flushes) | **17.6K** | 56.80µs | 342.63µs | 17,604 |
 
 ### pipeline — buffer overflow
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| push 1100 events (100 dropped, buffer=1000) | **2.6K** | 386.00µs | 2.985ms | 2,590 |
+| push 1100 events (100 dropped, buffer=1000) | **3.6K** | 276.95µs | 518.29µs | 3,610 |
 
 ### pipeline — serialization in drain
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| push 50 + JSON.stringify batch in drain | **14.9K** | 67.31µs | 1.995ms | 14,857 |
+| push 50 + JSON.stringify batch in drain | **499** | 2.004ms | 14.089ms | 498 |
 
 ### createUserAgentEnricher
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| no user-agent header | **28.12M** | 36ns | 42ns | 28,120,021 |
-| Googlebot | **4.43M** | 226ns | 333ns | 4,426,209 |
-| Firefox Linux | **4.31M** | 232ns | 334ns | 4,307,787 |
-| Chrome desktop | **2.61M** | 384ns | 583ns | 2,605,120 |
+| no user-agent header | **6.36M** | 157ns | 354ns | 6,358,028 |
+| Googlebot | **876.0K** | 1.14µs | 2.99µs | 875,954 |
+| Chrome desktop | **700.6K** | 1.43µs | 3.10µs | 700,579 |
+| Firefox Linux | **614.4K** | 1.63µs | 2.51µs | 614,363 |
 
 ### createGeoEnricher
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| Vercel headers (full) | **3.88M** | 258ns | 334ns | 3,875,361 |
-| no geo headers | **1.99M** | 503ns | 667ns | 1,986,473 |
-| Cloudflare headers (country only) | **1.00M** | 999ns | 1.33µs | 1,000,528 |
+| Vercel headers (full) | **999.5K** | 1.00µs | 1.74µs | 999,520 |
+| no geo headers | **522.0K** | 1.92µs | 3.43µs | 521,981 |
+| Cloudflare headers (country only) | **247.5K** | 4.04µs | 6.92µs | 247,547 |
 
 ### createRequestSizeEnricher
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| no content-length | **15.15M** | 66ns | 84ns | 15,151,293 |
-| with content-length | **12.37M** | 81ns | 125ns | 12,365,509 |
+| no content-length | **3.84M** | 260ns | 571ns | 3,843,432 |
+| with content-length | **2.27M** | 440ns | 984ns | 2,271,483 |
 
 ### createTraceContextEnricher
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| no trace headers | **14.40M** | 69ns | 84ns | 14,403,507 |
-| with traceparent + tracestate | **5.85M** | 171ns | 250ns | 5,854,833 |
-| with traceparent | **4.35M** | 230ns | 333ns | 4,349,656 |
+| no trace headers | **2.17M** | 461ns | 1.05µs | 2,170,915 |
+| with traceparent + tracestate | **1.34M** | 746ns | 1.40µs | 1,341,349 |
+| with traceparent | **961.5K** | 1.04µs | 1.92µs | 961,500 |
 
 ### full enricher pipeline
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| all enrichers (no headers) | **1.59M** | 629ns | 792ns | 1,589,875 |
-| all enrichers (all headers present) | **466.7K** | 2.14µs | 2.71µs | 466,694 |
+| all enrichers (no headers) | **216.8K** | 4.61µs | 6.74µs | 216,780 |
+| all enrichers (all headers present) | **55.3K** | 18.08µs | 22.03µs | 55,308 |
 
 ### createError
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| string message | **232.2K** | 4.31µs | 6.71µs | 232,175 |
-| with status | **229.4K** | 4.36µs | 5.83µs | 229,369 |
-| full options | **222.9K** | 4.49µs | 9.17µs | 222,937 |
-| with cause | **168.3K** | 5.94µs | 13.54µs | 168,299 |
+| with status | **42.9K** | 23.33µs | 49.11µs | 42,872 |
+| full options | **39.6K** | 25.26µs | 51.14µs | 39,583 |
+| string message | **39.5K** | 25.29µs | 77.38µs | 39,547 |
+| with cause | **30.8K** | 32.45µs | 64.89µs | 30,816 |
 
 ### parseError
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| parse fetch-like error | **45.48M** | 22ns | 42ns | 45,475,043 |
-| parse string | **44.03M** | 23ns | 42ns | 44,031,479 |
-| parse plain Error | **39.34M** | 25ns | 42ns | 39,336,243 |
-| parse EvlogError | **16.50M** | 61ns | 84ns | 16,501,523 |
+| parse string | **5.06M** | 198ns | 229ns | 5,061,147 |
+| parse plain Error | **4.09M** | 245ns | 349ns | 4,087,445 |
+| parse fetch-like error | **1.66M** | 603ns | 768ns | 1,659,665 |
+| parse EvlogError | **891.9K** | 1.12µs | 1.60µs | 891,900 |
 
 ### createError + parseError round-trip
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| create + parse (simple) | **231.4K** | 4.32µs | 10.75µs | 231,422 |
-| create + parse (full) | **165.1K** | 6.06µs | 11.62µs | 165,092 |
+| create + parse (simple) | **40.5K** | 24.71µs | 30.66µs | 40,474 |
+| create + parse (full) | **35.4K** | 28.27µs | 45.46µs | 35,379 |
 
 ### EvlogError serialization
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| toJSON() | **13.21M** | 76ns | 125ns | 13,210,889 |
-| toString() | **4.06M** | 247ns | 375ns | 4,056,286 |
-| JSON.stringify() | **2.30M** | 435ns | 625ns | 2,299,291 |
+| toJSON() | **1.00M** | 997ns | 1.65µs | 1,003,001 |
+| JSON.stringify() | **427.4K** | 2.34µs | 4.51µs | 427,357 |
+| toString() | **418.6K** | 2.39µs | 4.65µs | 418,608 |
 
 ### JSON serialization (production mode)
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| emit + JSON.stringify | **1.87M** | 534ns | 709ns | 1,871,668 |
+| emit + JSON.stringify | **533.0K** | 1.88µs | 3.23µs | 533,021 |
 
 ### pretty print (development mode)
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| emit + pretty print | **1.86M** | 538ns | 709ns | 1,858,187 |
+| emit + pretty print | **571.3K** | 1.75µs | 2.88µs | 571,319 |
 
 ### silent mode (no output)
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| emit silent (event build only) | **1.88M** | 532ns | 709ns | 1,878,393 |
+| emit silent (event build only) | **536.6K** | 1.86µs | 4.35µs | 536,618 |
 
 ### JSON.stringify baseline
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| raw JSON.stringify (same payload) | **2.21M** | 453ns | 583ns | 2,206,855 |
+| raw JSON.stringify (same payload) | **704.5K** | 1.42µs | 2.28µs | 704,528 |
 
 ### createLogger
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| no initial context | **19.20M** | 52ns | 84ns | 19,197,292 |
-| with shallow context | **18.74M** | 53ns | 84ns | 18,737,081 |
-| with nested context | **17.70M** | 56ns | 84ns | 17,700,949 |
+| with shallow context | **2.55M** | 393ns | 653ns | 2,547,661 |
+| no initial context | **2.31M** | 432ns | 790ns | 2,313,777 |
+| with nested context | **1.62M** | 616ns | 1.40µs | 1,623,180 |
 
 ### createRequestLogger
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| with method + path | **16.91M** | 59ns | 125ns | 16,913,825 |
-| with method + path + requestId | **12.67M** | 79ns | 125ns | 12,666,491 |
+| with method + path | **3.36M** | 298ns | 760ns | 3,357,475 |
+| with method + path + requestId | **1.93M** | 517ns | 1.07µs | 1,933,125 |
 
 ### log.set()
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| shallow merge (3 fields) | **9.56M** | 105ns | 167ns | 9,558,219 |
-| deep nested merge | **8.04M** | 124ns | 208ns | 8,038,978 |
-| multiple sequential sets | **7.05M** | 142ns | 250ns | 7,054,413 |
-| shallow merge (10 fields) | **4.79M** | 209ns | 292ns | 4,794,907 |
+| shallow merge (3 fields) | **470.9K** | 2.12µs | 4.32µs | 470,896 |
+| multiple sequential sets | **155.3K** | 6.44µs | 9.20µs | 155,323 |
+| shallow merge (10 fields) | **140.6K** | 7.11µs | 9.85µs | 140,566 |
+| deep nested merge | **64.3K** | 15.54µs | 23.80µs | 64,336 |
 
 ### log.emit()
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| emit minimal event | **1.93M** | 519ns | 667ns | 1,927,892 |
-| emit with context | **1.70M** | 588ns | 791ns | 1,700,748 |
-| full lifecycle (create + set + emit) | **1.59M** | 628ns | 833ns | 1,592,043 |
-| emit with error | **65.9K** | 15.17µs | 24.42µs | 65,905 |
+| emit minimal event | **308.1K** | 3.25µs | 4.42µs | 308,097 |
+| emit with context | **124.5K** | 8.03µs | 11.30µs | 124,496 |
+| full lifecycle (create + set + emit) | **99.4K** | 10.06µs | 18.20µs | 99,433 |
+| emit with error | **6.4K** | 155.36µs | 279.85µs | 6,436 |
 
 ### log.set() payload sizes
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| small payload (2 fields) | **1.72M** | 581ns | 750ns | 1,720,124 |
-| medium payload (50 fields) | **569.8K** | 1.76µs | 2.25µs | 569,755 |
-| large payload (200 nested fields) | **131.2K** | 7.62µs | 10.75µs | 131,158 |
+| small payload (2 fields) | **197.7K** | 5.06µs | 9.17µs | 197,708 |
+| medium payload (50 fields) | **23.5K** | 42.62µs | 76.59µs | 23,462 |
+| large payload (200 nested fields) | **1.7K** | 604.05µs | 789.79µs | 1,655 |
+
+### diagnostics channel
+
+| Benchmark | ops/sec | Mean | p99 | Samples |
+|-----------|--------:|-----:|----:|--------:|
+| emit — channel enabled, no subscriber | **221.0K** | 4.53µs | 8.26µs | 220,991 |
+| emit — channel disabled | **180.3K** | 5.55µs | 11.23µs | 180,268 |
 
 ### resolveMiddlewarePluginRunner (cached hot path)
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| no local plugins (returns global empty runner) | **37.70M** | 27ns | 42ns | 37,703,241 |
-| 2 local plugins (cached after first call) | **32.26M** | 31ns | 42ns | 32,263,913 |
-| 3 local plugins (cached after first call) | **31.66M** | 32ns | 42ns | 31,657,413 |
+| no local plugins (returns global empty runner) | **8.52M** | 117ns | 213ns | 8,521,673 |
+| 2 local plugins (cached after first call) | **7.93M** | 126ns | 239ns | 7,934,091 |
+| 3 local plugins (cached after first call) | **7.63M** | 131ns | 244ns | 7,625,722 |
 
 ### createMiddlewareLogger (full per-request setup)
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| no plugins, safe headers | **4.41M** | 227ns | 666ns | 4,409,813 |
-| no plugins, no headers | **4.23M** | 236ns | 625ns | 4,234,355 |
-| 2 plugins (cached merge) | **4.13M** | 242ns | 750ns | 4,126,493 |
+| 2 plugins (cached merge) | **445.1K** | 2.25µs | 5.36µs | 445,058 |
+| no plugins, no headers | **252.0K** | 3.97µs | 9.31µs | 252,045 |
+| no plugins, safe headers | **239.0K** | 4.18µs | 10.55µs | 239,033 |
 
 ### full request lifecycle (createMiddlewareLogger → set → finish)
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| no plugins, no drain | **993.7K** | 1.01µs | 1.79µs | 993,739 |
-| 2 plugins, sync drain | **621.2K** | 1.61µs | 2.46µs | 621,163 |
+| no plugins, no drain | **162.8K** | 6.14µs | 15.49µs | 162,837 |
+| 2 plugins, sync drain | **59.2K** | 16.88µs | 58.63µs | 59,241 |
 
 ### head sampling
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| with sampling rates | **460.2K** | 2.17µs | 3.12µs | 460,197 |
-| no sampling configured | **382.4K** | 2.61µs | 3.54µs | 382,420 |
+| with sampling rates | **174.0K** | 5.75µs | 10.63µs | 173,975 |
+| no sampling configured | **113.2K** | 8.83µs | 13.96µs | 113,187 |
 
 ### tail sampling (shouldKeep)
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| status match | **44.97M** | 22ns | 42ns | 44,971,910 |
-| duration match | **44.72M** | 22ns | 42ns | 44,724,939 |
-| no match (fast path) | **44.66M** | 22ns | 42ns | 44,658,746 |
-| path glob match | **44.48M** | 22ns | 42ns | 44,484,819 |
+| no match (fast path) | **10.29M** | 97ns | 188ns | 10,292,975 |
+| status match | **10.20M** | 98ns | 180ns | 10,203,326 |
+| duration match | **9.12M** | 110ns | 183ns | 9,121,597 |
+| path glob match | **7.36M** | 136ns | 212ns | 7,355,364 |
 
 ### head + tail sampling combined
 
 | Benchmark | ops/sec | Mean | p99 | Samples |
 |-----------|--------:|-----:|----:|--------:|
-| full emit with sampling (likely sampled out) | **7.01M** | 143ns | 583ns | 7,012,395 |
-| full emit with force-keep (tail sampling hit) | **6.35M** | 157ns | 625ns | 6,352,187 |
+| full emit with sampling (likely sampled out) | **758.7K** | 1.32µs | 3.08µs | 758,733 |
+| full emit with force-keep (tail sampling hit) | **408.5K** | 2.45µs | 4.56µs | 408,529 |

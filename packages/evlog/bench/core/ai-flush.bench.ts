@@ -36,7 +36,7 @@ async function runScenario(steps: number, withSubscriber: boolean): Promise<void
   if (withSubscriber) ai.onUpdate(() => { /* noop */ })
   const wrapped = ai.wrap(makeWrappedModel(steps))
   for (let i = 0; i < steps; i++) {
-    await wrapped.doGenerate({} as any)
+    await wrapped.doGenerate({ prompt: [] } as any)
   }
   log.emit({ _forceKeep: true } as any)
 }

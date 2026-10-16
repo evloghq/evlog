@@ -425,6 +425,7 @@
     "bench": "vitest bench bench/core/ && cp bench/results.json bench/baseline/bench.json && tsx bench/scripts/report.ts",
     "bench:compare": "vitest bench bench/comparison/ && cp bench/results.json bench/baseline/comparison.json && tsx bench/scripts/report.ts",
     "bench:report": "tsx bench/scripts/report.ts",
+    "bench:events": "tsx bench/scripts/event-count.ts",
     "size": "tsx bench/scripts/size.ts",
     "size:json": "tsx bench/scripts/size.ts --json",
     "size:alternatives": "tsx bench/scripts/bundled-size.ts --write && tsx bench/scripts/report.ts",
