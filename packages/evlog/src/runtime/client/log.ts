@@ -141,6 +141,31 @@ function serializeError(error: Error, seen = new Set<unknown>()): Record<string,
   return serialized
 }
 
+/**
+ * The server logger's walk over an object event: an Error at any depth is
+ * serialized, a cycle becomes `'[Circular]'`, and an event holding neither is
+ * returned as it is.
+ */
+function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown {
+  if (value === null || typeof value !== 'object') return value
+  if (ancestors.has(value)) return '[Circular]'
+  if (value instanceof Error) return serializeError(value)
+
+  ancestors.add(value)
+  let changed = false
+  const visit = (item: unknown): unknown => {
+    const result = removeErrorCycles(item, ancestors)
+    if (!Object.is(result, item)) changed = true
+    return result
+  }
+  const copy = Array.isArray(value)
+    ? value.map(visit)
+    : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, visit(item)]))
+  ancestors.delete(value)
+
+  return changed ? copy : value
+}
+
 function createLogMethod(level: LogLevel) {
   return function logMethod(tagOrEvent: string | Error | Record<string, unknown>, message?: string, ...args: unknown[]): void {
     // Call-time check: avoid relying on import.meta.client (can be false in some mixed bundles).
@@ -161,7 +186,7 @@ function createLogMethod(level: LogLevel) {
     } else if (tagOrEvent instanceof Error) {
       emitLog(level, { error: serializeError(tagOrEvent) })
     } else if (typeof tagOrEvent === 'object') {
-      emitLog(level, tagOrEvent)
+      emitLog(level, removeErrorCycles(tagOrEvent, new WeakSet()) as Record<string, unknown>)
     } else {
       emitTaggedLog(level, 'log', String(tagOrEvent))
     }

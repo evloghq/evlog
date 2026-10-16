@@ -208,10 +208,11 @@ describe('client minLevel', () => {
 
 describe('client log.error with an Error instance', () => {
   let errorSpy: ReturnType<typeof vi.spyOn>
+  let fetchSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
   })
 
   afterEach(() => {
@@ -281,5 +282,45 @@ describe('client log.error with an Error instance', () => {
     log.error({ action: 'payment', error: 'declined' })
 
     expect(emitted()).toMatchObject({ action: 'payment', error: 'declined' })
+  })
+
+  it('serializes an Error at any depth of an object event', () => {
+    initLog({ enabled: true, pretty: false })
+    const error = new Error('Payment declined', { cause: new Error('Card expired') })
+
+    log.error({ action: 'checkout', error, job: { failure: error } })
+
+    const expected = {
+      name: 'Error',
+      message: 'Payment declined',
+      stack: expect.any(String),
+      cause: { name: 'Error', message: 'Card expired', stack: expect.any(String) },
+    }
+    expect(emitted().error).toEqual(expected)
+    expect(emitted().job.failure).toEqual(expected)
+    expect(emitted().action).toBe('checkout')
+  })
+
+  it('sends the fields a nested error exposes as getters to the transport', () => {
+    initLog({ enabled: true, console: false, pretty: false, transport: { enabled: true, endpoint: '/api/_evlog/ingest' } })
+    const error = new Error('[GET] "/api/cart": 500 Internal Server Error')
+    Object.defineProperty(error, 'statusCode', { get: () => 500 })
+
+    log.error({ action: 'cart', error })
+
+    const [, options] = fetchSpy.mock.calls[0]!
+    expect(JSON.parse(options!.body as string).error).toMatchObject({
+      message: '[GET] "/api/cart": 500 Internal Server Error',
+      statusCode: 500,
+    })
+  })
+
+  it('replaces a cycle in an object event with [Circular]', () => {
+    initLog({ enabled: true, pretty: false })
+    const event: Record<string, unknown> = { action: 'checkout', error: new Error('Payment declined') }
+    event.self = event
+
+    expect(() => log.error(event)).not.toThrow()
+    expect(emitted().self).toBe('[Circular]')
   })
 })
