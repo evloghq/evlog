@@ -1,5 +1,5 @@
 import type { AuditableLogger } from '../../audit'
-import type { ServerEvent } from '../../types'
+import type { FieldContext, ServerEvent } from '../../types'
 
 /**
  * Returns the request logger attached to the given server event.
@@ -44,7 +44,7 @@ export function useLogger<T extends object = Record<string, unknown>>(event: Ser
   }
 
   if (service) {
-    log.set({ service })
+    log.set({ service } as FieldContext<T>)
   }
 
   return log

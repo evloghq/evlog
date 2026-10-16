@@ -1,5 +1,6 @@
 import type { HTTPEvent } from 'nitro/h3'
 import type { AuditableLogger } from '../audit'
+import type { FieldContext } from '../types'
 
 /**
  * Returns the request logger attached to the given Nitro v3 HTTP event.
@@ -29,7 +30,7 @@ export function useLogger<T extends object = Record<string, unknown>>(event: HTT
   }
 
   if (service) {
-    log.set({ service })
+    log.set({ service } as FieldContext<T>)
   }
 
   return log

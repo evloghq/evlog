@@ -10,7 +10,7 @@ import {
   createResolver,
   defineNuxtModule,
 } from '@nuxt/kit'
-import type { NuxtModule } from '@nuxt/schema'
+import type { NuxtModule, VitePlugin } from '@nuxt/schema'
 import type { Nitro, NitroConfig } from 'nitropack'
 import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from '../types'
 import type { DevTerminalInput } from '../shared/dev-terminal'
@@ -377,7 +377,11 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
     // @ts-expect-error nitro:config hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:config', (nitroConfig: NitroConfig) => {
       const evlogHandler = resolver.resolve('../nitro/errorHandler').replace(/\\/g, '/')
-      nitroConfig.errorHandler = prependNitroErrorHandler(nitroConfig.errorHandler, evlogHandler)
+      // Nitro's DeepPartial config types array entries as possibly undefined; the helper expects string paths.
+      nitroConfig.errorHandler = prependNitroErrorHandler(
+        nitroConfig.errorHandler as string | string[] | undefined,
+        evlogHandler,
+      )
 
       const evlogForNitro = nuxt.options.runtimeConfig.evlog ?? options
       if (evlogForNitro !== undefined && typeof evlogForNitro === 'object') {
@@ -543,12 +547,12 @@ export {}
 
     const stripLevels = options.strip ?? ['debug']
     if (stripLevels.length > 0) {
-      addVitePlugin(createStripPlugin(stripLevels))
+      addVitePlugin(createStripPlugin(stripLevels) as VitePlugin)
     }
 
     const srcLoc = options.sourceLocation ?? 'dev'
     if (srcLoc === true || (srcLoc === 'dev' && nuxt.options.dev)) {
-      addVitePlugin(createSourceLocationPlugin(true))
+      addVitePlugin(createSourceLocationPlugin(true) as VitePlugin)
     }
   },
 })

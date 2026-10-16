@@ -98,6 +98,7 @@ export interface NitroPluginEvlogConfig extends DevTerminalResolveInput {
   sampling?: SamplingConfig
   minLevel?: LogLevel
   redact?: boolean | RedactConfig | Record<string, unknown>
+  transport?: TransportConfig
 }
 
 /** @deprecated Renamed to {@link NitroPluginEvlogConfig}. Kept for backward compat. */
@@ -130,8 +131,8 @@ export function isExpectedEvlogError(evlogError: Error | null): boolean {
  * evlog is disabled, the route is excluded, or the plugin is not registered.
  * @internal
  */
-export function isRecordedByEvlog(context: { _evlogShouldEmit?: unknown } | undefined): boolean {
-  return context?._evlogShouldEmit === true
+export function isRecordedByEvlog(context: object | undefined): boolean {
+  return (context as { _evlogShouldEmit?: unknown } | undefined)?._evlogShouldEmit === true
 }
 
 /** Request metadata used to decide JSON vs framework error-page rendering. */
@@ -193,8 +194,8 @@ export function shouldSerializeNitroErrorAsJson(
  * `res.end`, so without this the Youch overlay still runs.
  * @internal
  */
-export function markH3ErrorHandled(event: { _handled?: boolean }): void {
-  event._handled = true
+export function markH3ErrorHandled(event: object): void {
+  (event as { _handled?: boolean })._handled = true
 }
 
 /**

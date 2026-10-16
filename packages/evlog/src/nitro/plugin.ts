@@ -14,11 +14,12 @@ import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig 
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import { bindStreamingResponseLifecycle, shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { startStreamServer, type StreamServerOptions } from '../stream'
+import type { AuditableLogger } from '../audit'
 import type { RequestLogger, ServerEvent, TailSamplingContext, WideEvent } from '../types'
 import { elapsedMs } from '../utils'
 import { callEnrichAndDrain, getSafeHeaders, getResponseStatus } from './enrich-drain'
 
-function createDeferredRequestLogger(e: ServerEvent): RequestLogger {
+function createDeferredRequestLogger(e: ServerEvent): AuditableLogger {
   let requestIdOverride: string | undefined
   if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
     const cfRay = getSafeHeaders(e)?.['cf-ray']

@@ -2,7 +2,7 @@ import type { ServerResponse } from 'node:http'
 import type { Request } from 'express'
 import type { DynamicModule, MiddlewareConsumer, NestModule, Provider } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
-import type { FastifyInstance } from 'fastify'
+import type { FastifyBaseLogger, FastifyInstance } from 'fastify'
 import type { AuditableLogger } from '../audit'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
@@ -89,7 +89,9 @@ const fastifyRequestLogProvider: Provider = {
       // `httpAdapter` is unset in standalone application contexts.
       if (host.httpAdapter?.getType() !== 'fastify') return
       host.httpAdapter.getInstance<FastifyInstance>().addHook('preHandler', (request, _reply, done) => {
-        if (request.raw.log) request.log = request.raw.log
+        // The evlog logger is a superset of Fastify's logger at runtime; the types do not
+        // overlap (no child/level/silent), so the handoff is an explicit cast.
+        if (request.raw.log) request.log = request.raw.log as unknown as FastifyBaseLogger
         done()
       })
     },

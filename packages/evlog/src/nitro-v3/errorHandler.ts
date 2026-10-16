@@ -13,7 +13,6 @@ import {
   suppressNitroDevOverlay,
   markH3ErrorHandled,
 } from '../nitro'
-import type { NitroErrorHandlerContext } from '../shared/nitro-types'
 
 /**
  * Custom Nitro v3 error handler that properly serializes EvlogError.
@@ -35,7 +34,7 @@ function getNitroV3RequestHeader(
   return Array.isArray(value) ? value[0] : value
 }
 
-export default defineErrorHandler(async (error, event, ctx: NitroErrorHandlerContext) => {
+export default defineErrorHandler(async (error, event, ctx) => {
   const evlogError = resolveEvlogError(error)
   const requestUrl = parseURL(event.req.url)
   // Read before `suppressNitroDevOverlay` clears the flags it relies on.
