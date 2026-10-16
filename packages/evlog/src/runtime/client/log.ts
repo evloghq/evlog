@@ -75,7 +75,7 @@ function emitLog(level: LogLevel, event: Record<string, unknown>): void {
     level,
     service: clientService,
     ...identityContext,
-    ...event,
+    ...(removeErrorCycles(event, new WeakSet()) as Record<string, unknown>),
   }
 
   if (clientConsole) {
@@ -117,7 +117,7 @@ const ERROR_FIELDS = ['code', 'status', 'statusText', 'statusCode', 'statusMessa
  * `name`, `message` and `stack` live on the prototype, so spreading an Error
  * into an event yields nothing. Mirrors the shape the server logger stores.
  */
-function serializeError(error: Error, seen = new Set<unknown>()): Record<string, unknown> {
+function serializeError(error: Error, ancestors = new WeakSet<object>()): Record<string, unknown> {
   const serialized: Record<string, unknown> = {
     name: error.name,
     message: error.message,
@@ -125,18 +125,12 @@ function serializeError(error: Error, seen = new Set<unknown>()): Record<string,
   }
 
   const record = error as unknown as Record<string, unknown>
+  ancestors.add(error)
   for (const key of ERROR_FIELDS) {
-    if (key in error) serialized[key] = record[key]
+    if (key in error) serialized[key] = removeErrorCycles(record[key], ancestors)
   }
-
-  if ('cause' in error) {
-    seen.add(error)
-    const { cause } = error
-    // A nested Error would JSON.stringify to {}, dropping its message entirely.
-    serialized.cause = cause instanceof Error && !seen.has(cause)
-      ? serializeError(cause, seen)
-      : cause
-  }
+  if ('cause' in error) serialized.cause = removeErrorCycles(error.cause, ancestors)
+  ancestors.delete(error)
 
   return serialized
 }
@@ -144,12 +138,14 @@ function serializeError(error: Error, seen = new Set<unknown>()): Record<string,
 /**
  * The server logger's walk over an object event: an Error at any depth is
  * serialized, a cycle becomes `'[Circular]'`, and an event holding neither is
- * returned as it is.
+ * returned as it is. An object with its own `toJSON` keeps it: a copy would
+ * drop what that method leaves out.
  */
 function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown {
   if (value === null || typeof value !== 'object') return value
   if (ancestors.has(value)) return '[Circular]'
-  if (value instanceof Error) return serializeError(value)
+  if (value instanceof Error) return serializeError(value, ancestors)
+  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return value
 
   ancestors.add(value)
   let changed = false
@@ -186,7 +182,7 @@ function createLogMethod(level: LogLevel) {
     } else if (tagOrEvent instanceof Error) {
       emitLog(level, { error: serializeError(tagOrEvent) })
     } else if (typeof tagOrEvent === 'object') {
-      emitLog(level, removeErrorCycles(tagOrEvent, new WeakSet()) as Record<string, unknown>)
+      emitLog(level, tagOrEvent)
     } else {
       emitTaggedLog(level, 'log', String(tagOrEvent))
     }
