@@ -51,10 +51,18 @@ function pickCondition(entry: unknown): string | null {
   return null
 }
 
-interface PackageManifest {
+export interface PackageManifest {
   exports?: unknown
   module?: string
   main?: string
+  dependencies?: Record<string, string>
+  peerDependencies?: Record<string, string>
+}
+
+/** A package found in `node_modules`, at the path it was found under. */
+export interface InstalledPackage {
+  dir: string
+  manifest: PackageManifest
 }
 
 function readManifest(path: string): PackageManifest | null {
@@ -78,21 +86,47 @@ function packageTarget(manifest: PackageManifest, subpath: string): string | nul
   return subpath === '.' ? pickCondition(exports) : null
 }
 
-function resolvePackage(specifier: string, fromDir: string): string | null {
-  const { name, subpath } = splitSpecifier(specifier)
+/**
+ * The package `name` resolves to from `fromDir`, walking up `node_modules` the
+ * way Node does, or `null` when it is not installed or its manifest is unreadable.
+ */
+export function findPackage(name: string, fromDir: string): InstalledPackage | null {
   let dir = fromDir
   for (;;) {
     const packageDir = join(dir, 'node_modules', name)
     const manifestPath = join(packageDir, 'package.json')
     if (isFile(manifestPath)) {
       const manifest = readManifest(manifestPath)
-      const target = manifest && packageTarget(manifest, subpath)
-      return target ? resolveFile(join(packageDir, target)) : null
+      return manifest && { dir: packageDir, manifest }
     }
     const parent = dirname(dir)
     if (parent === dir) return null
     dir = parent
   }
+}
+
+/** The source file `pkg` exposes for `subpath` (`.` or `./next`), or `null`. */
+export function packageEntry(pkg: InstalledPackage, subpath: string): string | null {
+  const target = packageTarget(pkg.manifest, subpath)
+  return target ? resolveFile(join(pkg.dir, target)) : null
+}
+
+/**
+ * The subpaths a package can be imported by: every literal key of its
+ * `exports` map, or `.` alone. Pattern keys (`./*`) name no file until an
+ * import fills them in, so they are left out.
+ */
+export function packageSubpaths(manifest: PackageManifest): string[] {
+  const { exports } = manifest
+  if (typeof exports !== 'object' || exports === null || Array.isArray(exports)) return ['.']
+  const keys = Object.keys(exports).filter(key => key.startsWith('.'))
+  return keys.length > 0 ? keys.filter(key => !key.includes('*')) : ['.']
+}
+
+function resolvePackage(specifier: string, fromDir: string): string | null {
+  const { name, subpath } = splitSpecifier(specifier)
+  const pkg = findPackage(name, fromDir)
+  return pkg && packageEntry(pkg, subpath)
 }
 
 /** Whether an import specifier is a path rather than a package name. */

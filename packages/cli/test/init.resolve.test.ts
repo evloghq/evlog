@@ -139,6 +139,7 @@ describe('the catalog', () => {
       pairable: new Set(['ai', 'better-auth'] as const),
       catalogs: [],
       evlogBarrels: new Map(),
+      evlogPackages: new Map(),
       repeatedErrors: new Map([['status=402', { label: '402', files: ['a.ts', 'b.ts'] }]]),
     }
 
