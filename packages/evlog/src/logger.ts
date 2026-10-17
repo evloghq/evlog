@@ -69,6 +69,12 @@ function writableChild(target: Record<string, unknown>, key: string): Record<str
   const child = target[key] as Record<string, unknown>
   if (!isPlainRecord(child)) return child
   const copy: Record<string, unknown> = { ...child }
+  // A spread drops a non-enumerable toJSON, the method that hides a field from
+  // the serialized form. Keep it, or a second merge would expose what it hid.
+  const { toJSON } = child as { toJSON?: unknown }
+  if (typeof toJSON === 'function' && !Object.hasOwn(copy, 'toJSON')) {
+    Object.defineProperty(copy, 'toJSON', { value: toJSON, enumerable: false, writable: true, configurable: true })
+  }
   setField(target, key, copy)
   return copy
 }
