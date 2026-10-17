@@ -526,6 +526,26 @@ describe('createLogger', () => {
     expect(() => JSON.stringify(event)).not.toThrow()
   })
 
+  it('keeps null fields and a non-enumerable toJSON on a nested record', () => {
+    const payload = { status: null, visible: 1, hidden: 2 }
+    Object.defineProperty(payload, 'toJSON', { value: () => ({ visible: 1 }), enumerable: false })
+    const logger = createLogger()
+
+    logger.set({ payload, other: { status: null } })
+
+    const context = logger.getContext()
+    expect(context.other).toEqual({ status: null })
+    expect(JSON.stringify(context.payload)).toBe('{"visible":1}')
+  })
+
+  it('stores a __proto__ key as a field instead of writing to Object.prototype', () => {
+    const logger = createLogger()
+
+    logger.set(JSON.parse('{"__proto__":{"polluted":true},"nested":{"__proto__":{"polluted":true}}}'))
+
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+
   it('creates logger with empty context by default', () => {
     const logger = createLogger()
 

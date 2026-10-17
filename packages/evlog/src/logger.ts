@@ -54,11 +54,34 @@ function warnPostEmit(method: string, detail: string): void {
   )
 }
 
+// A plain write to `__proto__` replaces the prototype instead of storing a field.
+function setField(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (key === '__proto__') {
+    Reflect.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
+  } else {
+    Reflect.set(target, key, value)
+  }
+}
+
+function copyRecord(record: Record<string, unknown>, ancestors: WeakSet<object>): Record<string, unknown> {
+  ancestors.add(record)
+  const copy: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(record)) {
+    let copied = value
+    if (isPlainRecord(value)) copied = ancestors.has(value) ? '[Circular]' : copyRecord(value, ancestors)
+    setField(copy, key, copied)
+  }
+  const toJSON = Object.getOwnPropertyDescriptor(record, 'toJSON')
+  if (toJSON && !toJSON.enumerable) Object.defineProperty(copy, 'toJSON', toJSON)
+  ancestors.delete(record)
+  return copy
+}
+
 function mergeInto(target: Record<string, unknown>, source: Record<string, unknown>): void {
   for (const key in source) {
     const sourceVal = source[key]
     if (sourceVal === undefined || sourceVal === null) continue
-    const targetVal = target[key]
+    const targetVal = Object.hasOwn(target, key) ? target[key] : undefined
     // Same reference on both sides — recording the same error twice, which every
     // integration does when a handler logs the error it then throws. Merging an
     // object into itself changes nothing, but walking into it would write to the
@@ -67,17 +90,15 @@ function mergeInto(target: Record<string, unknown>, source: Record<string, unkno
     if (isPlainObject(sourceVal) && isPlainObject(targetVal)) {
       mergeInto(targetVal, sourceVal)
     } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
-      target[key] = [...targetVal, ...sourceVal]
+      setField(target, key, [...targetVal, ...sourceVal])
     } else if (isPlainRecord(sourceVal)) {
       // Copy, so a later merge into this key writes to evlog's object, never to
       // the caller's. Writing to the caller's object can make it contain itself.
-      const copy: Record<string, unknown> = {}
-      mergeInto(copy, sourceVal)
-      target[key] = copy
+      setField(target, key, copyRecord(sourceVal, new WeakSet()))
     } else {
       // Context can hold objects evlog does not own; a field that refuses the
       // write must not abort the merge and lose the rest of the event.
-      Reflect.set(target, key, sourceVal)
+      setField(target, key, sourceVal)
     }
   }
 }
