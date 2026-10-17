@@ -185,7 +185,7 @@ export function evlog(options: EvlogSvelteKitOptions = {}): SvelteKitHandle {
 
         // Return structured JSON for EvlogError (like NextJS withEvlog / Nuxt errorHandler)
         if (EvlogError.isEvlogError(error)) {
-          const status = error.status ?? 500
+          const status = extractErrorStatus(error)
           const body = serializeEvlogErrorResponse(error, event.url.pathname)
           return new Response(JSON.stringify(body), {
             status,

@@ -118,6 +118,21 @@ describe('evlog/elysia', () => {
     expect(event.db).toEqual({ queries: 3 })
   })
 
+  it('answers 500 for a thrown EvlogError without a status', async () => {
+    const { drain } = createPipelineSpies()
+    const app = new Elysia()
+      .use(evlog({ drain }))
+      .get('/api/turn', () => {
+        throw createError({ message: 'Turn could not start', why: 'Agent queue is full' })
+      })
+
+    const res = await request(app, '/api/turn')
+    await waitForDrainCalls(drain)
+
+    expect(res.status).toBe(500)
+    assertHttpEventEmitted(drain, { path: '/api/turn', level: 'error', status: 500 })
+  })
+
   it('logs error context when handler throws', async () => {
     const { drain } = createPipelineSpies()
     const app = new Elysia()

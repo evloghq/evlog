@@ -1,6 +1,7 @@
 import type { RequestServerResult } from '@tanstack/start-client-core'
 import type { RequestLogger } from '../types'
 import { EvlogError } from '../error'
+import { extractErrorStatus } from '../shared/errors'
 
 /**
  * Server middleware handler that catches EvlogError and returns a structured JSON response.
@@ -51,7 +52,7 @@ export async function evlogErrorHandler(
 
       // Throw as Response so frameworks (TanStack Start, SolidStart, etc.) pass it through
       throw new Response(JSON.stringify(evlogError.toJSON()), {
-        status: evlogError.status || 500,
+        status: extractErrorStatus(evlogError),
         headers: { 'Content-Type': 'application/json' },
       })
     }

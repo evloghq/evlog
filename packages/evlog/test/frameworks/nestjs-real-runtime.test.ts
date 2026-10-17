@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing'
 import type { FastifyRequest } from 'fastify'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createError } from '../../src/error'
 import { initLogger } from '../../src/logger'
 import { EvlogModule, useLogger } from '../../src/nestjs/index'
 import {
@@ -42,6 +43,11 @@ class TestController {
   @Get('/api/fail')
   fail() {
     throw new Error('boom from nestjs handler')
+  }
+
+  @Get('/api/turn')
+  turn() {
+    throw createError({ message: 'Turn could not start', why: 'Agent queue is full' })
   }
 
 }
@@ -121,6 +127,17 @@ describe('evlog/nestjs (real NestJS runtime)', () => {
     await waitForDrainCalls(drain)
 
     assertHttpEventEmitted(drain, { path: '/api/fail', status: 500 })
+  })
+
+  it('answers 500 for a thrown EvlogError without a status', async () => {
+    const { drain } = createPipelineSpies()
+    app = await bootApp({ drain })
+
+    const res = await request(app.getHttpServer()).get('/api/turn')
+    expect(res.status).toBe(500)
+    await waitForDrainCalls(drain)
+
+    assertHttpEventEmitted(drain, { path: '/api/turn', status: 500 })
   })
 
   it('respects NestJS x-request-id pass-through', async () => {

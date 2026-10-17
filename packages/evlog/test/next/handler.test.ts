@@ -118,6 +118,21 @@ describe('withEvlog', () => {
     })
   })
 
+  it('answers 500 for a thrown EvlogError that has no status', async () => {
+    const withEvlog = createWithEvlog({ pretty: false })
+
+    const handler = withEvlog((_: Request) => {
+      throw createError({ message: 'Turn could not start', why: 'Agent queue is full' })
+    })
+
+    const response = await handler(new Request('http://localhost/api/turn', { method: 'POST' }))
+
+    expect(response.status).toBe(500)
+    const body = await response.json()
+    expect(body).toMatchObject({ message: 'Turn could not start', data: { why: 'Agent queue is full' } })
+    expect(body).not.toHaveProperty('status')
+  })
+
   it('captures errors and re-throws them', async () => {
     const withEvlog = createWithEvlog({ pretty: false })
 
