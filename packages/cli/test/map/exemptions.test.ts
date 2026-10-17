@@ -77,6 +77,7 @@ describe('exemptions', () => {
       pairable: new Set(),
       catalogs: [],
       evlogBarrels: new Map(),
+      evlogPackages: new Map(),
       repeatedErrors: new Map(),
     }
 
@@ -117,6 +118,7 @@ describe('exemptions', () => {
         pairable: new Set(),
         catalogs: [],
         evlogBarrels: new Map(),
+        evlogPackages: new Map(),
         repeatedErrors: new Map(),
       },
       capabilities: { requestLogger: 'explicit', evlogAutoImports: [] },

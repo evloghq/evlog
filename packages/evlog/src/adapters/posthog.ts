@@ -4,6 +4,7 @@ import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineDrain, defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { flattenRecord } from '../shared/event'
+import { warnDeprecated } from '../shared/deprecate'
 import { sendBatchToOTLP } from './otlp'
 import type { OTLPConfig, OTLPRecordShape } from './otlp'
 
@@ -74,7 +75,7 @@ export interface PostHogConfig {
 }
 
 /**
- * @deprecated Use {@link PostHogConfig} with `mode: 'events'` instead.
+ * @deprecated Removed in evlog v3. Use {@link PostHogConfig} with `mode: 'events'` instead.
  */
 export type PostHogEventsConfig = PostHogConfig
 
@@ -243,9 +244,13 @@ export function createPostHogDrain(overrides?: Partial<PostHogConfig>) {
 }
 
 /**
- * @deprecated Use {@link createPostHogDrain} with `mode: 'events'`.
+ * @deprecated Removed in evlog v3. Use {@link createPostHogDrain} with `mode: 'events'`.
  */
 export function createPostHogEventsDrain(overrides?: Partial<PostHogConfig>) {
+  warnDeprecated(
+    'posthog:createPostHogEventsDrain',
+    '[evlog/posthog] createPostHogEventsDrain() is deprecated and removed in v3. Use createPostHogDrain({ mode: \'events\' }).',
+  )
   return createPostHogDrain({ ...overrides, mode: 'events' })
 }
 

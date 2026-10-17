@@ -1,6 +1,7 @@
 import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { applyDeprecatedAlias, formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
+import { warnDeprecatedEnvVar } from '../shared/deprecate'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
 
@@ -8,8 +9,7 @@ export interface BetterStackConfig {
   /** Better Stack API key (replaces deprecated `sourceToken`). */
   apiKey: string
   /**
-   * @deprecated Renamed to {@link BetterStackConfig.apiKey}. Will be removed
-   * in the next major version. Pass `apiKey` instead.
+   * @deprecated Removed in evlog v3. Use `apiKey` instead.
    */
   sourceToken?: string
   /** Logtail ingestion endpoint. Default: https://in.logs.betterstack.com */
@@ -63,6 +63,7 @@ export function toBetterStackEvent(event: WideEvent): Record<string, unknown> {
  * ```
  */
 export function createBetterStackDrain(overrides?: Partial<BetterStackConfig>) {
+  warnDeprecatedEnvVar('better-stack', ['NUXT_BETTER_STACK_SOURCE_TOKEN', 'BETTER_STACK_SOURCE_TOKEN'], 'BETTER_STACK_API_KEY')
   return defineHttpDrain<BetterStackConfig>({
     name: 'better-stack',
     resolve: async () => {

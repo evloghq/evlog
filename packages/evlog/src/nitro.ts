@@ -3,6 +3,7 @@ import type { DevTerminalInput, DevTerminalResolveInput } from './shared/dev-ter
 import { extractErrorStatus } from './shared/errors'
 import { resolveDevTerminal, shouldShowFrameworkOverlay } from './shared/dev-terminal'
 import { readEvlogConfigSync } from './shared/nitroConfigBridge'
+import { readErrorField } from './utils'
 
 export type { DevTerminalInput, DevTerminalPreset, DevPrettyErrorConfig, DevTerminalConfigObject, ResolvedPrettyError } from './shared/dev-terminal'
 export { resolveDevTerminal, shouldShowFrameworkOverlay } from './shared/dev-terminal'
@@ -98,9 +99,10 @@ export interface NitroPluginEvlogConfig extends DevTerminalResolveInput {
   sampling?: SamplingConfig
   minLevel?: LogLevel
   redact?: boolean | RedactConfig | Record<string, unknown>
+  transport?: TransportConfig
 }
 
-/** @deprecated Renamed to {@link NitroPluginEvlogConfig}. Kept for backward compat. */
+/** @deprecated Removed in evlog v3. Use {@link NitroPluginEvlogConfig} instead. */
 export type EvlogConfig = NitroPluginEvlogConfig
 
 /**
@@ -130,8 +132,8 @@ export function isExpectedEvlogError(evlogError: Error | null): boolean {
  * evlog is disabled, the route is excluded, or the plugin is not registered.
  * @internal
  */
-export function isRecordedByEvlog(context: { _evlogShouldEmit?: unknown } | undefined): boolean {
-  return context?._evlogShouldEmit === true
+export function isRecordedByEvlog(context: object | undefined): boolean {
+  return (context as { _evlogShouldEmit?: unknown } | undefined)?._evlogShouldEmit === true
 }
 
 /** Request metadata used to decide JSON vs framework error-page rendering. */
@@ -193,8 +195,8 @@ export function shouldSerializeNitroErrorAsJson(
  * `res.end`, so without this the Youch overlay still runs.
  * @internal
  */
-export function markH3ErrorHandled(event: { _handled?: boolean }): void {
-  event._handled = true
+export function markH3ErrorHandled(event: object): void {
+  (event as { _handled?: boolean })._handled = true
 }
 
 /**
@@ -338,7 +340,7 @@ export function buildPlainNitroErrorBody(
 export function serializeEvlogErrorResponse(error: Error, url: string): Record<string, unknown> {
   const status = extractErrorStatus(error)
   const { data } = error as { data?: unknown }
-  const statusMessage = (error as { statusMessage?: string }).statusMessage || error.message
+  const statusMessage = (readErrorField(error, 'statusMessage') as string | undefined) || error.message
   return {
     url,
     status,

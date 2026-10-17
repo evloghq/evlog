@@ -156,6 +156,75 @@ jobs:
       - name: Build affected examples
         run: pnpm exec turbo run build --affected --continue --filter='./examples/*'
 
+  # Report-only (no fail threshold in 3.0). Base and head run on this same
+  # runner, so the comparison measures the change, not the machine. The job is
+  # left out of the `ci` aggregate below on purpose: it can never block a merge.
+  bench:
+    name: Benchmarks (report only)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0 # the base commit must be present for the worktree below
+          persist-credentials: false
+
+      - name: Set up pnpm and Node
+        uses: ./.github/actions/setup
+
+      - name: Record the runner
+        run: |
+          {
+            echo "### Runner"
+            echo ""
+            echo "- Node $(node -v)"
+            echo "- CPU: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs), $(nproc) vCPU"
+            echo "- OS: $(uname -sr)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Benchmark the pull request head
+        working-directory: packages/evlog
+        run: |
+          pnpm exec vitest bench bench/core/
+          cp bench/results.json "$RUNNER_TEMP/head.json"
+
+      # The base commit gets its own worktree. It reuses this checkout's
+      # dependencies, which is accurate unless the pull request changed them.
+      - name: Benchmark the base branch
+        run: |
+          git worktree add "$RUNNER_TEMP/base" "${{ github.event.pull_request.base.sha }}"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/base/node_modules"
+          ln -s "$GITHUB_WORKSPACE/packages/evlog/node_modules" "$RUNNER_TEMP/base/packages/evlog/node_modules"
+          cd "$RUNNER_TEMP/base/packages/evlog"
+          pnpm exec vitest bench bench/core/
+          cp bench/results.json "$RUNNER_TEMP/base.json"
+
+      - name: Compare the benchmarks
+        working-directory: packages/evlog
+        run: |
+          # compare.ts exits 1 past its threshold; in report-only mode that is output, not failure
+          pnpm exec tsx bench/scripts/compare.ts --bench "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/head.json" >> "$GITHUB_STEP_SUMMARY" || true
+
+      # One counting script for both sides, so a change in the count is a change
+      # in the code under test and never in the measuring code.
+      - name: Count records per request
+        run: |
+          cp packages/evlog/bench/scripts/event-count.ts "$RUNNER_TEMP/base/packages/evlog/bench/scripts/"
+          {
+            echo ""
+            echo "### Records per request, base"
+            echo ""
+            cd "$RUNNER_TEMP/base/packages/evlog" && pnpm exec tsx bench/scripts/event-count.ts
+            echo ""
+            echo "### Records per request, head"
+            echo ""
+            cd "$GITHUB_WORKSPACE/packages/evlog" && pnpm exec tsx bench/scripts/event-count.ts
+          } >> "$GITHUB_STEP_SUMMARY"
+
   publish:
     name: Publish preview package
     runs-on: ubuntu-latest

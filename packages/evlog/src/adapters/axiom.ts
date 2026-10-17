@@ -1,6 +1,7 @@
 import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { applyDeprecatedAlias, formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
+import { warnDeprecatedEnvVar } from '../shared/deprecate'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
 
@@ -14,8 +15,7 @@ interface BaseAxiomConfig {
    */
   apiKey: string
   /**
-   * @deprecated Renamed to {@link BaseAxiomConfig.apiKey}. Will be removed in
-   * the next major version. Pass `apiKey` instead.
+   * @deprecated Removed in evlog v3. Use `apiKey` instead.
    */
   token?: string
   /** Organization ID (required for Personal Access Tokens). */
@@ -90,6 +90,7 @@ function applyApiKeyAlias(config: Partial<ResolvedAxiomConfig>): Partial<Resolve
  * ```
  */
 export function createAxiomDrain(overrides?: Partial<AxiomConfig>) {
+  warnDeprecatedEnvVar('axiom', ['NUXT_AXIOM_TOKEN', 'AXIOM_TOKEN'], 'AXIOM_API_KEY')
   return defineHttpDrain<AxiomConfig>({
     name: 'axiom',
     resolve: async () => {

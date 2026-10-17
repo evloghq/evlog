@@ -88,17 +88,29 @@ export class EvlogError extends Error {
     }
   }
 
-  /** HTTP status text (alias for message) */
+  /**
+   * HTTP status text.
+   *
+   * @deprecated Removed in evlog v3. Use `message` instead.
+   */
   get statusText(): string {
     return this.message
   }
 
-  /** HTTP status code (alias for compatibility) */
+  /**
+   * HTTP status code.
+   *
+   * @deprecated Removed in evlog v3. Use `status` instead.
+   */
   get statusCode(): number {
     return this.status
   }
 
-  /** HTTP status message (alias for compatibility) */
+  /**
+   * HTTP status message.
+   *
+   * @deprecated Removed in evlog v3. Use `message` instead.
+   */
   get statusMessage(): string {
     return this.message
   }

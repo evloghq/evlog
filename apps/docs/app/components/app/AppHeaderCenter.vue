@@ -254,6 +254,12 @@ const landingItems = [
         to: '/integrate/adapters/hybrid/hyperdx'
       },
       {
+        label: 'Sazabi',
+        icon: 'i-custom-sazabi',
+        description: 'Send logs to Sazabi via OTLP',
+        to: '/integrate/adapters/cloud/sazabi'
+      },
+      {
         label: 'PostHog',
         icon: 'i-simple-icons-posthog',
         description: 'Send logs to PostHog',
@@ -276,6 +282,18 @@ const landingItems = [
         icon: 'i-simple-icons-datadog',
         description: 'Send logs to Datadog',
         to: '/integrate/adapters/cloud/datadog'
+      },
+      {
+        label: 'Grafana Loki',
+        icon: 'i-simple-icons-grafana',
+        description: 'Push logs to Grafana Loki',
+        to: '/integrate/adapters/hybrid/loki'
+      },
+      {
+        label: 'ClickHouse',
+        icon: 'i-simple-icons-clickhouse',
+        description: 'Insert events into ClickHouse',
+        to: '/integrate/adapters/hybrid/clickhouse'
       },
       {
         label: 'File System',

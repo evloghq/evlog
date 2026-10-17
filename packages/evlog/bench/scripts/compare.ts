@@ -5,9 +5,9 @@
  * a unified markdown report for PR comments.
  *
  * Usage:
- *   tsx bench/compare.ts --bench <baseline.json> <current.json>
- *   tsx bench/compare.ts --size <baseline.json> <current.json>
- *   tsx bench/compare.ts --bench <base> <curr> --size <base> <curr>
+ *   tsx bench/scripts/compare.ts --bench <baseline.json> <current.json>
+ *   tsx bench/scripts/compare.ts --size <baseline.json> <current.json>
+ *   tsx bench/scripts/compare.ts --bench <base> <curr> --size <base> <curr>
  *
  * Exits with code 1 if any benchmark regressed by more than the threshold.
  */
@@ -335,9 +335,9 @@ const parsed = parseArgs()
 
 if (!parsed.benchBase && !parsed.sizeBase) {
   console.error('Usage:')
-  console.error('  tsx bench/compare.ts --bench <baseline.json> <current.json>')
-  console.error('  tsx bench/compare.ts --size <baseline.json> <current.json>')
-  console.error('  tsx bench/compare.ts --bench <base> <curr> --size <base> <curr>')
+  console.error('  tsx bench/scripts/compare.ts --bench <baseline.json> <current.json>')
+  console.error('  tsx bench/scripts/compare.ts --size <baseline.json> <current.json>')
+  console.error('  tsx bench/scripts/compare.ts --bench <base> <curr> --size <base> <curr>')
   process.exit(1)
 }
 

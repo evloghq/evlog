@@ -20,6 +20,7 @@ import {
   clearAsyncLocalStorage,
   createSharedEnterWithStorage,
 } from '../shared/asyncStorageScope'
+import { warnDeprecated } from '../shared/deprecate'
 
 const DEFAULT_MAX_SESSIONS = 256
 
@@ -61,8 +62,8 @@ export interface EvlogEveOptions extends Omit<EvlogConfig, 'extends' | 'map' | '
   /** Max characters kept in `'preview'` mode. Default `500`. */
   messagePreviewLength?: number
   /**
-   * @deprecated Use {@link EvlogEveOptions.message}. `true` maps to `'omit'`,
-   * `false` to `'preview'`.
+   * @deprecated Removed in evlog v3. Use {@link EvlogEveOptions.message}.
+   * `true` maps to `'omit'`, `false` to `'preview'`.
    */
   redactMessage?: boolean
   /**
@@ -1160,8 +1161,13 @@ function getTurnState(sessionId: string, turnId: string): TurnState | undefined 
  * ```ts
  * export default defineEvlogHook({ ...config, message: 'preview' })
  * ```
+ *
+ * @deprecated Removed in evlog v3. Use the `evlog()` lifecycle provider.
  */
 export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {
+  if (options.redactMessage !== undefined) {
+    warnDeprecated('eve:redactMessage', '[evlog/eve] redactMessage is deprecated and removed in v3. Use message: \'omit\' (was true) or \'preview\' (was false).')
+  }
   const messageMode = resolveMessageMode(options)
   const previewLength = options.messagePreviewLength ?? DEFAULT_MESSAGE_PREVIEW_LENGTH
 
@@ -1682,6 +1688,8 @@ function buildInstrumentationContext(
  * owns the file's `events` slot, so once another integration needs it — PostHog
  * links spans to the initiating user there — drop the wrapper and spread
  * {@link evlogRuntimeContext} into your own `defineInstrumentation` instead.
+ *
+ * @deprecated Removed in evlog v3. Use the `evlog()` lifecycle provider.
  */
 export function defineEvlogInstrumentation(
   options: EvlogEveInstrumentationOptions = {},

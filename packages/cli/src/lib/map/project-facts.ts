@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { glob } from '../glob'
+import { collectEvlogPackages } from './evlog-packages'
 import { buildFileFacts, moduleKey } from './facts'
 import type { FileFacts } from './facts'
 import { parseSource } from './parse'
@@ -43,6 +44,13 @@ export interface ProjectFacts {
    * (`import { useLogger } from '@/lib/evlog'`) scored as uninstrumented.
    */
   evlogBarrels: ReadonlyMap<string, ReadonlySet<string>>
+  /**
+   * Installed packages that wrap evlog, keyed by the exact specifier an entry
+   * is imported with (`@acme/logger`, `@acme/logger/next`), with the evlog
+   * names it forwards. Only packages evlog resolves from are listed, so a
+   * non-empty map also means evlog is installed for this app.
+   */
+  evlogPackages: ReadonlyMap<string, ReadonlySet<string>>
   /**
    * Inline errors duplicated across files, by signature.
    *
@@ -170,6 +178,7 @@ export function collectProjectFacts(
     pairable,
     catalogs: [...catalogs].sort(),
     evlogBarrels,
+    evlogPackages: collectEvlogPackages(ctx.projectRoot, dependencies),
     repeatedErrors,
   }
 }

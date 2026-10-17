@@ -15,7 +15,7 @@ One row per drain adapter that talks to a third-party API. The row names the aut
 | `otlp.ts`, `otlp-protobuf.ts` | https://opentelemetry.io/docs/specs/otlp/ | `open-telemetry/opentelemetry-js` (`@opentelemetry/exporter-logs-otlp-http`) | `experimental/packages/exporter-logs-otlp-http/src/platform/node/OTLPLogExporter.ts`, `experimental/packages/otlp-exporter-base/src/configuration/otlp-http-configuration.ts` | the first run pins the files | unset |
 | `posthog.ts` | https://posthog.com/docs/api/capture | `PostHog/posthog-js` (`posthog-node`) | `packages/node/src/client.ts`, `packages/core/src/posthog-core.ts` | the first run pins the files | unset |
 | `sazabi.ts` | https://docs.sazabi.com (OTLP/HTTP log streams) | none: OTLP/HTTP through evlog's own encoder (`otlp.ts`) | `packages/evlog/src/adapters/otlp.ts` | none: no client of its own | unset |
-| `sentry.ts` | https://develop.sentry.dev/sdk/data-model/envelopes/ | `getsentry/sentry-javascript` (`@sentry/core`) | `packages/core/src/envelope.ts`, `packages/core/src/transports/base.ts` | the first run pins the files | unset |
+| `sentry.ts` | https://develop.sentry.dev/sdk/data-model/envelopes/ | `getsentry/sentry-javascript` (`@sentry/core`) | `packages/core/src/logs/envelope.ts`, `packages/core/src/logs/internal.ts`, `packages/core/src/envelope.ts`, `packages/core/src/transports/base.ts` | the first run pins the files | unset |
 
 `Aligned to` is the client's published version and the evlog commit that last matched it, written as `@sentry/core 11.2.0 @ 5e0d543`. `unset` means no run has compared the two yet; the first run over that adapter writes the first pin and files every mismatch and gap it finds along the way.
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { sendBatchToBetterStack, sendToBetterStack, toBetterStackEvent, createBetterStackDrain } from '../../src/adapters/better-stack'
+import { enableDeprecationWarnings } from '../helpers/deprecations'
 
 describe('better-stack adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -205,7 +206,10 @@ describe('better-stack adapter', () => {
       headers: {},
     })
 
+    beforeEach(enableDeprecationWarnings)
+
     afterEach(() => {
+      vi.unstubAllEnvs()
       delete process.env.NUXT_BETTER_STACK_API_KEY
       delete process.env.BETTER_STACK_API_KEY
       delete process.env.NUXT_BETTER_STACK_SOURCE_TOKEN
@@ -233,7 +237,7 @@ describe('better-stack adapter', () => {
       const drain = createBetterStackDrain({ sourceToken: 'legacy-key' })
       await drain(createDrainContext())
       expect(warnSpy).toHaveBeenCalledWith(
-        '[evlog/better-stack] `sourceToken` is deprecated, use `apiKey` instead.',
+        '[evlog/better-stack] \'sourceToken\' is deprecated and removed in v3, use \'apiKey\' instead.',
       )
     })
 

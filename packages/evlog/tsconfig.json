@@ -19,7 +19,8 @@
       "evlog": ["./src/index.ts"],
       "evlog/nuxt": ["./src/nuxt/module.ts"],
       "evlog/nitro": ["./src/nitro/plugin.ts"],
-      "evlog/workers": ["./src/workers/index.ts"]
+      "evlog/workers": ["./src/workers/index.ts"],
+      "#app": ["./node_modules/nuxt/dist/app/index.d.ts"]
     }
   },
   "include": ["src/**/*", "test/**/*"],

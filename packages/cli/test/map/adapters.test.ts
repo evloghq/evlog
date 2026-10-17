@@ -100,6 +100,8 @@ describe('next adapter', () => {
     ['a plain specifier', 'async function createOrder() {}\nexport { createOrder }', 'action:createOrder'],
     ['a renamed specifier', 'async function run() {}\nexport { run as createOrder }', 'action:createOrder'],
     ['a default function', 'export default async function createOrder() {}', 'action:createOrder'],
+    ['a wrapped function', 'export const createOrder = withEvlog(async () => {})', 'action:createOrder'],
+    ['a wrapped default', 'export default withEvlog(async () => {})', 'action:default'],
   ])('collects a server action declared as %s', async (_name, source, expected) => {
     const root = await project({ 'app/actions/orders.ts': `"use server"\n${source}` })
 

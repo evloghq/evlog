@@ -90,7 +90,7 @@ You don't build that JSON by hand. You call `log.set()` as your code runs, addin
 
 TypeScript-first logger that works everywhere. Framework hooks auto-create and auto-emit the logger at request boundaries. For scripts, jobs, and workflows, you create a logger, accumulate context, emit when done.
 
-It's also a drop-in replacement for `console.log`, `pino`, or `consola` in **any** TypeScript context — CLI tools, one-shot migrations, published libraries, BullMQ / Inngest jobs, Cloudflare Workers, AWS Lambda, and Astro endpoints. The same `log.info` / `log.error` API runs everywhere, with the same drains, the same redaction, and the same types. You don't pick "evlog for HTTP, something else for the rest" — it's the one logger you ship with.
+It's also a drop-in replacement for `console.log`, `pino`, or `consola` in **any** TypeScript context: CLI tools, one-shot migrations, published libraries, BullMQ / Inngest jobs, Cloudflare Workers, AWS Lambda, and Astro endpoints. The same `log.info` / `log.error` API runs everywhere, with the same drains, the same redaction, and the same types. You don't pick "evlog for HTTP, something else for the rest". It's the one logger you ship with.
 
 ::code-group
 
@@ -229,7 +229,7 @@ Same code pattern, same output, every framework. Human-readable in dev, structur
 
 ### One API, two shapes
 
-Fire single structured events like pino or consola when you just need a log line. Accumulate one wide event per operation when you want the full story. Same drains, same redaction, same types — pick per call. Wide events aren't a separate mode you opt into; they live inside the same logger you'd use for `console.log`.
+Fire single structured events like pino or consola when you just need a log line. Accumulate one wide event per operation when you want the full story. Same drains, same redaction, same types: pick per call. Wide events aren't a separate mode you opt into; they live inside the same logger you'd use for `console.log`.
 
 ### 0 transitive dependencies
 
@@ -239,13 +239,13 @@ No peer deps, no polyfills, no bundler drama. Nothing to audit, nothing that bre
 
 Nuxt, Next.js, SvelteKit, Nitro, Express, Fastify, Hono, Elysia, NestJS, React Router, TanStack Start, Cloudflare Workers. Add the middleware, get wide events. Switch frameworks, keep the same `log.set()` pattern.
 
-### 8 drain adapters, plug and play
+### 12 drain adapters, plug and play
 
-Axiom, OTLP (Grafana, Honeycomb), Datadog, Sentry, PostHog, Better Stack, HyperDX, filesystem. Two lines of config. Async, batched, out-of-band. Your users don't wait on your log pipeline.
+Axiom, OTLP (Grafana, Honeycomb), Datadog, Sentry, PostHog, Better Stack, HyperDX, Sazabi, Loki, ClickHouse, filesystem, memory. Two lines of config. Async, batched, out-of-band. Your users don't wait on your log pipeline.
 
 ### AI SDK integration, built in
 
-Wrap the model once. Token usage, tool calls, streaming metrics, cost estimation, multi-step agents, cache hits, reasoning tokens — all land in the **same** wide event. Add the telemetry integration for tool execution timing and total generation wall time.
+Wrap the model once. Token usage, tool calls, streaming metrics, cost estimation, multi-step agents, cache hits, reasoning tokens: all land in the **same** wide event. Add the telemetry integration for tool execution timing and total generation wall time.
 
 ```ts [server/api/chat.post.ts]
 const ai = createAILogger(log, {
@@ -258,11 +258,11 @@ const result = streamText({
 })
 ```
 
-Multi-step agents, embeddings, cost estimation — zero extra code. No callback conflicts. No separate pipeline for AI observability.
+Multi-step agents, embeddings, cost estimation: zero extra code. No callback conflicts. No separate pipeline for AI observability.
 
 ### PII auto-redaction, zero config
 
-Enabled by default in production. Credit cards become `****1111`, emails become `a***@***.com`, IPs, phone numbers, JWTs, IBANs — all smart-masked before your console or drain ever sees them. No flag to remember, no manual sanitize helpers, no forgotten fields leaking to Axiom. GDPR compliance shouldn't require a sprint.
+Enabled by default in production. Credit cards become `****1111`, emails become `a***@***.com`, IPs, phone numbers, JWTs, IBANs: all smart-masked before your console or drain ever sees them. No flag to remember, no manual sanitize helpers, no forgotten fields leaking to Axiom. GDPR compliance shouldn't require a sprint.
 
 ### Head + tail sampling
 
@@ -300,7 +300,7 @@ Write NDJSON to disk. Your AI agents, scripts, and teammates query structured ev
 
 ### "I already use pino."
 
-pino gives you fast line-by-line JSON. evlog gives you that **plus** wide events, structured errors with `why`/`fix`/`link`, head + tail sampling, eight drain adapters, AI SDK integration with full o11y, and auto-instrumentation for twelve frameworks. Zero transitive deps, lighter install, same job done better. pino was the standard. evlog is what comes next.
+pino gives you fast line-by-line JSON. evlog gives you that **plus** wide events, structured errors with `why`/`fix`/`link`, head + tail sampling, twelve drain adapters, AI SDK integration with full o11y, and auto-instrumentation for twelve frameworks. Zero transitive deps, lighter install, same job done better. pino was the standard. evlog is what comes next.
 
 ### "I already have Sentry / Datadog."
 

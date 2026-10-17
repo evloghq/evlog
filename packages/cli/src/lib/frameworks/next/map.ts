@@ -160,7 +160,9 @@ function mentionsServerDirective(file: string): boolean {
  *
  * All four export spellings count, because Next treats every export of such a
  * module as a public endpoint: a missed one is an unscanned POST handler, not a
- * cosmetic gap.
+ * cosmetic gap. An export built by a call counts too: Next requires each export
+ * to be an async function, so `withEvlog(async () => …)`, evlog's own documented
+ * shape, is an action whatever wraps it.
  */
 function findServerActionExports(parsed: ParseResult): Array<{ name: string, line: number }> {
   const exports: Array<{ name: string, line: number }> = []
@@ -169,7 +171,7 @@ function findServerActionExports(parsed: ParseResult): Array<{ name: string, lin
   walkAst(parsed.program, (node) => {
     if (node.type === 'ExportDefaultDeclaration') {
       const { declaration } = node as { declaration?: Node }
-      if (declaration?.type !== 'FunctionDeclaration' && declaration?.type !== 'ArrowFunctionExpression') return
+      if (declaration?.type !== 'FunctionDeclaration' && declaration?.type !== 'ArrowFunctionExpression' && declaration?.type !== 'CallExpression') return
       const name = declaration.type === 'FunctionDeclaration' ? declaration.id?.name ?? 'default' : 'default'
       exports.push({ name, line: lineOf(node) })
       return
@@ -201,7 +203,7 @@ function findServerActionExports(parsed: ParseResult): Array<{ name: string, lin
     }
     if (decl.declaration?.type === 'VariableDeclaration') {
       for (const d of decl.declaration.declarations ?? []) {
-        if (d.id.type === 'Identifier' && d.init && (d.init.type === 'ArrowFunctionExpression' || d.init.type === 'FunctionExpression')) {
+        if (d.id.type === 'Identifier' && d.init && ['ArrowFunctionExpression', 'FunctionExpression', 'CallExpression'].includes(d.init.type)) {
           exports.push({ name: d.id.name, line: lineOf(d.init as Node) })
         }
       }

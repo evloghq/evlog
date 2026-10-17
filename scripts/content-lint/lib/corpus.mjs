@@ -270,6 +270,7 @@ const FOREIGN_OWNERS = [
   'otlpgrpc',
   'collector',
   'hyperdx',
+  'sazabi',
   'datadog',
   'axiom',
   'posthog',

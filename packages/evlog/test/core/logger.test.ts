@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createError as h3CreateError } from 'h3'
-import { createError } from '../../src/error'
+import { EvlogError, createError } from '../../src/error'
 import { createLogger, createRequestLogger, getEnvironment, initLogger, isEnabled, log } from '../../src/logger'
 import { withFakeTimers } from '../helpers/timers'
 import { defined } from '../helpers/defined'
@@ -108,6 +108,15 @@ describe('log', () => {
       name: 'Error', message: 'Database unavailable', code: 'DB_UNAVAILABLE', status: 503,
     })
     expect(event.error?.stack).toContain('Database unavailable')
+  })
+
+  it('keeps why, fix and link on any error, as the client logger does', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ silent: true, redact: false, drain })
+    log.error(Object.assign(new Error('Quota exceeded'), { why: 'Plan limit reached', fix: 'Upgrade the plan', link: 'https://example.com/plans' }))
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ why: 'Plan limit reached', fix: 'Upgrade the plan', link: 'https://example.com/plans' })
   })
 
   it('preserves EvlogError guidance and redacts internal fields in the global drain', () => {
@@ -227,6 +236,51 @@ describe('log', () => {
     expect(serialized.message).toBe('Job failed')
   })
 
+  it('leaves an object that defines toJSON to it', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    class Card {
+      constructor(readonly number: string, readonly error: Error) {}
+      toJSON() {
+        return { last4: this.number.slice(-4) }
+      }
+    }
+    log.error({ action: 'checkout', card: new Card('4242424242424242', new Error('Declined')) })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(JSON.parse(JSON.stringify(event)).card).toEqual({ last4: '4242' })
+  })
+
+  it.each([
+    ['an Error', (error: Error) => log.error(error)],
+    ['an object event', (error: Error) => log.error({ action: 'checkout', error })],
+  ])('drops the data and internal fields an error\'s own toJSON leaves out (%s)', (_name, logIt) => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    class PaymentError extends Error {
+      data = { cardNumber: '4242424242424242' }
+      internal = { token: 'tok_secret' }
+      toJSON() {
+        return { name: this.name, message: this.message }
+      }
+    }
+    logIt(new PaymentError('Declined'))
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ name: 'Error', message: 'Declined', stack: expect.any(String) })
+    expect(JSON.stringify(event)).not.toContain('4242424242424242')
+    expect(JSON.stringify(event)).not.toContain('tok_secret')
+  })
+
+  it('keeps the data an h3 error carries', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    log.error({ action: 'checkout', error: h3CreateError({ statusCode: 502, message: 'Upstream failed', data: { provider: 'stripe' } }) })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ statusCode: 502, data: { provider: 'stripe' }, stack: expect.any(String) })
+  })
+
   it('serializes an h3 wrapper once, keeping its status and the original error', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, drain })
@@ -248,6 +302,30 @@ describe('log', () => {
       data: { why: 'Card declined by the issuer', fix: 'Use a different payment method' },
     })
     expect(serialized).not.toHaveProperty('cause')
+  })
+
+  it('serializes an EvlogError without reading its legacy status getters', () => {
+    const legacyGetters = ['statusCode', 'statusText', 'statusMessage'] as const
+    const spies = legacyGetters.map(name => vi.spyOn(EvlogError.prototype, name, 'get'))
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    log.error({ action: 'checkout', error: createError({ message: 'Payment failed', status: 402 }) })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ status: 402, statusCode: 402, statusText: 'Payment failed', statusMessage: 'Payment failed' })
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+    spies.forEach(spy => spy.mockRestore())
+  })
+
+  it('marks the data of an h3 wrapper that points back at it as circular', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    const wrapper = h3CreateError(new Error('kaboom') as any) as any
+    wrapper.data = { self: wrapper }
+    log.error(wrapper)
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ message: 'kaboom', data: { self: '[Circular]' } })
   })
 
   it('serializes a plain error wrapped by h3 once, keeping the h3 status code', () => {

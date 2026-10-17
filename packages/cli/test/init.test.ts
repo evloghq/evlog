@@ -550,6 +550,54 @@ describe('evlog.config.ts drains', () => {
     expect(contents).not.toContain('import.meta.dev')
   })
 
+  it('wires Sazabi from its catalog entry', async () => {
+    const root = await project({ 'package.json': '{"name":"api"}' })
+
+    const plan = await planWiring({
+      root,
+      framework: 'nitro',
+      service: 'api',
+      ...wiring({ devDrain: 'none', prodDrains: ['sazabi'] }),
+      nitroMajor: 3,
+    })
+    const { contents } = action(plan, 'evlog.config.ts')
+
+    expect(contents).toContain(`import { createSazabiDrain } from 'evlog/sazabi'`)
+    expect(contents).toContain('  drain: createSazabiDrain(),')
+  })
+
+  it('wires Loki from its catalog entry', async () => {
+    const root = await project({ 'package.json': '{"name":"api"}' })
+
+    const plan = await planWiring({
+      root,
+      framework: 'nitro',
+      service: 'api',
+      ...wiring({ devDrain: 'none', prodDrains: ['loki'] }),
+      nitroMajor: 3,
+    })
+    const { contents } = action(plan, 'evlog.config.ts')
+
+    expect(contents).toContain(`import { createLokiDrain } from 'evlog/loki'`)
+    expect(contents).toContain('  drain: createLokiDrain(),')
+  })
+
+  it('wires ClickHouse from its catalog entry', async () => {
+    const root = await project({ 'package.json': '{"name":"api"}' })
+
+    const plan = await planWiring({
+      root,
+      framework: 'nitro',
+      service: 'api',
+      ...wiring({ devDrain: 'none', prodDrains: ['clickhouse'] }),
+      nitroMajor: 3,
+    })
+    const { contents } = action(plan, 'evlog.config.ts')
+
+    expect(contents).toContain(`import { createClickHouseDrain } from 'evlog/clickhouse'`)
+    expect(contents).toContain('  drain: createClickHouseDrain(),')
+  })
+
   it('sends to every production destination when there are several', async () => {
     const root = await project({ 'package.json': '{"name":"api"}' })
 
