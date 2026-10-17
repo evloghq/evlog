@@ -71,6 +71,13 @@ describe('log.set()', () => {
     log.set({ cart: { items: 3, total: 9999 } })
     log.set({ checkout: { step: 'payment' } })
   })
+
+  bench('merge into an existing nested key', () => {
+    const log = createLogger()
+    log.set({ user: { id: '123' }, cart: { items: 3 } })
+    log.set({ user: { plan: 'pro' }, cart: { total: 9999 } })
+    log.set({ user: { role: 'admin' } })
+  })
 })
 
 describe('log.emit()', () => {

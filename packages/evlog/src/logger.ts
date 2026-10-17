@@ -63,17 +63,13 @@ function setField(target: Record<string, unknown>, key: string, value: unknown):
   }
 }
 
-function copyRecord(record: Record<string, unknown>, ancestors: WeakSet<object>): Record<string, unknown> {
-  ancestors.add(record)
-  const copy: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(record)) {
-    let copied = value
-    if (isPlainRecord(value)) copied = ancestors.has(value) ? '[Circular]' : copyRecord(value, ancestors)
-    setField(copy, key, copied)
-  }
-  const toJSON = Object.getOwnPropertyDescriptor(record, 'toJSON')
-  if (toJSON && !toJSON.enumerable) Object.defineProperty(copy, 'toJSON', toJSON)
-  ancestors.delete(record)
+// Objects are stored by reference and copied only when a merge writes into
+// them, so evlog never writes into an object the caller still holds.
+function writableChild(target: Record<string, unknown>, key: string): Record<string, unknown> {
+  const child = target[key] as Record<string, unknown>
+  if (!isPlainRecord(child)) return child
+  const copy: Record<string, unknown> = { ...child }
+  setField(target, key, copy)
   return copy
 }
 
@@ -81,20 +77,16 @@ function mergeInto(target: Record<string, unknown>, source: Record<string, unkno
   for (const key in source) {
     const sourceVal = source[key]
     if (sourceVal === undefined || sourceVal === null) continue
-    const targetVal = Object.hasOwn(target, key) ? target[key] : undefined
+    const targetVal = key === '__proto__' && !Object.hasOwn(target, key) ? undefined : target[key]
     // Same reference on both sides — recording the same error twice, which every
     // integration does when a handler logs the error it then throws. Merging an
     // object into itself changes nothing, but walking into it would write to the
     // caller's own object and throw on any read-only field it carries (#457).
     if (sourceVal === targetVal) continue
     if (isPlainObject(sourceVal) && isPlainObject(targetVal)) {
-      mergeInto(targetVal, sourceVal)
+      mergeInto(writableChild(target, key), sourceVal)
     } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
       setField(target, key, [...targetVal, ...sourceVal])
-    } else if (isPlainRecord(sourceVal)) {
-      // Copy, so a later merge into this key writes to evlog's object, never to
-      // the caller's. Writing to the caller's object can make it contain itself.
-      setField(target, key, copyRecord(sourceVal, new WeakSet()))
     } else {
       // Context can hold objects evlog does not own; a field that refuses the
       // write must not abort the merge and lose the rest of the event.
@@ -966,7 +958,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
     if (!isPlainObject(context.audit)) {
       context.audit = fields as unknown as Record<string, unknown>
     } else {
-      mergeInto(context.audit as Record<string, unknown>, fields as unknown as Record<string, unknown>)
+      mergeInto(writableChild(context, 'audit'), fields as unknown as Record<string, unknown>)
     }
     context._auditForceKeep = true
   } as AuditMethod<T>
@@ -1023,7 +1015,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const errorObj = serializeError(err)
 
       if (isPlainObject(context.error)) {
-        mergeInto(context.error as Record<string, unknown>, errorObj)
+        mergeInto(writableChild(context, 'error'), errorObj)
       } else {
         context.error = errorObj
       }

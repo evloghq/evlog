@@ -526,6 +526,17 @@ describe('createLogger', () => {
     expect(() => JSON.stringify(event)).not.toThrow()
   })
 
+  it('does not write into a nested object when a later set merges into its key', () => {
+    const user = { id: '123' }
+    const logger = createLogger()
+
+    logger.set({ user })
+    logger.set({ user: { plan: 'pro' } })
+
+    expect(user).toEqual({ id: '123' })
+    expect(logger.getContext().user).toEqual({ id: '123', plan: 'pro' })
+  })
+
   it('keeps null fields and a non-enumerable toJSON on a nested record', () => {
     const payload = { status: null, visible: 1, hidden: 2 }
     Object.defineProperty(payload, 'toJSON', { value: () => ({ visible: 1 }), enumerable: false })
