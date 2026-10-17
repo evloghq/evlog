@@ -543,6 +543,61 @@ describe('evlog/sveltekit', () => {
 
       expect(result.message).toBe('Internal Error')
     })
+
+    describe('SvelteKit 3 input (#911)', () => {
+      function createKit3Input(kind: 'unknown' | 'framework', error: unknown, event: ReturnType<typeof createMockEvent>) {
+        const deprecatedReads: string[] = []
+        const input = { kind, error, event }
+        // Kit 3 dev mode exposes `status` and `message` as deprecated getters that warn on access
+        Object.defineProperties(input, {
+          status: {
+            get() {
+              deprecatedReads.push('status')
+              return 500
+            },
+          },
+          message: {
+            get() {
+              deprecatedReads.push('message')
+              return 'Internal Error'
+            },
+          },
+        })
+        return { input, deprecatedReads }
+      }
+
+      it('logs an unknown error and returns nothing so Kit keeps its defaults', () => {
+        const handleError = evlogHandleError()
+        const event = createMockEvent('GET', '/api/fail')
+        const logError = vi.fn()
+        event.locals.log = { error: logError, emit: () => null }
+        const error = new Error('Something broke')
+        const { input, deprecatedReads } = createKit3Input('unknown', error, event)
+
+        expect(handleError(input)).toBeUndefined()
+        expect(logError).toHaveBeenCalledWith(error)
+        expect(deprecatedReads).toEqual([])
+      })
+
+      it('returns the EvlogError status and message', () => {
+        const handleError = evlogHandleError()
+        const event = createMockEvent('GET', '/api/checkout')
+        const error = new EvlogError({ message: 'Payment failed', status: 402, why: 'Card declined' })
+        const { input, deprecatedReads } = createKit3Input('unknown', error, event)
+
+        expect(handleError(input)).toEqual({ message: 'Payment failed', status: 402, why: 'Card declined' })
+        expect(deprecatedReads).toEqual([])
+      })
+
+      it('returns nothing for a framework error', () => {
+        const handleError = evlogHandleError()
+        const event = createMockEvent('GET', '/missing')
+        const { input, deprecatedReads } = createKit3Input('framework', { status: 404, message: 'Not Found' }, event)
+
+        expect(handleError(input)).toBeUndefined()
+        expect(deprecatedReads).toEqual([])
+      })
+    })
   })
 
   describe('createEvlogHooks()', () => {
