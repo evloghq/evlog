@@ -51,6 +51,7 @@ const footerColumns: FooterColumn[] = [
       { label: 'vs Pino', to: '/compare/pino' },
       { label: 'vs Winston', to: '/compare/winston' },
       { label: 'vs LogTape', to: '/compare/logtape' },
+      { label: 'vs LogLayer', to: '/compare/loglayer' },
       { label: 'vs Consola', to: '/compare/consola' },
       { label: 'OpenTelemetry', to: '/compare/opentelemetry' },
       { label: 'All loggers', to: '/reference/vs-other-loggers' },
