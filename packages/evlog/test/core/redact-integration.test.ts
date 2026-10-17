@@ -502,6 +502,15 @@ describe('built-in smart masking', () => {
     expect(event.safe).toBe('no bearer here')
   })
 
+  it.each([
+    ['all built-ins', true],
+    ['creditCard listed first', { builtins: ['creditCard', 'iban'] }],
+    ['iban listed first', { builtins: ['iban', 'creditCard'] }],
+  ] as const)('masks a spaced IBAN whole when card masking is on too (%s)', (_label, input) => {
+    const event = redactEvent({ iban: 'FR76 3000 6000 0112 3456 7890 189', card: '4111 1111 1111 1111' }, defined(resolveRedactConfig(input), 'redact config'))
+    expect(event).toEqual({ iban: 'FR76****189', card: '****1111' })
+  })
+
   it('masks IBAN numbers keeping country code and last 3 digits', () => {
     let event: Record<string, unknown> = {
       fr: 'FR76 3000 6000 0112 3456 7890 189',

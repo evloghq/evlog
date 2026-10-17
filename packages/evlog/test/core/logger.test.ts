@@ -579,6 +579,68 @@ describe('createLogger', () => {
     expect(Object.getOwnPropertyDescriptor(user, '__proto__')?.value).toEqual({ polluted: true })
   })
 
+  it('cuts a cycle in the initial context instead of overflowing the stack', () => {
+    initLogger({ pretty: false, redact: true })
+    const context: Record<string, unknown> = { jobId: 'job-1' }
+    context.self = context
+    const event = defined(createLogger(context).emit(), 'emitted event')
+    expect(event.self).toBe('[Circular]')
+    expect(() => JSON.stringify(event)).not.toThrow()
+  })
+
+  it('cuts a cycle passed to emit()', () => {
+    initLogger({ pretty: false, redact: true })
+    const extra: Record<string, unknown> = { a: 1 }
+    extra.self = extra
+    const event = defined(createLogger().emit({ extra }), 'emitted event')
+    expect(event.extra).toEqual({ a: 1, self: '[Circular]' })
+  })
+
+  it('serializes an error in the initial context like one passed to set()', () => {
+    const event = defined(createLogger({ cause: new Error('upstream down') }).emit(), 'emitted event')
+    expect(event.cause).not.toBeInstanceOf(Error)
+    expect(JSON.parse(JSON.stringify(event)).cause).toMatchObject({ name: 'Error', message: 'upstream down' })
+  })
+
+  it('replaces a class instance instead of writing into the caller\'s object', () => {
+    class Account {
+      constructor(public id: string) {}
+    }
+    const account = new Account('acc_1')
+    const logger = createLogger()
+    logger.set({ account })
+    logger.set({ account: { plan: 'pro' } })
+
+    expect(account).toEqual(new Account('acc_1'))
+    expect(logger.getContext().account).toEqual({ plan: 'pro' })
+  })
+
+  it('replaces a Date with the next value set on the same key', () => {
+    const first = new Date(0)
+    const second = new Date(86_400_000)
+    const logger = createLogger()
+    logger.set({ at: first })
+    logger.set({ at: second })
+    expect(logger.getContext().at).toBe(second)
+
+    logger.set({ at: { tz: 'UTC' } })
+    expect(logger.getContext().at).toEqual({ tz: 'UTC' })
+    expect(Object.hasOwn(second, 'tz')).toBe(false)
+  })
+
+  it('keeps a class instance in the error field untouched when error() records an error', () => {
+    class Failure {
+      constructor(public reason: string) {}
+    }
+    const failure = new Failure('declined')
+    const logger = createLogger()
+    logger.set({ error: failure })
+    logger.error(new Error('Payment failed'))
+
+    expect(failure).toEqual(new Failure('declined'))
+    expect(logger.getContext().error).toMatchObject({ name: 'Error', message: 'Payment failed' })
+  })
+
   it('creates logger with empty context by default', () => {
     const logger = createLogger()
 

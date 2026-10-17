@@ -67,7 +67,6 @@ function setField(target: Record<string, unknown>, key: string, value: unknown):
 // them, so evlog never writes into an object the caller still holds.
 function writableChild(target: Record<string, unknown>, key: string): Record<string, unknown> {
   const child = target[key] as Record<string, unknown>
-  if (!isPlainRecord(child)) return child
   const copy: Record<string, unknown> = { ...child }
   // A spread drops a non-enumerable toJSON, the method that hides a field from
   // the serialized form. Keep it, or a second merge would expose what it hid.
@@ -89,7 +88,9 @@ function mergeInto(target: Record<string, unknown>, source: Record<string, unkno
     // object into itself changes nothing, but walking into it would write to the
     // caller's own object and throw on any read-only field it carries (#457).
     if (sourceVal === targetVal) continue
-    if (isPlainObject(sourceVal) && isPlainObject(targetVal)) {
+    // Only plain objects are merged. A class instance or a Date is a value: the
+    // next one replaces it, and the caller's object is never written into.
+    if (isPlainRecord(sourceVal) && isPlainRecord(targetVal)) {
       mergeInto(writableChild(target, key), sourceVal)
     } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
       setField(target, key, [...targetVal, ...sourceVal])
@@ -936,7 +937,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
   const deferDrain = internalOptions?._deferDrain ?? false
   const waitUntil = internalOptions?.waitUntil
   const startTime = Date.now()
-  const context: Record<string, unknown> = { ...initialContext }
+  const context: Record<string, unknown> = { ...(serializeErrorsIn(initialContext) as Record<string, unknown>) }
   let hasError = false
   let hasFatal = false
   let hasWarn = false
@@ -961,7 +962,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       return
     }
     const fields = buildAuditFields(input)
-    if (!isPlainObject(context.audit)) {
+    if (!isPlainRecord(context.audit)) {
       context.audit = fields as unknown as Record<string, unknown>
     } else {
       mergeInto(writableChild(context, 'audit'), fields as unknown as Record<string, unknown>)
@@ -1020,7 +1021,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
 
       const errorObj = serializeError(err)
 
-      if (isPlainObject(context.error)) {
+      if (isPlainRecord(context.error)) {
         mergeInto(writableChild(context, 'error'), errorObj)
       } else {
         context.error = errorObj
@@ -1137,7 +1138,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       }
 
       if (overrides) {
-        const obj = overrides as Record<string, unknown>
+        const obj = serializeErrorsIn(overrides) as Record<string, unknown>
         for (const key in obj) {
           if (key !== '_forceKeep' && key !== '_durationMs') context[key] = obj[key]
         }
