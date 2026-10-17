@@ -9,6 +9,12 @@ const ERROR_FIELDS = ['code', 'status', 'data', 'internal', 'why', 'fix', 'link'
 
 const NONE: readonly string[] = []
 
+/** A plain write to `__proto__` replaces the prototype instead of storing a field. */
+function defineField(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (key === '__proto__') Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
+  else target[key] = value
+}
+
 /**
  * The HTTP status, read from `status` and falling back to h3's `statusCode`.
  * Logs carry `status` only; the fallback covers h3 errors, which still name it `statusCode`.
@@ -95,12 +101,13 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
   /**
    * `ancestors` holds the errors and objects on the current path, so a value
    * reached twice through different branches is kept and only a cycle is cut.
+   * The path is a few levels deep, so a scan of an array beats a WeakSet.
    */
-  function serialize(error: Error, ancestors: WeakSet<object>): Record<string, unknown> {
+  function serialize(error: Error, ancestors: object[]): Record<string, unknown> {
     const { cause } = error
-    ancestors.add(error)
+    ancestors.push(error)
 
-    if (isWrapperOf(error, cause) && !ancestors.has(cause)) {
+    if (isWrapperOf(error, cause) && !ancestors.includes(cause)) {
       // The cause already carries the message, which the wrapper repeats.
       const serialized = serialize(cause, ancestors)
       const hidden = payloadFieldsHiddenBy(error)
@@ -108,7 +115,7 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
       if (status !== undefined) serialized.status = status
       const data = readErrorField(error, 'data')
       if (data !== undefined && !hidden.includes('data')) serialized.data = walk(data, ancestors)
-      ancestors.delete(error)
+      ancestors.pop()
       return serialized
     }
 
@@ -128,51 +135,64 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
     } else if (cause !== undefined) {
       serialized.cause = walk(cause, ancestors)
     }
-    ancestors.delete(error)
+    ancestors.pop()
     return serialized
   }
 
   /** Copies an object or array only once one of its values changes, so an event without errors is returned as it is. */
-  function walk(value: unknown, ancestors: WeakSet<object>): unknown {
+  function walk(value: unknown, ancestors: object[]): unknown {
     if (value === null || typeof value !== 'object') return value
-    if (ancestors.has(value)) return '[Circular]'
+    if (ancestors.includes(value)) return '[Circular]'
     if (value instanceof Error) return serialize(value, ancestors)
     if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return value
 
-    ancestors.add(value)
+    ancestors.push(value)
     let copy: unknown
     if (Array.isArray(value)) {
       let items: unknown[] | undefined
       for (let i = 0; i < value.length; i++) {
         const item: unknown = value[i]
+        if (item === null || typeof item !== 'object') {
+          if (items) items[i] = item
+          continue
+        }
         const result = walk(item, ancestors)
         if (items) items[i] = result
         else if (!Object.is(result, item)) (items = value.slice())[i] = result
       }
       copy = items
     } else {
-      const entries = Object.entries(value)
-      let changed = false
-      for (const entry of entries) {
-        const result = walk(entry[1], ancestors)
-        if (!Object.is(result, entry[1])) {
-          entry[1] = result
-          changed = true
+      const record = value as Record<string, unknown>
+      const keys = Object.keys(record)
+      let fields: Record<string, unknown> | undefined
+      for (let i = 0; i < keys.length; i++) {
+        const item = record[keys[i]!]
+        if (item === null || typeof item !== 'object') {
+          if (fields) defineField(fields, keys[i]!, item)
+          continue
+        }
+        const result = walk(item, ancestors)
+        if (fields) {
+          defineField(fields, keys[i]!, result)
+        } else if (!Object.is(result, item)) {
+          fields = {}
+          for (let j = 0; j < i; j++) defineField(fields, keys[j]!, record[keys[j]!])
+          defineField(fields, keys[i]!, result)
         }
       }
-      if (changed) {
+      if (fields) {
         // Keep the prototype so a copied class instance is still replaced, not merged, by a later set().
         const proto = Object.getPrototypeOf(value)
-        copy = Object.fromEntries(entries)
-        if (proto !== Object.prototype) Object.setPrototypeOf(copy, proto)
+        if (proto !== Object.prototype) Object.setPrototypeOf(fields, proto)
       }
+      copy = fields
     }
-    ancestors.delete(value)
+    ancestors.pop()
     return copy ?? value
   }
 
   return {
-    serializeError: error => serialize(error, new WeakSet()),
-    serializeErrorsIn: value => walk(value, new WeakSet()),
+    serializeError: error => serialize(error, []),
+    serializeErrorsIn: value => walk(value, []),
   }
 }

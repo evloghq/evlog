@@ -3,7 +3,24 @@ import { globToRegExp } from './utils'
 
 const DEFAULT_REPLACEMENT = '[REDACTED]'
 
-export type Masker = [RegExp, (match: string) => string]
+/**
+ * A pattern, its mask, and a cheap check the value must pass before the pattern
+ * can match. The check only rules values out; it never decides a match.
+ */
+export type Masker = [RegExp, (match: string) => string, ((value: string) => boolean)?]
+
+const DIGIT = /\d/
+const BEARER_WORD = /bearer/i
+// The start of a match, without the length limits that make a full scan of a long
+// string slow: `[\w.+-]{1,64}` restarts at every character of a path.
+const EMAIL_SHAPE = /[\w.+-]@[\w-]{1,63}(?:\.[\w-]{1,63})*\.[a-zA-Z]{2}/
+const CARD_SHAPE = /\d{4}[\s-]?\d{4}/
+
+/**
+ * Every built-in pattern needs a digit, an `@`, `eyJ` or the word `bearer`, so a
+ * string with none of them is left as it is without running a single pattern.
+ */
+const BUILTIN_SIGNAL = /[\d@]|eyJ|bearer/i
 
 /** Compiled matchers for {@link RedactConfig.paths} glob patterns. */
 export interface RedactPathMatchers {
@@ -241,11 +258,13 @@ export const builtinPatterns = {
   /** Bearer tokens → Bearer *** */
   bearer: {
     pattern: /\bBearer\s+[\w\-.~+/]{8,}=*/gi,
+    gate: (v: string) => v.length >= 15 && BEARER_WORD.test(v),
     mask: () => 'Bearer ***',
   },
   /** IBAN → FR76****189 (country + check digits + last 3) */
   iban: {
     pattern: /\b[A-Z]{2}\d{2}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}\b/g,
+    gate: (v: string) => v.length >= 16 && DIGIT.test(v),
     mask: (m: string) => {
       const clean = m.replace(/[\s-]/g, '')
       return `${clean.slice(0, 4)}****${clean.slice(-3)}`
@@ -254,6 +273,7 @@ export const builtinPatterns = {
   /** Credit card numbers → ****1111 (PCI DSS: last 4 allowed) */
   creditCard: {
     pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
+    gate: (v: string) => v.length >= 16 && CARD_SHAPE.test(v),
     mask: (m: string) => `****${m.replace(/[\s-]/g, '').slice(-4)}`,
   },
   /** Email addresses → a***@***.com */
@@ -261,6 +281,7 @@ export const builtinPatterns = {
     // Letters-only TLD, so pnpm store segments like `name@1.2.3` are not treated as addresses.
     // RFC 5321 lengths bound the scan from each start position.
     pattern: /[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63})*\.[a-zA-Z]{2,63}\b/g,
+    gate: (v: string) => v.includes('@') && EMAIL_SHAPE.test(v),
     mask: (m: string) => {
       const at = m.indexOf('@')
       if (at < 1) return '***@***'
@@ -271,6 +292,7 @@ export const builtinPatterns = {
   /** IPv4 addresses → ***.***.***.100 (last octet only) */
   ipv4: {
     pattern: /\b(?!0\.0\.0\.0\b)(?!127\.0\.0\.1\b)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g,
+    gate: (v: string) => v.length >= 7 && v.includes('.') && DIGIT.test(v),
     mask: (m: string) => `***.***.***.${m.split('.').pop()}`,
   },
   /**
@@ -284,6 +306,7 @@ export const builtinPatterns = {
    */
   phone: {
     pattern: /(?:\+\d{1,3}[\s.-]?\(?\d{1,4}\)?|\(\d{1,4}\))(?:[\s.-]?\d{2,4}){2,4}\b/g,
+    gate: (v: string) => v.includes('+') || v.includes('('),
     mask: (m: string) => {
       const digits = m.replace(/[^\d]/g, '')
       const hasPlus = m.startsWith('+')
@@ -302,6 +325,7 @@ export const builtinPatterns = {
   jwt: {
     // The header stops at the next `-eyJ`, where another match could start, so no start rescans it.
     pattern: /\beyJ(?:(?!-eyJ)[\w-])*\.[\w-]*\.[\w-]*\b/g,
+    gate: (v: string) => v.includes('eyJ'),
     mask: () => 'eyJ***.***',
   },
 } as const
@@ -318,30 +342,41 @@ export type BuiltinRedactName = BuiltinPatternName | 'secrets'
  */
 const SECRET_KEY = /(?:password|passwd|secret|token)$/i
 
+/** {@link SECRET_KEY} only matches a key ending in `d`, `t` or `n`; the last character rules most keys out first. */
+function isSecretKey(key: string): boolean {
+  const last = key.charCodeAt(key.length - 1) | 0x20
+  return (last === 0x64 || last === 0x74 || last === 0x6E) && SECRET_KEY.test(key)
+}
+
 /**
  * Replace every value stored under a {@link SECRET_KEY} key, at any depth.
  * Booleans and `null` carry no secret (`hasPassword: true`) and are kept.
  * Mutates `obj` in place (use on a clone).
  */
-function redactSecretKeys(obj: unknown, replacement: RedactReplacement, prefix = ''): void {
+function redactSecretKeys(obj: unknown, replacement: RedactReplacement, path: Array<string | number> = []): void {
   if (obj === null || typeof obj !== 'object') return
 
   if (Array.isArray(obj)) {
     for (let i = 0; i < obj.length; i++) {
-      redactSecretKeys(obj[i], replacement, prefix ? `${prefix}.${i}` : String(i))
+      path.push(i)
+      redactSecretKeys(obj[i], replacement, path)
+      path.pop()
     }
     return
   }
 
+  // The dotted path is only built for a field that is replaced.
   const record = obj as Record<string, unknown>
   for (const key of redactableKeys(record)) {
-    const fullPath = prefix ? `${prefix}.${key}` : key
     const value = record[key]
-    if (SECRET_KEY.test(key) && value !== null && value !== undefined && typeof value !== 'boolean') {
+    path.push(key)
+    if (value !== null && value !== undefined && typeof value !== 'boolean' && isSecretKey(key)) {
+      const fullPath = path.join('.')
       setRedacted(record, key, resolveReplacement(replacement, value, { path: fullPath, key }), fullPath)
     } else {
-      redactSecretKeys(value, replacement, fullPath)
+      redactSecretKeys(value, replacement, path)
     }
+    path.pop()
   }
 }
 
@@ -371,7 +406,7 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
     ? (Object.keys(builtinPatterns) as BuiltinPatternName[])
       .filter(name => builtins.includes(name))
       .map(name => builtinPatterns[name])
-      .map(b => [cloneRegex(b.pattern), b.mask] as Masker)
+      .map(b => [cloneRegex(b.pattern), b.mask, b.gate] as Masker)
     : allBuiltinMaskers()
 
   return {
@@ -383,7 +418,7 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
 }
 
 function allBuiltinMaskers(): Masker[] {
-  return Object.values(builtinPatterns).map(b => [cloneRegex(b.pattern), b.mask] as Masker)
+  return Object.values(builtinPatterns).map(b => [cloneRegex(b.pattern), b.mask, b.gate] as Masker)
 }
 
 function cloneRegex(re: RegExp): RegExp {
@@ -403,11 +438,113 @@ export function isGloballyRedacted(event: Record<string, unknown>): boolean {
   return Reflect.has(event, globallyRedacted)
 }
 
+const NOT_PLAIN = Symbol('evlog.notPlain')
+
 /**
- * Clone before redaction. Wide events are JSON-shaped; fall back when
+ * Deep copy of a tree made only of plain objects, arrays and primitives, the
+ * shape almost every wide event has. Returns {@link NOT_PLAIN} on anything
+ * `structuredClone` treats differently (a Date, a Map, a class instance, a
+ * cycle, a hole, a function), so the caller can fall back to it.
+ */
+function clonePlain(value: unknown, ancestors: object[]): unknown {
+  if (value === null || typeof value !== 'object') {
+    return typeof value === 'function' || typeof value === 'symbol' ? NOT_PLAIN : value
+  }
+  if (ancestors.includes(value)) return NOT_PLAIN
+  const proto = Object.getPrototypeOf(value)
+  if (proto === Array.prototype) {
+    const source = value as unknown[]
+    const copy: unknown[] = new Array(source.length)
+    ancestors.push(source)
+    for (let i = 0; i < source.length; i++) {
+      if (!(i in source)) return NOT_PLAIN
+      const item = clonePlain(source[i], ancestors)
+      if (item === NOT_PLAIN) return NOT_PLAIN
+      copy[i] = item
+    }
+    ancestors.pop()
+    return copy
+  }
+  if (proto !== Object.prototype && proto !== null) return NOT_PLAIN
+  const record = value as Record<string, unknown>
+  const copy: Record<string, unknown> = {}
+  ancestors.push(record)
+  for (const key of Object.keys(record)) {
+    const item = clonePlain(record[key], ancestors)
+    if (item === NOT_PLAIN) return NOT_PLAIN
+    if (key === '__proto__') Object.defineProperty(copy, key, { value: item, enumerable: true, writable: true, configurable: true })
+    else copy[key] = item
+  }
+  ancestors.pop()
+  return copy
+}
+
+interface CloneRedactedOptions {
+  secretKeys: boolean
+  maskers: Masker[] | undefined
+  replacement: RedactReplacement
+}
+
+/**
+ * {@link clonePlain} that applies the `secrets` and masker stages while it
+ * copies, in the order `redactEvent` runs them. Only valid when no transform,
+ * path or custom pattern stage runs, since those must see the copy first.
+ */
+function cloneRedacted(value: unknown, ancestors: object[], path: Array<string | number>, options: CloneRedactedOptions): unknown {
+  if (value === null || typeof value !== 'object') {
+    if (typeof value === 'string') return options.maskers ? applyMaskers(value, options.maskers) : value
+    return typeof value === 'function' || typeof value === 'symbol' ? NOT_PLAIN : value
+  }
+  if (ancestors.includes(value)) return NOT_PLAIN
+  const proto = Object.getPrototypeOf(value)
+  if (proto === Array.prototype) {
+    const source = value as unknown[]
+    const copy: unknown[] = new Array(source.length)
+    ancestors.push(source)
+    for (let i = 0; i < source.length; i++) {
+      if (!(i in source)) return NOT_PLAIN
+      path.push(i)
+      const item = cloneRedacted(source[i], ancestors, path, options)
+      path.pop()
+      if (item === NOT_PLAIN) return NOT_PLAIN
+      copy[i] = item
+    }
+    ancestors.pop()
+    return copy
+  }
+  if (proto !== Object.prototype && proto !== null) return NOT_PLAIN
+  const record = value as Record<string, unknown>
+  const copy: Record<string, unknown> = {}
+  ancestors.push(record)
+  for (const key of Object.keys(record)) {
+    const raw = record[key]
+    let item: unknown
+    path.push(key)
+    if (options.secretKeys && raw !== null && raw !== undefined && typeof raw !== 'boolean' && isSecretKey(key)) {
+      const cloned = clonePlain(raw, ancestors)
+      if (cloned === NOT_PLAIN) return NOT_PLAIN
+      const replaced = resolveReplacement(options.replacement, cloned, { path: path.join('.'), key })
+      item = options.maskers ? applyMaskers(replaced, options.maskers) : replaced
+    } else {
+      item = cloneRedacted(raw, ancestors, path, options)
+    }
+    path.pop()
+    if (item === NOT_PLAIN) return NOT_PLAIN
+    if (key === '__proto__') Object.defineProperty(copy, key, { value: item, enumerable: true, writable: true, configurable: true })
+    else copy[key] = item
+  }
+  ancestors.pop()
+  return copy
+}
+
+/**
+ * Clone before redaction. Wide events are JSON-shaped, so a plain copy covers
+ * them; anything else goes through `structuredClone`, then JSON when
  * `structuredClone` rejects non-cloneable values (functions, symbols, etc.).
  */
 function cloneForRedaction(event: Record<string, unknown>): Record<string, unknown> {
+  const plain = clonePlain(event, [])
+  if (plain !== NOT_PLAIN) return plain as Record<string, unknown>
   try {
     return structuredClone(event)
   } catch {
@@ -435,8 +572,15 @@ function cloneForRedaction(event: Record<string, unknown>): Record<string, unkno
  * @returns A redacted deep clone of `event`.
  */
 export function redactEvent(event: Record<string, unknown>, config: RedactConfig): Record<string, unknown> {
-  const clone = cloneForRedaction(event)
   const replacement = config.replacement ?? DEFAULT_REPLACEMENT
+  const pathMatchers = config._pathMatchers ?? compileRedactPathMatchers(config.paths)
+
+  if (!config.transform && !pathMatchers && !config.patterns?.length) {
+    const redacted = cloneRedacted(event, [], [], { secretKeys: config._secretKeys === true, maskers: config._maskers, replacement })
+    if (redacted !== NOT_PLAIN) return redacted as Record<string, unknown>
+  }
+
+  const clone = cloneForRedaction(event)
 
   // Runs first so the hook sees raw values; declarative stages then still apply
   // to whatever it leaves behind, so a hook that misses a field is not the last
@@ -449,8 +593,6 @@ export function redactEvent(event: Record<string, unknown>, config: RedactConfig
     }
   }
 
-  // Configs resolved via resolveRedactConfig carry precompiled matchers; compile lazily for ad-hoc configs.
-  const pathMatchers = config._pathMatchers ?? compileRedactPathMatchers(config.paths)
   if (pathMatchers) {
     redactPathsInTree(clone, pathMatchers, replacement)
   }
@@ -539,7 +681,8 @@ function applyMaskersToTree(obj: unknown, maskers: Masker[]): void {
   if (Array.isArray(obj)) {
     for (let i = 0; i < obj.length; i++) {
       if (typeof obj[i] === 'string') {
-        obj[i] = applyMaskers(obj[i] as string, maskers)
+        const masked = applyMaskers(obj[i] as string, maskers)
+        if (masked !== obj[i]) obj[i] = masked
       } else if (typeof obj[i] === 'object') {
         applyMaskersToTree(obj[i], maskers)
       }
@@ -552,7 +695,8 @@ function applyMaskersToTree(obj: unknown, maskers: Masker[]): void {
     for (const key of redactableKeys(record)) {
       const val = record[key]
       if (typeof val === 'string') {
-        setRedacted(record, key, applyMaskers(val, maskers), key)
+        const masked = applyMaskers(val, maskers)
+        if (masked !== val) setRedacted(record, key, masked, key)
       } else if (typeof val === 'object') {
         applyMaskersToTree(val, maskers)
       }
@@ -561,8 +705,10 @@ function applyMaskersToTree(obj: unknown, maskers: Masker[]): void {
 }
 
 function applyMaskers(value: string, maskers: Masker[]): string {
+  if (!BUILTIN_SIGNAL.test(value)) return value
   let result = value
-  for (const [pattern, mask] of maskers) {
+  for (const [pattern, mask, gate] of maskers) {
+    if (gate && !gate(result)) continue
     result = result.replace(pattern, mask)
   }
   return result

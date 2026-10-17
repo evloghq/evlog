@@ -476,6 +476,86 @@ describe('redactEvent - edge cases', () => {
   })
 })
 
+describe('redactEvent - built-in pre-checks', () => {
+  // The shortest string each pattern matches, so every length check sits on its boundary.
+  const shortest: Array<[keyof typeof builtinPatterns, string, string]> = [
+    ['creditCard', '4111111111111111', '****1111'],
+    ['email', 'a@b.co', 'a***@***.co'],
+    ['ipv4', '1.2.3.4', '***.***.***.4'],
+    ['phone', '+123456', '+123******56'],
+    ['jwt', 'eyJ.a.b', 'eyJ***.***'],
+    ['bearer', 'Bearer abcdefgh', 'Bearer ***'],
+    ['iban', 'DE89370400440532', 'DE89****532'],
+  ]
+
+  it.each(shortest)('%s masks its shortest match and keeps one character less', (name, value, masked) => {
+    expect(value).toMatch(new RegExp(builtinPatterns[name].pattern.source, builtinPatterns[name].pattern.flags))
+    const config = defined(resolveRedactConfig({ builtins: [name] }), 'redact config')
+    expect(redactEvent({ value, short: value.slice(0, -1) }, config)).toEqual({ value: masked, short: value.slice(0, -1) })
+  })
+
+  it('masks a JWT and a Bearer token that carry no digit and no @', () => {
+    const config = defined(resolveRedactConfig(true), 'redact config')
+    expect(redactEvent({ jwt: 'eyJabc.def.ghi', auth: 'bearer abcdefghij' }, config)).toEqual({ jwt: 'eyJ***.***', auth: 'Bearer ***' })
+  })
+
+  it('gives the same result as running every pattern on every string', () => {
+    const maskers = Object.values(builtinPatterns)
+    const reference = (value: string) => maskers.reduce((acc, { pattern, mask }) => acc.replace(new RegExp(pattern.source, pattern.flags), mask), value)
+    const config = defined(resolveRedactConfig({ builtins: Object.keys(builtinPatterns) as Array<keyof typeof builtinPatterns> }), 'redact config')
+    const alphabet = '0123456789abcdeyJBrRE@.-+()/= \t'
+    const pieces = ['eyJ', 'Bearer ', 'bearer\t', '4111 1111 1111 1111', '4111-1111', '@example.com', 'jane.doe+x@mail.example.co', 'FR76', '192.168.', 'node_modules/.pnpm/a@1.2.3_@b+c@4.5.6_d/', ':1204:17)']
+    let seed = 1
+    const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
+    for (let i = 0; i < 5000; i++) {
+      let value = ''
+      for (let n = Math.floor(random() * 80); n > 0; n--) {
+        value += random() < 0.1 ? pieces[Math.floor(random() * pieces.length)] : alphabet[Math.floor(random() * alphabet.length)]
+      }
+      expect(redactEvent({ value }, config).value).toBe(reference(value))
+    }
+  })
+})
+
+describe('redactEvent - copy', () => {
+  const config = defined(resolveRedactConfig(true), 'redact config')
+
+  it('returns a copy at every level', () => {
+    const event = { user: { email: 'alice@example.com', plan: 'pro' }, items: [{ id: 'a' }] }
+    const redacted = redactEvent(event, config)
+    expect(redacted).toEqual({ user: { email: 'a***@***.com', plan: 'pro' }, items: [{ id: 'a' }] })
+    expect(redacted.user).not.toBe(event.user)
+    expect(redacted.items).not.toBe(event.items)
+    expect((redacted.items as unknown[])[0]).not.toBe(event.items[0])
+    expect(event.user.email).toBe('alice@example.com')
+  })
+
+  it('keeps a Date and an array hole, and still redacts the fields around them', () => {
+    const redacted = redactEvent({ at: new Date(0), email: 'alice@example.com', password: 'x', items: [, 'a@b.co'] }, config)
+    expect(redacted.at).toBeInstanceOf(Date)
+    expect(redacted.email).toBe('a***@***.com')
+    expect(redacted.password).toBe('[REDACTED]')
+    expect(0 in (redacted.items as unknown[])).toBe(false)
+    expect((redacted.items as unknown[])[1]).toBe('a***@***.co')
+  })
+
+  it('stores a __proto__ key as a field', () => {
+    const redacted = redactEvent(JSON.parse('{"__proto__":{"email":"alice@example.com"}}'), config)
+    expect(Object.getPrototypeOf(redacted)).toBe(Object.prototype)
+    expect(Object.getOwnPropertyDescriptor(redacted, '__proto__')?.value).toEqual({ email: 'a***@***.com' })
+  })
+
+  it('passes array indexes in the path of a replaced secret', () => {
+    const paths: string[] = []
+    const replacement = (_value: unknown, ctx: { path: string }) => {
+      paths.push(ctx.path)
+      return '[x]'
+    }
+    expect(redactEvent({ items: [{ apiToken: 'x' }] }, defined(resolveRedactConfig({ replacement }), 'redact config'))).toEqual({ items: [{ apiToken: '[x]' }] })
+    expect(paths).toEqual(['items.0.apiToken'])
+  })
+})
+
 describe('redactEvent - secrets built-in', () => {
   const redact = (event: Record<string, unknown>, input: Parameters<typeof resolveRedactConfig>[0] = true) =>
     redactEvent(event, defined(resolveRedactConfig(input), 'redact config'))
