@@ -8,7 +8,7 @@ name: e2e
 #
 # Triggers:
 #   - daily cron (3:00 UTC) — daily health check
-#   - push to main — confirm a merge didn't break anything
+#   - push to main or v3 — confirm a merge didn't break anything
 #   - workflow_dispatch — manual run from the Actions tab
 #   - PR labelled `e2e` — opt-in for adapter changes (only on PRs from
 #     the same repo, never on forks)
@@ -19,6 +19,7 @@ on:
   push:
     branches:
       - main
+      - v3
     paths:
       - 'packages/evlog/src/adapters/**'
       - 'packages/evlog/src/shared/drain.ts'

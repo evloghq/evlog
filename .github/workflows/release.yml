@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - v3
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
@@ -23,6 +24,18 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
+
+      # Without pre.json, v3 would publish 3.0.0 to `latest`; with it, main would publish a prerelease
+      - name: Check pre mode matches the branch
+        run: |
+          if [ "$GITHUB_REF_NAME" = v3 ] && [ ! -f .changeset/pre.json ]; then
+            echo "::error::v3 publishes prereleases only, .changeset/pre.json is missing"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_NAME" = main ] && [ -f .changeset/pre.json ]; then
+            echo "::error::main does not publish prereleases, .changeset/pre.json is present"
+            exit 1
+          fi
 
       - uses: ./.github/actions/setup
         with:

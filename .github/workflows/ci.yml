@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - v3
   pull_request:
     branches:
       - main
+      - v3
   workflow_dispatch:
 
 permissions:
@@ -230,7 +232,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Not gated on the other jobs: a preview is most useful while the PR is red
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3'
     permissions:
       contents: read
       id-token: write # remote cache OIDC
@@ -264,6 +266,13 @@ jobs:
     needs: [quality, test, examples]
     if: always()
     steps:
+      # v3 publishes prereleases until 3.0 GA; drop this step on v3 when GA is cut
+      - name: Keep v3 out of main
+        if: github.head_ref == 'v3' && github.base_ref == 'main'
+        run: |
+          echo "::error::v3 is not merged into main before 3.0 GA"
+          exit 1
+
       - name: Verify every required job succeeded
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1

@@ -1,0 +1,16 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "evi": "0.0.0",
+    "evlog-community-adapter-skeleton": "8.0.4",
+    "evlog-community-enricher-skeleton": "8.0.4",
+    "evlog-community-framework-skeleton": "8.0.4",
+    "@evlog/cli": "0.10.0",
+    "evlog": "2.32.0",
+    "@evlog/nuxthub": "2.0.2",
+    "@evlog/signals": "0.2.0",
+    "@evlog/telemetry": "0.3.4"
+  },
+  "changesets": []
+}
