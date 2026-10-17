@@ -13,7 +13,13 @@
     "@evlog/telemetry": "0.3.4"
   },
   "changesets": [
+    "bearer-before-iban",
     "error-status-field",
+    "faster-set-and-redaction",
+    "iban-before-card",
+    "logger-cycles-in-context",
+    "merge-plain-objects-only",
+    "registry-major-3",
     "require-node-22"
   ]
 }

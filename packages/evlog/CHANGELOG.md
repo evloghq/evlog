@@ -1,5 +1,21 @@
 # evlog
 
+## 3.0.0-beta.1
+
+### Patch Changes
+
+- [#910](https://github.com/evloghq/evlog/pull/910) [`5ab0a8d`](https://github.com/evloghq/evlog/commit/5ab0a8d7baed98b2181a2ab75de09fa10ce532ce) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The `bearer` redaction built-in now runs before every other built-in, so a Bearer token is masked whole. A token shaped like an IBAN or a card number was partly rewritten first and then no longer matched: `Bearer FR76ABCD123456789012` was logged as `Bearer FR76****012`, and `Bearer 4111111111111111` as `Bearer ****1111`. Both are now `Bearer ***`, and so is a JWT after `Bearer`, which was logged as `Bearer eyJ***.***`.
+
+- [#905](https://github.com/evloghq/evlog/pull/905) [`94748e1`](https://github.com/evloghq/evlog/commit/94748e1b3a643c1768d3bef1b1eceebd3d6a1718) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `log.set()`, `emit()` and the redaction production turns on by default do less work per event. The error check that runs on every `set()` payload no longer allocates when the payload holds no error. Redaction copies a plain event once while it redacts, instead of a `structuredClone` followed by a walk per stage, and skips the built-in patterns on strings none of them can match. Events with a `Date`, a `Map`, a class instance or another value that is not plain JSON still go through the previous path. The event `timestamp` is now one flat string. The concatenated string it replaces made `JSON.stringify` of the event, in a drain or a console line, about three times slower on Node 26. Logged and drained events are unchanged.
+
+- [#907](https://github.com/evloghq/evlog/pull/907) [`7fca2ba`](https://github.com/evloghq/evlog/commit/7fca2bacda2516eb4a1eee91381a29bdf1c81681) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The `iban` redaction built-in masks a spaced IBAN whole when `creditCard` is also on, as it is with the default `redact: true`. The card pattern ran first and matched the digits inside it, so `FR76 3000 6000 0112 3456 7890 189` was logged as `FR76 ****3456 7890 189`. It is now `FR76****189`. A `builtins` list runs in a fixed order, whatever order it is written in.
+
+- [#907](https://github.com/evloghq/evlog/pull/907) [`7fca2ba`](https://github.com/evloghq/evlog/commit/7fca2bacda2516eb4a1eee91381a29bdf1c81681) Thanks [@HugoRCD](https://github.com/HugoRCD)! - A cycle in the context passed to `createLogger()` or `createRequestLogger()`, or in the fields passed to `emit()`, is logged as `'[Circular]'`, as it already was for `set()`. It used to overflow the stack when redaction was on, which it is by default in production. An `Error` in that context or in `emit()` fields is now serialized with its `name`, `message` and `stack` instead of being logged as `{}`.
+
+- [#907](https://github.com/evloghq/evlog/pull/907) [`7fca2ba`](https://github.com/evloghq/evlog/commit/7fca2bacda2516eb4a1eee91381a29bdf1c81681) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `log.set()` only merges plain objects. A class instance or a `Date` is now a value: the next `set()` on the same key replaces it. Before, merging into one wrote the new fields into the caller's own object, and a second `Date` on the same key was ignored. `log.set({ account })` followed by `log.set({ account: { plan: 'pro' } })` now logs `{ plan: 'pro' }` and leaves `account` untouched.
+
+- [#902](https://github.com/evloghq/evlog/pull/902) [`7f74e73`](https://github.com/evloghq/evlog/commit/7f74e7301cc418ffc7a6dcb3f88ae0c9f50e71dd) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Keep evlog 3's process-wide state apart from evlog 2. `3.0.0-beta.0` still stored its config under the 2.x registry key, so with both majors loaded in one process (for example a dependency still on evlog 2), each copy read and overwrote the other's config, drain and redaction, and the "Multiple major versions of evlog" warning never fired. 3.x now uses its own key and warns when a 2.x copy is also loaded.
+
 ## 3.0.0-beta.0
 
 ### Major Changes
