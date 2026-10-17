@@ -60,7 +60,13 @@ export default defineNuxtConfig({
     },
     families: [
       { name: 'Geist', weights: ['100 900'], global: true },
-      { name: 'Geist Mono', weights: ['100 900'], global: true },
+      {
+        // symbols2 carries the box-drawing glyphs used by ASCII diagrams. Without it they fall back to a system monospace with a different advance width, and the diagram columns drift.
+        name: 'Geist Mono',
+        weights: ['100 900'],
+        global: true,
+        subsets: ['cyrillic-ext', 'cyrillic', 'greek-ext', 'greek', 'vietnamese', 'latin-ext', 'latin', 'symbols2'],
+      },
       {
         name: 'Geist Pixel Line',
         src: '/fonts/GeistPixel-Line.woff2',
