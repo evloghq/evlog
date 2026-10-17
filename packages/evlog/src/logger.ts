@@ -78,7 +78,14 @@ function writableChild(target: Record<string, unknown>, key: string): Record<str
   return copy
 }
 
-function mergeInto(target: Record<string, unknown>, source: Record<string, unknown>): void {
+// A copy evlog made is a plain object nothing else holds, so a direct write is
+// safe there and far cheaper than `Reflect.set`.
+function storeField(target: Record<string, unknown>, key: string, value: unknown, owned: boolean): void {
+  if (owned && key !== '__proto__') target[key] = value
+  else setField(target, key, value)
+}
+
+function mergeInto(target: Record<string, unknown>, source: Record<string, unknown>, owned = false): void {
   for (const key in source) {
     const sourceVal = source[key]
     if (sourceVal === undefined || sourceVal === null) continue
@@ -91,19 +98,20 @@ function mergeInto(target: Record<string, unknown>, source: Record<string, unkno
     // Only plain objects are merged. A class instance or a Date is a value: the
     // next one replaces it, and the caller's object is never written into.
     if (isPlainRecord(sourceVal) && isPlainRecord(targetVal)) {
-      mergeInto(writableChild(target, key), sourceVal)
+      const child = writableChild(target, key)
+      mergeInto(child, sourceVal, child !== targetVal)
     } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
-      setField(target, key, [...targetVal, ...sourceVal])
+      storeField(target, key, [...targetVal, ...sourceVal], owned)
     } else {
       // Context can hold objects evlog does not own; a field that refuses the
       // write must not abort the merge and lose the rest of the event.
-      setField(target, key, sourceVal)
+      storeField(target, key, sourceVal, owned)
     }
   }
 }
 
 function mergeFields(target: Record<string, unknown>, fields: Record<string, unknown>): void {
-  mergeInto(target, serializeErrorsIn(fields) as Record<string, unknown>)
+  mergeInto(target, serializeErrorsIn(fields) as Record<string, unknown>, true)
 }
 
 const pendingDrainState = new WeakMap<WideEvent, { drainStarted: boolean }>()
@@ -1149,9 +1157,10 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const wide = emitWideEvent(level, context, { deferDrain, ownsEvent: true, waitUntil })
       emitted = true
       pendingWideEvent = wide
-      if (wide) {
-        // Only enable the AI merge window when middleware defers drain until finish.
-        pendingDrainState.set(wide, { drainStarted: !deferDrain })
+      // Only middleware that defers the drain opens the AI merge window. Without
+      // an entry, a late set() warns exactly as it does once the drain started.
+      if (wide && deferDrain) {
+        pendingDrainState.set(wide, { drainStarted: false })
       }
       return wide
     },

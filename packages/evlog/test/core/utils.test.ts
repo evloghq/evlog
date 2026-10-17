@@ -65,6 +65,15 @@ describe('isoNow', () => {
     expect(isoNow()).toBe('2024-01-15T12:00:01.000Z')
   })
 
+  it('formats again when the millisecond changes within a second', () => {
+    const now = vi.spyOn(Date, 'now')
+    for (const ms of [5, 5, 6, 400, 401]) {
+      const time = Date.parse('2024-01-15T12:00:00.000Z') + ms
+      now.mockReturnValue(time)
+      expect(isoNow()).toBe(new Date(time).toISOString())
+    }
+  })
+
   it('updates milliseconds within the same second', () => {
     const now = vi.spyOn(Date, 'now')
     now.mockReturnValue(Date.parse('2024-01-15T12:00:00.001Z'))

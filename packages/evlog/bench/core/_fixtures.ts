@@ -43,6 +43,20 @@ export function initSilentLogger(): void {
   })
 }
 
+/**
+ * Silent logger configured as a production process runs it: `redact` resolves to
+ * `true` when NODE_ENV is production, so every emit is redacted.
+ */
+export function initProductionLogger(): void {
+  initLogger({
+    env: { service: 'bench', environment: 'production' },
+    pretty: false,
+    silent: true,
+    redact: true,
+    _suppressDrainWarning: true,
+  })
+}
+
 export function makeEnrichCtx(headers: Record<string, string>): EnrichContext {
   return {
     event: {} as Record<string, unknown>,
