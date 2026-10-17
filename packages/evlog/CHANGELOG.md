@@ -1,5 +1,19 @@
 # evlog
 
+## 2.33.1
+
+### Patch Changes
+
+- [#906](https://github.com/evloghq/evlog/pull/906) [`da6ef1a`](https://github.com/evloghq/evlog/commit/da6ef1aba940eed9c0b7c412bd3d8c6acd2afb11) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The `bearer` redaction built-in now runs before every other built-in, so a Bearer token is masked whole. A token shaped like an IBAN or a card number was partly rewritten first and then no longer matched: `Bearer FR76ABCD123456789012` was logged as `Bearer FR76****012`, and `Bearer 4111111111111111` as `Bearer ****1111`. Both are now `Bearer ***`, and so is a JWT after `Bearer`, which was logged as `Bearer eyJ***.***`.
+
+- [#906](https://github.com/evloghq/evlog/pull/906) [`da6ef1a`](https://github.com/evloghq/evlog/commit/da6ef1aba940eed9c0b7c412bd3d8c6acd2afb11) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The `iban` redaction built-in masks a spaced IBAN whole when `creditCard` is also on, as it is with the default `redact: true`. The card pattern ran first and matched the digits inside it, so `FR76 3000 6000 0112 3456 7890 189` was logged as `FR76 ****3456 7890 189`. It is now `FR76****189`. A `builtins` list runs in a fixed order, whatever order it is written in.
+
+- [#906](https://github.com/evloghq/evlog/pull/906) [`da6ef1a`](https://github.com/evloghq/evlog/commit/da6ef1aba940eed9c0b7c412bd3d8c6acd2afb11) Thanks [@HugoRCD](https://github.com/HugoRCD)! - A cycle in the context passed to `createLogger()` or `createRequestLogger()`, or in the fields passed to `emit()`, is logged as `'[Circular]'`, as it already was for `set()`. It used to overflow the stack when redaction was on, which it is by default in production. An `Error` in that context or in `emit()` fields is now serialized with its `name`, `message` and `stack` instead of being logged as `{}`.
+
+- [#906](https://github.com/evloghq/evlog/pull/906) [`da6ef1a`](https://github.com/evloghq/evlog/commit/da6ef1aba940eed9c0b7c412bd3d8c6acd2afb11) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `log.set()` only merges plain objects. A class instance or a `Date` is now a value: the next `set()` on the same key replaces it. Before, merging into one wrote the new fields into the caller's own object, and a second `Date` on the same key was ignored. `log.set({ account })` followed by `log.set({ account: { plan: 'pro' } })` now logs `{ plan: 'pro' }` and leaves `account` untouched.
+
+- [#913](https://github.com/evloghq/evlog/pull/913) [`3f1617d`](https://github.com/evloghq/evlog/commit/3f1617d7ebda58a61ccfb9c0e1857297dc0e6175) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `createEvlogHooks().handleError` and `evlogHandleError()` now accept SvelteKit 3's `handleError` input (`kind`, `error`, `event`) and type-check as Kit 3's `HandleServerError`. On SvelteKit 3, errors that are not an `EvlogError` keep Kit's own status and message instead of being overwritten with `undefined`, which made production responses return HTTP 200. The hook no longer reads Kit 3's deprecated `status` and `message` input properties, so dev mode stops logging deprecation warnings. SvelteKit 2 behavior is unchanged.
+
 ## 2.33.0
 
 ### Minor Changes
