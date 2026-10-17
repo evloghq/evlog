@@ -557,6 +557,17 @@ describe('createLogger', () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined()
   })
 
+  it('stores a __proto__ key as a field when merging into a field that already exists', () => {
+    const logger = createLogger({ user: { id: '1' } })
+
+    logger.info('payload', JSON.parse('{"user":{"__proto__":{"polluted":true},"plan":"pro"}}'))
+
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    const user = logger.getContext().user as Record<string, unknown>
+    expect(user).toMatchObject({ id: '1', plan: 'pro' })
+    expect(Object.getOwnPropertyDescriptor(user, '__proto__')?.value).toEqual({ polluted: true })
+  })
+
   it('creates logger with empty context by default', () => {
     const logger = createLogger()
 
