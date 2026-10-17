@@ -86,6 +86,21 @@ describe('evlog/hono', () => {
     expect(event.db).toEqual({ queries: 3 })
   })
 
+  it('answers 500 for a thrown EvlogError without a status', async () => {
+    const { drain } = createPipelineSpies()
+    const app = new Hono<EvlogVariables>()
+    app.use(evlog({ drain }))
+    app.get('/api/turn', () => {
+      throw createError({ message: 'Turn could not start', why: 'Agent queue is full' })
+    })
+
+    const res = await app.request('/api/turn')
+    await waitForDrainCalls(drain)
+
+    expect(res.status).toBe(500)
+    assertHttpEventEmitted(drain, { path: '/api/turn', status: 500, level: 'error' })
+  })
+
   it('logs status 500 when handler throws and Hono handles the error', async () => {
     const { drain } = createPipelineSpies()
     const app = new Hono<EvlogVariables>()

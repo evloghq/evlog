@@ -2,6 +2,7 @@ import { initLogger, isEnabled, isLoggerLocked } from '../logger'
 import { defineFrameworkIntegration } from '../shared/integration'
 import { pickBaseEvlogOptions } from '../shared/middleware'
 import { EvlogError } from '../error'
+import { extractErrorStatus } from '../shared/errors'
 import { enrichNextErrorStackForDev } from './enrich-error-stack'
 import type { NextEvlogOptions } from './types'
 import { evlogStorage } from './storage'
@@ -199,7 +200,7 @@ export function createWithEvlog(options: NextEvlogOptions) {
 
         // Return structured JSON response for EvlogErrors (like H3 does for Nuxt)
         if (isRequest && EvlogError.isEvlogError(error)) {
-          return Response.json(error.toJSON(), { status: error.status }) as Awaited<TReturn>
+          return Response.json(error.toJSON(), { status: extractErrorStatus(error) }) as Awaited<TReturn>
         }
 
         throw error

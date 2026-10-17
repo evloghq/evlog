@@ -40,10 +40,11 @@ describe('defineError', () => {
     expect(notFound.tags).toEqual(['user', 'not-found'])
   })
 
-  it('defaults status to 500 when not provided', () => {
+  it('leaves status unset when not provided', () => {
     const whatever = defineError('app.WHATEVER', { message: 'Boom' })
-    expect(whatever().status).toBe(500)
-    expect(whatever.status).toBe(500)
+    expect(whatever().status).toBeUndefined()
+    expect(whatever.status).toBeUndefined()
+    expect(whatever().toJSON()).not.toHaveProperty('status')
   })
 
   it('accepts call-site overrides for every overridable field', () => {
