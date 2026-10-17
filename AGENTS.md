@@ -21,7 +21,7 @@ pnpm content:lint:test             # the scanner's own tests, including its two 
 pnpm release-notes:test            # tests for scripts/release-notes, which rewrites GitHub release bodies and pins Latest to evlog
 ```
 
-Publishing is automated: changesets + `.github/workflows/release.yml`. Never run `pnpm release` or `changeset publish` manually.
+Publishing is automated: changesets + `.github/workflows/release.yml`. Never run `pnpm release` or `changeset publish` manually. CI publishes with npm Trusted Publishing, so a new package needs GitHub Actions (`evloghq/evlog`, `release.yml`) added as its Trusted Publisher on npmjs.com before the first release that includes it; without it npm answers `E404` on the publish.
 
 > Use `corepack enable` once so the `packageManager` field in `package.json` pins the right pnpm version automatically.
 >

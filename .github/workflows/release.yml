@@ -48,14 +48,16 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
 
+      # changesets sets `published` before it exits on a failed package, so these steps still
+      # run for the packages that did reach npm. The job stays failed either way.
       - name: Push tags
-        if: steps.changesets.outputs.published == 'true'
+        if: ${{ !cancelled() && steps.changesets.outputs.published == 'true' }}
         run: git push --tags
 
       # Rebuilds each release body from that package's PRs and changesets, then moves Latest
       # back to evlog. The header of scripts/release-notes/index.mjs says why.
       - name: Rewrite release notes and mark evlog Latest
-        if: steps.changesets.outputs.published == 'true'
+        if: ${{ !cancelled() && steps.changesets.outputs.published == 'true' }}
         run: node scripts/release-notes/index.mjs '${{ steps.changesets.outputs.publishedPackages }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
