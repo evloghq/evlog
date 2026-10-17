@@ -158,4 +158,23 @@ describe('collectProjectFacts on a package that wraps evlog', () => {
 
     expect(facts.evlogPackages.get('@acme/logger')).toEqual(new Set(['useLogger']))
   })
+
+  it('reads each entry in full when two entries re-export each other', async () => {
+    const facts = await workspaceFacts({
+      manifest: {
+        exports: { '.': './src/a.ts', './b': './src/b.ts' },
+        dependencies: { evlog: '^3.0.0' },
+      },
+      files: {
+        'src/a.ts': 'export * from \'./b\'\nexport * from \'./helper\'',
+        'src/b.ts': 'export * from \'./a\'',
+        'src/helper.ts': 'export { useLogger } from \'evlog\'',
+      },
+    })
+
+    expect(facts.evlogPackages).toEqual(new Map([
+      ['@acme/logger', new Set(['useLogger'])],
+      ['@acme/logger/b', new Set(['useLogger'])],
+    ]))
+  })
 })

@@ -12,7 +12,8 @@ const SOURCE_FILE = /\.[mc]?[jt]sx?$/
  * A package entry is usually an `index.ts` that re-exports the file calling
  * `createEvlog`, so reading the entry alone would find nothing. `cache` also
  * guards against re-exports that loop: a module already being read counts as
- * forwarding nothing until it is done.
+ * forwarding nothing until it is done. That leaves the other modules in the
+ * loop incomplete, so each entry is read with a cache of its own.
  */
 function forwardedNames(file: string, cache: Map<string, Set<string>>): ReadonlySet<string> {
   const cached = cache.get(file)
@@ -56,7 +57,6 @@ export function collectEvlogPackages(
   dependencies: ReadonlySet<string>,
 ): Map<string, ReadonlySet<string>> {
   const packages = new Map<string, ReadonlySet<string>>()
-  const cache = new Map<string, Set<string>>()
 
   for (const name of dependencies) {
     if (name === 'evlog') continue
@@ -69,7 +69,7 @@ export function collectEvlogPackages(
     for (const subpath of packageSubpaths(pkg.manifest)) {
       const entry = packageEntry(pkg, subpath)
       if (!entry || !SOURCE_FILE.test(entry)) continue
-      const names = forwardedNames(entry, cache)
+      const names = forwardedNames(entry, new Map())
       if (names.size === 0) continue
       packages.set(subpath === '.' ? name : `${name}${subpath.slice(1)}`, names)
     }
