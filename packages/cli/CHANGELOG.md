@@ -1,5 +1,24 @@
 # @evlog/cli
 
+## 0.11.0
+
+### Minor Changes
+
+- [#882](https://github.com/evloghq/evlog/pull/882) [`cf3a43b`](https://github.com/evloghq/evlog/commit/cf3a43b4222caaff9012c5d8daae30d3c294a23e) Thanks [@evlogai](https://github.com/apps/evlogai)! - `evlog init` offers Grafana Loki and ClickHouse as production destinations. Choosing one wires `createLokiDrain()` from `evlog/loki` or `createClickHouseDrain()` from `evlog/clickhouse`, and asks for `LOKI_ENDPOINT` or `CLICKHOUSE_ENDPOINT`.
+
+- [#881](https://github.com/evloghq/evlog/pull/881) [`68d709a`](https://github.com/evloghq/evlog/commit/68d709a4b88870f91444ea9ea647b154838dad2e) Thanks [@evlogai](https://github.com/apps/evlogai)! - `evlog init` offers Sazabi as a production destination. Choosing it wires `createSazabiDrain()` from `evlog/sazabi` and asks for `SAZABI_INTAKE_URL`, the intake URL of an OpenTelemetry log stream in Sazabi.
+
+### Patch Changes
+
+- [#887](https://github.com/evloghq/evlog/pull/887) [`71b2d77`](https://github.com/evloghq/evlog/commit/71b2d7762411c613c6c39aef047d2691d88ee38d) Thanks [@evlogai](https://github.com/apps/evlogai)! - `evlog doctor` and `evlog init` now recognise an app that reaches evlog only through a wrapper package, such as a shared `@acme/logger` that calls `createEvlog`, the same way `evlog map` already does. `doctor` reports evlog as reached through that package (for example "evlog via `@acme/logger`") instead of "not found in this project", drops the `pnpm add evlog` hint, and no longer warns that the framework still needs evlog. `init` stops in that case and says evlog is already wired through the wrapper, rather than offering to install evlog and scaffold a second setup next to it. `doctor --json` reports the same result.
+
+- [#869](https://github.com/evloghq/evlog/pull/869) [`99189f3`](https://github.com/evloghq/evlog/commit/99189f3123fd7ad66f8621cc4fbbf2826cdf950c) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map` recognises evlog helpers imported from a package that wraps evlog, such as a shared `@acme/logger` that calls `createEvlog` in a workspace. A dependency counts when it declares `evlog` and forwards evlog's exports from one of its `exports` entries, whether as source or as built output. Handlers that import `useLogger` or `withEvlog` from it are no longer reported as dark events, and an app that reaches evlog only through that package counts as having evlog installed. In a `"use server"` file, an export built by a call, such as `export const checkout = withEvlog(async () => …)`, is now listed as a server action.
+
+- [#895](https://github.com/evloghq/evlog/pull/895) [`6203a07`](https://github.com/evloghq/evlog/commit/6203a076bf209118528ae2f562b75bbd73f5fa03) Thanks [@evlogai](https://github.com/apps/evlogai)! - The published packages no longer ship `.map` files. They pointed to `src/`, which is not part of the package, so they only added to the install size. `evlog` drops from 340 files (about 2.09 MB unpacked) to 183 files (about 905 KB). No runtime or API change.
+
+- Updated dependencies [[`6203a07`](https://github.com/evloghq/evlog/commit/6203a076bf209118528ae2f562b75bbd73f5fa03)]:
+  - @evlog/telemetry@0.3.5
+
 ## 0.10.0
 
 ### Minor Changes
