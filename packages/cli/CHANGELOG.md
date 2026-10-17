@@ -1,5 +1,15 @@
 # @evlog/cli
 
+## 1.0.0-beta.0
+
+### Patch Changes
+
+- [#860](https://github.com/evloghq/evlog/pull/860) [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21) Thanks [@evlogai](https://github.com/apps/evlogai)! - The published packages no longer ship `.map` files. They pointed to `src/`, which is not part of the package, so they only added to the install size. `evlog` drops from 330 files (about 2.0 MB unpacked) to 178 files (about 865 KB). No runtime or API change.
+
+- Updated dependencies [[`24ca3e3`](https://github.com/evloghq/evlog/commit/24ca3e3c1fde0e16582abc125019f8995d0a48e4), [`32ded2c`](https://github.com/evloghq/evlog/commit/32ded2cb572f8184f24a938539eff30f24a1d455), [`a0187db`](https://github.com/evloghq/evlog/commit/a0187db7a500e5a51bcaa98e5f32ca1fe6df42e5), [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21)]:
+  - evlog@3.0.0-beta.0
+  - @evlog/telemetry@1.0.0-beta.0
+
 ## 0.11.0
 
 ### Minor Changes

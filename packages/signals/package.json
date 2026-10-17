@@ -1,6 +1,6 @@
 {
   "name": "@evlog/signals",
-  "version": "0.2.1",
+  "version": "1.0.0-beta.0",
   "description": "Typed model judgments on evlog wide events, built on the AI SDK evaluate contract",
   "author": "HugoRCD <contact@evlog.dev>",
   "homepage": "https://evlog.dev",
@@ -66,7 +66,7 @@
   },
   "peerDependencies": {
     "ai": ">=7.0.105 <8.0.0",
-    "evlog": "^2.30.0"
+    "evlog": "^3.0.0-beta.0"
   },
   "publishConfig": {
     "access": "public"
