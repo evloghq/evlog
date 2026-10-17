@@ -268,25 +268,25 @@ export function matchesPattern(path: string, pattern: string): boolean {
 
 /** Reused Date for ISO formatting — avoids allocating on second rollover. */
 const _isoDate = new Date()
-let _isoCachedSecond = -1
-let _isoCachedPrefix = ''
+let _isoCachedMs = -1
+let _isoCached = ''
 
 /**
  * Current wall-clock time as an ISO-8601 UTC string (`YYYY-MM-DDTHH:mm:ss.sssZ`).
  *
- * Caches the formatted prefix through the second and only appends milliseconds on
- * each call — same technique as pino / h3's logger, so hot emit paths avoid
- * re-running `toISOString()` thousands of times per second.
+ * Cached per millisecond, so a hot emit path runs `toISOString()` at most once
+ * per millisecond. The result is kept whole rather than concatenated: a
+ * concatenated timestamp makes `JSON.stringify` of the event several times
+ * slower on Node 26.
  */
 export function isoNow(): string {
   const now = Date.now()
-  const sec = Math.floor(now / 1000)
-  if (sec !== _isoCachedSecond) {
-    _isoCachedSecond = sec
+  if (now !== _isoCachedMs) {
+    _isoCachedMs = now
     _isoDate.setTime(now)
-    _isoCachedPrefix = _isoDate.toISOString().slice(0, 19)
+    _isoCached = _isoDate.toISOString()
   }
-  return `${_isoCachedPrefix}.${String(now % 1000).padStart(3, '0')}Z`
+  return _isoCached
 }
 
 /**
