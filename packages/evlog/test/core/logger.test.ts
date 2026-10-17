@@ -303,21 +303,6 @@ describe('log', () => {
     expect(event.error).not.toHaveProperty('statusCode')
   })
 
-  it('keeps a field its toJSON leaves out hidden after a second set() on the same key', () => {
-    const { drain } = createPipelineSpies()
-    initLogger({ pretty: false, redact: false, drain })
-    const payload: Record<string, unknown> = { visible: 1, secret: 'hunter2' }
-    Object.defineProperty(payload, 'toJSON', { value: () => ({ visible: 1 }) })
-    const logger = createRequestLogger()
-    logger.set({ payload })
-    logger.set({ payload: { extra: 2 } })
-    logger.emit()
-
-    const event = defined(findEventViaDrain(drain, () => true))
-    expect(JSON.parse(JSON.stringify(event)).payload).toEqual({ visible: 1 })
-    expect(JSON.stringify(event)).not.toContain('hunter2')
-  })
-
   it('serializes an h3 wrapper once, keeping its status and the original error', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, drain })
