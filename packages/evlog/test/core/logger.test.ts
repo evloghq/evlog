@@ -549,6 +549,17 @@ describe('createLogger', () => {
     expect(JSON.stringify(context.payload)).toBe('{"visible":1}')
   })
 
+  it('keeps a non-enumerable toJSON when a nested record is set twice under the same key', () => {
+    const payload = { visible: 1, secret: 'hunter2' }
+    Object.defineProperty(payload, 'toJSON', { value: () => ({ visible: 1 }), enumerable: false })
+    const logger = createLogger()
+
+    logger.set({ payload })
+    logger.set({ payload: { extra: 2 } })
+
+    expect(JSON.stringify(logger.getContext().payload)).toBe('{"visible":1}')
+  })
+
   it('stores a __proto__ key as a field instead of writing to Object.prototype', () => {
     const logger = createLogger()
 
