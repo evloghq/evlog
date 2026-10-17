@@ -141,11 +141,11 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-// Generated ids are cached per event so a retried batch resends the same ids and Sentry drops the duplicate issue.
-const tracedEvents = new WeakMap<WideEvent, WideEvent>()
 /** SDK identity Sentry expects on every log (`sentry.sdk.*` attributes) and on envelope headers. */
 const SENTRY_SDK = { name: 'evlog', version: EVLOG_VERSION } as const
 
+// Generated ids are cached per event so a retried batch resends the same ids and Sentry drops the duplicate issue.
+const tracedEvents = new WeakMap<WideEvent, WideEvent>()
 const issueIds = new WeakMap<WideEvent, { eventId: string, spanId: string }>()
 
 function cached<T>(cache: WeakMap<WideEvent, T>, event: WideEvent, create: () => T): T {

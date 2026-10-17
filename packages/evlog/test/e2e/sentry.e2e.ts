@@ -9,7 +9,7 @@
  * Required env vars:
  *   - SENTRY_DSN
  */
-import { expect } from 'vitest'
+import { expect, vi } from 'vitest'
 import { sendBatchToSentry, toSentryLog } from '../../src/adapters/sentry'
 import { describeIfEnv, itWithCorrelationId, makeEvent, readEnv } from './_shared'
 
@@ -41,8 +41,29 @@ describeIfEnv('sentry e2e (smoke)', ['SENTRY_DSN'], () => {
     expect(typeof log.timestamp).toBe('number')
     expect(typeof log.trace_id).toBe('string')
     expect(log.attributes?.service).toBeDefined()
+    expect(log.attributes?.['sentry.sdk.name']).toEqual({ value: 'evlog', type: 'string' })
+    expect(log.attributes?.['sentry.sdk.version']?.type).toBe('string')
 
     await expect(sendBatchToSentry([event], { dsn })).resolves.toBeUndefined()
+  }, 30_000)
+
+  // Issue requests are best-effort and never reject, so acceptance is the absence of the failure log.
+  itWithCorrelationId('Sentry envelope endpoint accepts an error sent as an issue', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const event = makeEvent('sentry-issue', {
+      level: 'error',
+      message: 'e2e issue from evlog tests',
+      method: 'GET',
+      path: '/e2e/issue',
+      error: { name: 'EvlogE2EError', message: 'e2e issue from evlog tests', stack: new Error('e2e issue from evlog tests').stack },
+    })
+
+    try {
+      await expect(sendBatchToSentry([event], { dsn, issues: true })).resolves.toBeUndefined()
+      expect(consoleSpy).not.toHaveBeenCalled()
+    } finally {
+      consoleSpy.mockRestore()
+    }
   }, 30_000)
 
   itWithCorrelationId('rejects an invalid DSN', async () => {
