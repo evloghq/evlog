@@ -75,7 +75,7 @@ npx evlog init --yes \
   --sampling medium
 ```
 
-Useful flags: `--framework` (override detection: `nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`), `--prodDrain` (comma-separated: `axiom`, `otlp`, `posthog`, `sentry`, `better-stack`, `datadog`, `hyperdx`, `sazabi`), `--extras` (`enrichers`, `pipeline`, `sampling`, `vite`, `error-catalog`, `audit-catalog`, `ai`, `better-auth`), `--enrichers`, `--sampling` (traffic tier: `all`, `low`, `medium`, `high`, `very-high`), `--apps` (monorepo: which workspace packages), `--no-install`. Review the `--dry-run` output with the user before applying. Docs: https://www.evlog.dev/cli/init
+Useful flags: `--framework` (override detection: `nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`), `--prodDrain` (comma-separated: `axiom`, `otlp`, `posthog`, `sentry`, `better-stack`, `datadog`, `hyperdx`, `sazabi`, `loki`, `clickhouse`), `--extras` (`enrichers`, `pipeline`, `sampling`, `vite`, `error-catalog`, `audit-catalog`, `ai`, `better-auth`), `--enrichers`, `--sampling` (traffic tier: `all`, `low`, `medium`, `high`, `very-high`), `--apps` (monorepo: which workspace packages), `--no-install`. Review the `--dry-run` output with the user before applying. Docs: https://www.evlog.dev/cli/init
 
 ### 2. Score: `evlog map`
 
@@ -950,6 +950,8 @@ They can also live in `evlog.config.ts`, written with `defineEvlog()`. Nuxt and 
 | OTLP | `evlog/otlp` | `OTLP_ENDPOINT` (or the standard `OTEL_EXPORTER_OTLP_[LOGS_]ENDPOINT`, `_HEADERS`, `_COMPRESSION`, `_PROTOCOL`, `OTEL_RESOURCE_ATTRIBUTES`). `protocol: 'http/protobuf'` sends binary protobuf. `semanticConventions: true` adds OTel attribute names (`http.*`, `exception.*`, `gen_ai.*`) |
 | HyperDX | `evlog/hyperdx` | `HYPERDX_API_KEY` (optional `HYPERDX_OTLP_ENDPOINT`; defaults to `https://in-otel.hyperdx.io`) |
 | Sazabi | `evlog/sazabi` | `SAZABI_INTAKE_URL` (the log stream's intake URL; its key is part of the URL), optional `SAZABI_SERVICE_NAME` |
+| Grafana Loki | `evlog/loki` | `LOKI_ENDPOINT`, optional `LOKI_API_KEY`, `LOKI_USER` |
+| ClickHouse | `evlog/clickhouse` | `CLICKHOUSE_ENDPOINT` (the `evlog_events` table must exist), optional `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DATABASE`, `CLICKHOUSE_TABLE` |
 | PostHog | `evlog/posthog` | `POSTHOG_API_KEY`, `POSTHOG_HOST` |
 | Sentry | `evlog/sentry` | `SENTRY_DSN` |
 | Better Stack | `evlog/better-stack` | `BETTER_STACK_API_KEY` |
