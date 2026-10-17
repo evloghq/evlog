@@ -233,10 +233,16 @@ export function redactValueByPaths(
  * Built-in PII detection patterns with smart masking.
  * Each builtin preserves just enough signal for debugging while scrubbing PII.
  * They run on every string of every wide event, so each must stay linear in the input length.
- * They run in this order. IBAN comes before credit cards, whose pattern matches
- * the digits inside a spaced IBAN and would leave the rest of it in the clear.
+ * They run in this order. Bearer comes first so its token is masked whole before
+ * a shorter pattern rewrites part of it. IBAN comes before credit cards, whose pattern
+ * matches the digits inside a spaced IBAN and would leave the rest of it in the clear.
  */
 export const builtinPatterns = {
+  /** Bearer tokens → Bearer *** */
+  bearer: {
+    pattern: /\bBearer\s+[\w\-.~+/]{8,}=*/gi,
+    mask: () => 'Bearer ***',
+  },
   /** IBAN → FR76****189 (country + check digits + last 3) */
   iban: {
     pattern: /\b[A-Z]{2}\d{2}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}\b/g,
@@ -297,11 +303,6 @@ export const builtinPatterns = {
     // The header stops at the next `-eyJ`, where another match could start, so no start rescans it.
     pattern: /\beyJ(?:(?!-eyJ)[\w-])*\.[\w-]*\.[\w-]*\b/g,
     mask: () => 'eyJ***.***',
-  },
-  /** Bearer tokens → Bearer *** */
-  bearer: {
-    pattern: /\bBearer\s+[\w\-.~+/]{8,}=*/gi,
-    mask: () => 'Bearer ***',
   },
 } as const
 

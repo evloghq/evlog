@@ -148,7 +148,12 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
           changed = true
         }
       }
-      if (changed) copy = Object.fromEntries(entries)
+      if (changed) {
+        // Keep the prototype so a copied class instance is still replaced, not merged, by a later set().
+        const proto = Object.getPrototypeOf(value)
+        copy = Object.fromEntries(entries)
+        if (proto !== Object.prototype) Object.setPrototypeOf(copy, proto)
+      }
     }
     ancestors.delete(value)
     return copy ?? value

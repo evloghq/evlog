@@ -615,6 +615,17 @@ describe('createLogger', () => {
     expect(logger.getContext().account).toEqual({ plan: 'pro' })
   })
 
+  it.each(['set()', 'the initial context'])('replaces a class instance holding an error, passed to %s', (via) => {
+    class Account {
+      constructor(public id: string, public lastError: Error) {}
+    }
+    const account = new Account('acc_1', new Error('card declined'))
+    const logger = via === 'set()' ? createLogger() : createLogger({ account })
+    if (via === 'set()') logger.set({ account })
+    logger.set({ account: { plan: 'pro' } })
+    expect(logger.getContext().account).toEqual({ plan: 'pro' })
+  })
+
   it('replaces a Date with the next value set on the same key', () => {
     const first = new Date(0)
     const second = new Date(86_400_000)
