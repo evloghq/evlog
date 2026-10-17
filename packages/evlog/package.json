@@ -1,6 +1,6 @@
 {
   "name": "evlog",
-  "version": "2.32.0",
+  "version": "2.33.0",
   "description": "Modern TypeScript logger — simple logs, wide events, structured errors. Built for scripts, libraries, jobs, edge, and HTTP. One drain pipeline everywhere.",
   "author": "HugoRCD <contact@evlog.dev>",
   "homepage": "https://evlog.dev",
@@ -26,6 +26,7 @@
     "nestjs",
     "orpc",
     "eve",
+    "effect",
     "sveltekit",
     "react-router",
     "vite",
@@ -68,6 +69,11 @@
       "types": "./dist/workers.d.mts",
       "import": "./dist/workers.mjs",
       "default": "./dist/workers.mjs"
+    },
+    "./effect": {
+      "types": "./dist/effect/index.d.mts",
+      "import": "./dist/effect/index.mjs",
+      "default": "./dist/effect/index.mjs"
     },
     "./axiom": {
       "types": "./dist/adapters/axiom.d.mts",
@@ -289,6 +295,9 @@
       "workers": [
         "./dist/workers.d.mts"
       ],
+      "effect": [
+        "./dist/effect/index.d.mts"
+      ],
       "axiom": [
         "./dist/adapters/axiom.d.mts"
       ],
@@ -438,7 +447,6 @@
   },
   "devDependencies": {
     "@codspeed/vitest-plugin": "^5.7.1",
-    "esbuild": "^0.28.2",
     "@nestjs/common": "^11.2.7",
     "@nestjs/core": "^11.2.7",
     "@nestjs/platform-express": "^11.2.7",
@@ -449,7 +457,6 @@
     "@nuxt/test-utils": "^4.3.2",
     "@orpc/client": "^1.15.4",
     "@orpc/server": "^1.15.4",
-    "ai": "^7.0.127",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@sveltejs/kit": "^2.70.3",
@@ -459,9 +466,12 @@
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^4.1.11",
     "acorn": "^8.18.0",
+    "ai": "^7.0.127",
     "changelogen": "^0.6.2",
     "consola": "^3.4.2",
+    "effect": "^4.0.3",
     "elysia": "^1.4.30",
+    "esbuild": "^0.28.2",
     "eve": "^0.30.8",
     "express": "^5.2.1",
     "fastify": "^5.12.5",
@@ -488,10 +498,11 @@
     "@nestjs/core": ">=11.2.7",
     "@nuxt/kit": "^4.4.2",
     "@orpc/server": ">=1.15.4",
-    "eve": ">=0.30.0",
     "@tanstack/start-client-core": "^1.170.34",
     "ai": ">=6.0.168 <8.0.0",
     "elysia": ">=1.4.30",
+    "eve": ">=0.30.0",
+    "effect": "^4.0.0",
     "express": ">=5.2.1",
     "fastify": ">=5.12.5",
     "h3": "^1.15.11",
@@ -548,6 +559,9 @@
       "optional": true
     },
     "eve": {
+      "optional": true
+    },
+    "effect": {
       "optional": true
     },
     "react-router": {

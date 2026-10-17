@@ -35,6 +35,7 @@ scope.
 - deps (the dependencies)
 - docs (the documentation site)
 - dx (developer experience improvements)
+- effect (Effect integration)
 - elysia (Elysia plugin)
 - evals (Evi eval suite)
 - eve (eve agent integration)

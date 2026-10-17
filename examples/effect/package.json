@@ -1,0 +1,14 @@
+{
+  "name": "evlog-effect-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "@effect/platform-node": "^4.0.3",
+    "effect": "^4.0.3",
+    "evlog": "workspace:*"
+  }
+}

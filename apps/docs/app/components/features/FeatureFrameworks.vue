@@ -26,6 +26,7 @@ const frameworkRows = [
     { name: 'Fastify', icon: 'i-simple-icons-fastify', tab: 9 },
     { name: 'Elysia', icon: 'i-custom-elysia', tab: 10 },
     { name: 'oRPC', icon: 'i-lucide-network', tab: 13 },
+    { name: 'Effect', icon: 'i-simple-icons-effect', tab: 14 },
     { name: 'Cloudflare', icon: 'i-simple-icons-cloudflare', tab: 11 },
     { name: 'Script', icon: 'i-lucide-terminal', tab: 12 },
     { name: 'Vite', icon: 'i-custom-vite', link: '/reference/vite-plugin' },
@@ -150,6 +151,9 @@ const frameworkRows = [
       </div>
       <div v-if="activeTab === 13" class="landing-code">
         <slot name="orpc" />
+      </div>
+      <div v-if="activeTab === 14" class="landing-code">
+        <slot name="effect" />
       </div>
     </Motion>
   </section>

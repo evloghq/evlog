@@ -21,7 +21,7 @@ Manifest mode now covers all classic HTTP frameworks. Use custom mode only when 
 Every framework integration must expose:
 
 1. `evlog()` middleware/plugin accepting the full `BaseEvlogOptions` (`drain`, `enrich`, `keep`, `include`, `exclude`, `routes`, `plugins`)
-2. `useLogger()` (ALS-backed). Workers is the one sanctioned exception (ALS needs a compat flag there; `defineWorkerFetch` attaches the logger instead)
+2. `useLogger()` (ALS-backed). Two sanctioned exceptions: Workers (ALS needs a compat flag there; `defineWorkerFetch` attaches the logger instead) and Effect (the logger is the `EvlogLogger` service in the Effect context)
 3. `log.fork()` support (automatic when `storage` is provided to the manifest)
 4. The framework-native accessor (`c.get('log')`, `req.log`, `event.locals.log`, …)
 

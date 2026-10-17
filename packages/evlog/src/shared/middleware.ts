@@ -134,13 +134,14 @@ function assignRedactedEvent(target: WideEvent, redacted: Partial<WideEvent>): v
 
 /**
  * Apply redact, enrich, and drain to an emitted wide event — the same
- * pipeline used by {@link createMiddlewareLogger}'s `finish`.
+ * pipeline used by {@link createMiddlewareLogger}'s `finish`. `requestInfo` is
+ * omitted for units of work that are not HTTP requests (jobs, alarms).
  */
 // eslint-disable-next-line max-params
 export async function runEnrichAndDrain(
   emittedEvent: WideEvent,
-  options: MiddlewareLoggerOptions,
-  requestInfo: { method: string; path: string; requestId?: string },
+  options: BaseEvlogOptions & { headers?: Record<string, string> },
+  requestInfo: EnrichContext['request'],
   responseStatus?: number,
   plugins?: PluginRunner,
 ): Promise<void> {

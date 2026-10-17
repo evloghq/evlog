@@ -699,6 +699,51 @@ describe('evlog/eve', () => {
     expect(event?.ai).toMatchObject({ model: 'anthropic/claude-opus-5' })
   })
 
+  it('reads the model from step.started when session.started reports none', async () => {
+    const spies = createPipelineSpies()
+    const hook = defineEvlogHook({ drain: spies.drain })
+    const ctx = hookContext()
+    const events = hook.events!
+
+    // eve 0.76 dropped `modelId` from the runtime identity and reports it per step
+    events['session.started']!({
+      type: 'session.started',
+      data: {
+        runtime: { agentId: 'agent_1', agentName: 'support', eveVersion: '0.76.3' } as HookEventMap['session.started']['data']['runtime'],
+      },
+    }, ctx)
+    events['turn.started']!({ type: 'turn.started', data: { sequence: 0, turnId: TURN_ID } }, ctx)
+    for (const [stepIndex, modelId] of ['openai/gpt-5', 'anthropic/claude-sonnet-5'].entries()) {
+      events['step.started']!({
+        type: 'step.started',
+        data: { modelId, sequence: 1 + stepIndex, stepIndex, turnId: TURN_ID } as HookEventMap['step.started']['data'],
+      }, ctx)
+    }
+    await events['turn.completed']!({ type: 'turn.completed', data: { sequence: 99, turnId: TURN_ID } }, ctx)
+
+    await waitForDrainCalls(spies.drain)
+    const event = findEventViaDrain(spies.drain, () => true)
+    expect(event?.ai).toMatchObject({ model: 'anthropic/claude-sonnet-5', provider: 'anthropic' })
+  })
+
+  it('prefers the step model over the configured model fallback', async () => {
+    const spies = createPipelineSpies()
+    const hook = defineEvlogHook({ drain: spies.drain, model: 'gpt-5-mini' })
+    const ctx = hookContext()
+    const events = hook.events!
+
+    events['turn.started']!({ type: 'turn.started', data: { sequence: 0, turnId: TURN_ID } }, ctx)
+    events['step.started']!({
+      type: 'step.started',
+      data: { modelId: 'openai/gpt-5', sequence: 1, stepIndex: 0, turnId: TURN_ID } as HookEventMap['step.started']['data'],
+    }, ctx)
+    await events['turn.completed']!({ type: 'turn.completed', data: { sequence: 99, turnId: TURN_ID } }, ctx)
+
+    await waitForDrainCalls(spies.drain)
+    const event = findEventViaDrain(spies.drain, () => true)
+    expect(event?.ai).toMatchObject({ model: 'openai/gpt-5', provider: 'openai' })
+  })
+
   it('records parent lineage for a subagent session', async () => {
     const spies = createPipelineSpies()
     const hook = defineEvlogHook({ drain: spies.drain })
@@ -1040,6 +1085,150 @@ describe('evlog/eve', () => {
     const { subagents } = (event?.eve as { subagents?: Array<Record<string, unknown>> })
     expect(subagents?.[0]).toMatchObject({ callId: 'call_1', status: 'completed' })
     expect(subagents?.[0]?.durationMs).toBeTypeOf('number')
+  })
+
+  it('records subagent calls from actions.requested and their results', async () => {
+    const spies = createPipelineSpies()
+    const hook = defineEvlogHook({ drain: spies.drain })
+    const ctx = hookContext()
+    const events = hook.events!
+
+    events['turn.started']!({ type: 'turn.started', data: { sequence: 0, turnId: TURN_ID } }, ctx)
+    events['actions.requested']!({
+      type: 'actions.requested',
+      data: {
+        actions: [
+          {
+            callId: 'call_sub',
+            description: 'Research the question',
+            input: {},
+            kind: 'subagent-call',
+            name: 'agent_researcher',
+            nodeId: 'node_1',
+            subagentName: 'researcher',
+          },
+          {
+            callId: 'call_remote',
+            description: 'Ask the billing agent',
+            input: {},
+            kind: 'remote-agent-call',
+            name: 'agent_billing',
+            nodeId: 'node_2',
+            remoteAgentName: 'billing',
+          },
+        ],
+        sequence: 5,
+        stepIndex: 0,
+        turnId: TURN_ID,
+      },
+    }, ctx)
+    await new Promise(r => setTimeout(r, 15))
+    events['action.result']!({
+      type: 'action.result',
+      data: {
+        result: {
+          callId: 'call_sub',
+          kind: 'subagent-result',
+          origin: 'child',
+          outcome: { kind: 'completed' },
+          output: 'the private answer',
+          subagentName: 'researcher',
+        } as HookEventMap['action.result']['data']['result'],
+        sequence: 10,
+        stepIndex: 0,
+        status: 'completed',
+        turnId: TURN_ID,
+      },
+    }, ctx)
+    events['action.result']!({
+      type: 'action.result',
+      data: {
+        error: { code: 'REMOTE_AGENT_FAILED', message: 'billing agent unreachable' },
+        result: {
+          callId: 'call_remote',
+          isError: true,
+          kind: 'subagent-result',
+          origin: 'dispatch',
+          output: null,
+          subagentName: 'billing',
+        },
+        sequence: 11,
+        stepIndex: 0,
+        status: 'failed',
+        turnId: TURN_ID,
+      },
+    }, ctx)
+    await events['turn.completed']!({ type: 'turn.completed', data: { sequence: 99, turnId: TURN_ID } }, ctx)
+
+    await waitForDrainCalls(spies.drain)
+    const event = findEventViaDrain(spies.drain, () => true)
+    const { subagents } = (event?.eve as { subagents?: Array<Record<string, unknown>> })
+    expect(subagents).toHaveLength(2)
+    expect(subagents?.[0]).toMatchObject({
+      callId: 'call_sub',
+      name: 'researcher',
+      toolName: 'agent_researcher',
+      status: 'completed',
+    })
+    expect(subagents?.[0]?.durationMs).toBeGreaterThanOrEqual(10)
+    expect(subagents?.[0]).not.toHaveProperty('output')
+    expect(subagents?.[1]).toMatchObject({
+      callId: 'call_remote',
+      name: 'billing',
+      remote: true,
+      status: 'failed',
+      error: 'billing agent unreachable',
+    })
+    const { tools } = (event?.ai as { tools?: Array<{ name: string, durationMs: number }> })
+    expect(tools?.map(t => t.name)).toEqual(['researcher', 'billing'])
+    expect(tools?.[0]?.durationMs).toBeGreaterThanOrEqual(10)
+  })
+
+  it('records one subagent when eve emits both subagent.called and a subagent-call action', async () => {
+    const spies = createPipelineSpies()
+    const hook = defineEvlogHook({ drain: spies.drain })
+    const ctx = hookContext()
+    const events = hook.events!
+
+    events['turn.started']!({ type: 'turn.started', data: { sequence: 0, turnId: TURN_ID } }, ctx)
+    events['actions.requested']!({
+      type: 'actions.requested',
+      data: {
+        actions: [
+          {
+            callId: 'call_1',
+            description: 'Research the question',
+            input: {},
+            kind: 'subagent-call',
+            name: 'delegate',
+            nodeId: 'node_1',
+            subagentName: 'researcher',
+          }
+        ],
+        sequence: 5,
+        stepIndex: 0,
+        turnId: TURN_ID,
+      },
+    }, ctx)
+    events['subagent.called']!({
+      type: 'subagent.called',
+      data: {
+        callId: 'call_1',
+        childSessionId: 'child_1',
+        sessionId: SESSION_ID,
+        sequence: 20,
+        name: 'researcher',
+        toolName: 'delegate',
+        turnId: TURN_ID,
+        workflowId: 'wf_1',
+      },
+    }, ctx)
+    await events['turn.completed']!({ type: 'turn.completed', data: { sequence: 99, turnId: TURN_ID } }, ctx)
+
+    await waitForDrainCalls(spies.drain)
+    const event = findEventViaDrain(spies.drain, () => true)
+    const { subagents } = (event?.eve as { subagents?: Array<Record<string, unknown>> })
+    expect(subagents).toEqual([{ callId: 'call_1', name: 'researcher', toolName: 'delegate', childSessionId: 'child_1', status: 'called' },])
   })
 
   it('summarizes attachment parts without their content in preview mode', async () => {

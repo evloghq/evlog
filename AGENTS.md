@@ -21,7 +21,7 @@ pnpm content:lint:test             # the scanner's own tests, including its two 
 pnpm release-notes:test            # tests for scripts/release-notes, which rewrites GitHub release bodies and pins Latest to evlog
 ```
 
-Publishing is automated: changesets + `.github/workflows/release.yml`. Never run `pnpm release` or `changeset publish` manually.
+Publishing is automated: changesets + `.github/workflows/release.yml`. Never run `pnpm release` or `changeset publish` manually. CI publishes with npm Trusted Publishing, so a new package needs GitHub Actions (`evloghq/evlog`, `release.yml`) added as its Trusted Publisher on npmjs.com before the first release that includes it; without it npm answers `E404` on the publish.
 
 > Use `corepack enable` once so the `packageManager` field in `package.json` pins the right pnpm version automatically.
 >
@@ -63,7 +63,7 @@ skills/                     Published skills (analyze-logs, build-audit-logs, re
 - `evlog/toolkit` is the public entrypoint for `src/shared/`. Never use `evlog/shared`.
 - `evlog/browser` is deprecated, use `evlog/http` instead.
 - Every framework integration exposes the **same contract**: `evlog()` middleware, `useLogger()`, `log.fork()`, and the full `BaseEvlogOptions` surface. Framework-native accessors (`c.get('log')`, `req.log`, `event.locals.log`, `context.get(loggerContext)`) stay alongside it. They are the idiomatic path inside handlers, `useLogger()` is for the layers underneath. When adding an integration, provide both.
-- `useLogger()` is backed by `AsyncLocalStorage`. On Cloudflare Workers that needs the `nodejs_compat` / `nodejs_als` flag, so `evlog/workers` deliberately has no `useLogger()` and passes the logger as the handler's fourth argument instead.
+- `useLogger()` is backed by `AsyncLocalStorage`. On Cloudflare Workers that needs the `nodejs_compat` / `nodejs_als` flag, so `evlog/workers` deliberately has no `useLogger()` and passes the logger as the handler's fourth argument instead. `evlog/effect` has no ALS `useLogger()` either: the logger travels in the Effect context as the `EvlogLogger` service (`yield* EvlogLogger`, `useLogger<T>()` as an Effect), and background work is a nested `withLogger` rather than `log.fork()`.
 - New export? Update `packages/evlog/package.json` exports, its `typesVersions`, and `packages/evlog/tsdown.config.ts`. A subpath missing from `typesVersions` resolves at runtime and fails to type-check. `packages/evlog/test/toolkit/entrypoint-registry.test.ts` catches the mismatch without a build.
 - Creating a new adapter, enricher, or framework integration? Read the matching skill at `.agents/skills/` **before starting**:
   - `.agents/skills/create-adapter/SKILL.md`

@@ -93,7 +93,7 @@ function isRetryable(error: unknown): boolean {
     const match = error.message.match(/API error: (\d+)/)
     if (match) {
       const status = Number.parseInt(match[1])
-      return status >= 500 || status === 429
+      return status >= 500 || status === 429 || status === 408
     }
   }
   return false

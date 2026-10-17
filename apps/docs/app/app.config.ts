@@ -66,6 +66,14 @@ export default defineAppConfig({
         container: 'fixed inset-y-0 z-50 hidden h-svh w-(--sidebar-width) lg:flex',
       },
     },
+    contentNavigation: {
+      slots: {
+        // Docus hides the whole trailing slot to drop the group chevrons, which also
+        // hides a page's `navigation.badge`. Hide only the chevron instead.
+        linkTrailing: 'ms-auto inline-flex gap-1.5 items-center',
+        linkTrailingIcon: 'hidden',
+      },
+    },
     prose: {
       pre: {
         slots: {

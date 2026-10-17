@@ -1,6 +1,6 @@
 ---
 name: review-logging-patterns
-description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, and Fastify. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
+description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, and Fastify. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Effect, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
 license: MIT
 metadata:
   author: HugoRCD
@@ -793,6 +793,62 @@ import { createAxiomDrain } from 'evlog/axiom'
 
 const handler = withEvlog(new RPCHandler(router), {
   include: ['/rpc/**'],
+  drain: createAxiomDrain(),
+  enrich: (ctx) => { ctx.event.region = process.env.FLY_REGION },
+  keep: (ctx) => {
+    if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
+  },
+})
+```
+
+### Effect
+
+Effect 4 (`HttpRouter`, `HttpApi`). `routerLayer` installs the `evlog()` middleware on every route and provides the `EvlogLogger` service. `initLoggerLayer` calls `initLogger` when the layer builds and flushes a `createDrainPipeline` drain when its scope closes:
+
+```typescript
+import { createServer } from 'node:http'
+import { NodeHttpServer, NodeRuntime } from '@effect/platform-node'
+import { Effect, Layer } from 'effect'
+import { HttpRouter, HttpServerResponse } from 'effect/http'
+import { EvlogLogger, initLoggerLayer, routerLayer } from 'evlog/effect'
+
+const Routes = HttpRouter.add('GET', '/api/users', Effect.gen(function* () {
+  const log = yield* EvlogLogger
+  log.set({ users: { count: 42 } })
+  return HttpServerResponse.jsonUnsafe({ users: [] })
+}))
+
+const Server = HttpRouter.serve(Routes.pipe(Layer.provide(routerLayer())), { disableLogger: true }).pipe(
+  Layer.provide(NodeHttpServer.layer(createServer, { port: 3000 })),
+  Layer.provide(initLoggerLayer({ env: { service: 'my-api' } })),
+)
+
+NodeRuntime.runMain(Layer.launch(Server))
+```
+
+There is no `AsyncLocalStorage` and no `log.fork()`. The event lives in the Effect context: `yield* EvlogLogger` in handlers and services (the requirement shows up in the effect's type), `yield* useLogger<Fields>()` for typed fields, and `yield* set(fields)` in library code that should not require `EvlogLogger` (a no-op outside a unit). It runs on Cloudflare Workers without `nodejs_compat`.
+
+```typescript
+import { Effect } from 'effect'
+import { useLogger } from 'evlog/effect'
+
+const chargeCard = (amount: number) => Effect.gen(function* () {
+  const log = yield* useLogger<{ payment: { amount: number } }>()
+  log.set({ payment: { amount } })
+})
+```
+
+Failures are read from the `Cause` (the primary failure as `error`, the rest under `error.suppressed`, a pure interruption as `status: 499`). Effect's router answers a failed `createError({ status: 402 })` with 500, so catch it in the handler with `Effect.catch`, call `log.error(error)`, and return `HttpServerResponse.jsonUnsafe(body, { status: parsed.status })` built from `parseError(error)`. `HttpApi` encodes declared errors as responses before the middleware: the event gets the status but no `error` field.
+
+Non-HTTP work (jobs, queue consumers, Durable Object alarms) uses `.pipe(withLogger('action-name', options))`. A Durable Object `fetch` uses `.pipe(withRequestLogger(request, options))`. On Workers, provide `WaitUntil` per request (`handler(request, Context.make(WaitUntil, ctx.waitUntil.bind(ctx)))` with `HttpRouter.toWebHandler`) so drains outlive the response. `loggerLayer()` folds `Effect.log*` calls into the current wide event. Each unit continues an incoming `traceparent`, and `withTracePropagation(client)` and `traceHeaders` forward it on outgoing calls.
+
+Full pipeline with drain, enrich, and tail sampling:
+
+```typescript
+import { createAxiomDrain } from 'evlog/axiom'
+
+routerLayer({
+  include: ['/api/**'],
   drain: createAxiomDrain(),
   enrich: (ctx) => { ctx.event.region = process.env.FLY_REGION },
   keep: (ctx) => {

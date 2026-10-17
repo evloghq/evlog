@@ -18,6 +18,7 @@ export const frameworks: Framework[] = [
   { id: 'elysia', label: 'Elysia', icon: 'i-custom:elysia' },
   { id: 'nestjs', label: 'NestJS', icon: 'i-logos-nestjs', aliases: ['nest'] },
   { id: 'orpc', label: 'oRPC', icon: 'i-custom:orpc' },
+  { id: 'effect', label: 'Effect', icon: 'i-simple-icons-effect' },
   { id: 'workers', label: 'Cloudflare Workers', icon: 'i-logos-cloudflare-workers-icon', aliases: ['cloudflare', 'cloudflare workers'] },
   { id: 'astro', label: 'Astro', icon: 'i-logos-astro-icon' },
   { id: 'lambda', label: 'AWS Lambda', icon: 'i-logos-aws-lambda', aliases: ['aws lambda', 'aws'] },

@@ -113,6 +113,40 @@ describe('shared/http evlog identity', () => {
       })
     })
 
+    it('retries 408 responses with backoff', async () => {
+      await withFakeTimers(async () => {
+        fetchSpy
+          .mockResolvedValueOnce(new Response('request timeout', { status: 408 }))
+          .mockResolvedValueOnce(new Response(null, { status: 200 }))
+
+        const promise = httpPost({
+          url: 'https://example.com/ingest',
+          headers: {},
+          body: '[]',
+          timeout: 5000,
+          label: 'test',
+        })
+        await vi.advanceTimersByTimeAsync(200)
+        await promise
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    it('does not retry other 4xx responses', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('bad request', { status: 400 }))
+
+      await expect(httpPost({
+        url: 'https://example.com/ingest',
+        headers: {},
+        body: '[]',
+        timeout: 5000,
+        label: 'test',
+      })).rejects.toThrow('API error: 400')
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+    })
+
     it('calls onResponse with the successful response', async () => {
       const onResponse = vi.fn()
 
