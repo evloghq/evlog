@@ -9,7 +9,7 @@ import { resolveDevTerminal } from './shared/dev-terminal'
 import { globalConfig } from './shared/globalRegistry'
 import { publishWideEvent } from './shared/wideEventChannel'
 import { EvlogError } from './error'
-import { colors, cssColors, detectEnvironment, elapsedMs, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern, payloadFieldsHiddenBy, walkErrors } from './utils'
+import { colors, cssColors, detectEnvironment, elapsedMs, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern, payloadFieldsHiddenBy, readErrorField, walkErrors } from './utils'
 
 const nativeStdoutWrite =
   typeof process !== 'undefined' && typeof process.stdout?.write === 'function'
@@ -832,14 +832,13 @@ function isH3InputOf(err: Error, cause: unknown): boolean {
   if (typeof cause !== 'object' || cause === null || cause instanceof Error || Array.isArray(cause)) return false
   const keys = Object.keys(cause)
   if (keys.length === 0) return false
-  const errRecord = err as unknown as Record<string, unknown>
   const causeRecord = cause as Record<string, unknown>
   return keys.every((key) => {
     const target = H3_INPUT_FIELDS[key]
     if (!target) return false
     const value = causeRecord[key]
-    if (value === undefined || value === errRecord[target]) return true
-    return target === 'statusCode' && Number(value) === errRecord.statusCode
+    if (value === undefined || value === readErrorField(err, target)) return true
+    return target === 'statusCode' && Number(value) === readErrorField(err, 'statusCode')
   })
 }
 
@@ -848,10 +847,10 @@ function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<s
     ancestors.add(err)
     const errorObj = serializeError(err.cause, ancestors)
     ancestors.delete(err)
-    const wrapper = err as unknown as Record<string, unknown>
     const hidden = payloadFieldsHiddenBy(err)
     for (const k of ['statusCode', 'statusMessage', 'data'] as const) {
-      if (wrapper[k] !== undefined && !hidden.includes(k)) errorObj[k] = removeErrorCycles(wrapper[k], ancestors)
+      const value = readErrorField(err, k)
+      if (value !== undefined && !hidden.includes(k)) errorObj[k] = removeErrorCycles(value, ancestors)
     }
     return errorObj
   }
@@ -861,7 +860,6 @@ function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<s
     message: err.message,
     stack: isDev() ? compactStackForStorage(err.stack) : err.stack,
   }
-  const errRecord = err as unknown as Record<string, unknown>
   const hidden = payloadFieldsHiddenBy(err)
   ancestors.add(err)
   for (const k of ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'cause', 'internal'] as const) {
@@ -872,7 +870,7 @@ function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<s
       }
       continue
     }
-    if (k in err && !hidden.includes(k)) errorObj[k] = removeErrorCycles(errRecord[k], ancestors)
+    if (k in err && !hidden.includes(k)) errorObj[k] = removeErrorCycles(readErrorField(err, k), ancestors)
   }
   ancestors.delete(err)
 

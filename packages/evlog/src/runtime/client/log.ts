@@ -1,5 +1,5 @@
 import type { Log, LogLevel, TransportConfig } from '../../types'
-import { cssColors, escapeFormatString, formatMessage, getCssLevelColor, hasMessageSpecifiers, isBrowser, isLevelEnabled, isLogLevel, isoNow, payloadFieldsHiddenBy, walkErrors } from '../../utils'
+import { cssColors, escapeFormatString, formatMessage, getCssLevelColor, hasMessageSpecifiers, isBrowser, isLevelEnabled, isLogLevel, isoNow, payloadFieldsHiddenBy, readErrorField, walkErrors } from '../../utils'
 
 /**
  * Browser DevTools often hide or bucket `console.debug` under "Verbose" in a way that looks like
@@ -124,11 +124,10 @@ function serializeError(error: Error, ancestors = new WeakSet<object>()): Record
     stack: error.stack,
   }
 
-  const record = error as unknown as Record<string, unknown>
   const hidden = payloadFieldsHiddenBy(error)
   ancestors.add(error)
   for (const key of ERROR_FIELDS) {
-    if (key in error && !hidden.includes(key)) serialized[key] = removeErrorCycles(record[key], ancestors)
+    if (key in error && !hidden.includes(key)) serialized[key] = removeErrorCycles(readErrorField(error, key), ancestors)
   }
   if ('cause' in error) serialized.cause = removeErrorCycles(error.cause, ancestors)
   ancestors.delete(error)

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createError as h3CreateError } from 'h3'
-import { createError } from '../../src/error'
+import { EvlogError, createError } from '../../src/error'
 import { createLogger, createRequestLogger, getEnvironment, initLogger, isEnabled, log } from '../../src/logger'
 import { withFakeTimers } from '../helpers/timers'
 import { defined } from '../helpers/defined'
@@ -293,6 +293,19 @@ describe('log', () => {
       data: { why: 'Card declined by the issuer', fix: 'Use a different payment method' },
     })
     expect(serialized).not.toHaveProperty('cause')
+  })
+
+  it('serializes an EvlogError without reading its legacy status getters', () => {
+    const legacyGetters = ['statusCode', 'statusText', 'statusMessage'] as const
+    const spies = legacyGetters.map(name => vi.spyOn(EvlogError.prototype, name, 'get'))
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    log.error({ action: 'checkout', error: createError({ message: 'Payment failed', status: 402 }) })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ status: 402, statusCode: 402, statusText: 'Payment failed', statusMessage: 'Payment failed' })
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+    spies.forEach(spy => spy.mockRestore())
   })
 
   it('serializes a plain error wrapped by h3 once, keeping the h3 status code', () => {

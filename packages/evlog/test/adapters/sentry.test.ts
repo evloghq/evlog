@@ -424,6 +424,16 @@ describe('sentry adapter', () => {
       expect(retryLogs?.payload.items[0].trace_id).toBe(firstLogs?.payload.items[0].trace_id)
     })
 
+    it('reads `status` before the legacy `statusCode` when they disagree', async () => {
+      await sendBatchToSentry([
+        createTestEvent({ level: 'error', error: { name: 'EvlogError', message: 'User 8231 not found', status: 404, statusCode: 500 } }),
+        createTestEvent({ level: 'error', error: { name: 'EvlogError', message: 'Database down', status: 503 } }),
+      ], { dsn, issues: true })
+
+      const [, ...issues] = envelopes()
+      expect(issues.map(e => e.payload.exception.values[0].value)).toEqual(['Database down'])
+    })
+
     it('does not open issues for 4xx errors', async () => {
       await sendBatchToSentry([
         createTestEvent({ level: 'error', status: 404, error: { name: 'EvlogError', message: 'User 8231 not found', status: 404 } }),

@@ -168,7 +168,7 @@ function getErrorRecord(event: WideEvent): Record<string, unknown> {
 /** Client errors (a thrown 404, 401 or validation 400) are expected traffic, not issues. */
 function isClientError(event: WideEvent): boolean {
   const error = getErrorRecord(event)
-  const status = Number(error.statusCode ?? error.status ?? event.status)
+  const status = Number(error.status ?? error.statusCode ?? event.status)
   return status >= 400 && status < 500
 }
 

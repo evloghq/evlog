@@ -290,6 +290,20 @@ export function isoNow(): string {
 }
 
 /**
+ * Reads a field of an error the way the serializers copy it. The legacy
+ * `statusCode`, `statusText` and `statusMessage` of an `EvlogError` are getters
+ * over `status` and `message`, so they are read from those fields directly and
+ * the getters are left for user code to call.
+ */
+export function readErrorField(error: Error, key: string): unknown {
+  if (isEvlogError(error)) {
+    if (key === 'statusCode') return (error as { status?: unknown }).status
+    if (key === 'statusText' || key === 'statusMessage') return error.message
+  }
+  return (error as unknown as Record<string, unknown>)[key]
+}
+
+/**
  * The payload fields (`data`, `internal`) an error's own `toJSON` leaves out,
  * which its serialized form leaves out too. `EvlogError#toJSON` shapes the HTTP
  * response and omits `internal`, which logs keep, so it does not count.
