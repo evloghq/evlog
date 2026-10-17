@@ -17,6 +17,9 @@ export type DrainId =
   | 'better-stack'
   | 'datadog'
   | 'hyperdx'
+  | 'sazabi'
+  | 'loki'
+  | 'clickhouse'
   | 'none'
 
 export interface Destination {
@@ -126,6 +129,36 @@ export const DESTINATIONS: readonly Destination[] = [
     factory: 'createHyperDXDrain()',
     env: [{ name: 'HYPERDX_API_KEY', hint: 'ingestion key' }],
     docs: '/integrate/adapters/hybrid/hyperdx',
+    productionSafe: true,
+  },
+  {
+    id: 'sazabi',
+    label: 'Sazabi',
+    hint: 'AI-native log search over OTLP',
+    specifier: 'evlog/sazabi',
+    factory: 'createSazabiDrain()',
+    env: [{ name: 'SAZABI_INTAKE_URL', hint: 'intake URL' }],
+    docs: '/integrate/adapters/cloud/sazabi',
+    productionSafe: true,
+  },
+  {
+    id: 'loki',
+    label: 'Grafana Loki',
+    hint: 'Log streams queried with LogQL',
+    specifier: 'evlog/loki',
+    factory: 'createLokiDrain()',
+    env: [{ name: 'LOKI_ENDPOINT', hint: 'Loki endpoint URL' }],
+    docs: '/integrate/adapters/hybrid/loki',
+    productionSafe: true,
+  },
+  {
+    id: 'clickhouse',
+    label: 'ClickHouse',
+    hint: 'Wide events as rows in your own table',
+    specifier: 'evlog/clickhouse',
+    factory: 'createClickHouseDrain()',
+    env: [{ name: 'CLICKHOUSE_ENDPOINT', hint: 'HTTP endpoint; the evlog_events table must exist first' }],
+    docs: '/integrate/adapters/hybrid/clickhouse',
     productionSafe: true,
   },
   {
