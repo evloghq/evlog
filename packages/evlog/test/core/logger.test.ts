@@ -278,7 +278,44 @@ describe('log', () => {
     log.error({ action: 'checkout', error: h3CreateError({ statusCode: 502, message: 'Upstream failed', data: { provider: 'stripe' } }) })
 
     const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
-    expect(event.error).toMatchObject({ statusCode: 502, data: { provider: 'stripe' }, stack: expect.any(String) })
+    expect(event.error).toMatchObject({ status: 502, data: { provider: 'stripe' }, stack: expect.any(String) })
+  })
+
+  it('serializes an error with status and message only', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    log.error({ action: 'checkout', error: createError({ status: 402, message: 'Payment could not be completed' }) })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ status: 402, message: 'Payment could not be completed' })
+    expect(event.error).not.toHaveProperty('statusCode')
+    expect(event.error).not.toHaveProperty('statusMessage')
+    expect(event.error).not.toHaveProperty('statusText')
+  })
+
+  it('maps the statusCode of an h3 error to status', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    log.error({ action: 'checkout', error: h3CreateError({ statusCode: 402, message: 'Payment could not be completed' }) })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ status: 402, message: 'Payment could not be completed' })
+    expect(event.error).not.toHaveProperty('statusCode')
+  })
+
+  it('keeps a field its toJSON leaves out hidden after a second set() on the same key', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    const payload: Record<string, unknown> = { visible: 1, secret: 'hunter2' }
+    Object.defineProperty(payload, 'toJSON', { value: () => ({ visible: 1 }) })
+    const logger = createRequestLogger()
+    logger.set({ payload })
+    logger.set({ payload: { extra: 2 } })
+    logger.emit()
+
+    const event = defined(findEventViaDrain(drain, () => true))
+    expect(JSON.parse(JSON.stringify(event)).payload).toEqual({ visible: 1 })
+    expect(JSON.stringify(event)).not.toContain('hunter2')
   })
 
   it('serializes an h3 wrapper once, keeping its status and the original error', () => {
@@ -296,9 +333,6 @@ describe('log', () => {
       status: 402,
       why: 'Card declined by the issuer',
       fix: 'Use a different payment method',
-      statusCode: 402,
-      statusText: 'Payment failed',
-      statusMessage: 'Payment failed',
       data: { why: 'Card declined by the issuer', fix: 'Use a different payment method' },
     })
     expect(serialized).not.toHaveProperty('cause')
@@ -312,7 +346,8 @@ describe('log', () => {
     log.error({ action: 'checkout', error: createError({ message: 'Payment failed', status: 402 }) })
 
     const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
-    expect(event.error).toMatchObject({ status: 402, statusCode: 402, statusText: 'Payment failed', statusMessage: 'Payment failed' })
+    expect(event.error).toMatchObject({ status: 402, message: 'Payment failed' })
+    expect(event.error).not.toHaveProperty('statusCode')
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
     spies.forEach(spy => spy.mockRestore())
   })
@@ -336,7 +371,7 @@ describe('log', () => {
 
     const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
     const serialized = JSON.parse(JSON.stringify(event.error))
-    expect(serialized).toMatchObject({ name: 'Error', message: 'kaboom', stack: original.stack, statusCode: 500 })
+    expect(serialized).toMatchObject({ name: 'Error', message: 'kaboom', stack: original.stack, status: 500 })
     expect(serialized).not.toHaveProperty('cause')
   })
 
@@ -357,7 +392,7 @@ describe('log', () => {
 
     const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
     const serialized = JSON.parse(JSON.stringify(event.error))
-    expect(serialized).toMatchObject({ message: 'Missing required field: timestamp', statusCode: 400 })
+    expect(serialized).toMatchObject({ message: 'Missing required field: timestamp', status: 400 })
     expect(serialized).not.toHaveProperty('cause')
   })
 
@@ -368,7 +403,7 @@ describe('log', () => {
 
     const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
     const serialized = JSON.parse(JSON.stringify(event.error))
-    expect(serialized).toMatchObject({ message: 'Failure', statusCode: 500, fatal: true, unhandled: true })
+    expect(serialized).toMatchObject({ message: 'Failure', status: 500, fatal: true, unhandled: true })
     expect(serialized).not.toHaveProperty('cause')
   })
 
@@ -378,7 +413,7 @@ describe('log', () => {
     log.error(h3CreateError({ status: 409, message: 'Conflict', requestId: 'req_1' } as any) as any)
 
     const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
-    expect(event.error).toMatchObject({ statusCode: 409, cause: { requestId: 'req_1' } })
+    expect(event.error).toMatchObject({ status: 409, cause: { requestId: 'req_1' } })
   })
 
   it('serializes a cyclic cause chain', () => {

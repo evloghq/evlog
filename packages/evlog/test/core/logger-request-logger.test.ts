@@ -303,7 +303,7 @@ describe('createRequestLogger', () => {
     expect(logs.map(entry => entry.message)).toEqual(['First entry', 'Second entry', 'Third entry'])
   })
 
-  it('captures custom error properties (statusCode, data, cause)', () => {
+  it('captures custom error properties (statusCode logged as status, data, cause)', () => {
     const logger = createRequestLogger({})
     const error = Object.assign(new Error('Something went wrong'), {
       statusCode: 500,
@@ -319,8 +319,7 @@ describe('createRequestLogger', () => {
       name: 'Error',
       message: 'Something went wrong',
       stack: expect.any(String),
-      statusCode: 500,
-      statusMessage: 'Internal Server Error',
+      status: 500,
       data: { code: 'VALIDATION_ERROR', why: 'Invalid input' },
       cause: { name: 'Error', message: 'original cause', stack: expect.any(String) },
     })
@@ -364,7 +363,7 @@ describe('createRequestLogger', () => {
     })
   })
 
-  it('captures status/statusText from new-style H3 errors (Nuxt v4.3+)', () => {
+  it('captures status from new-style H3 errors (Nuxt v4.3+)', () => {
     const logger = createRequestLogger({})
     const error = Object.assign(new Error('Not Found'), {
       status: 404,
@@ -379,7 +378,6 @@ describe('createRequestLogger', () => {
       message: 'Not Found',
       stack: expect.any(String),
       status: 404,
-      statusText: 'Not Found',
     })
   })
 
