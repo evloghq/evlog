@@ -38,8 +38,11 @@ export class EvlogError extends Error {
 
   /** Stable, machine-readable identifier (e.g. `'PAYMENT_DECLINED'`). */
   readonly code?: string
-  /** HTTP status code */
-  readonly status: number
+  /**
+   * HTTP status code. Unset for an error that is not an HTTP response; the
+   * framework boundary answers 500 for it.
+   */
+  readonly status?: number
   readonly why?: string
   readonly fix?: string
   readonly link?: string
@@ -59,7 +62,7 @@ export class EvlogError extends Error {
 
     this.name = 'EvlogError'
     this.code = opts.code
-    this.status = opts.status ?? 500
+    this.status = opts.status
     this.why = opts.why
     this.fix = opts.fix
     this.link = opts.link
@@ -102,7 +105,7 @@ export class EvlogError extends Error {
    *
    * @deprecated Removed in evlog v3. Use `status` instead.
    */
-  get statusCode(): number {
+  get statusCode(): number | undefined {
     return this.status
   }
 
@@ -173,7 +176,7 @@ export class EvlogError extends Error {
     return {
       name: this.name,
       message: this.message,
-      status: this.status,
+      ...(this.status !== undefined && { status: this.status }),
       ...(data && { data }),
       ...(this.cause instanceof Error && {
         cause: { name: this.cause.name, message: this.cause.message },

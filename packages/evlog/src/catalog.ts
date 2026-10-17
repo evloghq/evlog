@@ -10,7 +10,7 @@ import { EvlogError } from './error'
  * that can be overridden at the call site.
  */
 export interface ErrorCatalogEntry {
-  /** HTTP status code (default: 500). */
+  /** HTTP status code. Leave unset for an error that is not an HTTP response. */
   status?: number
   /**
    * Either a constant string or a typed function whose params become required
@@ -76,7 +76,7 @@ export type DefinedError<TCode extends string, TEntry extends ErrorCatalogEntry>
   & ((...args: FactoryArgs<TEntry>) => EvlogError)
   & {
     readonly code: TCode
-    readonly status: number
+    readonly status: number | undefined
     readonly message: TEntry['message']
     readonly why: TEntry['why']
     readonly fix: TEntry['fix']
@@ -119,7 +119,7 @@ function buildEvlogError(
   return new EvlogError({
     code,
     message,
-    status: status ?? entry.status ?? 500,
+    status: status ?? entry.status,
     why: why ?? entry.why,
     fix: fix ?? entry.fix,
     link: link ?? entry.link,
@@ -170,7 +170,7 @@ export function defineError<
 
   Object.defineProperties(factory, {
     code: { value: code, enumerable: true },
-    status: { value: entry.status ?? 500, enumerable: true },
+    status: { value: entry.status, enumerable: true },
     message: { value: entry.message, enumerable: true },
     why: { value: entry.why, enumerable: true },
     fix: { value: entry.fix, enumerable: true },

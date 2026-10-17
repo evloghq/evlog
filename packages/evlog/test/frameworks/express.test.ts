@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import express from 'express'
 import request from 'supertest'
 import { initLogger } from '../../src/logger'
+import { createError } from '../../src/error'
 import type { RequestLogger } from '../../src/types'
 import { evlog, useLogger } from '../../src/express/index'
 import {
@@ -85,6 +86,21 @@ describe('evlog/express', () => {
     )
     expect(event.user).toEqual({ id: 'u-1' })
     expect(event.db).toEqual({ queries: 3 })
+  })
+
+  it('answers 500 for a thrown EvlogError without a status', async () => {
+    const { drain } = createPipelineSpies()
+    const app = express()
+    app.use(evlog({ drain }))
+    app.get('/api/turn', () => {
+      throw createError({ message: 'Turn could not start', why: 'Agent queue is full' })
+    })
+
+    const res = await request(app).get('/api/turn')
+    await waitForDrainCalls(drain)
+
+    expect(res.status).toBe(500)
+    assertHttpEventEmitted(drain, { path: '/api/turn', status: 500 })
   })
 
   it('logs error status when handler sends error response', async () => {

@@ -96,6 +96,17 @@ describe('log', () => {
     expect(output).toContain('"items":3')
   })
 
+  it('logs a non-HTTP EvlogError without a status field', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ silent: true, redact: false, drain })
+    log.error(createError({ message: 'Export job stalled', why: 'Upstream timed out' }))
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event).not.toHaveProperty('status')
+    expect(event.error).toMatchObject({ name: 'EvlogError', message: 'Export job stalled', why: 'Upstream timed out' })
+    expect(event.error).not.toHaveProperty('status')
+  })
+
   it('preserves standard Error fields in the global drain', () => {
     const { drain } = createPipelineSpies()
     initLogger({ silent: true, redact: false, drain })
@@ -1151,6 +1162,21 @@ describe('tail sampling', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('does not match a status rule for an event with no status', () => {
+    initLogger({
+      pretty: false,
+      sampling: {
+        rates: { info: 0 },
+        keep: [{ status: 400 }],
+      },
+    })
+
+    const logger = createRequestLogger({ method: 'GET', path: '/job' })
+    logger.emit()
+
+    expect(infoSpy).not.toHaveBeenCalled()
   })
 
   it('keeps logs when status meets threshold', () => {
