@@ -5,14 +5,14 @@ import { z } from 'zod'
 import { missingBlobTokenError, uploadSandboxImage } from '../lib/blob'
 import { browserContext, captureFrame, SCREENSHOT_DIR, captureMarkdown, describeTarget, sensitiveCaptureReason, validateCaptureUrl, type CaptureTarget } from '../lib/capture'
 import { eviErrors, refusal } from '../lib/errors'
-import { canAccessAdminTools } from '../lib/trust'
+import { canCaptureEvidence } from '../lib/trust'
 
 // Frames publish to public URLs the moment the tool runs: autonomous turns
 // never see it. Keep executes inline in the resolver (docs/notes.md).
 export default defineDynamic({
   events: {
-    'turn.started': (_event, ctx) => {
-      if (!canAccessAdminTools(ctx.session.auth.current)) return null
+    'step.started': (_event, ctx) => {
+      if (!canCaptureEvidence(ctx.session.auth.current)) return null
       return {
         capture__before_after: defineTool({
           description: 'Capture a before/after comparison of an evlog surface in one call: for each URL, open it in the sandbox browser, wait 5s for animations to settle, scroll the change into view, screenshot the viewport, validate and upload both frames to the Blob store, and return the finished markdown table with an attestation receipt. Point it at the change with selector, or with text when the page has no stable selector: text finds the visible copy and widens to its section, so the sentence you just wrote is enough. Give both and text is the fallback. When neither resolves the call fails, listing the hooks and headings the page does offer, rather than silently framing the top of the page. Origins are restricted to evlog domains, Vercel previews, and sandbox dev servers. For surfaces that can show real user data (telemetry), review the pages with browser__screenshot before calling this: the returned URLs are public immediately.',
@@ -41,7 +41,7 @@ export default defineDynamic({
             return 'not-applicable'
           },
           async execute(input, toolCtx) {
-            if (!canAccessAdminTools(toolCtx.session.auth.current)) {
+            if (!canCaptureEvidence(toolCtx.session.auth.current)) {
               return refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool: 'capture__before_after' }))
             }
             const log = useLogger(toolCtx)

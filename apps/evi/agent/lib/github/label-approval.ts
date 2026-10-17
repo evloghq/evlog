@@ -1,6 +1,6 @@
 import type { SessionAuthContext } from 'eve/context'
 import type { ApprovalStatus } from 'eve/tools/approval'
-import { isAutonomous, isMaintainer } from '../trust'
+import { isAutonomous, isMaintainer, isPullRequestReview } from '../trust'
 
 const LABEL_NAME_MAX = 50
 const LABEL_DESCRIPTION_MAX = 100
@@ -15,6 +15,7 @@ const MULTILINE = /[\n\r\u2028\u2029]/
  * everyone else needs approval.
  */
 export function writePolicy(auth: SessionAuthContext | null): ApprovalStatus {
+  if (isPullRequestReview(auth)) return { type: 'denied', reason: 'PR review sessions may only publish their scoped review and suggestions.' }
   if (isAutonomous(auth)) {
     return {
       type: 'denied',
