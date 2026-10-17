@@ -1,81 +1,88 @@
 /**
- * These workloads use different output paths, not equivalent-output configurations.
- * Pino serializes JSON and writes to /dev/null; Winston serializes to a no-op stream.
- * Silent evlog and the no-op Consola reporter exclude console serialization.
- * The lifecycle group also compares one evlog event with multiple alternative records.
+ * Equivalent-output comparison. Every logger builds the record, serializes it
+ * to one JSON line and writes it to the same no-op stream, so each row prices
+ * the same work. evlog reaches the stream through a drain, as a deployed app does.
+ * Each group logs the same fields; check a library's output before adding it.
  */
 
 import { Writable } from 'node:stream'
-import { bench, describe } from 'vitest'
+import { afterAll, beforeAll, bench, describe, vi } from 'vitest'
 import pino from 'pino'
 import winston from 'winston'
 import { createConsola } from 'consola'
-import { createLogger, initLogger } from '../../src/logger'
+import { configureSync, getLogger, jsonLinesFormatter } from '@logtape/logtape'
+import { LogLayer } from 'loglayer'
+import { PinoTransport } from '@loglayer/transport-pino'
+import { createRequestLogger, initLogger, log } from '../../src/logger'
+import type { LoggerConfig } from '../../src/types'
 import { PAYLOADS } from '../core/_fixtures'
 
-// --- No-op destinations ---
-
 const devNull = new Writable({
+  decodeStrings: false,
   write(_chunk, _encoding, cb) {
     cb()
   },
 })
+const writeLine = (line: string) => devNull.write(line)
 
-// --- Logger setup ---
+const request = { method: 'POST', path: '/api/checkout', requestId: 'req_abc123' }
+const user = { id: 'usr_123', plan: 'pro', email: 'jane@example.com' }
+const cart = { items: [{ id: 'a', qty: 1, price: 2999 }, { id: 'b', qty: 2, price: 3500 }], total: 9999, currency: 'USD' }
+const payment = { method: 'card', last4: '4242', gateway: 'stripe' }
+const auth = { password: 'hunter2', provider: 'password' }
+const redactPaths = ['user.email', 'auth.password']
+// Created once: building an Error and its stack is the application's cost.
+const error = new Error('Payment failed')
 
-const pinoLogger = pino(
-  { level: 'info' },
-  pino.destination({ dest: '/dev/null', sync: true }),
-)
+const useEvlog = (redact: LoggerConfig['redact']) => () => {
+  initLogger({
+    env: { service: 'bench' },
+    pretty: false,
+    silent: true,
+    redact,
+    drain: ({ event }) => {
+      writeLine(`${JSON.stringify(event)}\n`)
+    },
+  })
+}
 
+const pinoLogger = pino({ level: 'info' }, devNull)
+const pinoRedacting = pino({ level: 'info', redact: redactPaths }, devNull)
+
+const { combine, errors, timestamp, json } = winston.format
 const winstonLogger = winston.createLogger({
   level: 'info',
-  format: winston.format.json(),
+  format: combine(errors({ stack: true }), timestamp(), json()),
   transports: [new winston.transports.Stream({ stream: devNull })],
 })
 
-const consolaLogger = createConsola({
-  level: 4,
-  reporters: [{ log: () => {} }],
+configureSync({
+  sinks: { out: record => writeLine(jsonLinesFormatter(record)) },
+  loggers: [
+    { category: ['bench'], lowestLevel: 'info', sinks: ['out'] },
+    { category: ['logtape', 'meta'], lowestLevel: 'warning', sinks: [] },
+  ],
+})
+const logtapeLogger = getLogger(['bench'])
+
+const logLayer = new LogLayer({ transport: new PinoTransport({ logger: pino({ level: 'info' }, devNull) }) })
+
+const consolaLogger = createConsola({ level: 3, reporters: [{ log: entry => writeLine(`${JSON.stringify(entry)}\n`) }] })
+
+// evlog compacts stacks outside production; the other loggers have no such mode.
+beforeAll(() => {
+  vi.stubEnv('NODE_ENV', 'production')
+})
+afterAll(() => {
+  vi.unstubAllEnvs()
 })
 
-initLogger({
-  env: { service: 'bench', environment: 'production' },
-  pretty: false,
-  silent: true,
-  _suppressDrainWarning: true,
-})
-
-// --- Benchmarks ---
-
-describe('simple string log', () => {
-  const msg = 'User logged in successfully'
+describe('one structured record (5 fields)', () => {
+  const record = { message: 'checkout', ...PAYLOADS.shallow }
 
   bench('evlog', () => {
-    const log = createLogger()
-    log.set({ message: msg })
-    log.emit()
-  })
-
-  bench('pino', () => {
-    pinoLogger.info(msg)
-  })
-
-  bench('winston', () => {
-    winstonLogger.info(msg)
-  })
-
-  bench('consola', () => {
-    consolaLogger.info(msg)
-  })
-})
-
-describe('structured log (5 fields)', () => {
-  bench('evlog', () => {
-    const log = createLogger()
-    log.set(PAYLOADS.shallow)
-    log.emit()
-  })
+    log.info(record)
+  }, { setup: useEvlog(false) })
 
   bench('pino', () => {
     pinoLogger.info(PAYLOADS.shallow, 'checkout')
@@ -85,126 +92,89 @@ describe('structured log (5 fields)', () => {
     winstonLogger.info('checkout', PAYLOADS.shallow)
   })
 
-  bench('consola', () => {
+  bench('LogTape', () => {
+    logtapeLogger.info('checkout', PAYLOADS.shallow)
+  })
+
+  bench('LogLayer (pino transport)', () => {
+    logLayer.withMetadata(PAYLOADS.shallow).info('checkout')
+  })
+
+  bench('consola (JSON reporter)', () => {
     consolaLogger.info('checkout', PAYLOADS.shallow)
   })
 })
 
-describe('deep nested log', () => {
-  bench('evlog', () => {
-    const log = createLogger()
-    log.set(PAYLOADS.deep)
-    log.emit()
-  })
-
-  bench('pino', () => {
-    pinoLogger.info(PAYLOADS.deep, 'deep event')
-  })
-
-  bench('winston', () => {
-    winstonLogger.info('deep event', PAYLOADS.deep)
-  })
-
-  bench('consola', () => {
-    consolaLogger.info('deep event', PAYLOADS.deep)
-  })
-})
-
-describe('child / scoped logger', () => {
-  const scope = { service: 'checkout', requestId: 'req_abc' }
-  const payload = { userId: 'usr_123', action: 'pay', status: 200 }
-
-  const pinoChild = pinoLogger.child(scope)
-  const winstonChild = winstonLogger.child(scope)
-
-  bench('evlog (createLogger + set + emit)', () => {
-    const log = createLogger(scope)
-    log.set(payload)
-    log.emit()
-  })
+describe('one request record', () => {
+  bench('evlog (request logger, 3 set + emit)', () => {
+    const logger = createRequestLogger(request)
+    logger.set({ user })
+    logger.set({ cart })
+    logger.set({ payment })
+    logger.emit({ status: 200 })
+  }, { setup: useEvlog(false) })
 
   bench('pino (child.info)', () => {
-    pinoChild.info(payload, 'request')
+    pinoLogger.child(request).info({ user, cart, payment, status: 200 }, 'request')
   })
 
   bench('winston (child.info)', () => {
-    winstonChild.info('request', payload)
+    winstonLogger.child(request).info('request', { user, cart, payment, status: 200 })
   })
 
-  bench('consola (withTag.info)', () => {
-    const tagged = consolaLogger.withTag('checkout')
-    tagged.info('request', payload)
-  })
-})
-
-describe('wide event lifecycle (evlog-native pattern)', () => {
-  bench('evlog — accumulate + emit (1 event)', () => {
-    const log = createLogger({ method: 'POST', path: '/api/checkout', requestId: 'req_abc' })
-    log.set({ user: { id: 'usr_123', plan: 'pro' } })
-    log.set({ cart: { items: 3, total: 9999 } })
-    log.set({ payment: { method: 'card', last4: '4242' } })
-    log.emit({ status: 200 })
+  bench('LogTape (with().info)', () => {
+    logtapeLogger.with(request).info('request', { user, cart, payment, status: 200 })
   })
 
-  bench('pino — 4 separate log calls', () => {
-    const child = pinoLogger.child({ method: 'POST', path: '/api/checkout', requestId: 'req_abc' })
-    child.info({ user: { id: 'usr_123', plan: 'pro' } }, 'user context')
-    child.info({ cart: { items: 3, total: 9999 } }, 'cart context')
-    child.info({ payment: { method: 'card', last4: '4242' } }, 'payment context')
-    child.info({ status: 200 }, 'request complete')
-  })
-
-  bench('winston — 4 separate log calls', () => {
-    const child = winstonLogger.child({ method: 'POST', path: '/api/checkout', requestId: 'req_abc' })
-    child.info('user context', { user: { id: 'usr_123', plan: 'pro' } })
-    child.info('cart context', { cart: { items: 3, total: 9999 } })
-    child.info('payment context', { payment: { method: 'card', last4: '4242' } })
-    child.info('request complete', { status: 200 })
+  bench('LogLayer (pino transport)', () => {
+    logLayer.child().withContext(request).withMetadata({ user, cart, payment, status: 200 }).info('request')
   })
 })
 
-describe('burst — 100 sequential logs', () => {
+describe('one request record with an error', () => {
   bench('evlog', () => {
-    for (let i = 0; i < 100; i++) {
-      const log = createLogger()
-      log.set({ i, action: 'tick' })
-      log.emit()
-    }
-  })
+    const logger = createRequestLogger(request)
+    logger.set({ user })
+    logger.error(error)
+    logger.emit({ status: 500 })
+  }, { setup: useEvlog(false) })
 
   bench('pino', () => {
-    for (let i = 0; i < 100; i++) {
-      pinoLogger.info({ i, action: 'tick' })
-    }
+    pinoLogger.child(request).error({ user, err: error, status: 500 }, 'request failed')
   })
 
   bench('winston', () => {
-    for (let i = 0; i < 100; i++) {
-      winstonLogger.info('tick', { i, action: 'tick' })
-    }
+    winstonLogger.child(request).error({ message: error, user, status: 500 })
   })
 
-  bench('consola', () => {
-    for (let i = 0; i < 100; i++) {
-      consolaLogger.info('tick', { i, action: 'tick' })
-    }
+  bench('LogTape', () => {
+    logtapeLogger.with(request).error('request failed', { user, error, status: 500 })
+  })
+
+  bench('LogLayer (pino transport)', () => {
+    logLayer.child().withContext(request).withMetadata({ user, status: 500 }).withError(error).error('request failed')
   })
 })
 
-describe('logger creation cost', () => {
-  bench('evlog — createLogger()', () => {
-    createLogger({ service: 'bench', requestId: 'req_abc' })
-  })
+describe('redact two paths in a request record', () => {
+  bench('evlog (redact.paths)', () => {
+    const logger = createRequestLogger(request)
+    logger.set({ user, auth })
+    logger.set({ cart })
+    logger.emit({ status: 200 })
+  }, { setup: useEvlog({ builtins: false, paths: redactPaths }) })
 
-  bench('pino — pino.child()', () => {
-    pinoLogger.child({ service: 'bench', requestId: 'req_abc' })
+  bench('pino (redact)', () => {
+    pinoRedacting.child(request).info({ user, auth, cart, status: 200 }, 'request')
   })
+})
 
-  bench('winston — winston.child()', () => {
-    winstonLogger.child({ service: 'bench', requestId: 'req_abc' })
-  })
-
-  bench('consola — consola.withTag()', () => {
-    consolaLogger.withTag('bench')
-  })
+// No alternative scans every string for PII by default, so this group has no counterpart.
+describe('evlog default production redaction', () => {
+  bench('evlog (redact: true)', () => {
+    const logger = createRequestLogger(request)
+    logger.set({ user, auth })
+    logger.set({ cart })
+    logger.emit({ status: 200 })
+  }, { setup: useEvlog(true) })
 })
