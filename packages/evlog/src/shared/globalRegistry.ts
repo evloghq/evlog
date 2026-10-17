@@ -11,10 +11,10 @@ import { getEmptyPluginRunner } from './plugin'
  *
  * Kept in sync with `package.json` by `test/toolkit/duplicate-install.test.ts`.
  */
-const EVLOG_MAJOR = 2
+const EVLOG_MAJOR = 3
 
 /**
- * Registry key. Every 2.x copy of evlog in a dependency graph resolves the
+ * Registry key. Every copy of evlog of the same major in a dependency graph resolves the
  * same slot, so `initLogger()` and `withEvlog()` work across duplicate installs
  * (pnpm/bun hash our 18 optional peers into store paths, so two workspaces
  * resolving `ai` or `zod` differently get physically distinct evlog copies).
