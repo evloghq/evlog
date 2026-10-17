@@ -242,6 +242,36 @@ describe('log', () => {
     expect(JSON.parse(JSON.stringify(event)).card).toEqual({ last4: '4242' })
   })
 
+  it.each([
+    ['an Error', (error: Error) => log.error(error)],
+    ['an object event', (error: Error) => log.error({ action: 'checkout', error })],
+  ])('drops the data and internal fields an error\'s own toJSON leaves out (%s)', (_name, logIt) => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    class PaymentError extends Error {
+      data = { cardNumber: '4242424242424242' }
+      internal = { token: 'tok_secret' }
+      toJSON() {
+        return { name: this.name, message: this.message }
+      }
+    }
+    logIt(new PaymentError('Declined'))
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ name: 'Error', message: 'Declined', stack: expect.any(String) })
+    expect(JSON.stringify(event)).not.toContain('4242424242424242')
+    expect(JSON.stringify(event)).not.toContain('tok_secret')
+  })
+
+  it('keeps the data an h3 error carries', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    log.error({ action: 'checkout', error: h3CreateError({ statusCode: 502, message: 'Upstream failed', data: { provider: 'stripe' } }) })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ statusCode: 502, data: { provider: 'stripe' }, stack: expect.any(String) })
+  })
+
   it('serializes an h3 wrapper once, keeping its status and the original error', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, drain })

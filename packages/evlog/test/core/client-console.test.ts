@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createError as h3CreateError } from 'h3'
 import type { LogLevel } from '../../src/types'
 import { initLog, log, setMinLevel } from '../../src/runtime/client/log'
 import { defined } from '../helpers/defined'
@@ -354,6 +355,29 @@ describe('client log.error with an Error instance', () => {
       log.error({ action: 'checkout', card: new Card('4242424242424242', new Error('Declined')) })
 
       expect(sent().card).toEqual({ last4: '4242' })
+    })
+
+    it('drops the data and internal fields its own toJSON leaves out', () => {
+      initTransport()
+      class PaymentError extends Error {
+        data = { cardNumber: '4242424242424242' }
+        internal = { token: 'tok_secret' }
+        toJSON() {
+          return { name: this.name, message: this.message }
+        }
+      }
+
+      log.error({ action: 'checkout', error: new PaymentError('Declined') })
+
+      expect(sent().error).toEqual({ name: 'Error', message: 'Declined', stack: expect.any(String) })
+    })
+
+    it('keeps the data an h3 error carries', () => {
+      initTransport()
+
+      log.error({ action: 'checkout', error: h3CreateError({ statusCode: 502, message: 'Upstream failed', data: { provider: 'stripe' } }) })
+
+      expect(sent().error).toMatchObject({ statusCode: 502, data: { provider: 'stripe' }, stack: expect.any(String) })
     })
 
     it.each([
