@@ -1,10 +1,21 @@
 import { readErrorField } from '../utils'
 import { isEvlogError } from './error-brand'
 
-/** Logged after `name`, `message` and `stack`, before `cause`. */
-const ERROR_FIELDS = ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'internal', 'why', 'fix', 'link'] as const
+/**
+ * Logged after `name`, `message` and `stack`, before `cause`. The status text
+ * is `message` itself, so `statusText` and `statusMessage` are not logged.
+ */
+const ERROR_FIELDS = ['code', 'status', 'data', 'internal', 'why', 'fix', 'link'] as const
 
 const NONE: readonly string[] = []
+
+/**
+ * The HTTP status, read from `status` and falling back to h3's `statusCode`.
+ * Logs carry `status` only; the fallback covers h3 errors, which still name it `statusCode`.
+ */
+function statusOf(error: Error): unknown {
+  return readErrorField(error, 'status') ?? readErrorField(error, 'statusCode')
+}
 
 /**
  * The payload fields (`data`, `internal`) an error's own `toJSON` leaves out,
@@ -90,12 +101,13 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
     ancestors.add(error)
 
     if (isWrapperOf(error, cause) && !ancestors.has(cause)) {
+      // The cause already carries the message, which the wrapper repeats.
       const serialized = serialize(cause, ancestors)
       const hidden = payloadFieldsHiddenBy(error)
-      for (const key of ['statusCode', 'statusMessage', 'data'] as const) {
-        const value = readErrorField(error, key)
-        if (value !== undefined && !hidden.includes(key)) serialized[key] = walk(value, ancestors)
-      }
+      const status = statusOf(error)
+      if (status !== undefined) serialized.status = status
+      const data = readErrorField(error, 'data')
+      if (data !== undefined && !hidden.includes('data')) serialized.data = walk(data, ancestors)
       ancestors.delete(error)
       return serialized
     }
@@ -107,7 +119,7 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
     }
     const hidden = payloadFieldsHiddenBy(error)
     for (const key of ERROR_FIELDS) {
-      const value = readErrorField(error, key)
+      const value = key === 'status' ? statusOf(error) : readErrorField(error, key)
       if (value !== undefined && !hidden.includes(key)) serialized[key] = walk(value, ancestors)
     }
     if (isH3InputOf(error, cause)) {

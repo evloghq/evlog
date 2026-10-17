@@ -2,4 +2,4 @@
 "evlog": patch
 ---
 
-The Sentry drain's `issues` option now reads an error's `status` before its legacy `statusCode` when it decides whether an event is a 4xx. An `EvlogError` carries both, so an error whose two values disagree is classified by `status`. Logs and the drained wide event are unchanged.
+The Sentry drain's `issues` option reads an error's `status`, then the event's `status`, when it decides whether an event is a 4xx. It no longer reads the legacy `statusCode`, so an error that only carries `statusCode` is classified by the event's `status`. Logs and the drained wide event are unchanged.

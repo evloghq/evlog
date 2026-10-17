@@ -324,7 +324,8 @@ describe('client log.error with an Error instance', () => {
 
       log.error({ action: 'cart', error })
 
-      expect(sent().error).toMatchObject({ message: '[GET] "/api/cart": 500 Internal Server Error', statusCode: 500 })
+      expect(sent().error).toMatchObject({ message: '[GET] "/api/cart": 500 Internal Server Error', status: 500 })
+      expect(sent().error).not.toHaveProperty('statusCode')
     })
 
     it('serializes an Error inside its own fields', () => {
@@ -378,7 +379,7 @@ describe('client log.error with an Error instance', () => {
 
       log.error({ action: 'checkout', error: h3CreateError({ statusCode: 502, message: 'Upstream failed', data: { provider: 'stripe' } }) })
 
-      expect(sent().error).toMatchObject({ statusCode: 502, data: { provider: 'stripe' }, stack: expect.any(String) })
+      expect(sent().error).toMatchObject({ status: 502, data: { provider: 'stripe' }, stack: expect.any(String) })
     })
 
     it('serializes an EvlogError without reading its legacy status getters', () => {
@@ -387,7 +388,8 @@ describe('client log.error with an Error instance', () => {
 
       log.error({ action: 'checkout', error: createError({ message: 'Payment failed', status: 402 }) })
 
-      expect(sent().error).toMatchObject({ status: 402, statusCode: 402, statusText: 'Payment failed', statusMessage: 'Payment failed' })
+      expect(sent().error).toMatchObject({ status: 402, message: 'Payment failed' })
+      expect(sent().error).not.toHaveProperty('statusCode')
       for (const spy of spies) expect(spy).not.toHaveBeenCalled()
     })
 
@@ -400,7 +402,7 @@ describe('client log.error with an Error instance', () => {
 
       logIt(h3CreateError(original as any) as any)
 
-      expect(sent().error).toMatchObject({ name: 'Error', message: 'kaboom', stack: original.stack, statusCode: 500 })
+      expect(sent().error).toMatchObject({ name: 'Error', message: 'kaboom', stack: original.stack, status: 500 })
       expect(sent().error).not.toHaveProperty('cause')
     })
 
@@ -409,7 +411,7 @@ describe('client log.error with an Error instance', () => {
 
       log.error({ action: 'checkout', error: h3CreateError({ statusCode: 400, message: 'Missing required field: timestamp' }) })
 
-      expect(sent().error).toMatchObject({ message: 'Missing required field: timestamp', statusCode: 400 })
+      expect(sent().error).toMatchObject({ message: 'Missing required field: timestamp', status: 400 })
       expect(sent().error).not.toHaveProperty('cause')
     })
 

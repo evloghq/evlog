@@ -424,7 +424,7 @@ describe('sentry adapter', () => {
       expect(retryLogs?.payload.items[0].trace_id).toBe(firstLogs?.payload.items[0].trace_id)
     })
 
-    it('reads `status` before the legacy `statusCode` when they disagree', async () => {
+    it('classifies by `status` alone, ignoring a legacy `statusCode`', async () => {
       await sendBatchToSentry([
         createTestEvent({ level: 'error', error: { name: 'EvlogError', message: 'User 8231 not found', status: 404, statusCode: 500 } }),
         createTestEvent({ level: 'error', error: { name: 'EvlogError', message: 'Database down', status: 503 } }),
@@ -437,7 +437,7 @@ describe('sentry adapter', () => {
     it('does not open issues for 4xx errors', async () => {
       await sendBatchToSentry([
         createTestEvent({ level: 'error', status: 404, error: { name: 'EvlogError', message: 'User 8231 not found', status: 404 } }),
-        createTestEvent({ level: 'error', error: { name: 'H3Error', message: 'Unauthorized', statusCode: 401 } }),
+        createTestEvent({ level: 'error', error: { name: 'H3Error', message: 'Unauthorized', status: 401 } }),
         createTestEvent({ level: 'error', status: 400, error: { name: 'Error', message: 'Invalid body' } }),
         createTestEvent({ level: 'error', status: 500, error: { name: 'TypeError', message: 'boom' } }),
         createTestEvent({ level: 'error', error: { name: 'Error', message: 'job failed' } }),
