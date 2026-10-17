@@ -287,3 +287,34 @@ export function isoNow(): string {
   }
   return `${_isoCachedPrefix}.${String(now % 1000).padStart(3, '0')}Z`
 }
+
+/**
+ * Walks an event so an Error at any depth goes through `serializeError` and a
+ * cycle becomes `'[Circular]'`. A value holding neither is returned as it is.
+ * An object with its own `toJSON` keeps it: a copy would drop what that method
+ * leaves out.
+ */
+export function walkErrors(
+  value: unknown,
+  ancestors: WeakSet<object>,
+  serializeError: (error: Error, ancestors: WeakSet<object>) => Record<string, unknown>,
+): unknown {
+  if (value === null || typeof value !== 'object') return value
+  if (ancestors.has(value)) return '[Circular]'
+  if (value instanceof Error) return serializeError(value, ancestors)
+  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return value
+
+  ancestors.add(value)
+  let changed = false
+  const visit = (item: unknown): unknown => {
+    const result = walkErrors(item, ancestors, serializeError)
+    if (!Object.is(result, item)) changed = true
+    return result
+  }
+  const copy = Array.isArray(value)
+    ? value.map(visit)
+    : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, visit(item)]))
+  ancestors.delete(value)
+
+  return changed ? copy : value
+}

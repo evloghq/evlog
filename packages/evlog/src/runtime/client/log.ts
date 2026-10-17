@@ -1,5 +1,5 @@
 import type { Log, LogLevel, TransportConfig } from '../../types'
-import { cssColors, escapeFormatString, formatMessage, getCssLevelColor, hasMessageSpecifiers, isBrowser, isLevelEnabled, isLogLevel, isoNow } from '../../utils'
+import { cssColors, escapeFormatString, formatMessage, getCssLevelColor, hasMessageSpecifiers, isBrowser, isLevelEnabled, isLogLevel, isoNow, walkErrors } from '../../utils'
 
 /**
  * Browser DevTools often hide or bucket `console.debug` under "Verbose" in a way that looks like
@@ -135,31 +135,8 @@ function serializeError(error: Error, ancestors = new WeakSet<object>()): Record
   return serialized
 }
 
-/**
- * The server logger's walk over an object event: an Error at any depth is
- * serialized, a cycle becomes `'[Circular]'`, and an event holding neither is
- * returned as it is. An object with its own `toJSON` keeps it: a copy would
- * drop what that method leaves out.
- */
 function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown {
-  if (value === null || typeof value !== 'object') return value
-  if (ancestors.has(value)) return '[Circular]'
-  if (value instanceof Error) return serializeError(value, ancestors)
-  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return value
-
-  ancestors.add(value)
-  let changed = false
-  const visit = (item: unknown): unknown => {
-    const result = removeErrorCycles(item, ancestors)
-    if (!Object.is(result, item)) changed = true
-    return result
-  }
-  const copy = Array.isArray(value)
-    ? value.map(visit)
-    : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, visit(item)]))
-  ancestors.delete(value)
-
-  return changed ? copy : value
+  return walkErrors(value, ancestors, serializeError)
 }
 
 function createLogMethod(level: LogLevel) {

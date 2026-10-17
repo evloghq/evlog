@@ -227,6 +227,21 @@ describe('log', () => {
     expect(serialized.message).toBe('Job failed')
   })
 
+  it('leaves an object that defines toJSON to it', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    class Card {
+      constructor(readonly number: string, readonly error: Error) {}
+      toJSON() {
+        return { last4: this.number.slice(-4) }
+      }
+    }
+    log.error({ action: 'checkout', card: new Card('4242424242424242', new Error('Declined')) })
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(JSON.parse(JSON.stringify(event)).card).toEqual({ last4: '4242' })
+  })
+
   it('serializes an h3 wrapper once, keeping its status and the original error', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, drain })

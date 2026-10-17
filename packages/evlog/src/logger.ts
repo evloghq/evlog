@@ -9,7 +9,7 @@ import { resolveDevTerminal } from './shared/dev-terminal'
 import { globalConfig } from './shared/globalRegistry'
 import { publishWideEvent } from './shared/wideEventChannel'
 import { EvlogError } from './error'
-import { colors, cssColors, detectEnvironment, elapsedMs, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern } from './utils'
+import { colors, cssColors, detectEnvironment, elapsedMs, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern, walkErrors } from './utils'
 
 const nativeStdoutWrite =
   typeof process !== 'undefined' && typeof process.stdout?.write === 'function'
@@ -796,23 +796,7 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
 }
 
 function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown {
-  if (value === null || typeof value !== 'object') return value
-  if (ancestors.has(value)) return '[Circular]'
-  if (value instanceof Error) return serializeError(value, ancestors)
-
-  ancestors.add(value)
-  let changed = false
-  const visit = (item: unknown): unknown => {
-    const result = removeErrorCycles(item, ancestors)
-    if (!Object.is(result, item)) changed = true
-    return result
-  }
-  const copy = Array.isArray(value)
-    ? value.map(visit)
-    : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, visit(item)]))
-  ancestors.delete(value)
-
-  return changed ? copy : value
+  return walkErrors(value, ancestors, serializeError)
 }
 
 /**
