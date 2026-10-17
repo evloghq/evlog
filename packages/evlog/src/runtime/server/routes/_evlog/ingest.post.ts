@@ -21,13 +21,14 @@ function validateOrigin(event: IngestEvent): void {
   const referer = getHeader(event, 'referer')
   const host = getRequestHost(event)
 
-  const requestOrigin = origin || (referer ? new URL(referer).origin : null)
+  const requestOrigin = origin || referer
 
   if (!requestOrigin) {
     throw createError({ statusCode: 403, message: 'Missing origin header' })
   }
 
-  const originHost = new URL(requestOrigin).host
+  // A sandboxed iframe sends `Origin: null`, which is not a URL.
+  const originHost = URL.canParse(requestOrigin) ? new URL(requestOrigin).host : null
 
   if (originHost !== host) {
     throw createError({ statusCode: 403, message: 'Invalid origin' })

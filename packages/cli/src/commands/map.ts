@@ -8,7 +8,7 @@ import { FRAMEWORK_IDS, isFramework } from '../lib/frameworks'
 import type { CliDebug } from '../lib/debug'
 import { createNoopCliDebug } from '../lib/debug'
 import { cliErrors } from '../lib/errors'
-import { prettyPath, resolveEvlog, resolveProject } from '../lib/project'
+import { evlogReached, prettyPath, resolveEvlog, resolveProject } from '../lib/project'
 import type { ProjectInfo } from '../lib/project'
 import { checkBaselineVersion, compareToBaseline, hasRegressed, loadBaseline } from '../lib/map/baseline'
 import type { BaselineComparison } from '../lib/map/baseline'
@@ -84,7 +84,7 @@ export async function runMap(
   const resolved = await log.step(
     'resolveEvlog',
     () => resolveEvlog(project),
-    r => ({ hasEvlog: !!r.install }),
+    r => ({ hasEvlog: evlogReached(r) }),
   )
 
   const config = await log.step(
@@ -97,7 +97,7 @@ export async function runMap(
     projectRoot: project.packageDir,
     framework,
     projectName: project.packageName ?? 'unknown',
-    hasEvlog: !!resolved.install,
+    hasEvlog: evlogReached(resolved),
     verbose: options.verbose ?? false,
     rulesOff: config?.map.off,
     ignore: config?.map.ignore,

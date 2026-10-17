@@ -232,6 +232,7 @@ export function redactValueByPaths(
 /**
  * Built-in PII detection patterns with smart masking.
  * Each builtin preserves just enough signal for debugging while scrubbing PII.
+ * They run on every string of every wide event, so each must stay linear in the input length.
  */
 export const builtinPatterns = {
   /** Credit card numbers → ****1111 (PCI DSS: last 4 allowed) */
@@ -242,7 +243,8 @@ export const builtinPatterns = {
   /** Email addresses → a***@***.com */
   email: {
     // Letters-only TLD, so pnpm store segments like `name@1.2.3` are not treated as addresses.
-    pattern: /[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}\b/g,
+    // RFC 5321 lengths bound the scan from each start position.
+    pattern: /[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63})*\.[a-zA-Z]{2,63}\b/g,
     mask: (m: string) => {
       const at = m.indexOf('@')
       if (at < 1) return '***@***'
@@ -282,7 +284,8 @@ export const builtinPatterns = {
   },
   /** JWT tokens → eyJ***.*** */
   jwt: {
-    pattern: /\beyJ[\w-]*\.[\w-]*\.[\w-]*\b/g,
+    // The header stops at the next `-eyJ`, where another match could start, so no start rescans it.
+    pattern: /\beyJ(?:(?!-eyJ)[\w-])*\.[\w-]*\.[\w-]*\b/g,
     mask: () => 'eyJ***.***',
   },
   /** Bearer tokens → Bearer *** */

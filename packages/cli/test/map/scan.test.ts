@@ -1,5 +1,7 @@
-import { join } from 'node:path'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getFramework } from '../../src/lib/frameworks'
 import { detectFramework } from '../../src/lib/map/detect'
 import { scan } from '../../src/lib/map/scan'
@@ -253,5 +255,72 @@ describe('hono checks', () => {
     const health = result.map.routes.find(r => r.path === '/health')
     expect(health?.checks['wide-event']?.status).toBe('fail')
     expect(health?.checks['context']?.status).toBe('fail')
+  })
+})
+
+/* The setup from EVL-659: a Next.js app in a pnpm workspace that only ever
+   imports a shared `@acme/logger` package, with evlog installed in that package
+   and not in the app. */
+describe('a workspace package that wraps evlog', () => {
+  let root: string
+  let result: ScanResult
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'evlog-cli-wrapper-'))
+    const files: Record<string, string> = {
+      'packages/logger/package.json': JSON.stringify({
+        name: '@acme/logger',
+        exports: { '.': './src/index.ts' },
+        dependencies: { evlog: '^3.0.0' },
+      }),
+      'packages/logger/src/index.ts': 'import { createEvlog } from \'evlog/next\'\nexport const { withEvlog, useLogger } = createEvlog({ service: \'shop\' })',
+      'packages/logger/node_modules/evlog/package.json': JSON.stringify({ name: 'evlog', version: '3.0.0' }),
+      'apps/web/package.json': JSON.stringify({ name: 'web', dependencies: { '@acme/logger': 'workspace:*', 'next': '*' } }),
+      'apps/web/app/api/orders/route.ts': [
+        'import { useLogger, withEvlog } from \'@acme/logger\'',
+        'export const POST = withEvlog(async () => {',
+        '  useLogger().set({ order: { id: 1 } })',
+        '  return Response.json({ ok: true })',
+        '})',
+      ].join('\n'),
+      'apps/web/app/api/health/route.ts': 'export function GET() { return Response.json({ ok: true }) }',
+      'apps/web/app/actions/checkout.ts': [
+        '\'use server\'',
+        'import { useLogger, withEvlog } from \'@acme/logger\'',
+        'export const checkout = withEvlog(async () => {',
+        '  useLogger().set({ cart: { id: 1 } })',
+        '})',
+      ].join('\n'),
+    }
+    for (const [path, source] of Object.entries(files)) {
+      const file = join(root, path)
+      await mkdir(dirname(file), { recursive: true })
+      await writeFile(file, source, 'utf8')
+    }
+    await mkdir(join(root, 'apps/web/node_modules/@acme'), { recursive: true })
+    await symlink(join(root, 'packages/logger'), join(root, 'apps/web/node_modules/@acme/logger'), 'dir')
+
+    result = await scan({ projectRoot: join(root, 'apps/web'), framework: 'next', projectName: 'web', hasEvlog: false, verbose: false })
+  })
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('credits a route handler that logs through the package', () => {
+    const orders = result.map.routes.find(r => r.path === '/api/orders')
+    expect(orders?.checks['wide-event']?.status).toBe('pass')
+    expect(orders?.checks['context']?.status).toBe('pass')
+  })
+
+  it('lists and credits a server action wrapped by the package', () => {
+    const checkout = result.map.routes.find(r => r.path === 'action:checkout')
+    expect(checkout?.kind).toBe('server-action')
+    expect(checkout?.checks['wide-event']?.status).toBe('pass')
+  })
+
+  it('treats evlog as installed when the package can reach it', () => {
+    const health = result.map.routes.find(r => r.path === '/api/health')
+    expect(health?.checks['wide-event']?.message).toMatch(/dark event/)
   })
 })

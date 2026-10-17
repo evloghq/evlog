@@ -514,6 +514,60 @@ describe('createLogger', () => {
     })
   })
 
+  it('does not write into a payload logged as context and then thrown as error data', () => {
+    const data = { reason: 'refresh token rejected' }
+    const logger = createLogger()
+
+    logger.warn('refresh failed', { error: data })
+    logger.error(h3CreateError({ status: 401, message: 'Unauthorized', data }))
+
+    expect(data).toEqual({ reason: 'refresh token rejected' })
+    const event = defined(logger.emit(), 'emitted event')
+    expect(() => JSON.stringify(event)).not.toThrow()
+  })
+
+  it('does not write into a nested object when a later set merges into its key', () => {
+    const user = { id: '123' }
+    const logger = createLogger()
+
+    logger.set({ user })
+    logger.set({ user: { plan: 'pro' } })
+
+    expect(user).toEqual({ id: '123' })
+    expect(logger.getContext().user).toEqual({ id: '123', plan: 'pro' })
+  })
+
+  it('keeps null fields and a non-enumerable toJSON on a nested record', () => {
+    const payload = { status: null, visible: 1, hidden: 2 }
+    Object.defineProperty(payload, 'toJSON', { value: () => ({ visible: 1 }), enumerable: false })
+    const logger = createLogger()
+
+    logger.set({ payload, other: { status: null } })
+
+    const context = logger.getContext()
+    expect(context.other).toEqual({ status: null })
+    expect(JSON.stringify(context.payload)).toBe('{"visible":1}')
+  })
+
+  it('stores a __proto__ key as a field instead of writing to Object.prototype', () => {
+    const logger = createLogger()
+
+    logger.set(JSON.parse('{"__proto__":{"polluted":true},"nested":{"__proto__":{"polluted":true}}}'))
+
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+
+  it('stores a __proto__ key as a field when merging into a field that already exists', () => {
+    const logger = createLogger({ user: { id: '1' } })
+
+    logger.info('payload', JSON.parse('{"user":{"__proto__":{"polluted":true},"plan":"pro"}}'))
+
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    const user = logger.getContext().user as Record<string, unknown>
+    expect(user).toMatchObject({ id: '1', plan: 'pro' })
+    expect(Object.getOwnPropertyDescriptor(user, '__proto__')?.value).toEqual({ polluted: true })
+  })
+
   it('creates logger with empty context by default', () => {
     const logger = createLogger()
 

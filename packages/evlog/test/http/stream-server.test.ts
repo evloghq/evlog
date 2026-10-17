@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +7,18 @@ import { resetStreamServerForTests, setDefaultStream, startStreamServer, type St
 import type { WideEvent } from '../../src/types'
 import { makeEvent } from '../helpers/events'
 import { defined } from '../helpers/defined'
+
+/** Status of a GET sent with raw headers: `fetch` refuses to set `Host`. */
+function getStatus(url: string, headers: Record<string, string>): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = request(url, { headers }, (res) => {
+      resolve(res.statusCode ?? 0)
+      req.destroy()
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
 
 async function readSSE(url: string, durationMs: number, headers: Record<string, string> = {}): Promise<string[]> {
   const session = await openSSE(url, headers)
@@ -219,6 +232,36 @@ describe('startStreamServer', () => {
     })
     expect(res.status).toBe(200)
     res.body?.cancel()
+  })
+
+  it('accepts loopback origins without a token', async () => {
+    server = await startStreamServer({ urlFileDir: dir, banner: false, heartbeatMs: 60_000 })
+
+    for (const origin of ['http://localhost:3000', 'http://127.0.0.1:5173', 'http://[::1]:3000']) {
+      expect(await getStatus(server.url, { origin }), origin).toBe(200)
+    }
+  })
+
+  it('rejects origins that only start with a loopback name', async () => {
+    server = await startStreamServer({ urlFileDir: dir, banner: false, heartbeatMs: 60_000 })
+
+    for (const origin of ['https://localhost.evil.com', 'https://127.0.0.1.evil.com', 'https://evil.com']) {
+      expect(await getStatus(server.url, { origin }), origin).toBe(403)
+    }
+  })
+
+  it('rejects a non-loopback Host without a token, as a DNS-rebound page sends', async () => {
+    server = await startStreamServer({ urlFileDir: dir, banner: false, heartbeatMs: 60_000 })
+    const { port } = server
+
+    expect(await getStatus(server.url, { host: `rebind.evil.com:${port}` })).toBe(403)
+    expect(await getStatus(server.url, { host: `localhost:${port}` })).toBe(200)
+  })
+
+  it('accepts any Host when the bearer token matches', async () => {
+    server = await startStreamServer({ urlFileDir: dir, banner: false, token: 'secret-1', heartbeatMs: 60_000 })
+
+    expect(await getStatus(server.url, { host: 'stream.internal:4317', authorization: 'Bearer secret-1' })).toBe(200)
   })
 
   it('removes stream.url and frees the port on close()', async () => {

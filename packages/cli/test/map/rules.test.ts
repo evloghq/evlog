@@ -47,6 +47,13 @@ interface Case {
    */
   barrels?: Record<string, string[]>
   /**
+   * Installed packages that forward evlog, as import specifier → forwarded names.
+   *
+   * `{ '@acme/logger': ['withEvlog'] }` stands for a workspace package whose
+   * entry does `export const { withEvlog } = createEvlog(…)`.
+   */
+  packages?: Record<string, string[]>
+  /**
    * Inline errors that also exist elsewhere in the project.
    *
    * Given as the literal payload, e.g. `{ status: 404, why: 'Gone' }`, and
@@ -84,9 +91,13 @@ function check(rule: MapRule, testCase: Case): CheckResult | undefined {
   const evlogBarrels = new Map(
     Object.entries(testCase.barrels ?? {}).map(([key, names]) => [key, new Set(names)]),
   )
+  const evlogPackages = new Map(
+    Object.entries(testCase.packages ?? {}).map(([specifier, names]) => [specifier, new Set(names)]),
+  )
   const facts = buildFileFacts(parsed, {
     evlogAutoImports: capabilities.evlogAutoImports,
     evlogBarrels,
+    evlogPackages,
     requestLoggerMember: capabilities.requestLoggerMember,
   })
   const raw = {
@@ -111,6 +122,7 @@ function check(rule: MapRule, testCase: Case): CheckResult | undefined {
     pairable: new Set(testCase.pairable ?? []),
     catalogs: testCase.catalogs ?? [],
     evlogBarrels,
+    evlogPackages,
     repeatedErrors: buildRepeatedErrors(testCase.repeatedErrors ?? []),
   }
 
@@ -184,6 +196,18 @@ const CASES: Record<CheckId, RuleCases> = {
         framework: 'next',
         barrels: { observability: ['*'] },
         code: 'import { useLogger } from \'~/lib/observability\'\nexport async function POST() { const log = useLogger() }',
+      },
+      {
+        name: 'withEvlog forwarded by a workspace package that wraps createEvlog',
+        framework: 'next',
+        packages: { '@acme/logger': ['withEvlog', 'useLogger'] },
+        code: 'import { withEvlog } from \'@acme/logger\'\nexport const POST = withEvlog(async () => Response.json({ ok: true }))',
+      },
+      {
+        name: 'useLogger from a subpath of that package',
+        framework: 'next',
+        packages: { '@acme/logger/next': ['useLogger'] },
+        code: 'import { useLogger } from \'@acme/logger/next\'\nexport async function POST() { const log = useLogger() }',
       },
       {
         name: 'the logger read off the request context — evlog\'s own TanStack Start shape',
@@ -265,6 +289,20 @@ const CASES: Record<CheckId, RuleCases> = {
         framework: 'next',
         barrels: { evlog: ['withEvlog'] },
         code: 'import { useLogger } from \'@/lib/evlog\'\nexport async function POST() { const log = useLogger() }',
+        message: /dark event/,
+      },
+      {
+        name: 'a package only vouches for the names it forwards',
+        framework: 'next',
+        packages: { '@acme/logger': ['withEvlog'] },
+        code: 'import { useLogger } from \'@acme/logger\'\nexport async function POST() { const log = useLogger() }',
+        message: /dark event/,
+      },
+      {
+        name: 'a package is matched by its full specifier, not its last segment',
+        framework: 'next',
+        packages: { '@acme/logger': ['useLogger'] },
+        code: 'import { useLogger } from \'@other/logger\'\nexport async function POST() { const log = useLogger() }',
         message: /dark event/,
       },
       {

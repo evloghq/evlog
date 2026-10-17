@@ -284,6 +284,18 @@ const landingItems = [
         to: '/integrate/adapters/cloud/datadog'
       },
       {
+        label: 'Grafana Loki',
+        icon: 'i-simple-icons-grafana',
+        description: 'Push logs to Grafana Loki',
+        to: '/integrate/adapters/hybrid/loki'
+      },
+      {
+        label: 'ClickHouse',
+        icon: 'i-simple-icons-clickhouse',
+        description: 'Insert events into ClickHouse',
+        to: '/integrate/adapters/hybrid/clickhouse'
+      },
+      {
         label: 'File System',
         icon: 'i-lucide-hard-drive',
         description: 'Write NDJSON logs locally',

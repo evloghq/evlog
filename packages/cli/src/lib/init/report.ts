@@ -30,6 +30,11 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
     return paint('yellow', 'Cancelled — nothing was written.')
   }
 
+  if (stoppedAtWrapper(result)) {
+    const names = result.wrappers.join(', ')
+    return paint('green', `evlog is already wired through ${names}, so there is nothing to install or scaffold here. Nothing was written.`)
+  }
+
   const dev = findDestination(answers.devDrain)?.label ?? answers.devDrain
   const prod = answers.prodDrains.map(id => findDestination(id)?.label ?? id)
   lines.push([
@@ -126,4 +131,9 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
 export function formatWorkspaceHeading(ctx: CliContext, label: string): string {
   const { paint } = createStyle(ctx)
   return `\n${paint(['bold', 'cyan'], `── ${label} `)}${paint('dim', '─'.repeat(Math.max(0, 40 - label.length)))}`
+}
+
+/** `init` stopped because evlog reaches the app only through a wrapper package. */
+function stoppedAtWrapper(result: InitResult): boolean {
+  return result.wrappers.length > 0 && result.install.status === 'already' && result.install.version === undefined
 }

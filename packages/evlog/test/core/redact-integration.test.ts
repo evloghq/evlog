@@ -442,6 +442,53 @@ describe('built-in smart masking', () => {
     expect(event.safe).toBe('no jwt here')
   })
 
+  it('masks email addresses with subdomains, uppercase letters, or joined to another address', () => {
+    let event: Record<string, unknown> = {
+      upper: 'UPPER@EXAMPLE.COM',
+      subdomain: 'x@sub.domain.example.museum end',
+      list: 'two: a@b.io, c.d@e-f.org.',
+      joined: 'alice@example.com-bob@example.org',
+    }
+    event = redactEvent(event, defined(resolveRedactConfig({ builtins: ['email'] }), 'redact config'))
+    expect(event.upper).toBe('U***@***.COM')
+    expect(event.subdomain).toBe('x***@***.museum end')
+    expect(event.list).toBe('two: a***@***.io, c***@***.org.')
+    expect(event.joined).toBe('a***@***.com-***@***.org')
+  })
+
+  it('masks a JWT after a hyphen and one whose header embeds a jwk', () => {
+    const signature = 'X'.repeat(43)
+    const token = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiIxIn0', signature].join('.')
+    // DPoP proof header: the nested `{"kty"` encodes to a second `eyJ` inside the segment.
+    const dpopHeader = 'eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6IkVTMjU2IiwiayI6IiIsImp3ayI6eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2In19'
+    let event: Record<string, unknown> = {
+      key: `jwt-${token}`,
+      dpop: `DPoP ${dpopHeader}.eyJodG0iOiJQT1NUIn0.${signature}`,
+    }
+    event = redactEvent(event, defined(resolveRedactConfig({ builtins: ['jwt'] }), 'redact config'))
+    expect(event.key).toBe('jwt-eyJ***.***')
+    expect(event.dpop).toBe('DPoP eyJ***.***')
+  })
+
+  it('masks long attacker-controlled strings in linear time', () => {
+    const config = defined(resolveRedactConfig(true), 'redact config')
+    const inputs = [
+      'A'.repeat(65_536),
+      `a@${'a.'.repeat(32_768)}`,
+      'eyJ-'.repeat(16_384),
+      'eyJ.'.repeat(16_384),
+      `${'x'.repeat(64)}@${`${'a'.repeat(63)}.`.repeat(1_024)}`,
+      `${'a'.repeat(32_768)}@${'a.'.repeat(16_384)}`,
+      '1.2.3-'.repeat(10_923),
+      `eyJa.${'-eyJ.'.repeat(13_107)}`,
+    ]
+    for (const input of inputs) {
+      const start = performance.now()
+      redactEvent({ input }, config)
+      expect(performance.now() - start, input.slice(0, 16)).toBeLessThan(100)
+    }
+  })
+
   it('masks Bearer tokens keeping prefix', () => {
     // Stripe-shaped key built from fragments to avoid secret-scanner alarms.
     const fakeStripeKey = ['sk', 'live', 'abc123def456ghi789'].join('_')

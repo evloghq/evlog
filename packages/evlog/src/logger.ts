@@ -38,6 +38,12 @@ function isPlainObject(val: unknown): val is Record<string, unknown> {
   return val !== null && typeof val === 'object' && !Array.isArray(val)
 }
 
+function isPlainRecord(val: unknown): val is Record<string, unknown> {
+  if (!isPlainObject(val)) return false
+  const proto = Object.getPrototypeOf(val)
+  return proto === Object.prototype || proto === null
+}
+
 /** Shown after post-emit warnings so users can fix fire-and-forget / ALS continuations. */
 const POST_EMIT_FORK_HINT =
   'For intentional background work tied to this request, use log.fork(\'label\', fn) when your integration supports it (see https://evlog.dev).'
@@ -48,24 +54,43 @@ function warnPostEmit(method: string, detail: string): void {
   )
 }
 
+// A plain write to `__proto__` replaces the prototype instead of storing a field.
+function setField(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (key === '__proto__') {
+    Reflect.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
+  } else {
+    Reflect.set(target, key, value)
+  }
+}
+
+// Objects are stored by reference and copied only when a merge writes into
+// them, so evlog never writes into an object the caller still holds.
+function writableChild(target: Record<string, unknown>, key: string): Record<string, unknown> {
+  const child = target[key] as Record<string, unknown>
+  if (!isPlainRecord(child)) return child
+  const copy: Record<string, unknown> = { ...child }
+  setField(target, key, copy)
+  return copy
+}
+
 function mergeInto(target: Record<string, unknown>, source: Record<string, unknown>): void {
   for (const key in source) {
     const sourceVal = source[key]
     if (sourceVal === undefined || sourceVal === null) continue
-    const targetVal = target[key]
+    const targetVal = key === '__proto__' && !Object.hasOwn(target, key) ? undefined : target[key]
     // Same reference on both sides — recording the same error twice, which every
     // integration does when a handler logs the error it then throws. Merging an
     // object into itself changes nothing, but walking into it would write to the
     // caller's own object and throw on any read-only field it carries (#457).
     if (sourceVal === targetVal) continue
     if (isPlainObject(sourceVal) && isPlainObject(targetVal)) {
-      mergeInto(targetVal, sourceVal)
+      mergeInto(writableChild(target, key), sourceVal)
     } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
-      target[key] = [...targetVal, ...sourceVal]
+      setField(target, key, [...targetVal, ...sourceVal])
     } else {
       // Context can hold objects evlog does not own; a field that refuses the
       // write must not abort the merge and lose the rest of the event.
-      Reflect.set(target, key, sourceVal)
+      setField(target, key, sourceVal)
     }
   }
 }
@@ -933,7 +958,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
     if (!isPlainObject(context.audit)) {
       context.audit = fields as unknown as Record<string, unknown>
     } else {
-      mergeInto(context.audit as Record<string, unknown>, fields as unknown as Record<string, unknown>)
+      mergeInto(writableChild(context, 'audit'), fields as unknown as Record<string, unknown>)
     }
     context._auditForceKeep = true
   } as AuditMethod<T>
@@ -990,7 +1015,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const errorObj = serializeError(err)
 
       if (isPlainObject(context.error)) {
-        mergeInto(context.error as Record<string, unknown>, errorObj)
+        mergeInto(writableChild(context, 'error'), errorObj)
       } else {
         context.error = errorObj
       }

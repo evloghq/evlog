@@ -43,6 +43,7 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
     ? buildFileFacts(parsed, {
       evlogAutoImports: capabilities.evlogAutoImports,
       evlogBarrels: project.evlogBarrels,
+      evlogPackages: project.evlogPackages,
       requestLoggerMember: capabilities.requestLoggerMember,
     })
     : null
@@ -80,7 +81,7 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
 export async function scan(input: ScanContext): Promise<ScanResult> {
   /* One parser for the whole run: the adapter and the analysis below read the
      same files, and Next emits one entry per exported method. */
-  const ctx: ScanContext = { ...input, parse: input.parse ?? createParseCache() }
+  let ctx: ScanContext = { ...input, parse: input.parse ?? createParseCache() }
   const definition = getFramework(ctx.framework)
   const adapter = await definition.map()
   const capabilities: FrameworkCapabilities = {
@@ -93,6 +94,9 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
     packageJson: readPackageJson(ctx.projectRoot),
     evlogAutoImports: capabilities.evlogAutoImports,
   })
+  /* An app that reaches evlog only through a wrapper package has none of its
+     own under pnpm, and the rules would tell it to adopt evlog. */
+  if (!ctx.hasEvlog && project.evlogPackages.size > 0) ctx = { ...ctx, hasEvlog: true }
 
   const extracted = await adapter.extractRoutes(ctx)
   const ignored = new Set(ctx.ignore?.length ? glob(ctx.ignore, ctx.projectRoot).map(file => relativeFromRoot(ctx.projectRoot, file)) : [])

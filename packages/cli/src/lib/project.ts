@@ -1,6 +1,7 @@
 import { access, readFile, readdir, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join, relative, resolve, sep } from 'node:path'
+import { collectEvlogPackages } from './map/evlog-packages'
 
 /** Minimal `package.json` fields used for project / workspace discovery. */
 export interface PackageJson {
@@ -144,13 +145,45 @@ function declaredEvlog(pkg: PackageJson | null): { range: string, field: string 
   return null
 }
 
+/** How this project reaches evlog: its own install, and any wrapper package that forwards it. */
+export interface EvlogResolution {
+  install: EvlogInstall | null
+  declared: { range: string, field: string } | null
+  tried: ResolveAttempt[]
+  /**
+   * Dependencies that declare evlog and forward its names (`@acme/logger` calling
+   * `createEvlog`), keyed by package name. An app that imports only such a wrapper
+   * still has evlog; `map`, `doctor` and `init` all read `hasEvlog` from here.
+   */
+  wrappers: ReadonlyMap<string, ReadonlySet<string>>
+}
+
+/**
+ * The one answer to "does this project have evlog?", shared by `map`, `doctor`
+ * and `init`: evlog's own install, plus the wrapper packages that forward it.
+ */
+export async function resolveEvlog(project: ProjectInfo): Promise<EvlogResolution> {
+  const own = await findEvlogInstall(project)
+  const pkg = project.packageJson
+  const dependencies = new Set([
+    ...Object.keys(pkg?.dependencies ?? {}),
+    ...Object.keys(pkg?.devDependencies ?? {}),
+  ])
+  return { ...own, wrappers: collectEvlogPackages(project.packageDir, dependencies) }
+}
+
+/** True when the project reaches evlog, directly or through a wrapper package. */
+export function evlogReached(resolution: EvlogResolution): boolean {
+  return resolution.install !== null || resolution.wrappers.size > 0
+}
+
 /**
  * Resolve an installed `evlog` package by walking `node_modules` (hoist-aware)
  * via `createRequire`, then fall back to declared ranges in the local package.json.
  *
  * `tried` lists every probe (for `--debug` decision trails).
  */
-export async function resolveEvlog(project: ProjectInfo): Promise<{
+async function findEvlogInstall(project: ProjectInfo): Promise<{
   install: EvlogInstall | null
   declared: { range: string, field: string } | null
   tried: ResolveAttempt[]

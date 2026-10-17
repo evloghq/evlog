@@ -52,6 +52,11 @@ export interface FileFacts {
    * literal source `evlog` scored that recommended shape as uninstrumented.
    */
   reexportsEvlog: ReadonlySet<string>
+  /**
+   * Re-exports from modules other than evlog, so a package's entry can be
+   * followed to the file that actually wraps evlog.
+   */
+  reexports: readonly ReexportFact[]
   /** Object keys and member names seen anywhere — cheap PII surface. */
   names: ReadonlySet<string>
   /** `createError({ … })` calls with enough literal detail to compare. */
@@ -91,6 +96,13 @@ export interface CallFact {
   start: number
   /** Keys of the first argument when it is an object literal. */
   props: ReadonlySet<string>
+}
+
+/** `export { a as b } from './x'`, or `export * from './x'`. */
+export interface ReexportFact {
+  source: string
+  /** Exported name → name in `source`; `* → *` for `export * from`. */
+  names: ReadonlyMap<string, string>
 }
 
 export interface ThrowFact {
@@ -168,6 +180,11 @@ function nodeRange(node: Node): GuardRange {
 
 function isEvlogSource(source: string | undefined | null): boolean {
   return source === 'evlog' || (source?.startsWith('evlog/') ?? false)
+}
+
+/** The name an export specifier carries, `export { a as 'b' }` included. */
+function specifierName(name: { name?: string, value?: string } | undefined): string | undefined {
+  return name?.name ?? name?.value
 }
 
 /**
@@ -523,12 +540,15 @@ function statementHandlesError(statement: Node): boolean {
  * {@link moduleKey}, with the names each one forwards. Collected once per scan so
  * that a handler importing from `@/lib/evlog` is credited without this function
  * ever touching the filesystem.
+ * @param options.evlogPackages - installed packages that forward evlog, keyed by
+ * the exact specifier they are imported by (`@acme/logger`, `@acme/logger/next`).
  */
 export function buildFileFacts(
   parsed: ParseResult,
   options: {
     evlogAutoImports?: readonly string[]
     evlogBarrels?: ReadonlyMap<string, ReadonlySet<string>>
+    evlogPackages?: ReadonlyMap<string, ReadonlySet<string>>
     requestLoggerMember?: string
   } = {},
 ): FileFacts {
@@ -541,6 +561,9 @@ export function buildFileFacts(
   const inlineErrors: InlineErrorFact[] = []
   const catalogsDeclared: string[] = []
   const reexportsEvlog = new Set<string>()
+  const reexports: ReexportFact[] = []
+  /** `export { local as exported }` with no source — resolved after the pass. */
+  const localExports: Array<{ local: string, exported: string }> = []
   const names = new Set<string>()
   /** Resolved after the pass: needs imports and declarations to be complete. */
   const loggerCandidates: Array<{ binding: string | null, factory: string, line: number }> = []
@@ -569,14 +592,34 @@ export function buildFileFacts(
       case 'ExportNamedDeclaration': {
         const exported = node as {
           source?: { value: string } | null
-          specifiers?: Array<{ exported?: { name?: string } }>
+          specifiers?: Array<{ local?: { name?: string, value?: string }, exported?: { name?: string, value?: string } }>
           declaration?: Node | null
         }
 
         if (exported.source) {
-          if (!isEvlogSource(exported.source.value)) break
+          if (!isEvlogSource(exported.source.value)) {
+            const forwarded = new Map<string, string>()
+            for (const specifier of exported.specifiers ?? []) {
+              const local = specifierName(specifier.local)
+              const name = specifierName(specifier.exported)
+              if (local && name) forwarded.set(name, local)
+            }
+            reexports.push({ source: exported.source.value, names: forwarded })
+            break
+          }
           for (const specifier of exported.specifiers ?? []) {
             if (specifier.exported?.name) reexportsEvlog.add(specifier.exported.name)
+          }
+          break
+        }
+
+        /* `export { withEvlog$1 as withEvlog }`: how a bundler writes the
+           destructured factory exports of a published wrapper. */
+        if (!exported.declaration) {
+          for (const specifier of exported.specifiers ?? []) {
+            const local = specifierName(specifier.local)
+            const name = specifierName(specifier.exported)
+            if (local && name) localExports.push({ local, exported: name })
           }
           break
         }
@@ -596,8 +639,11 @@ export function buildFileFacts(
       }
 
       case 'ExportAllDeclaration': {
-        const declaration = node as { source?: { value: string } | null }
+        const declaration = node as { source?: { value: string } | null, exported?: Node | null }
         if (isEvlogSource(declaration.source?.value)) reexportsEvlog.add('*')
+        else if (declaration.source && !declaration.exported) {
+          reexports.push({ source: declaration.source.value, names: new Map([['*', '*']]) })
+        }
         break
       }
 
@@ -756,14 +802,15 @@ export function buildFileFacts(
    * declaration beats an auto-import for the same reason.
    */
   const evlogAutoImports = options.evlogAutoImports ?? []
-  const { evlogBarrels } = options
+  const { evlogBarrels, evlogPackages } = options
   const resolvesToEvlog = (name: string): boolean => {
     const source = imports.get(name)
     if (source !== undefined) {
       if (isEvlogSource(source)) return true
-      /* A local module counts only for the names it actually forwards, so a
-         hand-written `./my-logger` stub is still not evlog's. */
-      const forwarded = evlogBarrels?.get(moduleKey(source))
+      /* A module counts only for the names it actually forwards, so a
+         hand-written `./my-logger` stub is still not evlog's. A package is
+         matched by its exact specifier: `@other/logger` is not `@acme/logger`. */
+      const forwarded = evlogPackages?.get(source) ?? evlogBarrels?.get(moduleKey(source))
       return forwarded !== undefined && (forwarded.has(name) || forwarded.has('*'))
     }
     return evlogAutoImports.includes(name) && !localDeclarations.has(name)
@@ -805,6 +852,24 @@ export function buildFileFacts(
     for (const name of exportedNames) reexportsEvlog.add(name)
   }
 
+  if (localExports.length > 0) {
+    const topLevelFactories = new Map<string, string>()
+    for (const statement of parsed.program.body as Node[]) {
+      if (statement.type !== 'VariableDeclaration') continue
+      for (const declarator of (statement as { declarations: Node[] }).declarations) {
+        const { id, init } = declarator as { id: Node, init?: Node | null }
+        if (init?.type !== 'CallExpression') continue
+        const factory = describeCallee((init as { callee: Node }).callee)
+        if (!factory) continue
+        for (const name of patternNames(id)) topLevelFactories.set(name, factory.member)
+      }
+    }
+    for (const { local, exported } of localExports) {
+      const factory = topLevelFactories.get(local)
+      if (factory === undefined ? resolvesToEvlog(local) : resolvesToEvlog(factory)) reexportsEvlog.add(exported)
+    }
+  }
+
   const evlogImports = new Set<string>()
   for (const source of imports.values()) {
     if (isEvlogSource(source)) evlogImports.add(source)
@@ -835,6 +900,7 @@ export function buildFileFacts(
     evlogWrappers,
     evlogImports,
     reexportsEvlog,
+    reexports,
     names,
     inlineErrors,
     catalogsDeclared,

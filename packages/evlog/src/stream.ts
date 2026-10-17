@@ -22,6 +22,7 @@
 
 import type { DrainContext, WideEvent } from './types'
 import { EVLOG_VERSION } from './shared/http'
+import { isLoopbackUrl } from './shared/loopback'
 
 /** Configuration accepted by {@link createStreamDrain}. */
 export interface StreamDrainOptions {
@@ -277,9 +278,9 @@ export interface StreamServerOptions {
   host?: string
   /**
    * Bearer token. When set, the server requires `Authorization: Bearer
-   * <token>` on every request and 401s otherwise. When unset, only
-   * connections from `127.0.0.1` (and equivalent local hosts) are
-   * accepted — same-origin policy applies on non-local hosts.
+   * <token>` on every request and 401s otherwise. When unset, a request is
+   * accepted only when its `Host` is `localhost`, `127.0.0.1` or `[::1]`
+   * and its `Origin`, if any, names one of those hosts. Others get 403.
    */
   token?: string
   /**
@@ -338,11 +339,6 @@ const STREAM_DEFAULTS = {
 
 let activeStreamServer: StreamServer | null = null
 
-function isLocalHost(host: string | undefined): boolean {
-  if (!host) return false
-  const lower = host.toLowerCase()
-  return lower.startsWith('localhost') || lower.startsWith('127.0.0.1') || lower.startsWith('[::1]')
-}
 
 /**
  * Start a local HTTP server that exposes the default in-process stream over
@@ -413,20 +409,13 @@ export async function startStreamServer(options: StreamServerOptions = {}): Prom
         return
       }
     } else {
-      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : null
-      if (origin) {
-        let originHost: string | null = null
-        try {
-          originHost = new URL(origin).host
-        } catch {
-          originHost = null
-        }
-        if (!isLocalHost(originHost ?? undefined)) {
-          writeCors(res)
-          res.writeHead(403)
-          res.end('forbidden')
-          return
-        }
+      // A page whose domain was rebound to 127.0.0.1 sends no Origin on a same-origin GET, so its Host is checked too.
+      const { origin, host } = req.headers
+      if (!isLoopbackUrl(`http://${host ?? ''}`) || (origin !== undefined && !isLoopbackUrl(origin))) {
+        writeCors(res)
+        res.writeHead(403)
+        res.end('forbidden')
+        return
       }
     }
 
