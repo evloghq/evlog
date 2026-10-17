@@ -4,13 +4,22 @@ on:
   pull_request_target:
     types:
       - opened
+      - reopened
+      - edited
     branches:
       - main
+
+# One run per PR at a time. A queued run replaces an older queued one, which is fine: each run reads the PR's current state.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   add-pr-labels:
     name: Add PR labels
-    # One GitHub API call, no checkout and no build: a 1 vCPU runner is plenty.
+    # The type label sorts the PR in the release notes, so it follows the title, not the first draft of it.
+    if: github.event.action != 'edited' || github.event.changes.title.from != null
+    # A few GitHub API calls, no checkout and no build: a 1 vCPU runner is plenty.
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -18,20 +27,15 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
         with:
           script: |
-            const labelsToAdd = []
+            // The payload is a snapshot from when the event fired; a later title edit may already be applied.
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.payload.pull_request.number })
+            const { number, title } = pr
+            const current = pr.labels.map(l => l.name)
 
-            const pullRequest = {
-              number: ${{ github.event.pull_request.number }},
-              title: process.env.PULL_REQUEST_TITLE,
-              labelsNames: ${{ toJson(github.event.pull_request.labels.*.name) }}
-            }
-
-            // Select label based on the type in PR title
-            const pullRequestTypeToLabelName = {
+            // Conventional Commits type → label from .github/release.yml
+            const typeLabels = {
               breaking: 'breaking',
               feat: 'feature',
               fix: 'bug',
@@ -39,35 +43,28 @@ jobs:
               ci: 'ci',
               docs: 'documentation',
               enhancement: 'enhancement',
-              chore: 'dependencies',
               perf: 'performance',
               style: 'style',
               test: 'test',
               refactor: 'refactor',
-              revert: 'revert'
+              revert: 'revert',
             }
 
-            for (const [pullRequestType, labelName] of Object.entries(
-              pullRequestTypeToLabelName
-            )) {
-              if (
-                pullRequest.title.startsWith(pullRequestType) &&
-                !pullRequest.labelsNames.includes(
-                  pullRequestTypeToLabelName[pullRequestType]
-                )
-              ) {
-                labelsToAdd.push(labelName)
-
-                break
-              }
+            const match = title.match(/^(\w+)(?:\(([^)]*)\))?(!)?:/)
+            const wanted = new Set()
+            if (match) {
+              const [, type, scope, bang] = match
+              if (typeLabels[type]) wanted.add(typeLabels[type])
+              // Only dependency bumps are release-worthy chores; the others go to Other Changes.
+              if (type === 'chore' && scope === 'deps') wanted.add('dependencies')
+              if (bang) wanted.add('breaking')
             }
 
-            // Add selected labels
-            if (labelsToAdd.length > 0) {
-              await github.rest.issues.addLabels({
-                issue_number: pullRequest.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                labels: labelsToAdd
-              })
-            }
+            // `breaking` can be set by hand on a PR whose title has no `!`, so it is never removed.
+            const managed = [...Object.values(typeLabels), 'dependencies'].filter(l => l !== 'breaking')
+            const stale = current.filter(l => managed.includes(l) && !wanted.has(l))
+            const missing = [...wanted].filter(l => !current.includes(l))
+
+            const issue = { owner: context.repo.owner, repo: context.repo.repo, issue_number: number }
+            for (const name of stale) await github.rest.issues.removeLabel({ ...issue, name })
+            if (missing.length > 0) await github.rest.issues.addLabels({ ...issue, labels: missing })

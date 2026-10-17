@@ -18,6 +18,7 @@ pnpm telemetry:cli <command>       # run this repo's CLI into that local dashboa
 pnpm cli:sandbox                   # disposable per-framework apps under .sandbox/ to test the CLI by hand (--reset restores them, --smoke runs the feature matrix)
 pnpm content:lint [path]           # rank the written corpus by content findings (see scripts/content-lint/README.md)
 pnpm content:lint:test             # the scanner's own tests, including its two calibration fixtures
+pnpm release-notes:test            # tests for scripts/release-notes, which rewrites GitHub release bodies and pins Latest to evlog
 ```
 
 Publishing is automated: changesets + `.github/workflows/release.yml`. Never run `pnpm release` or `changeset publish` manually.

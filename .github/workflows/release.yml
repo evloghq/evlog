@@ -48,19 +48,14 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
 
-      # createGithubReleases gives us one release per package, tagged pkg@version — that part
-      # we keep. Its *body* is the CHANGELOG section, which for a dependent package is a wall of
-      # "Updated dependencies [<hash>, <hash>, …]" and is empty for packages with no changeset
-      # of their own. `--generate-notes` is not the answer either: GitHub builds those from a
-      # commit range, and monorepo tags interleave, so each package would list everybody's PRs.
-      # So we rewrite each body from the PRs that actually touched that package's directory,
-      # grouped by the same categories as .github/release.yml.
       - name: Push tags
         if: steps.changesets.outputs.published == 'true'
         run: git push --tags
 
-      - name: Rewrite release notes
+      # Rebuilds each release body from that package's PRs and changesets, then moves Latest
+      # back to evlog. The header of scripts/release-notes/index.mjs says why.
+      - name: Rewrite release notes and mark evlog Latest
         if: steps.changesets.outputs.published == 'true'
-        run: node scripts/release-notes.mjs '${{ steps.changesets.outputs.publishedPackages }}'
+        run: node scripts/release-notes/index.mjs '${{ steps.changesets.outputs.publishedPackages }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

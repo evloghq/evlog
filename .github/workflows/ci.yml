@@ -94,6 +94,10 @@ jobs:
       - name: Test content-lint
         run: pnpm run content:lint:test
 
+      # Same reason: the release notes only run on a publish, too late to find out.
+      - name: Test release-notes
+        run: pnpm run release-notes:test
+
       # A ratchet, not a floor: every file this pull request touched has to score
       # at least as well as the same file on the base branch, and introduce no
       # finding id it did not already carry. A fixed bar would fail a new page
