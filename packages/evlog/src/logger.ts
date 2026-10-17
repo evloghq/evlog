@@ -38,6 +38,12 @@ function isPlainObject(val: unknown): val is Record<string, unknown> {
   return val !== null && typeof val === 'object' && !Array.isArray(val)
 }
 
+function isPlainRecord(val: unknown): val is Record<string, unknown> {
+  if (!isPlainObject(val)) return false
+  const proto = Object.getPrototypeOf(val)
+  return proto === Object.prototype || proto === null
+}
+
 /** Shown after post-emit warnings so users can fix fire-and-forget / ALS continuations. */
 const POST_EMIT_FORK_HINT =
   'For intentional background work tied to this request, use log.fork(\'label\', fn) when your integration supports it (see https://evlog.dev).'
@@ -62,6 +68,12 @@ function mergeInto(target: Record<string, unknown>, source: Record<string, unkno
       mergeInto(targetVal, sourceVal)
     } else if (Array.isArray(targetVal) && Array.isArray(sourceVal)) {
       target[key] = [...targetVal, ...sourceVal]
+    } else if (isPlainRecord(sourceVal)) {
+      // Copy, so a later merge into this key writes to evlog's object, never to
+      // the caller's. Writing to the caller's object can make it contain itself.
+      const copy: Record<string, unknown> = {}
+      mergeInto(copy, sourceVal)
+      target[key] = copy
     } else {
       // Context can hold objects evlog does not own; a field that refuses the
       // write must not abort the merge and lose the rest of the event.

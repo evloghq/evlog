@@ -514,6 +514,18 @@ describe('createLogger', () => {
     })
   })
 
+  it('does not write into a payload logged as context and then thrown as error data', () => {
+    const data = { reason: 'refresh token rejected' }
+    const logger = createLogger()
+
+    logger.warn('refresh failed', { error: data })
+    logger.error(h3CreateError({ status: 401, message: 'Unauthorized', data }))
+
+    expect(data).toEqual({ reason: 'refresh token rejected' })
+    const event = defined(logger.emit(), 'emitted event')
+    expect(() => JSON.stringify(event)).not.toThrow()
+  })
+
   it('creates logger with empty context by default', () => {
     const logger = createLogger()
 
