@@ -1,6 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it, vi } from 'vitest'
 import { UNSHALLOW_TIMEOUT_MS, ensureFullHistory, historySource, readContentCommitDates } from '../config/content-dates'
 import { collectSitemapUrls } from '../server/utils/sitemap'
+
+const contentPages = vi.hoisted(() => [
+  { path: '/landing', stem: '0.landing' },
+  { path: '/start/introduction', stem: '1.start/1.introduction' },
+])
+
+vi.mock('@nuxt/content/server', () => ({
+  queryCollection: () => ({ all: () => Promise.resolve(contentPages) }),
+}))
+
+const appDir = fileURLToPath(new URL('..', import.meta.url))
 
 describe('collectSitemapUrls', () => {
   it('maps content paths to sitemap entries', () => {
@@ -151,5 +164,40 @@ describe('per-file lastmod', () => {
     readContentCommitDates('/repo', git, { env: {}, log: line => lines.push(line) })
 
     expect(lines[0]).toBe('[content-dates] unshallow from https://github.com/evloghq/evlog.git failed (fatal: unable to access), keeping shallow dates; 2 files, 2 distinct dates')
+  })
+})
+
+describe('sitemap source', () => {
+  // `@nuxtjs/sitemap` (registered by Docus) owns `/sitemap.xml` and builds it from the
+  // sources Docus lists. A source we do not shadow brings back a sitemap with no lastmod.
+  it('shadows every local sitemap source Docus registers', () => {
+    const docusConfig = readFileSync(fileURLToPath(new URL('../node_modules/docus/nuxt.config.ts', import.meta.url)), 'utf8')
+    const sources = docusConfig.match(/sources:\s*\[([^\]]*)\]/)?.[1]?.match(/'[^']+'/g)?.map(source => source.slice(1, -1))
+
+    expect(sources).toEqual(['/api/__sitemap__/urls'])
+    for (const source of sources!) {
+      expect(existsSync(`${appDir}server${source}.ts`), `server${source}.ts`).toBe(true)
+    }
+  })
+
+  it('does not ship a sitemap.xml route, which the module handler would silently shadow', () => {
+    expect(existsSync(`${appDir}server/routes/sitemap.xml.ts`)).toBe(false)
+  })
+
+  it('dates every page from its last commit and lists the home page at /', async () => {
+    vi.stubGlobal('defineSitemapEventHandler', (handler: unknown) => handler)
+    vi.stubGlobal('useRuntimeConfig', () => ({
+      contentCommitDates: { '0.landing': '2026-10-17', '1.start/1.introduction': '2026-10-11' },
+    }))
+    try {
+      const { default: source } = await import('../server/api/__sitemap__/urls')
+
+      expect(await (source as unknown as (event: unknown) => Promise<unknown>)({})).toEqual([
+        { loc: '/', lastmod: '2026-10-17' },
+        { loc: '/start/introduction', lastmod: '2026-10-11' },
+      ])
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
