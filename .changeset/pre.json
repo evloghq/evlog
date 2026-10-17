@@ -14,8 +14,6 @@
   },
   "changesets": [
     "error-status-field",
-    "require-node-22",
-    "sentry-issues-read-status",
-    "stop-publishing-sourcemaps"
+    "require-node-22"
   ]
 }

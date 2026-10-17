@@ -14,4 +14,4 @@ The logged error, trimmed to the fields that changed:
 
 Before this change the same error also logged `statusCode: 402`, `statusText` and `statusMessage`.
 
-A `toJSON` that leaves a field out now also keeps that field out after a second `set()` on the same key, so a field hidden by `toJSON` is no longer logged through that path.
+The Sentry drain's `issues` option no longer reads the legacy `statusCode` when it decides whether an event is a 4xx. It reads the error's `status`, then the event's `status`.
