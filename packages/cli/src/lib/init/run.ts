@@ -9,7 +9,7 @@ import { createNoopCliDebug } from '../debug'
 import { cliErrors } from '../errors'
 import { detectFramework } from '../map/detect'
 import type { Framework } from '../map/types'
-import { resolveEvlog, resolveProject } from '../project'
+import { evlogReached, resolveEvlog, resolveProject } from '../project'
 import type { PackageJson, ProjectInfo } from '../project'
 import { getFramework, isInitFramework } from '../frameworks'
 import type { DrainId, EnricherId, ExtraId, OfferContext, SamplingProfile } from './catalog'
@@ -67,6 +67,11 @@ export interface InitResult {
   interactive: boolean
   /** True when the user answered "no" at the plan, or hit Ctrl-C. */
   cancelled: boolean
+  /**
+   * Wrapper packages that forward evlog to this app (`@acme/logger`). When evlog
+   * is reached only through one, `init` stops: nothing to install, nothing to scaffold.
+   */
+  wrappers: string[]
 }
 
 /** What the scan found, summarised for the report and the telemetry event. */
@@ -179,7 +184,7 @@ export async function runInit(
   const resolved = await log.step(
     'resolveEvlog',
     () => resolveEvlog(project),
-    r => ({ hasEvlog: !!r.install }),
+    r => ({ hasEvlog: evlogReached(r) }),
   )
 
   // The same analysis `map` runs, so an offer can carry its evidence.
@@ -193,6 +198,7 @@ export async function runInit(
   const command = installCommand(packageManager)
   const dryRun = options.dryRun === true
   const evlogInstalled = !!resolved.install
+  const wrappers = [...resolved.wrappers.keys()]
   const interactive = !options.nonInteractive && !options.yes && canPrompt(ctx)
 
   const offers = (prodDrains: DrainId[], framework: Framework): OfferContext => ({
@@ -217,6 +223,33 @@ export async function runInit(
     offers,
   }
 
+  /* evlog already reaches this app through a wrapper package: there is nothing
+     to install and no second setup to scaffold beside it. Stop before any
+     prompt or write. The answers are the defaults this run would have used. */
+  if (!evlogInstalled && wrappers.length > 0) {
+    const wrappedAnswers = resolveAnswers({ ...base, install: false, agentGuide: false })
+    log.set({ steps: ['done'] })
+    const stopped: InitResult = {
+      project,
+      answers: wrappedAnswers,
+      packageManager,
+      install: { status: 'already', command },
+      written: [],
+      already: [],
+      manual: [],
+      dropped: [],
+      insight: null,
+      verified: null,
+      agentGuide: null,
+      dryRun,
+      interactive: false,
+      cancelled: false,
+      wrappers,
+    }
+    recordInitAnswers(stopped)
+    return stopped
+  }
+
   let answers: InitAnswers
 
   if (interactive) {
@@ -236,7 +269,7 @@ export async function runInit(
     } catch (error) {
       if (error instanceof InitCancelled) {
         closeCancelled()
-        return cancelled(cancelledResult({ project, answers: resolveAnswers(base), packageManager, command, dryRun }))
+        return cancelled(cancelledResult({ project, answers: resolveAnswers(base), packageManager, command, dryRun, wrappers }))
       }
       throw error
     }
@@ -325,13 +358,13 @@ export async function runInit(
     } catch (error) {
       if (error instanceof InitCancelled) {
         closeCancelled()
-        return cancelled(cancelledResult({ project, answers, packageManager, command, dryRun }))
+        return cancelled(cancelledResult({ project, answers, packageManager, command, dryRun, wrappers }))
       }
       throw error
     }
     if (!confirmed) {
       closeCancelled()
-      return cancelled(cancelledResult({ project, answers, packageManager, command, dryRun }))
+      return cancelled(cancelledResult({ project, answers, packageManager, command, dryRun, wrappers }))
     }
   }
 
@@ -423,6 +456,7 @@ export async function runInit(
     dryRun,
     interactive,
     cancelled: false,
+    wrappers,
   }
 
   recordInitAnswers(result)
@@ -436,6 +470,7 @@ function cancelledResult(input: {
   packageManager: PackageManager
   command: string
   dryRun: boolean
+  wrappers: string[]
 }): InitResult {
   return {
     project: input.project,
@@ -454,6 +489,7 @@ function cancelledResult(input: {
        when nobody was asked. */
     interactive: true,
     cancelled: true,
+    wrappers: input.wrappers,
   }
 }
 

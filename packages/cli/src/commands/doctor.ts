@@ -17,6 +17,7 @@ import { createNoopCliDebug } from '../lib/debug'
 import { cliErrors } from '../lib/errors'
 import {
   detectStack,
+  evlogReached,
   findConfiguredFsDrain,
   findLogsSink,
   prettyPath,
@@ -96,6 +97,17 @@ function checkEvlog(
       status: 'ok',
       message: `v${install.version}${range}`,
       hint: loc !== '.' ? `resolved from ${loc}` : undefined,
+    }
+  }
+
+  /* A wrapper that forwards evlog is evlog reaching this app, not a gap. */
+  const wrappers = [...resolved.wrappers.keys()]
+  if (wrappers.length > 0) {
+    return {
+      id: 'evlog',
+      status: 'ok',
+      message: `via ${wrappers.join(', ')}`,
+      hint: 'reached through a wrapper package, not installed directly',
     }
   }
 
@@ -264,7 +276,7 @@ export async function runDoctor(
       checkNode(ctx),
       checkProject(project),
     ]
-    const stackCheck = checkStack(stack, !!resolved.install)
+    const stackCheck = checkStack(stack, evlogReached(resolved))
     if (stackCheck) environment.push(stackCheck)
 
     const logsCheck = await checkLogs(project, ctx.env)
