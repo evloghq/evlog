@@ -8,8 +8,10 @@ import { buildErrorEntries, compactStackForStorage, PRETTY_ERROR_TREE_SPACER } f
 import { resolveDevTerminal } from './shared/dev-terminal'
 import { globalConfig } from './shared/globalRegistry'
 import { publishWideEvent } from './shared/wideEventChannel'
-import { EvlogError } from './error'
-import { colors, cssColors, detectEnvironment, elapsedMs, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern, payloadFieldsHiddenBy, readErrorField, walkErrors } from './utils'
+import { createErrorSerializer } from './shared/serialize-error'
+import { colors, cssColors, detectEnvironment, elapsedMs, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern } from './utils'
+
+const { serializeError, serializeErrorsIn } = createErrorSerializer(stack => isDev() ? compactStackForStorage(stack) : stack)
 
 const nativeStdoutWrite =
   typeof process !== 'undefined' && typeof process.stdout?.write === 'function'
@@ -69,7 +71,7 @@ function mergeInto(target: Record<string, unknown>, source: Record<string, unkno
 }
 
 function mergeFields(target: Record<string, unknown>, fields: Record<string, unknown>): void {
-  mergeInto(target, removeErrorCycles(fields, new WeakSet()) as Record<string, unknown>)
+  mergeInto(target, serializeErrorsIn(fields) as Record<string, unknown>)
 }
 
 const pendingDrainState = new WeakMap<WideEvent, { drainStarted: boolean }>()
@@ -795,95 +797,6 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
   }
 }
 
-function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown {
-  return walkErrors(value, ancestors, serializeError)
-}
-
-/**
- * h3 wraps a thrown error in an H3Error that keeps the original as `cause` and
- * reads its stack from it, so the pair describe the same failure. Serializing
- * both repeats the message, the stack and the payload.
- */
-function isWrapperOf(err: Error, cause: unknown): cause is Error {
-  return cause instanceof Error
-    && cause !== err
-    && cause.message === err.message
-    && cause.stack === err.stack
-}
-
-const H3_INPUT_FIELDS: Record<string, string> = {
-  message: 'message',
-  stack: 'stack',
-  statusCode: 'statusCode',
-  status: 'statusCode',
-  statusMessage: 'statusMessage',
-  statusText: 'statusMessage',
-  data: 'data',
-  fatal: 'fatal',
-  unhandled: 'unhandled',
-}
-
-/**
- * h3's `createError({ statusCode, message })` keeps the options object itself
- * as `cause`. It only restates fields the error already carries, so it counts
- * as a copy when every key is one h3 reads and every value matches the error.
- */
-function isH3InputOf(err: Error, cause: unknown): boolean {
-  if (typeof cause !== 'object' || cause === null || cause instanceof Error || Array.isArray(cause)) return false
-  const keys = Object.keys(cause)
-  if (keys.length === 0) return false
-  const causeRecord = cause as Record<string, unknown>
-  return keys.every((key) => {
-    const target = H3_INPUT_FIELDS[key]
-    if (!target) return false
-    const value = causeRecord[key]
-    if (value === undefined || value === readErrorField(err, target)) return true
-    return target === 'statusCode' && Number(value) === readErrorField(err, 'statusCode')
-  })
-}
-
-function serializeError(err: Error, ancestors = new WeakSet<object>()): Record<string, unknown> {
-  if (isWrapperOf(err, err.cause) && !ancestors.has(err.cause)) {
-    ancestors.add(err)
-    const errorObj = serializeError(err.cause, ancestors)
-    ancestors.delete(err)
-    const hidden = payloadFieldsHiddenBy(err)
-    for (const k of ['statusCode', 'statusMessage', 'data'] as const) {
-      const value = readErrorField(err, k)
-      if (value !== undefined && !hidden.includes(k)) errorObj[k] = removeErrorCycles(value, ancestors)
-    }
-    return errorObj
-  }
-
-  const errorObj: Record<string, unknown> = {
-    name: err.name,
-    message: err.message,
-    stack: isDev() ? compactStackForStorage(err.stack) : err.stack,
-  }
-  const hidden = payloadFieldsHiddenBy(err)
-  ancestors.add(err)
-  for (const k of ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'cause', 'internal'] as const) {
-    if (k === 'cause' && isH3InputOf(err, err.cause)) {
-      const cause = err.cause as Record<string, unknown>
-      for (const flag of ['fatal', 'unhandled'] as const) {
-        if (cause[flag] !== undefined) errorObj[flag] = cause[flag]
-      }
-      continue
-    }
-    if (k in err && !hidden.includes(k)) errorObj[k] = removeErrorCycles(readErrorField(err, k), ancestors)
-  }
-  ancestors.delete(err)
-
-  if (EvlogError.isEvlogError(err)) {
-    if (err.code) errorObj.code = err.code
-    if (err.why) errorObj.why = err.why
-    if (err.fix) errorObj.fix = err.fix
-    if (err.link) errorObj.link = err.link
-    if (err.status) errorObj.status = err.status
-  }
-  return errorObj
-}
-
 function createLogMethod(level: LogLevel) {
   return function logMethod(tagOrEvent: string | Error | Record<string, unknown>, message?: string, ...args: unknown[]): void {
     if (typeof tagOrEvent === 'string') {
@@ -899,7 +812,7 @@ function createLogMethod(level: LogLevel) {
     } else if (tagOrEvent instanceof Error) {
       emitWideEvent(level, { error: serializeError(tagOrEvent) })
     } else if (typeof tagOrEvent === 'object') {
-      emitWideEvent(level, removeErrorCycles(tagOrEvent, new WeakSet()) as Record<string, unknown>)
+      emitWideEvent(level, serializeErrorsIn(tagOrEvent) as Record<string, unknown>)
     } else {
       emitTaggedLog(level, 'log', String(tagOrEvent))
     }

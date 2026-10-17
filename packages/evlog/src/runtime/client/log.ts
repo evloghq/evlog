@@ -1,5 +1,8 @@
 import type { Log, LogLevel, TransportConfig } from '../../types'
-import { cssColors, escapeFormatString, formatMessage, getCssLevelColor, hasMessageSpecifiers, isBrowser, isLevelEnabled, isLogLevel, isoNow, payloadFieldsHiddenBy, readErrorField, walkErrors } from '../../utils'
+import { createErrorSerializer } from '../../shared/serialize-error'
+import { cssColors, escapeFormatString, formatMessage, getCssLevelColor, hasMessageSpecifiers, isBrowser, isLevelEnabled, isLogLevel, isoNow } from '../../utils'
+
+const { serializeErrorsIn } = createErrorSerializer()
 
 /**
  * Browser DevTools often hide or bucket `console.debug` under "Verbose" in a way that looks like
@@ -66,28 +69,31 @@ async function sendToServer(event: Record<string, unknown>): Promise<void> {
   }
 }
 
+/** The fields every client event starts with, ahead of the logged fields. */
+function eventHead(level: LogLevel) {
+  return { timestamp: isoNow(), level, service: clientService, ...identityContext }
+}
+
+/**
+ * The pretty console gets the event as it was logged, so DevTools shows a live
+ * Error with its stack. Only the JSON line and the transport need it serialized.
+ */
 function emitLog(level: LogLevel, event: Record<string, unknown>): void {
   if (!clientEnabled) return
   if (!isLevelEnabled(level, clientMinLevel)) return
 
-  const formatted = {
-    timestamp: isoNow(),
-    level,
-    service: clientService,
-    ...identityContext,
-    ...(removeErrorCycles(event, new WeakSet()) as Record<string, unknown>),
+  const head = eventHead(level)
+  const method = browserConsoleMethod(level)
+  if (clientConsole && clientPretty) {
+    const { level: lvl, service, ...rest } = { ...head, ...event }
+    console[method](`%c[${escapeFormatString(String(service))}]%c ${lvl}`, getCssLevelColor(lvl), cssColors.reset, rest)
   }
 
-  if (clientConsole) {
-    const method = browserConsoleMethod(level)
-    if (clientPretty) {
-      const { level: lvl, service, ...rest } = formatted
-      console[method](`%c[${escapeFormatString(String(service))}]%c ${lvl}`, getCssLevelColor(lvl), cssColors.reset, rest)
-    } else {
-      console[method](JSON.stringify(formatted))
-    }
-  }
+  const printsJson = clientConsole && !clientPretty
+  if (!printsJson && !transportEnabled) return
 
+  const formatted = { ...head, ...(serializeErrorsIn(event) as Record<string, unknown>) }
+  if (printsJson) console[method](JSON.stringify(formatted))
   sendToServer(formatted)
 }
 
@@ -98,45 +104,10 @@ function emitTaggedLog(level: LogLevel, tag: string, message: string): void {
     if (clientConsole) {
       console[browserConsoleMethod(level)](`%c[${escapeFormatString(tag)}]%c ${escapeFormatString(message)}`, getCssLevelColor(level), cssColors.reset)
     }
-    sendToServer({
-      timestamp: isoNow(),
-      level,
-      service: clientService,
-      ...identityContext,
-      tag,
-      message,
-    })
+    sendToServer({ ...eventHead(level), tag, message })
   } else {
     emitLog(level, { tag, message })
   }
-}
-
-const ERROR_FIELDS = ['code', 'status', 'statusText', 'statusCode', 'statusMessage', 'data', 'internal', 'why', 'fix', 'link'] as const
-
-/**
- * `name`, `message` and `stack` live on the prototype, so spreading an Error
- * into an event yields nothing. Mirrors the shape the server logger stores.
- */
-function serializeError(error: Error, ancestors = new WeakSet<object>()): Record<string, unknown> {
-  const serialized: Record<string, unknown> = {
-    name: error.name,
-    message: error.message,
-    stack: error.stack,
-  }
-
-  const hidden = payloadFieldsHiddenBy(error)
-  ancestors.add(error)
-  for (const key of ERROR_FIELDS) {
-    if (key in error && !hidden.includes(key)) serialized[key] = removeErrorCycles(readErrorField(error, key), ancestors)
-  }
-  if ('cause' in error) serialized.cause = removeErrorCycles(error.cause, ancestors)
-  ancestors.delete(error)
-
-  return serialized
-}
-
-function removeErrorCycles(value: unknown, ancestors: WeakSet<object>): unknown {
-  return walkErrors(value, ancestors, serializeError)
 }
 
 function createLogMethod(level: LogLevel) {
@@ -157,7 +128,7 @@ function createLogMethod(level: LogLevel) {
         emitTaggedLog(level, tagOrEvent, formatMessage(message, args))
       }
     } else if (tagOrEvent instanceof Error) {
-      emitLog(level, { error: serializeError(tagOrEvent) })
+      emitLog(level, { error: tagOrEvent })
     } else if (typeof tagOrEvent === 'object') {
       emitLog(level, tagOrEvent)
     } else {

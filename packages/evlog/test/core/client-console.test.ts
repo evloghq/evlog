@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createError as h3CreateError } from 'h3'
 import type { LogLevel } from '../../src/types'
+import { EvlogError, createError } from '../../src/error'
 import { initLog, log, setMinLevel } from '../../src/runtime/client/log'
 import { defined } from '../helpers/defined'
 
@@ -380,6 +381,38 @@ describe('client log.error with an Error instance', () => {
       expect(sent().error).toMatchObject({ statusCode: 502, data: { provider: 'stripe' }, stack: expect.any(String) })
     })
 
+    it('serializes an EvlogError without reading its legacy status getters', () => {
+      initTransport()
+      const spies = (['statusCode', 'statusText', 'statusMessage'] as const).map(name => vi.spyOn(EvlogError.prototype, name, 'get'))
+
+      log.error({ action: 'checkout', error: createError({ message: 'Payment failed', status: 402 }) })
+
+      expect(sent().error).toMatchObject({ status: 402, statusCode: 402, statusText: 'Payment failed', statusMessage: 'Payment failed' })
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['an Error', (error: Error) => log.error(error)],
+      ['an object event', (error: Error) => log.error({ action: 'checkout', error })],
+    ])('serializes an h3 wrapper once (%s)', (_name, logIt) => {
+      initTransport()
+      const original = new Error('kaboom')
+
+      logIt(h3CreateError(original as any) as any)
+
+      expect(sent().error).toMatchObject({ name: 'Error', message: 'kaboom', stack: original.stack, statusCode: 500 })
+      expect(sent().error).not.toHaveProperty('cause')
+    })
+
+    it('drops the options object h3 keeps as cause', () => {
+      initTransport()
+
+      log.error({ action: 'checkout', error: h3CreateError({ statusCode: 400, message: 'Missing required field: timestamp' }) })
+
+      expect(sent().error).toMatchObject({ message: 'Missing required field: timestamp', statusCode: 400 })
+      expect(sent().error).not.toHaveProperty('cause')
+    })
+
     it.each([
       ['disabled', { enabled: false }],
       ['below minLevel', { minLevel: 'error' as const }],
@@ -395,5 +428,51 @@ describe('client log.error with an Error instance', () => {
       expect(() => log.warn(event)).not.toThrow()
       expect(fetchSpy).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('client pretty console', () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>
+  let fetchSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const printed = () => defined(errorSpy.mock.calls[0], 'console call')[3] as Record<string, unknown>
+
+  it.each([
+    ['an Error', (error: Error) => log.error(error)],
+    ['an object event', (error: Error) => log.error({ action: 'checkout', error })],
+  ])('hands DevTools the Error itself and sends it serialized (%s)', (_name, logIt) => {
+    initLog({ enabled: true, pretty: true, transport: { enabled: true, endpoint: '/api/_evlog/ingest' } })
+    const error = new Error('Payment declined')
+
+    logIt(error)
+
+    expect(printed().error).toBe(error)
+    const [, options] = defined(fetchSpy.mock.calls[0], 'transport call')
+    expect(JSON.parse(String(defined(options, 'transport request').body)).error).toMatchObject({ name: 'Error', message: 'Payment declined', stack: error.stack })
+  })
+
+  it('reads the event once when nothing sends it as JSON', () => {
+    initLog({ enabled: true, pretty: true })
+    const read = vi.fn(() => 'value')
+    const event = {
+      action: 'checkout',
+      get detail() {
+        return read()
+      },
+    }
+
+    log.error(event)
+
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(printed()).toMatchObject({ action: 'checkout', detail: 'value' })
   })
 })

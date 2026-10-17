@@ -110,6 +110,15 @@ describe('log', () => {
     expect(event.error?.stack).toContain('Database unavailable')
   })
 
+  it('keeps why, fix and link on any error, as the client logger does', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ silent: true, redact: false, drain })
+    log.error(Object.assign(new Error('Quota exceeded'), { why: 'Plan limit reached', fix: 'Upgrade the plan', link: 'https://example.com/plans' }))
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ why: 'Plan limit reached', fix: 'Upgrade the plan', link: 'https://example.com/plans' })
+  })
+
   it('preserves EvlogError guidance and redacts internal fields in the global drain', () => {
     const { drain } = createPipelineSpies()
     initLogger({ silent: true, drain, redact: { paths: ['error.internal.token'] } })
@@ -306,6 +315,17 @@ describe('log', () => {
     expect(event.error).toMatchObject({ status: 402, statusCode: 402, statusText: 'Payment failed', statusMessage: 'Payment failed' })
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
     spies.forEach(spy => spy.mockRestore())
+  })
+
+  it('marks the data of an h3 wrapper that points back at it as circular', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    const wrapper = h3CreateError(new Error('kaboom') as any) as any
+    wrapper.data = { self: wrapper }
+    log.error(wrapper)
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ message: 'kaboom', data: { self: '[Circular]' } })
   })
 
   it('serializes a plain error wrapped by h3 once, keeping the h3 status code', () => {
