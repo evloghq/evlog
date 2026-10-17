@@ -35,7 +35,7 @@ packages/evlog/            Main package
   src/vite/                Vite plugin (evlog/vite)
   src/shared/              Toolkit — exposed as evlog/toolkit (NOT evlog/shared)
   src/ai/                  AI SDK integration (evlog/ai)
-  src/adapters/            Drain adapters (Axiom, OTLP, HyperDX, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, fs, memory)
+  src/adapters/            Drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, fs, memory)
   src/enrichers/           Built-in enrichers (UserAgent, Geo, RequestSize, TraceContext)
   src/runtime/             Runtime code (client/, server/, utils/)
   src/<framework>/         One dir per framework integration (hono/, next/, sveltekit/, nestjs/, express/, fastify/, elysia/, orpc/, react-router/, workers/, eve/, better-auth/)

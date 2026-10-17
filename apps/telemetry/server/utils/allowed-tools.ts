@@ -67,6 +67,7 @@ export const DEFAULT_ALLOWED_CUSTOM_KEYS: Record<string, string[]> = {
     'initProdBetterStack',
     'initProdDatadog',
     'initProdHyperdx',
+    'initProdSazabi',
     'initProdNone',
     'initExtraEnrichers',
     'initExtraPipeline',

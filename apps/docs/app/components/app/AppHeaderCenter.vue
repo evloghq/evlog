@@ -254,6 +254,12 @@ const landingItems = [
         to: '/integrate/adapters/hybrid/hyperdx'
       },
       {
+        label: 'Sazabi',
+        icon: 'i-custom-sazabi',
+        description: 'Send logs to Sazabi via OTLP',
+        to: '/integrate/adapters/cloud/sazabi'
+      },
+      {
         label: 'PostHog',
         icon: 'i-simple-icons-posthog',
         description: 'Send logs to PostHog',

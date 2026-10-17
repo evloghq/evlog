@@ -17,6 +17,7 @@ export type DrainId =
   | 'better-stack'
   | 'datadog'
   | 'hyperdx'
+  | 'sazabi'
   | 'none'
 
 export interface Destination {
@@ -126,6 +127,16 @@ export const DESTINATIONS: readonly Destination[] = [
     factory: 'createHyperDXDrain()',
     env: [{ name: 'HYPERDX_API_KEY', hint: 'ingestion key' }],
     docs: '/integrate/adapters/hybrid/hyperdx',
+    productionSafe: true,
+  },
+  {
+    id: 'sazabi',
+    label: 'Sazabi',
+    hint: 'AI-native log search over OTLP',
+    specifier: 'evlog/sazabi',
+    factory: 'createSazabiDrain()',
+    env: [{ name: 'SAZABI_INTAKE_URL', hint: 'intake URL' }],
+    docs: '/integrate/adapters/cloud/sazabi',
     productionSafe: true,
   },
   {

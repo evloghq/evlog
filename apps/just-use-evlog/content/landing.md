@@ -239,9 +239,9 @@ No peer deps, no polyfills, no bundler drama. Nothing to audit, nothing that bre
 
 Nuxt, Next.js, SvelteKit, Nitro, Express, Fastify, Hono, Elysia, NestJS, React Router, TanStack Start, Cloudflare Workers. Add the middleware, get wide events. Switch frameworks, keep the same `log.set()` pattern.
 
-### 8 drain adapters, plug and play
+### 9 drain adapters, plug and play
 
-Axiom, OTLP (Grafana, Honeycomb), Datadog, Sentry, PostHog, Better Stack, HyperDX, filesystem. Two lines of config. Async, batched, out-of-band. Your users don't wait on your log pipeline.
+Axiom, OTLP (Grafana, Honeycomb), Datadog, Sentry, PostHog, Better Stack, HyperDX, Sazabi, filesystem. Two lines of config. Async, batched, out-of-band. Your users don't wait on your log pipeline.
 
 ### AI SDK integration, built in
 
