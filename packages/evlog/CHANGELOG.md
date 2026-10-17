@@ -1,5 +1,38 @@
 # evlog
 
+## 3.0.0-beta.0
+
+### Major Changes
+
+- [#894](https://github.com/evloghq/evlog/pull/894) [`24ca3e3`](https://github.com/evloghq/evlog/commit/24ca3e3c1fde0e16582abc125019f8995d0a48e4) Thanks [@evlogai](https://github.com/apps/evlogai)! - A logged error carries its HTTP status in `status` only. The `statusCode`, `statusText` and `statusMessage` fields are no longer written into the wide event or the log, on the server or in the browser, so a drain or a query that read them needs to read `status`. The message that `statusText` and `statusMessage` repeated is already logged as `message`.
+
+  An h3 or Nuxt error keeps its own `statusCode` as input: the logger reads it and logs it as `status`.
+
+  The logged error, trimmed to the fields that changed:
+
+  ```json
+  {
+    "name": "EvlogError",
+    "message": "Payment could not be completed",
+    "status": 402,
+    "data": { "why": "Card declined" }
+  }
+  ```
+
+  Before this change the same error also logged `statusCode: 402`, `statusText` and `statusMessage`.
+
+  A `toJSON` that leaves a field out now also keeps that field out after a second `set()` on the same key, so a field hidden by `toJSON` is no longer logged through that path.
+
+- [#861](https://github.com/evloghq/evlog/pull/861) [`32ded2c`](https://github.com/evloghq/evlog/commit/32ded2cb572f8184f24a938539eff30f24a1d455) Thanks [@evlogai](https://github.com/apps/evlogai)! - Require Node.js 22 or later. `engines.node` is now `>=22.0.0` (it was `>=18.0.0`, and `>=20.0.0` for `@evlog/signals`). The build target follows the floor, so the published output targets Node 22.
+
+  Nuxt 4.6.1 declares `^22.22.3 || ^24.15.0 || >=26.0.0`, so Nuxt projects should run one of those ranges.
+
+### Patch Changes
+
+- [#880](https://github.com/evloghq/evlog/pull/880) [`a0187db`](https://github.com/evloghq/evlog/commit/a0187db7a500e5a51bcaa98e5f32ca1fe6df42e5) Thanks [@evlogai](https://github.com/apps/evlogai)! - The Sentry drain's `issues` option reads an error's `status`, then the event's `status`, when it decides whether an event is a 4xx. It no longer reads the legacy `statusCode`, so an error that only carries `statusCode` is classified by the event's `status`. Logs and the drained wide event are unchanged.
+
+- [#860](https://github.com/evloghq/evlog/pull/860) [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21) Thanks [@evlogai](https://github.com/apps/evlogai)! - The published packages no longer ship `.map` files. They pointed to `src/`, which is not part of the package, so they only added to the install size. `evlog` drops from 330 files (about 2.0 MB unpacked) to 178 files (about 865 KB). No runtime or API change.
+
 ## 2.33.0
 
 ### Minor Changes

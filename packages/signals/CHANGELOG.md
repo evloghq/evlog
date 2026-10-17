@@ -1,5 +1,20 @@
 # @evlog/signals
 
+## 1.0.0-beta.0
+
+### Major Changes
+
+- [#861](https://github.com/evloghq/evlog/pull/861) [`32ded2c`](https://github.com/evloghq/evlog/commit/32ded2cb572f8184f24a938539eff30f24a1d455) Thanks [@evlogai](https://github.com/apps/evlogai)! - Require Node.js 22 or later. `engines.node` is now `>=22.0.0` (it was `>=18.0.0`, and `>=20.0.0` for `@evlog/signals`). The build target follows the floor, so the published output targets Node 22.
+
+  Nuxt 4.6.1 declares `^22.22.3 || ^24.15.0 || >=26.0.0`, so Nuxt projects should run one of those ranges.
+
+### Patch Changes
+
+- [#860](https://github.com/evloghq/evlog/pull/860) [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21) Thanks [@evlogai](https://github.com/apps/evlogai)! - The published packages no longer ship `.map` files. They pointed to `src/`, which is not part of the package, so they only added to the install size. `evlog` drops from 330 files (about 2.0 MB unpacked) to 178 files (about 865 KB). No runtime or API change.
+
+- Updated dependencies [[`24ca3e3`](https://github.com/evloghq/evlog/commit/24ca3e3c1fde0e16582abc125019f8995d0a48e4), [`32ded2c`](https://github.com/evloghq/evlog/commit/32ded2cb572f8184f24a938539eff30f24a1d455), [`a0187db`](https://github.com/evloghq/evlog/commit/a0187db7a500e5a51bcaa98e5f32ca1fe6df42e5), [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21)]:
+  - evlog@3.0.0-beta.0
+
 ## 0.2.1
 
 ### Patch Changes

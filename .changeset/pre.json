@@ -12,5 +12,10 @@
     "@evlog/signals": "0.2.0",
     "@evlog/telemetry": "0.3.4"
   },
-  "changesets": []
+  "changesets": [
+    "error-status-field",
+    "require-node-22",
+    "sentry-issues-read-status",
+    "stop-publishing-sourcemaps"
+  ]
 }

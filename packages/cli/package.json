@@ -1,6 +1,6 @@
 {
   "name": "@evlog/cli",
-  "version": "0.11.0",
+  "version": "1.0.0-beta.0",
   "description": "The official command line for evlog",
   "author": "HugoRCD <contact@evlog.dev>",
   "homepage": "https://evlog.dev",
@@ -61,7 +61,7 @@
     "oxc-parser": "^0.152.0"
   },
   "peerDependencies": {
-    "evlog": ">=2.31.0"
+    "evlog": ">=3.0.0-beta.0"
   },
   "devDependencies": {
     "evlog": "workspace:*",
