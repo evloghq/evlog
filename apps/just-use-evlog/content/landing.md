@@ -239,9 +239,9 @@ No peer deps, no polyfills, no bundler drama. Nothing to audit, nothing that bre
 
 Nuxt, Next.js, SvelteKit, Nitro, Express, Fastify, Hono, Elysia, NestJS, React Router, TanStack Start, Cloudflare Workers. Add the middleware, get wide events. Switch frameworks, keep the same `log.set()` pattern.
 
-### 9 drain adapters, plug and play
+### 12 drain adapters, plug and play
 
-Axiom, OTLP (Grafana, Honeycomb), Datadog, Sentry, PostHog, Better Stack, HyperDX, Sazabi, filesystem. Two lines of config. Async, batched, out-of-band. Your users don't wait on your log pipeline.
+Axiom, OTLP (Grafana, Honeycomb), Datadog, Sentry, PostHog, Better Stack, HyperDX, Sazabi, Loki, ClickHouse, filesystem, memory. Two lines of config. Async, batched, out-of-band. Your users don't wait on your log pipeline.
 
 ### AI SDK integration, built in
 
@@ -300,7 +300,7 @@ Write NDJSON to disk. Your AI agents, scripts, and teammates query structured ev
 
 ### "I already use pino."
 
-pino gives you fast line-by-line JSON. evlog gives you that **plus** wide events, structured errors with `why`/`fix`/`link`, head + tail sampling, eight drain adapters, AI SDK integration with full o11y, and auto-instrumentation for twelve frameworks. Zero transitive deps, lighter install, same job done better. pino was the standard. evlog is what comes next.
+pino gives you fast line-by-line JSON. evlog gives you that **plus** wide events, structured errors with `why`/`fix`/`link`, head + tail sampling, twelve drain adapters, AI SDK integration with full o11y, and auto-instrumentation for twelve frameworks. Zero transitive deps, lighter install, same job done better. pino was the standard. evlog is what comes next.
 
 ### "I already have Sentry / Datadog."
 

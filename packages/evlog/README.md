@@ -401,7 +401,6 @@ export default defineNitroPlugin((nitroApp) => {
 | Better Stack | `evlog/better-stack` |
 | HyperDX | `evlog/hyperdx` |
 | Sazabi | `evlog/sazabi` |
-| Sazabi | `evlog/sazabi` |
 | File system (NDJSON) | `evlog/fs` |
 | Memory (any runtime, Workers included) | `evlog/memory` |
 | Browser to server (batched HTTP) | `evlog/http` |

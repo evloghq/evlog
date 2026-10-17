@@ -18,7 +18,7 @@
     </div>
     <div class="text-center">
       <div class="text-3xl font-bold text-highlighted md:text-4xl">
-        8
+        12
       </div>
       <div class="mt-1 text-xs text-muted">
         drain adapters
