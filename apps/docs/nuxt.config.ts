@@ -160,6 +160,12 @@ export default defineNuxtConfig({
         contentCollection: 'docs',
         contentFilters: [{ field: 'path', operator: 'LIKE', value: '/reference/%' }],
       },
+      {
+        title: 'Compare',
+        description: 'How evlog compares with Pino, Winston, Consola, LogTape, and LogLayer, and how it connects to OpenTelemetry.',
+        contentCollection: 'docs',
+        contentFilters: [{ field: 'path', operator: 'LIKE', value: '/compare/%' }],
+      },
     ],
     full: {
       title: 'evlog - full documentation',
