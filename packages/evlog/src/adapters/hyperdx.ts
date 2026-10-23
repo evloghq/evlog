@@ -2,7 +2,7 @@ import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import { defineDrain } from '../shared/drain'
-import type { OTLPConfig } from './otlp'
+import type { OTLPConfig, OTLPRecordShape } from './otlp'
 import { sendBatchToOTLP } from './otlp'
 
 /**
@@ -31,6 +31,20 @@ export interface HyperDXConfig {
   timeout?: number
   /** Number of retry attempts on transient failures. Default: 2 */
   retries?: number
+  /**
+   * Log record shape. Default: `'compact'`: the body is a one-line summary and nested fields flatten to dotted attributes.
+   * `'json'` sends the serialized event as the body. To keep the 2.x output, set `'json'` and `semanticConventions: false`.
+   * @see {@link OTLPRecordShape}
+   */
+  recordShape?: OTLPRecordShape
+  /**
+   * Also emit OpenTelemetry semantic convention attributes (`http.request.method`,
+   * `url.path`, `http.response.status_code`, `exception.*`, `gen_ai.*`) and the
+   * `deployment.environment.name` resource attribute, next to the evlog field names.
+   * Default: `true`. Set `false` to send the evlog field names only. Together with
+   * `recordShape: 'json'`, this keeps the 2.x output.
+   */
+  semanticConventions?: boolean
 }
 
 const HYPERDX_FIELDS: ConfigField<HyperDXConfig>[] = [
@@ -40,6 +54,8 @@ const HYPERDX_FIELDS: ConfigField<HyperDXConfig>[] = [
   { key: 'resourceAttributes' },
   { key: 'timeout' },
   { key: 'retries' },
+  { key: 'recordShape' },
+  { key: 'semanticConventions' },
 ]
 
 /**
@@ -57,6 +73,8 @@ export function toHyperDXOTLPConfig(config: HyperDXConfig): OTLPConfig {
     resourceAttributes: config.resourceAttributes,
     timeout: config.timeout,
     retries: config.retries,
+    recordShape: config.recordShape,
+    semanticConventions: config.semanticConventions,
   }
 }
 
