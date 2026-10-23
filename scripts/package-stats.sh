@@ -122,9 +122,6 @@ row "evlog/enrichers" "enrichers" \
 row "evlog/http" "http" \
   "$DIST/http.mjs" >> "$OUT"
 
-row "evlog/browser" "browser" \
-  "$DIST/browser.mjs" >> "$OUT"
-
 row "evlog/workers" "workers" \
   "$DIST/workers.mjs" >> "$OUT"
 

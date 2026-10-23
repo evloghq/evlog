@@ -24,7 +24,6 @@ What users actually pay when importing a specific path (after tree-shaking):
 | `evlog/pipeline` | 4.2 kB | **1.4 kB** | pipeline |
 | `evlog/enrichers` | 6.1 kB | **1.9 kB** | enrichers |
 | `evlog/http` | 2.9 kB | **1.2 kB** | http |
-| `evlog/browser` | — | — | deprecated; re-exports `evlog/http` (removed next major) |
 | `evlog/workers` | 2.1 kB | **965 B** | workers |
 
 ### Shared Chunks

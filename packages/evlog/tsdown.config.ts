@@ -46,7 +46,6 @@ export default defineConfig({
     'diagnostics': 'src/diagnostics.ts',
     'stream': 'src/stream.ts',
     'http': 'src/http.ts',
-    'browser': 'src/browser.ts',
     'next/index': 'src/next/index.ts',
     'next/client': 'src/next/client.ts',
     'next/instrumentation': 'src/next/instrumentation.ts',

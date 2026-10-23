@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAxiomDrain } from '../../src/adapters/axiom'
 import { createPostHogEventsDrain } from '../../src/adapters/posthog'
-import { createBrowserDrain } from '../../src/browser'
 import { defineEvlogHook } from '../../src/eve'
 import { warnDeprecated } from '../../src/shared/deprecate'
 import { resetGlobalRegistry } from '../../src/shared/globalRegistry'
@@ -77,15 +76,6 @@ describe('deprecated entry points warn on call', () => {
     expect(warnSpy).toHaveBeenCalledOnce()
     expect(warnSpy).toHaveBeenCalledWith(
       '[evlog/posthog] createPostHogEventsDrain() is deprecated and removed in v3. Use createPostHogDrain({ mode: \'events\' }).',
-    )
-  })
-
-  it('warns once for the evlog/browser entry point', () => {
-    createBrowserDrain({ endpoint: 'https://example.test/ingest' })
-    createBrowserDrain({ endpoint: 'https://example.test/ingest' })
-    expect(warnSpy).toHaveBeenCalledOnce()
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[evlog] \'evlog/browser\' is deprecated and removed in v3. Import from \'evlog/http\' instead (createBrowserDrain to createHttpDrain).',
     )
   })
 
