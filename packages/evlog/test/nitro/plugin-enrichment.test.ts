@@ -11,8 +11,8 @@ vi.mock('h3', () => ({
   getHeaders: vi.fn(),
 }))
 
-function asNitroApp(hooks: { callHook: NitroApp['hooks']['callHook'] }): NitroApp {
-  return { hooks } as NitroApp
+function asNitroApp(hooks: object): NitroApp {
+  return { hooks } as unknown as NitroApp
 }
 
 describe('nitro plugin - enrichment pipeline (T7)', () => {

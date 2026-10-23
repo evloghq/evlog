@@ -1,6 +1,6 @@
 import { createError, defineEventHandler, getHeader, getHeaders, getRequestHost, readRawBody, setResponseStatus } from 'h3'
 import { useNitroApp } from 'nitropack/runtime'
-import type { IngestPayload, WideEvent } from '../../../../types'
+import type { DrainContext, IngestPayload, WideEvent } from '../../../../types'
 import { getEnvironment, getGlobalPluginRunner, outputWideEvent, redactWithGlobalConfig, shouldSample } from '../../../../logger'
 import { filterSafeHeaders } from '../../../../utils'
 
@@ -14,6 +14,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isLogLevel(value: string): value is IngestPayload['level'] {
   return (VALID_LEVELS as readonly string[]).includes(value)
+}
+
+// hookable 6 returns `void` from `callHook` when no hook is registered or every hook is
+// synchronous, so the result is awaited rather than chained with `.catch`.
+async function callDrainHook(nitroApp: ReturnType<typeof useNitroApp>, drainCtx: DrainContext): Promise<void> {
+  try {
+    await nitroApp.hooks.callHook('evlog:drain', drainCtx)
+  } catch (err) {
+    console.error('[evlog] drain failed:', err)
+  }
 }
 
 function validateOrigin(event: IngestEvent): void {
@@ -199,11 +209,7 @@ export default defineEventHandler(async (event) => {
     request,
     headers,
   }
-  const drainTasks: Array<Promise<unknown>> = [
-    nitroApp.hooks.callHook('evlog:drain', drainCtx).catch((err) => {
-      console.error('[evlog] drain failed:', err)
-    }),
-  ]
+  const drainTasks: Array<Promise<unknown>> = [callDrainHook(nitroApp, drainCtx)]
   if (runner.hasDrain) {
     drainTasks.push(runner.runDrain(drainCtx))
   }

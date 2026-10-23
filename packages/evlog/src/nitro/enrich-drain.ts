@@ -1,7 +1,7 @@
 import type { NitroApp } from 'nitropack/types'
 import { getHeaders } from 'h3'
 import { getGlobalPluginRunner, outputWideEvent } from '../logger'
-import type { EnrichContext, ServerEvent, WideEvent } from '../types'
+import type { DrainContext, EnrichContext, ServerEvent, WideEvent } from '../types'
 import { filterSafeHeaders } from '../utils'
 import { extendDeferredDrain } from './deferred-drain'
 
@@ -66,6 +66,18 @@ function resolveDeferredWaitUntil(event: ServerEvent): ((promise: Promise<unknow
 }
 
 /**
+ * hookable 6 returns `void` from `callHook` when no hook is registered or every hook is
+ * synchronous, so the result is awaited rather than chained with `.catch`.
+ */
+async function callDrainHook(nitroApp: NitroApp, drainCtx: DrainContext): Promise<void> {
+  try {
+    await nitroApp.hooks.callHook('evlog:drain', drainCtx)
+  } catch (err) {
+    console.error('[evlog] drain failed:', err)
+  }
+}
+
+/**
  * Run evlog enrich + drain hooks for an emitted wide event.
  * @internal Exported for Nitro plugin tests.
  */
@@ -95,9 +107,7 @@ export async function callEnrichAndDrain(
     headers: hookContext.headers,
   }
   const drainTasks: Array<Promise<unknown>> = [
-    nitroApp.hooks.callHook('evlog:drain', drainCtx).catch((err) => {
-      console.error('[evlog] drain failed:', err)
-    }),
+    callDrainHook(nitroApp, drainCtx),
     runner.runDrain(drainCtx),
   ]
   const drainPromise = Promise.all(drainTasks)
