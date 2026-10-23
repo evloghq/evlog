@@ -102,9 +102,6 @@ export interface NitroPluginEvlogConfig extends DevTerminalResolveInput {
   transport?: TransportConfig
 }
 
-/** @deprecated Removed in evlog v3. Use {@link NitroPluginEvlogConfig} instead. */
-export type EvlogConfig = NitroPluginEvlogConfig
-
 /**
  * Resolve an EvlogError from an error or its cause chain.
  * Both Nitro v2 (h3) and v3 wrap thrown errors — this unwraps them.

@@ -21,6 +21,3 @@ export * from './middleware'
 export * from './plugin'
 export * from './routes'
 export * from './severity'
-// TODO(major): drop this re-export — keep only `evlog/toolkit/storage` so the
-// main toolkit barrel no longer pulls `node:async_hooks` (#403).
-export * from './storage'
