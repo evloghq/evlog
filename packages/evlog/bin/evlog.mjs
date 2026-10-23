@@ -6,6 +6,9 @@ import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const PACKAGE = '@evlog/cli'
+/* Set on the fetch so that, when the evlog bin shadows @evlog/cli, the run it
+   starts does not fetch again. */
+const GUARD = 'EVLOG_CLI_WRAPPER'
 
 /* The project's own install wins over a hoisted one, so an app that pins the
    CLI in a monorepo runs that pin. The package exports a single entry, so its
@@ -34,12 +37,16 @@ const root = locate()
 if (root) {
   const { bin } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   await import(pathToFileURL(join(root, bin.evlog)).href)
+} else if (process.env[GUARD]) {
+  process.stderr.write(`${PACKAGE} could not be loaded from the fetch that was just started. Run it with npx instead: npx --yes ${PACKAGE} <command>\n`)
+  process.exitCode = 1
 } else {
   const [command, prefix] = runner()
   process.stderr.write(`${PACKAGE} is not installed, fetching it with ${command}. Add it as a dev dependency for a pinned, instant run.\n`)
   const result = spawnSync(command, [...prefix, PACKAGE, ...process.argv.slice(2)], {
     stdio: 'inherit',
     shell: process.platform === 'win32',
+    env: { ...process.env, [GUARD]: '1' },
   })
   if (result.error) throw result.error
   process.exitCode = result.status ?? 1

@@ -16,7 +16,7 @@ afterEach(async () => {
 
 /* Copied out of the workspace so neither the cwd nor the shim's own location
    resolves @evlog/cli; fake runners on PATH record the call and exit 3. */
-async function isolated(): Promise<{ shim: string, env: NodeJS.ProcessEnv, calls: () => Promise<string> }> {
+async function isolated(): Promise<{ dir: string, log: string, shim: string, env: NodeJS.ProcessEnv, calls: () => Promise<string> }> {
   const dir = await mkdtemp(join(tmpdir(), 'evlog-bin-'))
   tempDirs.push(dir)
   const shim = join(dir, 'evlog.mjs')
@@ -28,6 +28,8 @@ async function isolated(): Promise<{ shim: string, env: NodeJS.ProcessEnv, calls
     await chmod(fake, 0o755)
   }
   return {
+    dir,
+    log,
     shim,
     env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
     calls: async () => (await readFile(log, 'utf8')).trim(),
@@ -63,5 +65,23 @@ describe('evlog bin', () => {
       env: { ...env, npm_config_user_agent: 'pnpm/10.0.0 npm/? node/v22.0.0' },
     }).catch(() => undefined)
     expect(await calls()).toBe('pnpm dlx @evlog/cli doctor')
+  })
+
+  it('stops when the fetch it started runs this bin again', async () => {
+    const { dir, log, shim, env, calls } = await isolated()
+    /* With the evlog bin shadowing @evlog/cli, pnpm dlx lands back on this bin.
+       The fake re-runs the shim the way that does, and exits after three calls
+       so a regression fails instead of spinning. */
+    const pnpm = join(dir, 'pnpm')
+    await writeFile(pnpm, `#!/bin/sh\nprintf 'pnpm %s\\n' "$*" >> "${log}"\n[ "$(wc -l < "${log}")" -ge 3 ] && exit 3\nexec "${process.execPath}" "${shim}"\n`)
+    await chmod(pnpm, 0o755)
+    const result = await run(process.execPath, [shim, 'map', '--json'], {
+      cwd: tmpdir(),
+      timeout: 20_000,
+      env: { ...env, npm_config_user_agent: 'pnpm/11.28.3 npm/? node/v24.21.0' },
+    }).catch((error: { code: number, stderr: string }) => error)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('npx --yes @evlog/cli')
+    expect(await calls()).toBe('pnpm dlx @evlog/cli map --json')
   })
 })
