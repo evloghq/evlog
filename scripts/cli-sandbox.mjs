@@ -111,7 +111,7 @@ export default defineConfig({
 
   // Instrumented: a wide event with business context and an audit trail.
   write(dir, 'routes/api/checkout.post.ts', `import { defineHandler, readBody } from 'nitro/h3'
-import { useLogger } from 'evlog/nitro/v3'
+import { useLogger } from 'evlog/nitro'
 
 export default defineHandler(async (event) => {
   const log = useLogger(event)

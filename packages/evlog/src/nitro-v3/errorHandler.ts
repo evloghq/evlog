@@ -20,7 +20,7 @@ import {
  * in the JSON response regardless of the underlying HTTP framework.
  *
  * Registered automatically by the `evlog()` Nitro module, which prepends
- * this handler before any framework handler (see `evlog/nitro/v3`).
+ * this handler before any framework handler (see `evlog/nitro`).
  */
 function getNitroV3RequestHeader(
   headers: Headers | Record<string, string | string[] | undefined>,

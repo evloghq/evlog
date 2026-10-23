@@ -154,8 +154,8 @@ export default defineEventHandler(async (event) => {
 })
 
 // ✅ After (Nuxt - auto-imported, no import needed)
-// For Nitro v3: import { useLogger } from 'evlog/nitro/v3'
-// For Nitro v2: import { useLogger } from 'evlog/nitro'
+// For Nitro v3: import { useLogger } from 'evlog/nitro'
+// For Nitro v2: import { useLogger } from 'evlog/nitro/v2'
 
 export default defineEventHandler(async (event) => {
   const log = useLogger(event)
@@ -252,8 +252,8 @@ export default defineEventHandler(async (event) => {
 })
 
 // ✅ After (Nuxt - auto-imported, no import needed)
-// For Nitro v3: import { useLogger } from 'evlog/nitro/v3'
-// For Nitro v2: import { useLogger } from 'evlog/nitro'
+// For Nitro v3: import { useLogger } from 'evlog/nitro'
+// For Nitro v2: import { useLogger } from 'evlog/nitro/v2'
 import { createError } from 'evlog'
 
 export default defineEventHandler(async (event) => {

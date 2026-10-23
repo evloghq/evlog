@@ -8,7 +8,7 @@ import {
   useLogger,
 } from '../../src/nitro-v3/index'
 
-describe('evlog/nitro/v3 barrel', () => {
+describe('evlog/nitro barrel', () => {
   it('exports structured error helpers alongside Nitro integration', () => {
     expect(typeof createError).toBe('function')
     expect(createEvlogError).toBe(createError)

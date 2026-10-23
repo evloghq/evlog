@@ -4,18 +4,20 @@ import type { ArrayNode, ObjectNode, Splice } from '../../init/edit'
 import type { WiringInput, WiringPlan } from '../../init/wiring'
 import { configCandidates, firstExisting } from '../../init/wiring'
 
-function nitroModuleSpecifier(major: 2 | 3): string {
-  return major === 3 ? 'evlog/nitro/v3' : 'evlog/nitro'
+/** evlog 3 serves Nitro 3 from `evlog/nitro` and nitropack from `evlog/nitro/v2`; evlog 2 used `evlog/nitro/v3` and `evlog/nitro`. */
+export function nitroModuleSpecifier(nitroMajor: 2 | 3, evlogMajor: 2 | 3): string {
+  if (evlogMajor === 2) return nitroMajor === 3 ? 'evlog/nitro/v3' : 'evlog/nitro'
+  return nitroMajor === 3 ? 'evlog/nitro' : 'evlog/nitro/v2'
 }
 
-function nitroConfigTemplate(input: WiringInput): string {
+function nitroConfigTemplate(input: WiringInput, specifier: string): string {
   const asyncContext = input.framework === 'tanstack-start'
     ? '  experimental: {\n    asyncContext: true,\n  },\n'
     : ''
 
   if (input.nitroMajor === 3) {
     return `import { defineConfig } from 'nitro'
-import evlog from 'evlog/nitro/v3'
+import evlog from '${specifier}'
 
 export default defineConfig({
 ${asyncContext}  modules: [evlog()],
@@ -24,7 +26,7 @@ ${asyncContext}  modules: [evlog()],
   }
 
   return `import { defineNitroConfig } from 'nitropack/config'
-import evlog from 'evlog/nitro'
+import evlog from '${specifier}'
 
 export default defineNitroConfig({
   modules: [evlog()],
@@ -35,12 +37,12 @@ export default defineNitroConfig({
 /** Registers the module only: it loads `evlog.config.ts`, where the settings live. */
 export default function planNitro(input: WiringInput): WiringPlan {
   const plan: WiringPlan = { actions: [], manual: [], already: [] }
-  const specifier = nitroModuleSpecifier(input.nitroMajor)
+  const specifier = nitroModuleSpecifier(input.nitroMajor, input.evlogMajor)
   const configPath = firstExisting(input.root, configCandidates('nitro.config'))
 
   if (!configPath) {
     const path = join(input.root, 'nitro.config.ts')
-    plan.actions.push({ path, relative: 'nitro.config.ts', kind: 'create', contents: nitroConfigTemplate(input) })
+    plan.actions.push({ path, relative: 'nitro.config.ts', kind: 'create', contents: nitroConfigTemplate(input, specifier) })
     return plan
   }
 

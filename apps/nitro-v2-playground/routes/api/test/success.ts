@@ -1,5 +1,5 @@
 import { defineEventHandler } from 'h3'
-import { useLogger } from 'evlog/nitro'
+import { useLogger } from 'evlog/nitro/v2'
 
 export default defineEventHandler(async (event) => {
   const logger = useLogger(event)

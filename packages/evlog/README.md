@@ -190,7 +190,7 @@ Works with **any framework powered by Nitro**: Nuxt, Analog, Vinxi, SolidStart, 
 ```typescript
 // nitro.config.ts
 import { defineConfig } from 'nitro'
-import evlog from 'evlog/nitro/v3'
+import evlog from 'evlog/nitro'
 
 export default defineConfig({
   modules: [
@@ -204,7 +204,7 @@ export default defineConfig({
 ```typescript
 // nitro.config.ts
 import { defineNitroConfig } from 'nitropack/config'
-import evlog from 'evlog/nitro'
+import evlog from 'evlog/nitro/v2'
 
 export default defineNitroConfig({
   modules: [
@@ -213,7 +213,7 @@ export default defineNitroConfig({
 })
 ```
 
-The module loads `evlog.config.ts`. Then use `useLogger` in any route. Import from `evlog/nitro/v3` (v3) or `evlog/nitro` (v2). Usage is identical to the Nuxt section above; see the [Nitro docs](https://www.evlog.dev/integrate/frameworks/nitro) for the full route example.
+The module loads `evlog.config.ts`. Then use `useLogger` in any route. Import from `evlog/nitro` (v3) or `evlog/nitro/v2` (v2). Usage is identical to the Nuxt section above; see the [Nitro docs](https://www.evlog.dev/integrate/frameworks/nitro) for the full route example.
 
 ## Standalone TypeScript
 
@@ -508,8 +508,8 @@ In production (`pretty: false`), logs are emitted as JSON for machine parsing.
 | **Nuxt** | `modules: ['evlog/nuxt']` |
 | **Next.js** | `createEvlog()` factory with `import { createEvlog } from 'evlog/next'` ([docs](https://evlog.dev/integrate/frameworks/nextjs)) |
 | **SvelteKit** | `export const { handle, handleError } = createEvlogHooks()` with `import { createEvlogHooks } from 'evlog/sveltekit'` ([docs](https://evlog.dev/integrate/frameworks/sveltekit)) |
-| **Nitro v3** | `modules: [evlog()]` with `import evlog from 'evlog/nitro/v3'` |
-| **Nitro v2** | `modules: [evlog()]` with `import evlog from 'evlog/nitro'` |
+| **Nitro v3** | `modules: [evlog()]` with `import evlog from 'evlog/nitro'` |
+| **Nitro v2** | `modules: [evlog()]` with `import evlog from 'evlog/nitro/v2'` |
 | **TanStack Start** | Nitro v3 module setup ([docs](https://evlog.dev/integrate/frameworks/tanstack-start)) |
 | **React Router** | `evlog()` middleware with `import { evlog } from 'evlog/react-router'` ([docs](https://evlog.dev/integrate/frameworks/react-router)) |
 | **NestJS** | `EvlogModule.forRoot()` with `import { EvlogModule } from 'evlog/nestjs'` ([docs](https://evlog.dev/integrate/frameworks/nestjs)) |

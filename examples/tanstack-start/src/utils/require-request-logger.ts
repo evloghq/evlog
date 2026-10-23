@@ -18,7 +18,7 @@ function readContextLog(context: unknown): unknown {
 export function requireRequestLogger(context: unknown): RequestLogger {
   const log = readContextLog(context)
   if (!isRequestLogger(log)) {
-    throw new Error('Missing evlog request logger — is evlog/nitro/v3 registered?')
+    throw new Error('Missing evlog request logger — is evlog/nitro registered?')
   }
   return log
 }

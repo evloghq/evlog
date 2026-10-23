@@ -691,11 +691,11 @@ export default {
     expect(configJson(result).app).toContainEqual({ path: 'env.service', value: 'nuxt-wins', source: 'nuxt.config.ts:4', overrides: { value: 'review', source: 'evlog.config.ts:2' } })
   })
 
-  it('reads the options passed to the Nitro module', async () => {
+  it.each(['evlog/nitro', 'evlog/nitro/v2', 'evlog/nitro/v3'])('reads the options passed to the Nitro module imported from %s', async (specifier) => {
     const cwd = await makeProject({
       'package.json': PACKAGE,
       'evlog.config.ts': 'export default { service: \'review\' }\n',
-      'nitro.config.ts': `import evlog from 'evlog/nitro/v3'
+      'nitro.config.ts': `import evlog from '${specifier}'
 import { defineConfig } from 'nitro'
 
 export default defineConfig({
@@ -713,7 +713,7 @@ export default defineConfig({
     const cwd = await makeProject({
       'package.json': PACKAGE,
       'evlog.config.ts': 'export default { service: \'review\' }\n',
-      'nitro.config.ts': `import evlog from 'evlog/nitro'
+      'nitro.config.ts': `import evlog from 'evlog/nitro/v2'
 const modules = [evlog({ env: { service: 'nitro-wins' } })]
 export default defineNitroConfig({ modules })
 `,
@@ -758,7 +758,7 @@ export default defineNitroConfig({ modules })
     const cwd = await makeProject({
       'package.json': PACKAGE,
       'evlog.config.ts': 'export default { service: \'review\' }\n',
-      'nitro.config.ts': 'import evlog from \'evlog/nitro\'\n\nexport default defineNitroConfig({ modules: [evlog()] })\n',
+      'nitro.config.ts': 'import evlog from \'evlog/nitro/v2\'\n\nexport default defineNitroConfig({ modules: [evlog()] })\n',
     })
     const result = await runConfig(fakeContext(cwd))
 

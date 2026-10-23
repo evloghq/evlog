@@ -32,7 +32,7 @@ describe.skipIf(!distExists).sequential('Nitro cloudflare-durable build with evl
       dev: false,
       compatibilityDate: '2024-01-16',
       serverDir: './',
-      plugins: [resolve(evlogDist, 'nitro/v3/plugin.mjs')],
+      plugins: [resolve(evlogDist, 'nitro/plugin.mjs')],
       alias: {
         evlog: resolve(evlogDist, 'index.mjs'),
       },

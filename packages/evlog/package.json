@@ -56,14 +56,14 @@
       "default": "./dist/nuxt/module.mjs"
     },
     "./nitro": {
-      "types": "./dist/nitro/module.d.mts",
-      "import": "./dist/nitro/module.mjs",
-      "default": "./dist/nitro/module.mjs"
+      "types": "./dist/nitro/index.d.mts",
+      "import": "./dist/nitro/index.mjs",
+      "default": "./dist/nitro/index.mjs"
     },
-    "./nitro/v3": {
-      "types": "./dist/nitro/v3/index.d.mts",
-      "import": "./dist/nitro/v3/index.mjs",
-      "default": "./dist/nitro/v3/index.mjs"
+    "./nitro/v2": {
+      "types": "./dist/nitro/v2/module.d.mts",
+      "import": "./dist/nitro/v2/module.mjs",
+      "default": "./dist/nitro/v2/module.mjs"
     },
     "./workers": {
       "types": "./dist/workers.d.mts",
@@ -282,10 +282,10 @@
         "./dist/nuxt/module.d.mts"
       ],
       "nitro": [
-        "./dist/nitro/module.d.mts"
+        "./dist/nitro/index.d.mts"
       ],
-      "nitro/v3": [
-        "./dist/nitro/v3/index.d.mts"
+      "nitro/v2": [
+        "./dist/nitro/v2/module.d.mts"
       ],
       "workers": [
         "./dist/workers.d.mts"

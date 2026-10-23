@@ -198,7 +198,7 @@ async function callEnrichAndDrain(
  * Usage in Nitro v3:
  * ```ts
  * // plugins/evlog.ts
- * export { default } from 'evlog/nitro/v3'
+ * export { default } from 'evlog/nitro'
  * ```
  */
 export default definePlugin(async (nitroApp) => {

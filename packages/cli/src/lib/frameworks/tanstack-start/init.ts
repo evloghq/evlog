@@ -1,6 +1,6 @@
 import { relative } from 'node:path'
 import type { WiringInput, WiringPlan } from '../../init/wiring'
-import planNitro from '../nitro/init'
+import planNitro, { nitroModuleSpecifier } from '../nitro/init'
 import { configCandidates, firstExisting } from '../../init/wiring'
 
 /** The root route is a component file — splicing a middleware into it is guesswork. */
@@ -28,7 +28,7 @@ export default defineConfig({
     title: 'Return structured errors from the root route',
     file: rootRoute ? relative(input.root, rootRoute) : 'src/routes/__root.tsx',
     snippet: `import { createMiddleware } from '@tanstack/react-start'
-import { evlogErrorHandler } from 'evlog/nitro/v3'
+import { evlogErrorHandler } from '${nitroModuleSpecifier(3, input.evlogMajor)}'
 
 export const Route = createRootRoute({
   server: {

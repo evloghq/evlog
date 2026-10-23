@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const v3Plugin = resolve(__dirname, '../../dist/nitro/v3/plugin.mjs')
+const v3Plugin = resolve(__dirname, '../../dist/nitro/plugin.mjs')
 const distExists = existsSync(v3Plugin)
 
 if (!distExists) {
@@ -11,7 +11,7 @@ if (!distExists) {
 
 // h3 is legitimately imported by the v2 runtime chunks, so it can't be forbidden
 // dist-wide. Collect the chunks the v3 plugin actually reaches (it pulls in
-// shared root-level chunks via `../../*.mjs`) and forbid h3 only within that set.
+// shared root-level chunks via `../*.mjs`) and forbid h3 only within that set.
 function collectV3Chunks(entry: string): string[] {
   const seen = new Set<string>()
   const relativeRe = /(?:import|export)\s+(?:[^'"]*?\sfrom\s+)?['"](\.[^'"]+)['"]|import\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g
@@ -42,7 +42,7 @@ function collectV3Chunks(entry: string): string[] {
  * failed to build with `"getHeaders" is not exported by "__vite-optional-peer-dep:h3:evlog"`.
  * No chunk in the v3 plugin's graph may import `h3`.
  */
-describe.skipIf(!distExists)('evlog/nitro/v3 avoids the optional h3 peer', () => {
+describe.skipIf(!distExists)('evlog/nitro avoids the optional h3 peer', () => {
   it('no chunk reachable from the v3 plugin imports h3', () => {
     const chunks = collectV3Chunks(v3Plugin)
     expect(chunks.length).toBeGreaterThan(0)

@@ -1,6 +1,6 @@
 import type { APIEvent } from '@solidjs/start/server'
 import { createError } from 'evlog'
-import { useLogger } from 'evlog/nitro'
+import { useLogger } from 'evlog/nitro/v2'
 
 // eslint-disable-next-line
 export function POST(event: APIEvent) {

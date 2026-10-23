@@ -372,7 +372,7 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
     // often cannot resolve useRuntimeConfig().evlog via dynamic import reliably).
     // @ts-expect-error nitro:config hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:config', (nitroConfig: NitroConfig) => {
-      const evlogHandler = resolver.resolve('../nitro/errorHandler').replace(/\\/g, '/')
+      const evlogHandler = resolver.resolve('../nitro/v2/errorHandler').replace(/\\/g, '/')
       // Nitro's DeepPartial config types array entries as possibly undefined; the helper expects string paths.
       nitroConfig.errorHandler = prependNitroErrorHandler(
         nitroConfig.errorHandler as string | string[] | undefined,
@@ -419,7 +419,7 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
       })
     }
 
-    addServerPlugin(resolver.resolve('../nitro/plugin'))
+    addServerPlugin(resolver.resolve('../nitro/v2/plugin'))
     addServerPlugin(resolver.resolve('../runtime/server/public-config'))
     // @ts-expect-error nitro:init hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:init', (nitro: Nitro) => {

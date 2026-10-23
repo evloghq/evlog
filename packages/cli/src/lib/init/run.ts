@@ -146,6 +146,11 @@ export function detectNitroMajor(pkg: PackageJson | null, framework: Framework):
   return 3
 }
 
+/** The evlog major init writes import paths for: the installed one, or 3, the major init installs. */
+export function detectEvlogMajor(installedVersion: string | undefined): 2 | 3 {
+  return installedVersion !== undefined && Number.parseInt(installedVersion, 10) === 2 ? 2 : 3
+}
+
 function majorFromRange(range: string): number {
   const version = range.startsWith('npm:') ? range.slice(range.lastIndexOf('@') + 1) : range.replace(/^[^\d]*/, '')
   return Number.parseInt(version.split('.')[0] ?? '', 10)
@@ -296,6 +301,7 @@ export async function runInit(
       enrichers: answers.enrichers,
       sampling: answers.sampling,
       nitroMajor: detectNitroMajor(project.packageJson, answers.framework),
+      evlogMajor: detectEvlogMajor(resolved.install?.version),
       repeatedErrors: insight?.repeatedErrors ?? [],
       auditGaps: insight?.auditGaps ?? [],
     }),

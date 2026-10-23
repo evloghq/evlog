@@ -8,7 +8,7 @@ export const nitro = defineFramework({
   label: 'Nitro',
   docs: '/integrate/frameworks/nitro',
   detect: { deps: ['nitropack', 'nitro'], configs: ['nitro.config.{ts,js,mjs}'], unlessDeps: ['nuxt'], specificity: 8 },
-  accessor: '`useLogger(event)` from `evlog/nitro` inside a route handler',
+  accessor: '`useLogger(event)` from `evlog/nitro` (`evlog/nitro/v2` on nitropack) inside a route handler',
   requestLogger: 'ambient',
   evlogAutoImports: NUXT_EVLOG_AUTO_IMPORTS,
   shape: { loggerCall: 'const log = useLogger(event)', handler: eventHandlerShape },
