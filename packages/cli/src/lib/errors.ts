@@ -375,6 +375,27 @@ export const cliErrors = defineErrorCatalog('cli', {
     link: 'https://evlog.dev/cli/config',
     tags: ['config'],
   },
+  UPGRADE_NO_PACKAGE_JSON: {
+    status: 404,
+    message: 'No package.json found',
+    why: 'upgrade reads the evlog version and rewrites code under the package root',
+    fix: 'Run from your app directory or pass --cwd',
+    tags: ['upgrade', 'project'],
+  },
+  UPGRADE_NO_EVLOG: {
+    status: 404,
+    message: 'No evlog version to upgrade from',
+    why: 'package.json declares no evlog range with a version and no evlog is installed',
+    fix: 'Run upgrade in the package that depends on evlog',
+    tags: ['upgrade', 'evlog'],
+  },
+  UPGRADE_DIRTY_TREE: {
+    status: 409,
+    message: 'The project has uncommitted changes',
+    why: '--write rewrites files in place, and a clean tree keeps its changes reviewable and easy to revert',
+    fix: 'Commit or stash first, or pass --force',
+    tags: ['upgrade'],
+  },
 })
 
 declare module 'evlog' {

@@ -1,42 +1,33 @@
-import { defineEvlogCommand } from '../lib/command'
-import { UPGRADE_TRANSFORMS } from '../lib/upgrade/transforms'
-import type { UpgradeTransform } from '../lib/upgrade/transforms'
-
-/** The plan `evlog upgrade` reports. The scaffold reads the table and changes no files. */
-export function planUpgrade(transforms: readonly UpgradeTransform[] = UPGRADE_TRANSFORMS) {
-  const auto = transforms.filter(t => t.mode === 'auto').length
-  return {
-    writes: false as const,
-    transforms: [...transforms],
-    summary: { auto, report: transforms.length - auto },
-  }
-}
-
-function formatPlan(plan: ReturnType<typeof planUpgrade>): string {
-  const lines = plan.transforms.map(t => `  ${t.mode.padEnd(6)}  ${t.from}  →  ${t.to}`)
-  return [
-    `evlog upgrade: ${plan.summary.auto} auto, ${plan.summary.report} to review`,
-    ...lines,
-    '',
-    'No files were changed. Scanning and rewriting land in a follow-up.',
-  ].join('\n')
-}
+import { createStyle, EXIT_FAIL, EXIT_OK } from '../core/output'
+import { defineEvlogCommand, failWith } from '../lib/command'
+import { formatUpgradeReport } from '../lib/upgrade/report'
+import { runUpgrade } from '../lib/upgrade/run'
 
 /**
- * `evlog upgrade`: the v2 to v3 codemod.
+ * `evlog upgrade`: migrate a project to the newest evlog major.
  *
- * This is the scaffold: it lists the transforms the command will apply and
- * changes nothing. Detection (EVL-595) and the auto-fixes (EVL-594) plug into
- * the same table.
+ * Shows what it would change and exits 1 while anything is left. `--write`
+ * applies the fixes and bumps `evlog` in package.json; it exits 1 only while
+ * findings that need a person remain.
  */
 export default defineEvlogCommand('upgrade', {
-  meta: { name: 'upgrade', description: 'Plan the v2 to v3 rewrites (scaffold, no files changed yet)' },
-  run({ args, ui }) {
-    const plan = planUpgrade()
-    ui.done({
-      jsonMode: args.json,
-      json: { ...plan },
-      human: formatPlan(plan),
-    })
+  meta: { name: 'upgrade', description: 'Migrate this project to the newest evlog major' },
+  args: {
+    write: { type: 'boolean', description: 'Apply the fixes (default: show them and change nothing)' },
+    force: { type: 'boolean', description: 'With --write, run even when git has uncommitted changes' },
+  },
+  async run({ args, cli, log, ui }) {
+    try {
+      const { report, result } = await log.step(
+        'upgrade',
+        () => runUpgrade({ cwd: cli.cwd, write: args.write === true, force: args.force === true }),
+        ({ report }) => ({ from: report.from, to: report.to, auto: report.summary.auto, report: report.summary.report }),
+      )
+      ui.done({ jsonMode: args.json, json: { ...report }, human: formatUpgradeReport(createStyle(cli), report, result) })
+      const remaining = report.write ? report.summary.report : report.findings.length
+      ui.exit(remaining > 0 ? EXIT_FAIL : EXIT_OK)
+    } catch (error) {
+      failWith(error, { args, log, ui })
+    }
   },
 })
