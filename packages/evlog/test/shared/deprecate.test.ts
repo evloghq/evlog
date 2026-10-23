@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createPostHogEventsDrain } from '../../src/adapters/posthog'
 import { defineEvlogHook } from '../../src/eve'
 import { warnDeprecated } from '../../src/shared/deprecate'
 import { resetGlobalRegistry } from '../../src/shared/globalRegistry'
@@ -66,15 +65,6 @@ describe('deprecated entry points warn on call', () => {
     vi.restoreAllMocks()
     vi.unstubAllEnvs()
     resetGlobalRegistry()
-  })
-
-  it('warns once for createPostHogEventsDrain()', () => {
-    createPostHogEventsDrain({ apiKey: 'k' })
-    createPostHogEventsDrain({ apiKey: 'k' })
-    expect(warnSpy).toHaveBeenCalledOnce()
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[evlog/posthog] createPostHogEventsDrain() is deprecated and removed in v3. Use createPostHogDrain({ mode: \'events\' }).',
-    )
   })
 
   it('warns when redactMessage is passed to defineEvlogHook()', () => {
