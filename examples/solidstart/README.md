@@ -25,7 +25,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { defineConfig } from "@solidjs/start/config"
 
-const evlogDir = dirname(fileURLToPath(import.meta.resolve("evlog/nitro")))
+const evlogDir = dirname(fileURLToPath(import.meta.resolve("evlog/nitro/v2")))
 
 process.env.__EVLOG_CONFIG = JSON.stringify({
   env: { service: "solidstart-example" },

@@ -1,5 +1,5 @@
 import type { APIEvent } from '@solidjs/start/server'
-import { useLogger } from 'evlog/nitro'
+import { useLogger } from 'evlog/nitro/v2'
 
 // eslint-disable-next-line
 export function GET(event: APIEvent) {

@@ -209,14 +209,14 @@ exports[`public API surface > matches snapshot for all subpath exports 1`] = `
     "defineStreamedInstrumentation",
   ],
   "./nitro": [
-    "useLogger",
-  ],
-  "./nitro/v3": [
     "EvlogError",
     "createError",
     "createEvlogError",
     "evlogErrorHandler",
     "parseError",
+    "useLogger",
+  ],
+  "./nitro/v2": [
     "useLogger",
   ],
   "./nuxt": [],

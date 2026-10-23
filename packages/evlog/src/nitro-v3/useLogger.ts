@@ -11,7 +11,7 @@ import type { FieldContext } from '../types'
  * @throws Error if the logger is not initialized on the event context.
  *
  * @example
- * import { useLogger } from 'evlog/nitro/v3'
+ * import { useLogger } from 'evlog/nitro'
  *
  * export default defineHandler((event) => {
  *   const log = useLogger(event)

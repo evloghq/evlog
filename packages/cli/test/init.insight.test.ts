@@ -112,6 +112,7 @@ describe('generated catalogs', () => {
       enrichers: [],
       sampling: 'all',
       nitroMajor: 3,
+      evlogMajor: 3,
       repeatedErrors: [{ key: 'CARD_DECLINED', status: 402, message: 'Card declined', files: ['a.ts', 'b.ts'] }],
       auditGaps: [],
     })
@@ -138,6 +139,7 @@ describe('generated catalogs', () => {
       enrichers: [],
       sampling: 'all',
       nitroMajor: 3,
+      evlogMajor: 3,
       repeatedErrors: [],
       auditGaps: [],
     })

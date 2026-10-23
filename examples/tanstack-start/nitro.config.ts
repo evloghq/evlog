@@ -1,7 +1,7 @@
 import type { NitroConfig } from 'nitro/types'
-import evlog from 'evlog/nitro/v3'
+import evlog from 'evlog/nitro'
 
-/* `evlog/nitro/v3` may resolve a different `nitro` version than this example's
+/* `evlog/nitro` may resolve a different `nitro` version than this example's
  * `nitro-nightly`. Runtime behavior matches; align the module slot for tsc. */
 type NitroModuleSlot = NonNullable<NitroConfig['modules']>[number]
 

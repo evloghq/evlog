@@ -53,6 +53,8 @@ export interface WiringInput {
   sampling: SamplingProfile
   /** Nitro major, when the framework is Nitro (`tanstack-start` is always v3). */
   nitroMajor: 2 | 3
+  /** The evlog major the import paths target. evlog 3 moved the Nitro subpaths. */
+  evlogMajor: 2 | 3
   /** Seeds from the scan, when the catalog extras were selected. */
   repeatedErrors: readonly RepeatedErrorSeed[]
   auditGaps: readonly AuditGap[]

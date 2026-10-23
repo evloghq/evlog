@@ -341,8 +341,8 @@ Structured errors integrate seamlessly with wide events:
 ```typescript
 // server/api/checkout.post.ts
 // Nuxt: useLogger is auto-imported, createError is not
-// Nitro v3: import { useLogger } from 'evlog/nitro/v3'
-// Nitro v2: import { useLogger } from 'evlog/nitro'
+// Nitro v3: import { useLogger } from 'evlog/nitro'
+// Nitro v2: import { useLogger } from 'evlog/nitro/v2'
 import { createError } from 'evlog'
 
 export default defineEventHandler(async (event) => {

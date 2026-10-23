@@ -4,13 +4,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createContext } from '../src/core/context'
+import { VERSION } from '../src/lib/constants'
 import type { CliContext } from '../src/core/context'
 import { readConfig, RuntimeValue } from '../src/lib/config/read'
 import { formatInitReport } from '../src/lib/init/report'
 import { configuredService, planWiring } from '../src/lib/init/wiring'
 import type { FileAction, WiringPlan } from '../src/lib/init/wiring'
-import { detectPackageManager, installCommand } from '../src/lib/init/pm'
-import { detectNitroMajor, runInit } from '../src/lib/init/run'
+import { detectPackageManager, evlogPackageSpec, installCommand } from '../src/lib/init/pm'
+import { detectEvlogMajor, detectNitroMajor, runInit } from '../src/lib/init/run'
 
 /** Only the spawn is faked; the rest of the skills module stays real. */
 const skills = vi.hoisted(() => ({
@@ -64,6 +65,7 @@ function wiring(overrides: Partial<Parameters<typeof planWiring>[0]> = {}) {
     extras: [] as never[],
     enrichers: [] as never[],
     sampling: 'all' as const,
+    evlogMajor: 3 as const,
     repeatedErrors: [],
     auditGaps: [],
     ...overrides,
@@ -175,7 +177,7 @@ describe('planWiring — nitro', () => {
     const plan = await planWiring({ root, framework: 'nitro', service: 'api', ...wiring({ devDrain: 'none' }), nitroMajor: 3 })
     const { contents } = action(plan, 'nitro.config.ts')
 
-    expect(contents).toContain(`import evlog from 'evlog/nitro/v3'`)
+    expect(contents).toContain(`import evlog from 'evlog/nitro'`)
     expect(contents).toContain('modules: [evlog()]')
     expect(contents).not.toContain('service')
   })
@@ -186,15 +188,25 @@ describe('planWiring — nitro', () => {
     const plan = await planWiring({ root, framework: 'nitro', service: 'api', ...wiring({ devDrain: 'none' }), nitroMajor: 2 })
     const { contents } = action(plan, 'nitro.config.ts')
 
-    expect(contents).toContain(`import evlog from 'evlog/nitro'`)
+    expect(contents).toContain(`import evlog from 'evlog/nitro/v2'`)
     expect(contents).toContain('defineNitroConfig')
     expect(contents).toContain('modules: [evlog()]')
+  })
+
+  it('writes the evlog 2 subpaths when the project is on evlog 2', async () => {
+    const root = await project({ 'package.json': '{"name":"api"}' })
+
+    const nitro3 = await planWiring({ root, framework: 'nitro', service: 'api', ...wiring({ devDrain: 'none', evlogMajor: 2 }), nitroMajor: 3 })
+    const nitropack = await planWiring({ root, framework: 'nitro', service: 'api', ...wiring({ devDrain: 'none', evlogMajor: 2 }), nitroMajor: 2 })
+
+    expect(action(nitro3, 'nitro.config.ts').contents).toContain(`import evlog from 'evlog/nitro/v3'\n`)
+    expect(action(nitropack, 'nitro.config.ts').contents).toContain(`import evlog from 'evlog/nitro'\n`)
   })
 
   it('says the module options win when the module is already registered', async () => {
     const root = await project({
       'package.json': '{"name":"api"}',
-      'nitro.config.ts': `import { defineConfig } from 'nitro'\nimport evlog from 'evlog/nitro/v3'\n\nexport default defineConfig({\n  modules: [evlog({ env: { service: 'api' } })],\n})\n`,
+      'nitro.config.ts': `import { defineConfig } from 'nitro'\nimport evlog from 'evlog/nitro'\n\nexport default defineConfig({\n  modules: [evlog({ env: { service: 'api' } })],\n})\n`,
     })
 
     const plan = await planWiring({ root, framework: 'nitro', service: 'api', ...wiring({ devDrain: 'none' }), nitroMajor: 3 })
@@ -212,7 +224,15 @@ describe('planWiring — nitro', () => {
     const plan = await planWiring({ root, framework: 'tanstack-start', service: 'start-app', ...wiring({ devDrain: 'none' }), nitroMajor: 3 })
 
     expect(action(plan, 'nitro.config.ts').contents).toContain('asyncContext: true')
-    expect(plan.manual[0]!.snippet).toContain('evlogErrorHandler')
+    expect(plan.manual[0]!.snippet).toContain(`import { evlogErrorHandler } from 'evlog/nitro'\n`)
+  })
+
+  it('imports the tanstack start error middleware from evlog/nitro/v3 on evlog 2', async () => {
+    const root = await project({ 'package.json': '{"name":"start-app"}' })
+
+    const plan = await planWiring({ root, framework: 'tanstack-start', service: 'start-app', ...wiring({ devDrain: 'none', evlogMajor: 2 }), nitroMajor: 3 })
+
+    expect(plan.manual[0]!.snippet).toContain(`import { evlogErrorHandler } from 'evlog/nitro/v3'\n`)
   })
 })
 
@@ -392,7 +412,7 @@ describe('runInit', () => {
 
     const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
 
-    expect(result.install).toMatchObject({ status: 'skipped', command: 'pnpm add evlog' })
+    expect(result.install).toMatchObject({ status: 'skipped', command: `pnpm add ${evlogPackageSpec(VERSION)}` })
   })
 })
 
@@ -412,6 +432,24 @@ describe('detectNitroMajor', () => {
 
   it('tanstack-start is always Nitro v3', () => {
     expect(detectNitroMajor(pkg({}), 'tanstack-start')).toBe(3)
+  })
+})
+
+describe('detectEvlogMajor', () => {
+  it('reads the installed evlog major', () => {
+    expect(detectEvlogMajor('2.33.1')).toBe(2)
+    expect(detectEvlogMajor('3.0.0-beta.2')).toBe(3)
+  })
+
+  it('targets evlog 3 when init installs it', () => {
+    expect(detectEvlogMajor(undefined)).toBe(3)
+  })
+})
+
+describe('evlogPackageSpec', () => {
+  it('installs the beta evlog from a prerelease CLI and the latest one from a release', () => {
+    expect(evlogPackageSpec('1.0.0-beta.3')).toBe('evlog@beta')
+    expect(evlogPackageSpec('1.0.0')).toBe('evlog')
   })
 })
 
@@ -525,7 +563,7 @@ describe('detectPackageManager', () => {
     const root = await project({ 'package.json': '{}' })
 
     expect(detectPackageManager([root])).toBe('npm')
-    expect(installCommand('npm')).toBe('npm install evlog')
+    expect(installCommand('npm')).toBe(`npm install ${evlogPackageSpec(VERSION)}`)
   })
 })
 

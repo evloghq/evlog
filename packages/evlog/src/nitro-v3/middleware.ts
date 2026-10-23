@@ -14,7 +14,7 @@ import { extractErrorStatus } from '../shared/errors'
  * @example TanStack Start
  * ```ts
  * import { createMiddleware } from '@tanstack/react-start'
- * import { evlogErrorHandler } from 'evlog/nitro/v3'
+ * import { evlogErrorHandler } from 'evlog/nitro'
  *
  * const evlogMiddleware = createMiddleware().server(evlogErrorHandler)
  *

@@ -1,5 +1,5 @@
 import { defineConfig } from 'nitro'
-import evlog from 'evlog/nitro/v3'
+import evlog from 'evlog/nitro'
 
 export default defineConfig({
   serverDir: './',

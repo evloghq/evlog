@@ -84,7 +84,8 @@ interface Located<T> {
 /** Bounds how far a name is followed through bindings and re-exports, so a cycle ends. */
 const MAX_HOPS = 8
 const DEFINE_SOURCES = new Set(['evlog', 'evlog/toolkit'])
-const NITRO_MODULE_SOURCES = new Set(['evlog/nitro', 'evlog/nitro/v3'])
+/** evlog 3 names the Nitro 3 module `evlog/nitro` and the nitropack one `evlog/nitro/v2`; evlog 2 names them `evlog/nitro/v3` and `evlog/nitro`. */
+const NITRO_MODULE_SOURCES = new Set(['evlog/nitro', 'evlog/nitro/v2', 'evlog/nitro/v3'])
 const WRAPPERS = new Set(['ParenthesizedExpression', 'TSAsExpression', 'TSSatisfiesExpression', 'TSNonNullExpression', 'TSTypeAssertion'])
 const SNIPPET_LENGTH = 60
 
@@ -267,7 +268,7 @@ class Reader {
     return null
   }
 
-  /** Nuxt's `evlog` key, or the argument of the `evlog/nitro` module in `modules`, written inline or through a named list. */
+  /** Nuxt's `evlog` key, or the argument of the evlog Nitro module in `modules`, written inline or through a named list. */
   moduleOptionsNode({ module, node }: Located<ObjectExpression>): Located<Expression> | null {
     for (const prop of node.properties) {
       if (prop.type !== 'Property') continue
@@ -433,7 +434,7 @@ export function readConfig(file: string, label: (file: string) => string): ReadC
 /**
  * Read the options `nuxt.config` or `nitro.config` passes to the evlog module
  * without running the file: Nuxt's `evlog` key, or the argument of the
- * `evlog/nitro` module in `modules`. `null` when it passes none.
+ * evlog Nitro module in `modules`. `null` when it passes none.
  *
  * @throws a `cli.CONFIG_PARSE_FAILED` error when the file does not parse.
  */

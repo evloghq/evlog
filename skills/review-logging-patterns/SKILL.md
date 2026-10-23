@@ -359,7 +359,7 @@ export const { handle, handleError } = createEvlogHooks({
 ```typescript
 // nitro.config.ts
 import { defineConfig } from 'nitro'
-import evlog from 'evlog/nitro/v3'
+import evlog from 'evlog/nitro'
 
 export default defineConfig({
   modules: [evlog({ env: { service: 'my-api' } })],
@@ -369,7 +369,7 @@ export default defineConfig({
 ```typescript
 // routes/api/checkout.post.ts
 import { defineHandler } from 'nitro/h3'
-import { useLogger } from 'evlog/nitro/v3'
+import { useLogger } from 'evlog/nitro'
 
 export default defineHandler(async (event) => {
   const log = useLogger(event)
@@ -385,7 +385,7 @@ TanStack Start uses Nitro v3. Install evlog and add a `nitro.config.ts`:
 ```typescript
 // nitro.config.ts
 import { defineConfig } from 'nitro'
-import evlog from 'evlog/nitro/v3'
+import evlog from 'evlog/nitro'
 
 export default defineConfig({
   experimental: { asyncContext: true },
@@ -398,7 +398,7 @@ Add the error handling middleware to `__root.tsx`:
 ```typescript
 // src/routes/__root.tsx
 import { createMiddleware } from '@tanstack/react-start'
-import { evlogErrorHandler } from 'evlog/nitro/v3'
+import { evlogErrorHandler } from 'evlog/nitro'
 
 export const Route = createRootRoute({
   server: {
@@ -423,14 +423,14 @@ log.set({ user: { id: 'user_123' } })
 ```typescript
 // nitro.config.ts
 import { defineNitroConfig } from 'nitropack/config'
-import evlog from 'evlog/nitro'
+import evlog from 'evlog/nitro/v2'
 
 export default defineNitroConfig({
   modules: [evlog({ env: { service: 'my-api' } })],
 })
 ```
 
-Import `useLogger` from `evlog/nitro` in routes. On Nitro v2 and v3, an `evlog.config.ts` at the app root is loaded by the module, and the options passed to `evlog()` override it.
+Import `useLogger` from `evlog/nitro/v2` in routes. On Nitro v2 and v3, an `evlog.config.ts` at the app root is loaded by the module, and the options passed to `evlog()` override it.
 
 ### NestJS
 

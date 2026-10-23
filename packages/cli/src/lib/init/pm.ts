@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { VERSION } from '../constants'
 
 const exec = promisify(execFile)
 
@@ -25,8 +26,18 @@ export function detectPackageManager(dirs: string[]): PackageManager {
   return 'npm'
 }
 
+/**
+ * The `evlog` spec init installs. A prerelease CLI installs evlog from `beta`:
+ * until a major is GA, `latest` is the previous one, whose import paths differ.
+ */
+export function evlogPackageSpec(cliVersion: string): string {
+  return cliVersion.includes('-') ? 'evlog@beta' : 'evlog'
+}
+
+const EVLOG_PACKAGE = evlogPackageSpec(VERSION)
+
 /** The command line that adds `evlog`, as the user would type it. */
-export function installCommand(manager: PackageManager, pkg = 'evlog'): string {
+export function installCommand(manager: PackageManager, pkg = EVLOG_PACKAGE): string {
   return manager === 'npm' ? `npm install ${pkg}` : `${manager} add ${pkg}`
 }
 
@@ -34,7 +45,7 @@ export function installCommand(manager: PackageManager, pkg = 'evlog'): string {
 export async function runInstall(
   manager: PackageManager,
   cwd: string,
-  pkg = 'evlog',
+  pkg = EVLOG_PACKAGE,
 ): Promise<{ ok: true } | { ok: false, error: string }> {
   const args = manager === 'npm' ? ['install', pkg] : ['add', pkg]
   try {

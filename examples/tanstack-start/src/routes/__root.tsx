@@ -2,7 +2,7 @@ import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 import { createMiddleware } from '@tanstack/react-start'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
-import { evlogErrorHandler } from 'evlog/nitro/v3'
+import { evlogErrorHandler } from 'evlog/nitro'
 
 import Header from '../components/Header'
 
