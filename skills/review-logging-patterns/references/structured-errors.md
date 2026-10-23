@@ -90,7 +90,7 @@ Caused by: StripeCardError: card_declined
 }
 ```
 
-The Nitro, Nuxt, and SvelteKit handlers return a Nitro-shaped body instead, with `url`, `statusCode`, `statusText`, and `error: true` around the same `message`, `status`, and `data`. Every serializer agrees on the part clients read: `why`, `fix`, and `link` sit under `data`, not at the top level, and neither `internal` nor `stack` is ever included. On the client, `parseError()` flattens both shapes.
+The Nitro, Nuxt, and SvelteKit handlers return a Nitro-shaped body instead, with `url` and `error: true` around the same `message`, `status`, and `data`. Every serializer agrees on the part clients read: `why`, `fix`, and `link` sit under `data`, not at the top level, and neither `internal` nor `stack` is ever included. On the client, `parseError()` flattens both shapes.
 
 ## Field Guidelines
 
@@ -420,7 +420,7 @@ throw createError({
 // HTTP Response:
 // Status: 402
 // Body: {
-//   statusCode: 402,
+//   status: 402,
 //   message: "Payment failed",
 //   data: { why: "Card declined", fix: "Try another card", link: "..." }
 // }

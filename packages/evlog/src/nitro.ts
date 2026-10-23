@@ -311,18 +311,12 @@ export function buildPlainNitroErrorBody(
   const status = extractErrorStatus(error)
   const shortStatus = (error as { statusText?: string }).statusText
     ?? (error as { statusMessage?: string }).statusMessage
-  const rawMessage = error.message || shortStatus || 'Internal Server Error'
-  const sanitize = (text: string) => hide ? 'Internal Server Error' : text
-  const message = sanitize(rawMessage)
-  const statusMessage = sanitize(shortStatus ?? rawMessage)
+  const message = hide ? 'Internal Server Error' : error.message || shortStatus || 'Internal Server Error'
   const { data } = error as { data?: unknown }
 
   return {
     url,
     status,
-    statusCode: status,
-    statusText: message,
-    statusMessage,
     message,
     error: true,
     ...(!hide && data !== undefined && { data }),
@@ -336,13 +330,9 @@ export function buildPlainNitroErrorBody(
 export function serializeEvlogErrorResponse(error: Error, url: string): Record<string, unknown> {
   const status = extractErrorStatus(error)
   const { data } = error as { data?: unknown }
-  const statusMessage = (error as { statusMessage?: string }).statusMessage || error.message
   return {
     url,
     status,
-    statusCode: status,
-    statusText: statusMessage,
-    statusMessage,
     message: error.message,
     error: true,
     ...(data !== undefined && { data }),

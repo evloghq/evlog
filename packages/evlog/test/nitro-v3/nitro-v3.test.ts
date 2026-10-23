@@ -320,12 +320,14 @@ describe.sequential('Nitro v3 Server with evlog', () => {
     const res = await server.fetch(new Request(new URL('/throws-h3-data', server.url)))
 
     expect(res.status).toBe(500)
-    expect(await res.json()).toMatchObject({
-      statusCode: 500,
+    const body = await res.json()
+    expect(body).toMatchObject({
+      status: 500,
       url: '/throws-h3-data',
       error: true,
       message: 'Payment provider rejected the charge',
       data: { orderId: 'ord_1', retryable: true },
     })
+    for (const key of ['statusCode', 'statusText', 'statusMessage']) expect(body).not.toHaveProperty(key)
   })
 })

@@ -103,7 +103,7 @@ describe('nitro-v3 errorHandler', () => {
       expect(response.headers.get('Content-Type')).toBe('application/json')
 
       const body = await readJson(response)
-      expect(body.statusCode).toBe(402)
+      expect(body.status).toBe(402)
       expect(body.message).toBe('Payment failed')
       expect(body.url).toBe('/api/test')
       expect(body.error).toBe(true)
@@ -131,7 +131,7 @@ describe('nitro-v3 errorHandler', () => {
       expect(response.status).toBe(404)
 
       const body = await readJson(response)
-      expect(body.statusCode).toBe(404)
+      expect(body.status).toBe(404)
       expect(body.data).toEqual({ why: 'Resource does not exist' })
     })
 
@@ -176,8 +176,7 @@ describe('nitro-v3 errorHandler', () => {
       expect(response.status).toBe(400)
 
       const body = await readJson(response)
-      expect(body.statusCode).toBe(400)
-      expect(body.statusMessage).toBe('Something went wrong')
+      expect(body.status).toBe(400)
       expect(body.message).toBe('Something went wrong')
       expect(body.url).toBe('/api/test')
       expect(body.error).toBe(true)
@@ -194,7 +193,6 @@ describe('nitro-v3 errorHandler', () => {
 
       const body = await readJson(response)
       expect(body.message).toBe('Internal Server Error')
-      expect(body.statusMessage).toBe('Internal Server Error')
     })
 
     it('preserves data from createError, like Nitro does', async () => {
@@ -218,7 +216,6 @@ describe('nitro-v3 errorHandler', () => {
 
       const body = await readJson(await invokeErrorHandler(error))
       expect(body.message).toBe('Internal Server Error')
-      expect(body.statusMessage).toBe('Internal Server Error')
       expect(body.data).toBeUndefined()
     })
 
@@ -251,7 +248,6 @@ describe('nitro-v3 errorHandler', () => {
 
       const body = await readJson(await invokeErrorHandler(error))
       expect(body.message).toBe('Invalid email format')
-      expect(body.statusMessage).toBe('Invalid email format')
     })
 
     it('skips Nitro default logging for an expected 4xx EvlogError in production', async () => {
@@ -336,7 +332,7 @@ describe('nitro-v3 errorHandler', () => {
       const response = await invokeErrorHandler(evlogError)
 
       expect(response?.status).toBe(402)
-      expect(await readJson(response!)).toMatchObject({ statusCode: 402, data: { why: 'Card declined' } })
+      expect(await readJson(response!)).toMatchObject({ status: 402, data: { why: 'Card declined' } })
     })
   })
 })
