@@ -46,19 +46,14 @@ describe('EvlogError', () => {
   })
 
   describe('HTTP compatibility', () => {
-    it('provides status/statusText properties', () => {
+    it('carries the status as status and the text as message only', () => {
       const error = new EvlogError({ message: 'Not found', status: 404 })
 
       expect(error.status).toBe(404)
-      expect(error.statusText).toBe('Not found')
-    })
-
-    it('provides statusCode/statusMessage aliases', () => {
-      const error = new EvlogError({ message: 'Not found', status: 404 })
-
-      expect(error.statusCode).toBe(404)
-      expect(error.statusMessage).toBe('Not found')
-      expect(error.statusCode).toBe(error.status)
+      expect(error.message).toBe('Not found')
+      expect('statusCode' in error).toBe(false)
+      expect('statusText' in error).toBe(false)
+      expect('statusMessage' in error).toBe(false)
     })
 
     it('provides data getter with structured info', () => {

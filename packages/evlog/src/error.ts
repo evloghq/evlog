@@ -89,33 +89,6 @@ export class EvlogError extends Error {
   }
 
   /**
-   * HTTP status text.
-   *
-   * @deprecated Removed in evlog v3. Use `message` instead.
-   */
-  get statusText(): string {
-    return this.message
-  }
-
-  /**
-   * HTTP status code.
-   *
-   * @deprecated Removed in evlog v3. Use `status` instead.
-   */
-  get statusCode(): number | undefined {
-    return this.status
-  }
-
-  /**
-   * HTTP status message.
-   *
-   * @deprecated Removed in evlog v3. Use `message` instead.
-   */
-  get statusMessage(): string {
-    return this.message
-  }
-
-  /**
    * Structured data for serialization: the guidance fields, merged over the
    * payload passed as `createError({ data })`.
    */
