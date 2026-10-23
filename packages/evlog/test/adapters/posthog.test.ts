@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
-import { createPostHogDrain, createPostHogEventsDrain, sendBatchToPostHog, sendBatchToPostHogEvents, sendToPostHog, sendToPostHogEvents, toPostHogEvent } from '../../src/adapters/posthog'
+import { createPostHogDrain, sendBatchToPostHog, sendBatchToPostHogEvents, sendToPostHog, sendToPostHogEvents, toPostHogEvent } from '../../src/adapters/posthog'
 
 describe('posthog adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -590,7 +590,7 @@ describe('posthog adapter', () => {
     })
   })
 
-  describe('createPostHogEventsDrain', () => {
+  describe('createPostHogDrain in events mode', () => {
     const createDrainContext = (overrides?: Partial<WideEvent>) => ({
       event: createTestEvent(overrides),
     })
@@ -601,7 +601,7 @@ describe('posthog adapter', () => {
     })
 
     it('sends to batch endpoint', async () => {
-      const drain = createPostHogEventsDrain({ apiKey: 'phc_test' })
+      const drain = createPostHogDrain({ mode: 'events', apiKey: 'phc_test' })
       await drain(createDrainContext())
 
       expect(fetchSpy).toHaveBeenCalledTimes(1)
@@ -610,7 +610,7 @@ describe('posthog adapter', () => {
     })
 
     it('supports custom eventName', async () => {
-      const drain = createPostHogEventsDrain({ apiKey: 'phc_test', eventName: 'custom_event' })
+      const drain = createPostHogDrain({ mode: 'events', apiKey: 'phc_test', eventName: 'custom_event' })
       await drain(createDrainContext())
 
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
@@ -619,7 +619,7 @@ describe('posthog adapter', () => {
     })
 
     it('supports custom distinctId', async () => {
-      const drain = createPostHogEventsDrain({ apiKey: 'phc_test', distinctId: 'my-service' })
+      const drain = createPostHogDrain({ mode: 'events', apiKey: 'phc_test', distinctId: 'my-service' })
       await drain(createDrainContext())
 
       const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
@@ -629,7 +629,7 @@ describe('posthog adapter', () => {
 
     it('logs error when apiKey is missing', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const drain = createPostHogEventsDrain()
+      const drain = createPostHogDrain({ mode: 'events' })
       await drain(createDrainContext())
 
       expect(consoleSpy).toHaveBeenCalledWith(
