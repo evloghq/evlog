@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Fastify from 'fastify'
 import { initLogger } from '../../src/logger'
+import { createError } from '../../src/error'
 import type { RequestLogger } from '../../src/types'
 import { evlog, useLogger } from '../../src/fastify/index'
 import {
@@ -85,6 +86,21 @@ describe('evlog/fastify', () => {
     )
     expect(event.user).toEqual({ id: 'u-1' })
     expect(event.db).toEqual({ queries: 3 })
+  })
+
+  it('answers 500 for a thrown EvlogError without a status', async () => {
+    const { drain } = createPipelineSpies()
+    const app = Fastify({ logger: false })
+    await app.register(evlog, { drain })
+    app.get('/api/turn', () => {
+      throw createError({ message: 'Turn could not start', why: 'Agent queue is full' })
+    })
+
+    const res = await app.inject({ method: 'GET', url: '/api/turn' })
+    await waitForDrainCalls(drain)
+
+    expect(res.statusCode).toBe(500)
+    assertHttpEventEmitted(drain, { path: '/api/turn', level: 'error', status: 500 })
   })
 
   it('logs error status when handler throws', async () => {

@@ -449,7 +449,7 @@ import { createError } from 'evlog'
 
 createError({
   message: string   // What happened
-  status?: number   // HTTP status code (default: 500)
+  status?: number   // HTTP status code (unset outside HTTP; the framework answers 500)
   why?: string      // Why it happened
   fix?: string      // How to fix it
   link?: string     // Documentation URL

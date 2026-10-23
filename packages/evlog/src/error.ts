@@ -1,12 +1,9 @@
 import type { ErrorOptions, EvlogErrorData } from './types'
 import { colors, isServer } from './utils'
-import { evlogErrorBrand, isEvlogError as hasEvlogErrorBrand } from './shared/error-brand'
+import { evlogErrorBrand, evlogErrorDataKey, isEvlogError as hasEvlogErrorBrand } from './shared/error-brand'
 
 /** Non-enumerable storage so `JSON.stringify(error)` never exposes internal context */
 const evlogErrorInternalKey = Symbol.for('evlog.error.internal')
-
-/** Non-enumerable storage; the payload reaches the wire through the `data` getter */
-const evlogErrorDataKey = Symbol.for('evlog.error.data')
 
 /**
  * Structured error with context for better debugging
@@ -38,8 +35,11 @@ export class EvlogError extends Error {
 
   /** Stable, machine-readable identifier (e.g. `'PAYMENT_DECLINED'`). */
   readonly code?: string
-  /** HTTP status code */
-  readonly status: number
+  /**
+   * HTTP status code. Unset for an error that is not an HTTP response; the
+   * framework boundary answers 500 for it.
+   */
+  readonly status?: number
   readonly why?: string
   readonly fix?: string
   readonly link?: string
@@ -59,7 +59,7 @@ export class EvlogError extends Error {
 
     this.name = 'EvlogError'
     this.code = opts.code
-    this.status = opts.status ?? 500
+    this.status = opts.status
     this.why = opts.why
     this.fix = opts.fix
     this.link = opts.link
@@ -102,7 +102,7 @@ export class EvlogError extends Error {
    *
    * @deprecated Removed in evlog v3. Use `status` instead.
    */
-  get statusCode(): number {
+  get statusCode(): number | undefined {
     return this.status
   }
 
@@ -173,7 +173,7 @@ export class EvlogError extends Error {
     return {
       name: this.name,
       message: this.message,
-      status: this.status,
+      ...(this.status !== undefined && { status: this.status }),
       ...(data && { data }),
       ...(this.cause instanceof Error && {
         cause: { name: this.cause.name, message: this.cause.message },
@@ -192,7 +192,7 @@ Object.defineProperty(EvlogError.prototype, evlogErrorBrand, {
  * Create a structured error with context for debugging and user-facing messages.
  *
  * @param options - Error message string or full options object
- * @returns EvlogError with HTTP metadata (`status`, `statusText`) and `data`; also includes `statusCode` and `statusMessage` for legacy compatibility
+ * @returns The error to throw, log or reject with. `status` is set only when you pass one; an HTTP boundary answers 500 without it.
  *
  * @example
  * ```ts

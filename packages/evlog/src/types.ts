@@ -1046,7 +1046,7 @@ export interface ErrorOptions {
    * accepts arbitrary strings for ad-hoc errors.
    */
   code?: ErrorCode | (string & {})
-  /** HTTP status code (default: 500) */
+  /** HTTP status code. Unset for an error that is not an HTTP response; the framework boundary answers 500. */
   status?: number
   /** Why this error occurred */
   why?: string

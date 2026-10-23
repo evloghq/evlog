@@ -1,5 +1,5 @@
 import { readErrorField } from '../utils'
-import { isEvlogError } from './error-brand'
+import { evlogErrorDataKey, isEvlogError } from './error-brand'
 
 /**
  * Logged after `name`, `message` and `stack`, before `cause`. The status text
@@ -21,6 +21,15 @@ function defineField(target: Record<string, unknown>, key: string, value: unknow
  */
 function statusOf(error: Error): unknown {
   return readErrorField(error, 'status') ?? readErrorField(error, 'statusCode')
+}
+
+/**
+ * The payload to log. An EvlogError's `data` getter adds `code`, `why`, `fix`
+ * and `link` for the HTTP response; logs carry those at the top level, so they
+ * read the payload as it was passed.
+ */
+function dataOf(error: Error): unknown {
+  return isEvlogError(error) ? (error as unknown as Record<symbol, unknown>)[evlogErrorDataKey] : readErrorField(error, 'data')
 }
 
 /**
@@ -113,7 +122,8 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
       const hidden = payloadFieldsHiddenBy(error)
       const status = statusOf(error)
       if (status !== undefined) serialized.status = status
-      const data = readErrorField(error, 'data')
+      // h3 copies the cause's `data` onto the wrapper; for an EvlogError that copy includes the guidance.
+      const data = isEvlogError(cause) ? undefined : readErrorField(error, 'data')
       if (data !== undefined && !hidden.includes('data')) serialized.data = walk(data, ancestors)
       ancestors.pop()
       return serialized
@@ -126,7 +136,7 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
     }
     const hidden = payloadFieldsHiddenBy(error)
     for (const key of ERROR_FIELDS) {
-      const value = key === 'status' ? statusOf(error) : readErrorField(error, key)
+      const value = key === 'status' ? statusOf(error) : key === 'data' ? dataOf(error) : readErrorField(error, key)
       if (value !== undefined && !hidden.includes(key)) serialized[key] = walk(value, ancestors)
     }
     if (isH3InputOf(error, cause)) {

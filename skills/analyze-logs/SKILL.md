@@ -112,9 +112,9 @@ Each line is a self-contained JSON object (wide event). Key fields:
 | `duration` | `string` | Request duration, human-formatted (`"234ms"`) |
 | `durationMs` | `number` | Request duration in milliseconds. Filter and sort on this one |
 | `requestId` | `string` | Unique request identifier |
-| `error` | `object` | Error details: `name`, `message`, `stack`, `statusCode`, `data` |
-| `error.data.why` | `string` | Human-readable explanation of what went wrong |
-| `error.data.fix` | `string` | Suggested fix for the error |
+| `error` | `object` | Error details: `name`, `message`, `stack`, `code`, `status`, `data` (the payload passed to `createError`) |
+| `error.why` | `string` | Human-readable explanation of what went wrong |
+| `error.fix` | `string` | Suggested fix for the error |
 | `source` | `string` | `client` for browser logs, absent for server logs |
 | `userAgent` | `object` | Parsed browser/OS/device info |
 
@@ -142,8 +142,8 @@ Filter based on the user's question:
 For each relevant event:
 
 1. **What happened**: summarize the `path`, `method`, `status`, `level`
-2. **Why it failed** (errors): read `error.message`, `error.data.why`, and the stack trace
-3. **How to fix**: check `error.data.fix` for suggested remediation
+2. **Why it failed** (errors): read `error.message`, `error.why`, and the stack trace
+3. **How to fix**: check `error.fix` for suggested remediation
 4. **Context**: examine application-specific fields for business context (user info, payment details, etc.)
 5. **Patterns**: look for recurring errors, degrading performance, or correlated failures
 
@@ -191,7 +191,7 @@ Look for: client errors that don't have corresponding server errors (network iss
 ## Important notes
 
 - Each line is a **complete, self-contained event**. Unlike traditional logs, you don't need to correlate multiple lines. One line has all the context for one request.
-- The `error.data.why` and `error.data.fix` fields are evlog-specific structured error fields. When present, they provide the most actionable information.
+- The `error.why` and `error.fix` fields are evlog-specific structured error fields. When present, they provide the most actionable information. Logs written by evlog 2.x also repeat them as `error.data.why` and `error.data.fix`.
 - `duration` is human-formatted with units (e.g. `"706ms"`). `durationMs` is the same duration in milliseconds; filter and sort on `durationMs`.
 - Events with `"source":"client"` originated from browser-side logging and were sent to the server via the HTTP drain endpoint.
 - Log files are `.gitignore`'d automatically. They exist only on the local machine or server where the app runs.

@@ -9,7 +9,7 @@ describe('EvlogError', () => {
 
     expect(error.message).toBe('Something went wrong')
     expect(error.name).toBe('EvlogError')
-    expect(error.status).toBe(500)
+    expect(error.status).toBeUndefined()
     expect(error.why).toBeUndefined()
     expect(error.fix).toBeUndefined()
     expect(error.link).toBeUndefined()
@@ -38,10 +38,11 @@ describe('EvlogError', () => {
     expect(error.code).toBeUndefined()
   })
 
-  it('defaults to 500 status', () => {
+  it('leaves status unset when not provided', () => {
     const error = new EvlogError({ message: 'Server error' })
 
-    expect(error.status).toBe(500)
+    expect(error.status).toBeUndefined()
+    expect(error.toJSON()).not.toHaveProperty('status')
   })
 
   describe('HTTP compatibility', () => {
@@ -308,7 +309,7 @@ describe('createError', () => {
     const error = createError('Quick error')
     expect(error).toBeInstanceOf(EvlogError)
     expect(error.message).toBe('Quick error')
-    expect(error.status).toBe(500)
+    expect(error.status).toBeUndefined()
   })
 
   it('creates EvlogError with options', () => {

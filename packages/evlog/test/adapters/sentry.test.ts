@@ -448,6 +448,13 @@ describe('sentry adapter', () => {
       expect(issues.map(e => e.payload.exception.values[0].value)).toEqual(['boom', 'job failed'])
     })
 
+    it('opens an issue for an error with no HTTP status', async () => {
+      await sendBatchToSentry([createTestEvent({ level: 'error', error: { name: 'EvlogError', message: 'Turn could not start' } })], { dsn, issues: true })
+
+      const [, ...issues] = envelopes()
+      expect(issues.map(e => e.payload.exception.values[0].value)).toEqual(['Turn could not start'])
+    })
+
     it('sends the error stack as frames, oldest call first', () => {
       const stack = [
         'TypeError: Cannot read properties of undefined',
