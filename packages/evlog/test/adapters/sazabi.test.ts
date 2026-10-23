@@ -58,7 +58,7 @@ describe('sazabi adapter', () => {
         resourceAttributes: undefined,
         timeout: 1000,
         retries: 1,
-        recordShape: 'compact',
+        recordShape: undefined,
       })
       expect(otlp.headers).toBeUndefined()
     })

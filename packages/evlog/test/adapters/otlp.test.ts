@@ -85,9 +85,18 @@ describe('otlp adapter', () => {
       expect(record.severityText).toBe('TRACE')
     })
 
-    it('serializes the whole event as the body by default', () => {
-      const event = createTestEvent({ action: 'test', userId: '123' })
+    it('uses the compact shape and the semantic conventions by default', () => {
+      const event = createTestEvent({ method: 'POST', path: '/api/checkout', status: 500, user: { id: '123' } })
       const record = toOTLPLogRecord(event)
+
+      expect(record.body.stringValue).toBe('POST /api/checkout (500)')
+      expect(record.attributes.find(a => a.key === 'user.id')?.value).toEqual({ stringValue: '123' })
+      expect(record.attributes.find(a => a.key === 'http.request.method')?.value).toEqual({ stringValue: 'POST' })
+    })
+
+    it('serializes the whole event as the body in json shape', () => {
+      const event = createTestEvent({ action: 'test', userId: '123' })
+      const record = toOTLPLogRecord(event, 'json')
 
       expect(record.body.stringValue).toBe(JSON.stringify(event))
     })
@@ -192,9 +201,9 @@ describe('otlp adapter', () => {
       expect(record.attributes.find(a => a.key === 'gaps')?.value).toEqual({ stringValue: '[1,null]' })
     })
 
-    it('sends a nested object as one kvlist attribute by default', () => {
+    it('sends a nested object as one kvlist attribute in json shape', () => {
       const event = createTestEvent({ user: { id: '123', name: 'Alice', plan: { seats: 3, trial: false } } })
-      const record = toOTLPLogRecord(event)
+      const record = toOTLPLogRecord(event, 'json')
 
       expect(record.attributes.find(a => a.key === 'user')?.value).toEqual({
         kvlistValue: {
@@ -219,7 +228,7 @@ describe('otlp adapter', () => {
 
     it('drops null and undefined entries inside a kvlist', () => {
       const event = createTestEvent({ user: { id: '123', email: null, name: undefined } })
-      const record = toOTLPLogRecord(event)
+      const record = toOTLPLogRecord(event, 'json')
 
       expect(record.attributes.find(a => a.key === 'user')?.value)
         .toEqual({ kvlistValue: { values: [{ key: 'id', value: { stringValue: '123' } }] } })
@@ -340,8 +349,8 @@ describe('otlp adapter', () => {
         expect(attributes['gen_ai.usage.input_tokens']).toEqual({ intValue: '1200' })
       })
 
-      it('adds none of them by default', () => {
-        const attributes = attributeMap(toOTLPLogRecord(requestEvent, 'compact'))
+      it('adds none of them with semanticConventions: false', () => {
+        const attributes = attributeMap(toOTLPLogRecord(requestEvent, 'compact', { semanticConventions: false }))
 
         expect(Object.keys(attributes).filter(key => key.startsWith('http.') || key.startsWith('gen_ai.'))).toEqual([])
       })

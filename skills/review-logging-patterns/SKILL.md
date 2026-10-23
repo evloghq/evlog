@@ -1003,7 +1003,7 @@ They can also live in `evlog.config.ts`, written with `defineEvlog()`. Nuxt and 
 | Adapter | Import | Env Vars |
 |---------|--------|----------|
 | Axiom | `evlog/axiom` | `AXIOM_API_KEY`, `AXIOM_DATASET` |
-| OTLP | `evlog/otlp` | `OTLP_ENDPOINT` (or the standard `OTEL_EXPORTER_OTLP_[LOGS_]ENDPOINT`, `_HEADERS`, `_COMPRESSION`, `_PROTOCOL`, `OTEL_RESOURCE_ATTRIBUTES`). `protocol: 'http/protobuf'` sends binary protobuf. `semanticConventions: true` adds OTel attribute names (`http.*`, `exception.*`, `gen_ai.*`) |
+| OTLP | `evlog/otlp` | `OTLP_ENDPOINT` (or the standard `OTEL_EXPORTER_OTLP_[LOGS_]ENDPOINT`, `_HEADERS`, `_COMPRESSION`, `_PROTOCOL`, `OTEL_RESOURCE_ATTRIBUTES`). `protocol: 'http/protobuf'` sends binary protobuf. Records default to the `compact` shape with OTel attribute names (`http.*`, `exception.*`, `gen_ai.*`); `recordShape: 'json'` and `semanticConventions: false` restore the 2.x output |
 | HyperDX | `evlog/hyperdx` | `HYPERDX_API_KEY` (optional `HYPERDX_OTLP_ENDPOINT`; defaults to `https://in-otel.hyperdx.io`) |
 | Sazabi | `evlog/sazabi` | `SAZABI_INTAKE_URL` (the log stream's intake URL; its key is part of the URL), optional `SAZABI_SERVICE_NAME` |
 | Grafana Loki | `evlog/loki` | `LOKI_ENDPOINT`, optional `LOKI_API_KEY`, `LOKI_USER` |

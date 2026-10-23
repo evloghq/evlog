@@ -51,8 +51,7 @@ export function toSazabiOTLPEndpoint(endpoint: string): string {
 
 /**
  * Map Sazabi config to {@link OTLPConfig}. Sazabi ingests OTLP/HTTP logs at
- * `<intake URL>/v1/logs`; the key lives in the URL, so no headers are added. Records use the
- * `'compact'` shape unless `recordShape` says otherwise.
+ * `<intake URL>/v1/logs`; the key lives in the URL, so no headers are added.
  */
 export function toSazabiOTLPConfig(config: SazabiConfig): OTLPConfig {
   return {
@@ -61,7 +60,7 @@ export function toSazabiOTLPConfig(config: SazabiConfig): OTLPConfig {
     resourceAttributes: config.resourceAttributes,
     timeout: config.timeout,
     retries: config.retries,
-    recordShape: config.recordShape ?? 'compact',
+    recordShape: config.recordShape,
   }
 }
 

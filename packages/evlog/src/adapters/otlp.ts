@@ -16,7 +16,7 @@ import { OTEL_SEVERITY_NUMBER, OTEL_SEVERITY_TEXT } from '../shared/severity'
  * - `'compact'` — body is a one-line summary; nested fields flatten to dotted
  *   attributes (`user.id`), which is what backends facet and filter on.
  *
- * `'compact'` becomes the default in the next major.
+ * Default: `'compact'`.
  */
 export type OTLPRecordShape = 'json' | 'compact'
 
@@ -27,7 +27,7 @@ export interface OTLPConfig {
   /** OTLP HTTP endpoint (e.g., http://localhost:4318) */
   endpoint: string
   /**
-   * Log record shape. Default: `'json'`.
+   * Log record shape. Default: `'compact'`.
    * @see {@link OTLPRecordShape}
    */
   recordShape?: OTLPRecordShape
@@ -39,7 +39,7 @@ export interface OTLPConfig {
    * Also emit OpenTelemetry semantic convention attributes (`http.request.method`,
    * `url.path`, `http.response.status_code`, `exception.*`, `gen_ai.*`) and the
    * `deployment.environment.name` resource attribute, next to the evlog field names.
-   * Default: `false`. Becomes the default in the next major.
+   * Default: `true`. Set `false` to send the evlog field names only.
    */
   semanticConventions?: boolean
   /** Custom headers (e.g., for authentication) */
@@ -230,9 +230,9 @@ export interface OTLPLogRecordOptions {
 /**
  * Convert an evlog WideEvent to an OTLP LogRecord.
  *
- * @param shape See {@link OTLPRecordShape}. Defaults to `'json'`.
+ * @param shape See {@link OTLPRecordShape}. Defaults to `'compact'`.
  */
-export function toOTLPLogRecord(event: WideEvent, shape: OTLPRecordShape = 'json', options: OTLPLogRecordOptions = {}): OTLPLogRecord {
+export function toOTLPLogRecord(event: WideEvent, shape: OTLPRecordShape = 'compact', options: OTLPLogRecordOptions = {}): OTLPLogRecord {
   const timestamp = new Date(event.timestamp).getTime() * 1_000_000 // Convert to nanoseconds
 
   const { level, ...rest } = event
@@ -259,7 +259,7 @@ export function toOTLPLogRecord(event: WideEvent, shape: OTLPRecordShape = 'json
       }
     }
   }
-  if (options.semanticConventions) pushSemanticConventionAttributes(event, attributes)
+  if (options.semanticConventions !== false) pushSemanticConventionAttributes(event, attributes)
 
   const record: OTLPLogRecord = {
     timeUnixNano: String(timestamp),
@@ -293,7 +293,7 @@ function buildResourceAttributes(
   attributes.set('service.name', config.serviceName ?? event.service)
   if (event.environment) {
     attributes.set('deployment.environment', event.environment)
-    if (config.semanticConventions) attributes.set('deployment.environment.name', event.environment)
+    if (config.semanticConventions !== false) attributes.set('deployment.environment.name', event.environment)
   }
   if (event.version) attributes.set('service.version', event.version)
   if (event.region) attributes.set('cloud.region', event.region)

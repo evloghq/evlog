@@ -140,6 +140,7 @@ describe('otlp protobuf encoding', () => {
     await sendBatchToOTLP([createTestEvent({ traceId: TRACE_ID, spanId: SPAN_ID, method: 'POST' })], {
       endpoint: 'http://localhost:4318',
       protocol: 'http/protobuf',
+      recordShape: 'json',
     })
 
     const { resourceAttributes, scope, record } = firstRecord(sentBody())
@@ -175,7 +176,7 @@ describe('otlp protobuf encoding', () => {
       user: { id: 'usr_1', plan: { seats: 3 } },
     })
 
-    await sendBatchToOTLP([event], { endpoint: 'http://localhost:4318', protocol: 'http/protobuf' })
+    await sendBatchToOTLP([event], { endpoint: 'http://localhost:4318', protocol: 'http/protobuf', recordShape: 'json' })
     const attributes = bytesOf(firstRecord(sentBody()).record, 6).map(keyValue)
 
     expect(attributes).toEqual(expect.arrayContaining([

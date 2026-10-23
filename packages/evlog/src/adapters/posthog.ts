@@ -58,7 +58,7 @@ export interface PostHogConfig {
    */
   sessionIdField?: string
   /**
-   * Record shape. Default: `'json'`.
+   * Record shape. Default: `'compact'`.
    *
    * In `'events'` mode, `'compact'` flattens nested properties into dotted
    * keys (`ai.costUsd`), which is what the PostHog UI filters and breaks down
@@ -159,7 +159,7 @@ function withPostHogIdentity(event: WideEvent, config: PostHogConfig): WideEvent
 export function toPostHogEvent(event: WideEvent, config: PostHogConfig): PostHogEvent {
   const { timestamp, level, service, ...rest } = event
   const distinctId = resolveDistinctId(event, config)
-  const fields = config.recordShape === 'compact' ? flattenRecord(rest) : rest
+  const fields = config.recordShape === 'json' ? rest : flattenRecord(rest)
   return {
     event: config.eventName ?? 'evlog_wide_event',
     distinct_id: distinctId ?? service,
