@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NitroApp } from 'nitropack/types'
+import { createHooks } from 'hookable'
 import { getHeaders } from 'h3'
 import type { DrainContext, EnrichContext, ServerEvent, WideEvent } from '../../src/types'
 import { defined } from '../helpers/defined'
@@ -292,5 +293,56 @@ describe('nitro plugin - enrichment pipeline (T7)', () => {
 
     resolveDrain()
     await slowDrain
+  })
+})
+
+describe('nitro plugin - callHook may return undefined (hookable 6)', () => {
+  const emittedEvent: WideEvent = {
+    timestamp: new Date().toISOString(),
+    level: 'info',
+    service: 'test',
+    environment: 'test',
+  }
+  const mockEvent: ServerEvent = {
+    method: 'POST',
+    path: '/api/test',
+    context: {},
+  }
+
+  beforeEach(() => {
+    initLogger({ pretty: false })
+    vi.mocked(getHeaders).mockReturnValue({})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('resolves when no evlog:drain hook is registered', async () => {
+    const hooks = createHooks()
+
+    await expect(callEnrichAndDrain(asNitroApp(hooks), emittedEvent, mockEvent)).resolves.toBeUndefined()
+  })
+
+  it('runs a synchronous evlog:drain hook without throwing', async () => {
+    const hooks = createHooks()
+    const drained: DrainContext[] = []
+    hooks.hook('evlog:drain', (ctx: DrainContext) => {
+      drained.push(ctx)
+    })
+
+    await expect(callEnrichAndDrain(asNitroApp(hooks), emittedEvent, mockEvent)).resolves.toBeUndefined()
+    expect(drained).toHaveLength(1)
+  })
+
+  it('logs a synchronous evlog:drain error instead of throwing', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const hooks = createHooks()
+    hooks.hook('evlog:drain', () => {
+      throw new Error('sync drain boom')
+    })
+
+    await expect(callEnrichAndDrain(asNitroApp(hooks), emittedEvent, mockEvent)).resolves.toBeUndefined()
+    expect(consoleSpy).toHaveBeenCalledWith('[evlog] drain failed:', expect.any(Error))
   })
 })

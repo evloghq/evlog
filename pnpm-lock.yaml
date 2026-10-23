@@ -1103,6 +1103,9 @@ importers:
       happy-dom:
         specifier: ^20.14.5
         version: 20.14.5
+      hookable:
+        specifier: ^6.1.2
+        version: 6.1.2
       magic-string:
         specifier: ^0.30.21
         version: 0.30.21
