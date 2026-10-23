@@ -89,7 +89,7 @@ npm install evlog
 
 ## Configure once
 
-Every option lives in `evlog.config.ts` at the root of your app. `npx evlog init` writes it for you:
+Every option lives in `evlog.config.ts` at the root of your app. `pnpm dlx evlog init` writes it for you:
 
 ```typescript
 // evlog.config.ts
@@ -531,7 +531,7 @@ In production (`pretty: false`), logs are emitted as JSON for machine parsing.
 evlog ships an `evlog` executable, still early, that scores what your app can tell you when something goes wrong. It reads your project on disk, with no traffic and no instrumentation, finds every entry point, and names the ones to fix first. Worth trying once you have anything wired; hand the report to an agent if you like.
 
 ```bash
-npx evlog map
+pnpm dlx evlog map
 # or: pnpm evlog map
 ```
 
@@ -566,7 +566,7 @@ evlog provides [Agent Skills](https://www.evlog.dev/reference/agent-skills) to h
 ### Installation
 
 ```bash
-npx skills add https://www.evlog.dev
+pnpm dlx skills add https://www.evlog.dev
 ```
 
 ### What it does
@@ -576,7 +576,7 @@ Once installed, your AI assistant will:
 - Help refactor scattered `console.log` calls into structured events
 - Guide you to use `createError()` for self-documenting errors
 - Ensure proper use of `useLogger(event)` in Nuxt/Nitro routes
-- Optionally run [`evlog map`](https://www.evlog.dev/cli/map) (`npx evlog map`) to score dark entry points. Early, worth trying
+- Optionally run [`evlog map`](https://www.evlog.dev/cli/map) (`pnpm dlx evlog map`) to score dark entry points. Early, worth trying
 
 ### Examples
 

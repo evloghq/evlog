@@ -48,13 +48,12 @@ const integration = defineFrameworkIntegration<SvelteKitRequestEvent>({
 
 /**
  * SvelteKit `HandleServerError` signature — avoids a hard dependency on `@sveltejs/kit`.
+ * Kit 2 passes `status` and `message`; Kit 3 passes a `kind` discriminant instead.
  */
 type SvelteKitHandleServerError = (input: {
   error: unknown
   event: { request: Request; url: URL; locals: Record<string, any> }
-  status: number
-  message: string
-}) => MaybePromise<void | AppError>
+} & ({ kind: string } | { status: number; message: string })) => MaybePromise<void | AppError>
 
 type MaybePromise<T> = T | Promise<T>
 
@@ -203,8 +202,8 @@ export function evlog(options: EvlogSvelteKitOptions = {}): SvelteKitHandle {
  * Create an evlog error handler for SvelteKit.
  *
  * Logs unhandled errors via `event.locals.log` (if available) and returns
- * structured error responses for `EvlogError` instances. For non-evlog errors,
- * returns a generic error response with sanitized messages in production.
+ * structured error responses for `EvlogError` instances. Other errors keep
+ * SvelteKit's own status and message. Supports SvelteKit 2 and 3.
  *
  * @example
  * ```ts
@@ -216,7 +215,8 @@ export function evlog(options: EvlogSvelteKitOptions = {}): SvelteKitHandle {
  * ```
  */
 export function evlogHandleError(): SvelteKitHandleServerError {
-  return ({ error, event, status, message }) => {
+  return (input) => {
+    const { error, event } = input
     const logger = isRequestLogger(event.locals.log) ? event.locals.log : undefined
 
     if (logger && error instanceof Error) {
@@ -229,13 +229,15 @@ export function evlogHandleError(): SvelteKitHandleServerError {
       const errorStatus = extractErrorStatus(evlogError)
       const response = serializeEvlogErrorResponse(evlogError, event.url.pathname)
       return {
-        message: typeof response.message === 'string' ? response.message : message,
+        message: evlogError.message,
         status: errorStatus,
         ...readEvlogResponseData(response),
       }
     }
 
-    return { message, status }
+    // Kit 3 fills in status and message itself; its input getters for them are deprecated
+    if ('kind' in input) return
+    return { message: input.message, status: input.status }
   }
 }
 

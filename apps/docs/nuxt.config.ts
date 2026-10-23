@@ -114,6 +114,11 @@ export default defineNuxtConfig({
             href: 'https://www.npmjs.com/package/evlog',
           },
           {
+            title: 'Docs MCP server',
+            description: 'Search and read this documentation from Cursor, Claude Code, or VS Code over streamable HTTP at https://www.evlog.dev/mcp.',
+            href: 'https://www.evlog.dev/reference/mcp',
+          },
+          {
             title: 'Agent skills index',
             description: 'Skills published by this site, following the /.well-known/skills convention.',
             href: 'https://www.evlog.dev/.well-known/skills/index.json',
@@ -160,6 +165,12 @@ export default defineNuxtConfig({
         contentCollection: 'docs',
         contentFilters: [{ field: 'path', operator: 'LIKE', value: '/reference/%' }],
       },
+      {
+        title: 'Compare',
+        description: 'How evlog compares with Pino, Winston, Consola, LogTape, and LogLayer, and how it connects to OpenTelemetry.',
+        contentCollection: 'docs',
+        contentFilters: [{ field: 'path', operator: 'LIKE', value: '/compare/%' }],
+      },
     ],
     full: {
       title: 'evlog - full documentation',
@@ -189,6 +200,8 @@ export default defineNuxtConfig({
 
   mcp: {
     name: 'evlog MCP',
+    // A browser opening /mcp lands on the page that explains how to connect
+    browserRedirect: '/reference/mcp',
   },
 
   content: {

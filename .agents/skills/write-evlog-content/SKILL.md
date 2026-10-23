@@ -27,7 +27,7 @@ references/
     machine.md      skills and AGENTS.md, the surfaces an agent acts on
   ai-tells.md     the tell corpus, each tell with its legitimate twin
   terminology.md  the names evlog gave its own parts (U-15)
-  landscape/      what pino, winston, consola, and OpenTelemetry actually do (U-12)
+  landscape/      what pino, winston, consola, LogTape, LogLayer, and OpenTelemetry actually do (U-12)
   surfaces/       what each surface owes its reader
     docs.md  blog.md  landing.md  readme.md  skill.md  agents.md  changeset.md
   samples.md      evlog pages that read right, and why. What the tells must not flag
@@ -91,7 +91,7 @@ Then, in order:
 2. **Put every rhythm candidate next to its twin.** Each tell in `ai-tells.md` ships `Reads generated` and `Reads legitimate`. Almost every one has a lawful twin in reference documentation: a required and optional field list is a complement set, three drains listed is a rule of three, uniform sentence length is the register of an API page. Say which side the candidate is nearer. If it is nearer the twin, drop it. If it genuinely sits between, keep it and name what made it survive.
 3. **Check it against `samples.md`.** These are evlog pages that read right. The test that decides most borderline cases: does the line deliver a fact, a number, a mechanism, or a decision? A short closer that lands a measurement is voice. The same closer restating the paragraph is a tell.
 4. **Verify what the scanner flagged as drift.** Every symbol in backticks that the scanner could not find in `packages/evlog/src` is either a doc that outran a rename or a false hit on prose. Read the source before writing the finding.
-5. **Check every comparison against its dossier.** A `U-12` candidate means a sentence claims something about pino, winston, consola, or OpenTelemetry with nothing behind it. Open `landscape/<tool>.md`. If the claim is not in the dossier, it is unverified, and unverified is a finding whether or not the claim is true.
+5. **Check every comparison against its dossier.** A `U-12` candidate means a sentence claims something about pino, winston, consola, LogTape, LogLayer, or OpenTelemetry with nothing behind it. Open `landscape/<tool>.md`. If the claim is not in the dossier, it is unverified, and unverified is a finding whether or not the claim is true.
 6. **Judge the structure yourself.** Header template lock, paragraph-rhythm uniformity, and a page that never lets the reader do anything are invisible to a scanner.
 
 Every finding carries a rule id or a tell id, a verbatim excerpt, and one line on what it costs the reader. A finding that cites neither is taste, and taste does not ship.

@@ -222,6 +222,8 @@ export const ALTERNATIVES = [
   'winston',
   'bunyan',
   'consola',
+  'logtape',
+  'loglayer',
   'signale',
   'log4js',
   'roarr',

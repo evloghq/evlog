@@ -187,6 +187,35 @@ describe('evlog/effect drains', () => {
     expect(log).toMatchObject({ trace_id: wide.traceId, level: 'error' })
   })
 
+  it('gives the Sentry issue of a failed unit the trace id of its wide event', async () => {
+    const fetchSpy = mockFetch()
+    const { drain: spy } = createPipelineSpies()
+    const sentry = createSentryDrain({ dsn: 'https://public@o0.ingest.sentry.io/123', issues: true })
+
+    await Effect.runPromiseExit(failingTurn.pipe(withLogger('turn', {
+      drain: async (ctx) => {
+        await spy(ctx)
+        await sentry(ctx)
+      },
+    })))
+
+    const wide = getDrainCallArg(defined(spy.mock.calls[0], 'drain call')).event
+    const items = Array.from({ length: fetchSpy.mock.calls.length }, (_, index) => {
+      const [, item, payload] = String(getFetchCall(fetchSpy, index).init.body).split('\n')
+      return {
+        type: JSON.parse(defined(item, 'item header')).type as string,
+        payload: JSON.parse(defined(payload, 'payload')),
+      }
+    })
+    const issue = defined(items.find(item => item.type === 'event'), 'error event').payload
+    const [log] = defined(items.find(item => item.type === 'log'), 'log').payload.items
+
+    expect(wide.traceId).toMatch(/^[\da-f]{32}$/)
+    expect(issue.contexts.trace).toMatchObject({ trace_id: wide.traceId, span_id: wide.spanId })
+    expect(issue.exception.values[0]).toMatchObject({ value: 'model timed out' })
+    expect(log.trace_id).toBe(wide.traceId)
+  })
+
   it('ships drains through waitUntil on Workers', async () => {
     const fetchSpy = mockFetch()
     const waitUntil = vi.fn<(promise: Promise<unknown>) => void>()
