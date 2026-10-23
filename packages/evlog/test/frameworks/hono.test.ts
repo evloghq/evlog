@@ -151,8 +151,10 @@ describe('evlog/hono', () => {
     expect(event.error).toMatchObject({
       name: 'EvlogError',
       message: 'Payment failed',
-      data: { why: 'Card declined by issuer', orderId: 'ord_1', retryable: true },
+      why: 'Card declined by issuer',
+      data: { orderId: 'ord_1', retryable: true },
     })
+    expect(event.error.data).not.toHaveProperty('why')
   })
 
   it('records the response status onError returned, not the status of the error', async () => {

@@ -1,12 +1,9 @@
 import type { ErrorOptions, EvlogErrorData } from './types'
 import { colors, isServer } from './utils'
-import { evlogErrorBrand, isEvlogError as hasEvlogErrorBrand } from './shared/error-brand'
+import { evlogErrorBrand, evlogErrorDataKey, isEvlogError as hasEvlogErrorBrand } from './shared/error-brand'
 
 /** Non-enumerable storage so `JSON.stringify(error)` never exposes internal context */
 const evlogErrorInternalKey = Symbol.for('evlog.error.internal')
-
-/** Non-enumerable storage; the payload reaches the wire through the `data` getter */
-const evlogErrorDataKey = Symbol.for('evlog.error.data')
 
 /**
  * Structured error with context for better debugging
@@ -195,7 +192,7 @@ Object.defineProperty(EvlogError.prototype, evlogErrorBrand, {
  * Create a structured error with context for debugging and user-facing messages.
  *
  * @param options - Error message string or full options object
- * @returns EvlogError with HTTP metadata (`status`, `statusText`) and `data`; also includes `statusCode` and `statusMessage` for legacy compatibility
+ * @returns The error to throw, log or reject with. `status` is set only when you pass one; an HTTP boundary answers 500 without it.
  *
  * @example
  * ```ts

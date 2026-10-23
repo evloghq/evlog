@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { createError as h3CreateError } from 'h3'
+import { createError } from '../../src/error'
 import { createErrorSerializer } from '../../src/shared/serialize-error'
 
 const { serializeErrorsIn } = createErrorSerializer()
@@ -54,5 +56,30 @@ describe('serializeErrorsIn', () => {
     expect(result.self).toBe('[Circular]')
     expect(result.a).toBe(shared)
     expect(result.b).toBe(shared)
+  })
+
+  describe('EvlogError guidance', () => {
+    const guided = () => createError({ code: 'PAYMENT_DECLINED', message: 'Payment failed', status: 402, why: 'Card declined', fix: 'Try another card', link: 'https://example.test', data: { retryAfter: 30 } })
+
+    it('logs code, why, fix and link once, at the top level, and data as the payload only', () => {
+      const { error } = serializeErrorsIn({ error: guided() }) as { error: Record<string, unknown> }
+
+      expect(error).toMatchObject({ code: 'PAYMENT_DECLINED', status: 402, why: 'Card declined', fix: 'Try another card', link: 'https://example.test' })
+      expect(error.data).toEqual({ retryAfter: 30 })
+    })
+
+    it('logs no data when the error carries only guidance', () => {
+      const { error } = serializeErrorsIn({ error: createError({ message: 'Payment failed', why: 'Card declined' }) }) as { error: Record<string, unknown> }
+
+      expect(error.why).toBe('Card declined')
+      expect(error).not.toHaveProperty('data')
+    })
+
+    it('logs the guidance once when h3 wraps the error', () => {
+      const { error } = serializeErrorsIn({ error: h3CreateError(guided()) }) as { error: Record<string, unknown> }
+
+      expect(error).toMatchObject({ why: 'Card declined', fix: 'Try another card', status: 402 })
+      expect(error.data).toEqual({ retryAfter: 30 })
+    })
   })
 })

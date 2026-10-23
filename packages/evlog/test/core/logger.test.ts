@@ -329,7 +329,6 @@ describe('log', () => {
       status: 402,
       why: 'Card declined by the issuer',
       fix: 'Use a different payment method',
-      data: { why: 'Card declined by the issuer', fix: 'Use a different payment method' },
     })
     expect(serialized).not.toHaveProperty('cause')
   })
