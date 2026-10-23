@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DrainContext } from '../../src/types'
+import { EvlogError } from '../../src/error'
 import { initLogger } from '../../src/logger'
 import { createDrainPipeline } from '../../src/pipeline'
 import { globallyRedacted } from '../../src/redact'
@@ -177,6 +178,42 @@ describe('createMiddlewareLogger', () => {
       method: 'GET',
       duration: expect.any(Number),
     }))
+  })
+
+  describe('tail sampling on error status', () => {
+    beforeEach(() => {
+      // Head sampling drops every error, so only a tail keep rule can emit one.
+      initLogger({
+        env: { service: 'test-app' },
+        pretty: false,
+        sampling: { rates: { error: 0 }, keep: [{ status: 500 }] },
+      })
+    })
+
+    it('keeps an error with no status the same way as a 500', async () => {
+      const { finish } = createMiddlewareLogger({ method: 'POST', path: '/api/job' })
+
+      const event = defined(await finish({ error: new EvlogError({ message: 'Turn could not start' }) }), 'finish event')
+
+      expect(event.status).toBe(500)
+      expect(event.error).not.toHaveProperty('status')
+    })
+
+    it('keeps a plain Error the same way as a 500', async () => {
+      const { finish } = createMiddlewareLogger({ method: 'POST', path: '/api/job' })
+
+      const event = defined(await finish({ error: new Error('boom') }), 'finish event')
+
+      expect(event.status).toBe(500)
+    })
+
+    it('drops an error whose explicit status is below the keep threshold', async () => {
+      const { finish } = createMiddlewareLogger({ method: 'POST', path: '/api/job' })
+
+      const event = await finish({ error: new EvlogError({ message: 'Not found', status: 404 }) })
+
+      expect(event).toBeNull()
+    })
   })
 
   it('returns noop when logging is disabled', () => {
