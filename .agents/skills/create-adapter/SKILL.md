@@ -58,8 +58,6 @@ Standard option naming (use these exact names):
 | Request timeout (ms) | `timeout` |
 | Retry attempts on transient failures | `retries` |
 
-If a service historically used a different name (`token`, `sourceToken`, …) keep it as a deprecated alias via `applyDeprecatedAlias`. See Axiom and Better Stack for the pattern.
-
 ## Step 1: Adapter Source: built on `defineHttpDrain`
 
 Create `packages/evlog/src/adapters/{name}.ts`. Read [references/adapter-template.md](references/adapter-template.md) for the full annotated template. `loki.ts` and `clickhouse.ts` are the most recent reference implementations.
@@ -74,7 +72,7 @@ Key rules:
 - **Single factory.** Export one `create{Name}Drain(overrides?: Partial<{Name}Config>)`. No dual-API factories: if a service has multiple ingest modes (logs vs events), expose them via a `mode` option (see PostHog).
 - **No HTTP code in the adapter.** Never call `fetch` directly. If the service truly needs custom transport (binary envelopes, non-HTTP), use `defineDrain` from `../shared/drain` instead, see `fs.ts` and `memory.ts`.
 - **Encode parity.** The standalone `sendTo{Name}` / `sendBatchTo{Name}` helpers must reuse the same private `encode{Name}Request()` and go through `sendEncodedDrainRequest(request, { label, source, timeout, retries })`, never a separate fetch path. `test/adapters/encode-parity.test.ts` pins this for a subset of adapters; add the new one to it (not every existing adapter is registered there yet, and that is a gap, not a license to skip).
-- **No bespoke config resolution.** Always go through `resolveAdapterConfig`. Deprecated aliases (`token` → `apiKey`) go through `applyDeprecatedAlias`.
+- **No bespoke config resolution.** Always go through `resolveAdapterConfig`.
 - **Exported converters.** If the service needs a specific event shape, export `to{Name}Event()` / `build{Name}Payload()` helpers so they're testable independently.
 - **Edge-safe.** Adapters run on Cloudflare Workers: no `Buffer` (use `TextEncoder` + `btoa`, see `loki.ts`), no Node-only APIs. `fs.ts` shows the `isEdgeRuntime()` guard pattern when a runtime genuinely can't be supported.
 

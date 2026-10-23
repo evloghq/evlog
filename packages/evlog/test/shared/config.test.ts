@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyDeprecatedAlias, formatPublicEnvKeys } from '../../src/shared/config'
-import { enableDeprecationWarnings } from '../helpers/deprecations'
+import { describe, expect, it } from 'vitest'
+import { formatPublicEnvKeys } from '../../src/shared/config'
 
 describe('formatPublicEnvKeys', () => {
   it('drops NUXT_* aliases and keeps canonical names', () => {
@@ -23,54 +22,5 @@ describe('formatPublicEnvKeys', () => {
   it('falls back to NUXT_* when no public keys exist', () => {
     expect(formatPublicEnvKeys(['NUXT_ONLY_KEY']))
       .toBe('NUXT_ONLY_KEY')
-  })
-})
-
-describe('applyDeprecatedAlias', () => {
-  beforeEach(enableDeprecationWarnings)
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-    vi.unstubAllEnvs()
-  })
-
-  it('warns about the deprecated config field only', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    applyDeprecatedAlias(
-      { sourceToken: 'legacy' },
-      {
-        adapter: 'test-config-warn',
-        from: 'sourceToken',
-        to: 'apiKey',
-      },
-    )
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[evlog/test-config-warn] \'sourceToken\' is deprecated and removed in v3, use \'apiKey\' instead.',
-    )
-  })
-
-  it('copies the deprecated value onto the replacement', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const result = applyDeprecatedAlias(
-      { token: 'xaat-legacy' },
-      {
-        adapter: 'test-config-copy',
-        from: 'token',
-        to: 'apiKey',
-      },
-    )
-    expect(result).toEqual({ token: 'xaat-legacy', apiKey: 'xaat-legacy' })
-  })
-
-  it('warns only once per adapter/field pair', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const opts = {
-      adapter: 'test-config-once',
-      from: 'sourceToken' as const,
-      to: 'apiKey' as const,
-    }
-    applyDeprecatedAlias({ sourceToken: 'a' }, opts)
-    applyDeprecatedAlias({ sourceToken: 'b' }, opts)
-    expect(warnSpy).toHaveBeenCalledOnce()
   })
 })

@@ -9,7 +9,7 @@
  * The mode is detected at runtime by a preflight APL query.
  *
  * Required env vars:
- *   - AXIOM_TOKEN (or AXIOM_API_KEY)
+ *   - AXIOM_API_KEY
  *   - AXIOM_DATASET
  *   - AXIOM_ORG_ID (required for Personal Access Tokens, optional otherwise)
  */
@@ -64,8 +64,8 @@ function rowCount(response: AplResponse): number {
   return response.tables?.[0]?.columns?.[0]?.length ?? 0
 }
 
-describeIfEnv('axiom e2e', ['AXIOM_TOKEN', 'AXIOM_DATASET'], () => {
-  const apiKey = (readEnv('AXIOM_TOKEN') ?? readEnv('AXIOM_API_KEY'))!
+describeIfEnv('axiom e2e', ['AXIOM_API_KEY', 'AXIOM_DATASET'], () => {
+  const apiKey = readEnv('AXIOM_API_KEY')!
   const dataset = readEnv('AXIOM_DATASET')!
   const orgId = readEnv('AXIOM_ORG_ID')
   let canQuery = false

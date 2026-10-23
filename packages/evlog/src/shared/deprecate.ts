@@ -27,19 +27,3 @@ function isDeprecationWarningSilenced(): boolean {
   if (env.VITEST || env.JEST_WORKER_ID) return true
   return env.EVLOG_NO_DEPRECATION_WARNINGS === '1' || env.EVLOG_NO_DEPRECATION_WARNINGS === 'true'
 }
-
-/**
- * Warn once when a deprecated env var is set. `envNames` lists every name the
- * variable used to be read under, `NUXT_*` included; the message names the
- * public one.
- */
-export function warnDeprecatedEnvVar(adapter: string, envNames: readonly string[], replacement: string): void {
-  if (typeof process === 'undefined') return
-  const isSet = envNames.some(name => process.env[name] !== undefined && process.env[name] !== '')
-  if (!isSet) return
-  const publicName = envNames.find(name => !name.startsWith('NUXT_')) ?? ''
-  warnDeprecated(
-    `${adapter}:env:${publicName}`,
-    `[evlog/${adapter}] ${publicName} is deprecated and ignored in v3. Rename it to ${replacement}.`,
-  )
-}

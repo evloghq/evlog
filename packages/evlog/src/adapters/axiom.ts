@@ -1,7 +1,6 @@
 import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
-import { applyDeprecatedAlias, formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
-import { warnDeprecatedEnvVar } from '../shared/deprecate'
+import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
 
@@ -14,10 +13,6 @@ interface BaseAxiomConfig {
    * @example `xaat-...`
    */
   apiKey: string
-  /**
-   * @deprecated Removed in evlog v3. Use `apiKey` instead.
-   */
-  token?: string
   /** Organization ID (required for Personal Access Tokens). */
   orgId?: string
   /** Request timeout in milliseconds. Default: 5000 */
@@ -54,22 +49,12 @@ type ResolvedAxiomConfig = BaseAxiomConfig & {
 const AXIOM_FIELDS: ConfigField<ResolvedAxiomConfig>[] = [
   { key: 'dataset', env: ['NUXT_AXIOM_DATASET', 'AXIOM_DATASET'] },
   { key: 'apiKey', env: ['NUXT_AXIOM_API_KEY', 'AXIOM_API_KEY'] },
-  // Deprecated env var names — resolved as a fallback for `apiKey` below.
-  { key: 'token', env: ['NUXT_AXIOM_TOKEN', 'AXIOM_TOKEN'] },
   { key: 'orgId', env: ['NUXT_AXIOM_ORG_ID', 'AXIOM_ORG_ID'] },
   { key: 'edgeUrl', env: ['NUXT_AXIOM_EDGE_URL', 'AXIOM_EDGE_URL'] },
   { key: 'baseUrl', env: ['NUXT_AXIOM_URL', 'AXIOM_URL'] },
   { key: 'timeout' },
   { key: 'retries' },
 ]
-
-function applyApiKeyAlias(config: Partial<ResolvedAxiomConfig>): Partial<ResolvedAxiomConfig> {
-  return applyDeprecatedAlias(config, {
-    adapter: 'axiom',
-    from: 'token',
-    to: 'apiKey',
-  })
-}
 
 /**
  * Create a drain function for sending logs to Axiom.
@@ -78,7 +63,7 @@ function applyApiKeyAlias(config: Partial<ResolvedAxiomConfig>): Partial<Resolve
  * 1. Overrides passed to createAxiomDrain()
  * 2. runtimeConfig.evlog.axiom
  * 3. runtimeConfig.axiom
- * 4. Environment variables: AXIOM_API_KEY, AXIOM_DATASET (or legacy `AXIOM_TOKEN`)
+ * 4. Environment variables: AXIOM_API_KEY, AXIOM_DATASET
  *
  * @example
  * ```ts
@@ -90,16 +75,14 @@ function applyApiKeyAlias(config: Partial<ResolvedAxiomConfig>): Partial<Resolve
  * ```
  */
 export function createAxiomDrain(overrides?: Partial<AxiomConfig>) {
-  warnDeprecatedEnvVar('axiom', ['NUXT_AXIOM_TOKEN', 'AXIOM_TOKEN'], 'AXIOM_API_KEY')
   return defineHttpDrain<AxiomConfig>({
     name: 'axiom',
     resolve: async () => {
-      const resolved = await resolveAdapterConfig<ResolvedAxiomConfig>(
+      const config = await resolveAdapterConfig<ResolvedAxiomConfig>(
         'axiom',
         AXIOM_FIELDS,
         overrides as Partial<ResolvedAxiomConfig>,
       )
-      const config = applyApiKeyAlias(resolved)
       if (!config.dataset || !config.apiKey) {
         console.error(`[evlog/axiom] Missing dataset or apiKey. Set ${formatPublicEnvKeys(['NUXT_AXIOM_API_KEY', 'AXIOM_API_KEY'], ['NUXT_AXIOM_DATASET', 'AXIOM_DATASET'])} env vars or pass to createAxiomDrain()`)
         return null
@@ -124,7 +107,7 @@ export function createAxiomDrain(overrides?: Partial<AxiomConfig>) {
 function encodeAxiomRequest(events: WideEvent[], config: AxiomConfig): HttpDrainRequest {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${config.apiKey ?? config.token}`,
+    'Authorization': `Bearer ${config.apiKey}`,
   }
   if (config.orgId) headers['X-Axiom-Org-Id'] = config.orgId
   return { url: resolveIngestUrl(config), headers, body: JSON.stringify(events) }
@@ -141,7 +124,7 @@ export async function sendToAxiom(event: WideEvent, config: AxiomConfig): Promis
  * Send a batch of events to Axiom.
  */
 export async function sendBatchToAxiom(events: WideEvent[], config: AxiomConfig): Promise<void> {
-  if (!(config.apiKey ?? config.token)) {
+  if (!(config.apiKey)) {
     throw new Error('[evlog/axiom] Missing apiKey')
   }
   await sendEncodedDrainRequest(encodeAxiomRequest(events, config), {

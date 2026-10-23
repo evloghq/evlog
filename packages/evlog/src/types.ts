@@ -42,7 +42,7 @@ declare module 'nitropack/types' {
      * nitroApp.hooks.hook('evlog:drain', async (ctx) => {
      *   await fetch('https://api.axiom.co/v1/datasets/logs/ingest', {
      *     method: 'POST',
-     *     headers: { Authorization: `Bearer ${process.env.AXIOM_TOKEN}` },
+     *     headers: { Authorization: `Bearer ${process.env.AXIOM_API_KEY}` },
      *     body: JSON.stringify([ctx.event])
      *   })
      * })

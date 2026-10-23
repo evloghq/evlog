@@ -4,7 +4,7 @@ Using evlog with drain adapters outside of Nitro — just a plain script.
 
 ```bash
 # Set your Axiom credentials
-export AXIOM_TOKEN="xaat-..."
+export AXIOM_API_KEY="xaat-..."
 export AXIOM_DATASET="my-logs"
 
 bun run start

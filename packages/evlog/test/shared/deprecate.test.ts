@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createAxiomDrain } from '../../src/adapters/axiom'
 import { createPostHogEventsDrain } from '../../src/adapters/posthog'
 import { defineEvlogHook } from '../../src/eve'
 import { warnDeprecated } from '../../src/shared/deprecate'
@@ -66,7 +65,6 @@ describe('deprecated entry points warn on call', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllEnvs()
-    delete process.env.AXIOM_TOKEN
     resetGlobalRegistry()
   })
 
@@ -76,14 +74,6 @@ describe('deprecated entry points warn on call', () => {
     expect(warnSpy).toHaveBeenCalledOnce()
     expect(warnSpy).toHaveBeenCalledWith(
       '[evlog/posthog] createPostHogEventsDrain() is deprecated and removed in v3. Use createPostHogDrain({ mode: \'events\' }).',
-    )
-  })
-
-  it('warns when the legacy AXIOM_TOKEN env var is set', () => {
-    process.env.AXIOM_TOKEN = 'legacy-token'
-    createAxiomDrain({ apiKey: 'k', dataset: 'logs' })
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[evlog/axiom] AXIOM_TOKEN is deprecated and ignored in v3. Rename it to AXIOM_API_KEY.',
     )
   })
 

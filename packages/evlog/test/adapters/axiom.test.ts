@@ -308,23 +308,14 @@ describe('axiom adapter', () => {
       expect(fetchSpy).not.toHaveBeenCalled()
     })
 
-    it('warns when legacy token alias is used', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const drain = createAxiomDrain({ token: 'legacy-key', dataset: 'logs' })
+    it('does not read the legacy AXIOM_TOKEN env var', async () => {
+      process.env.AXIOM_TOKEN = 'legacy-key'
+      process.env.AXIOM_DATASET = 'logs'
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const drain = createAxiomDrain()
       await drain(createDrainContext())
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[evlog/axiom] \'token\' is deprecated and removed in v3, use \'apiKey\' instead.',
-      )
-    })
-
-    it('accepts legacy token alias', async () => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const drain = createAxiomDrain({ token: 'legacy-key', dataset: 'logs' })
-      await drain(createDrainContext())
-      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
-      expect(options.headers).toEqual(expect.objectContaining({
-        Authorization: 'Bearer legacy-key',
-      }))
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Missing dataset or apiKey'))
+      expect(fetchSpy).not.toHaveBeenCalled()
     })
   })
 })

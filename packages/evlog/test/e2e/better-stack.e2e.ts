@@ -8,7 +8,7 @@
  * it within 24h.
  *
  * Required env vars:
- *   - BETTER_STACK_SOURCE_TOKEN (or BETTER_STACK_API_KEY)
+ *   - BETTER_STACK_API_KEY
  */
 import { expect } from 'vitest'
 import {
@@ -19,12 +19,9 @@ import { describeIfEnv, itWithCorrelationId, makeEvent, readEnv } from './_share
 
 describeIfEnv(
   'better-stack e2e (smoke)',
-  ['BETTER_STACK_SOURCE_TOKEN'],
+  ['BETTER_STACK_API_KEY'],
   () => {
-    const apiKey = (
-      readEnv('BETTER_STACK_SOURCE_TOKEN')
-      ?? readEnv('BETTER_STACK_API_KEY')
-    )!
+    const apiKey = readEnv('BETTER_STACK_API_KEY')!
     const endpoint = readEnv('BETTER_STACK_ENDPOINT')
 
     itWithCorrelationId('ingest endpoint accepts info / warn / error logs', async () => {
