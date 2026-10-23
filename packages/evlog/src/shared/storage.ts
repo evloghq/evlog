@@ -7,11 +7,8 @@ import { getSharedStorage } from './globalRegistry'
  * accessor. Every framework that exposes `useLogger()` (Express, Fastify,
  * NestJS, SvelteKit) calls this once at module level.
  *
- * Prefer `import { createLoggerStorage } from 'evlog/toolkit/storage'` on
- * Cloudflare Workers / edge so `node:async_hooks` is not pulled through the
- * main `evlog/toolkit` barrel. The barrel still re-exports this helper for
- * compatibility; that re-export is removed in evlog v3, so import it from
- * `evlog/toolkit/storage` (#403).
+ * Import it from `evlog/toolkit/storage`. The main `evlog/toolkit` barrel does
+ * not export it, so `node:async_hooks` stays out of edge bundles.
  *
  * @param contextHint - Appended to the error message when `useLogger()` is
  *   called outside of a request, e.g. `"middleware context. Make sure

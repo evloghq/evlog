@@ -13,11 +13,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { RequestLogger } from 'evlog'
 import {
-  createLoggerStorage,
   defineFrameworkIntegration,
   type BaseEvlogOptions,
 } from 'evlog/toolkit'
-// On Workers / edge, prefer: import { createLoggerStorage } from 'evlog/toolkit/storage'
+import { createLoggerStorage } from 'evlog/toolkit/storage'
 
 /** The framework's per-request context shape. */
 export interface MyFrameworkContext {

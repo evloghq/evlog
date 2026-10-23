@@ -71,7 +71,7 @@ All integrations share the same core utilities. **Never reimplement logic that e
 | `defineFrameworkIntegration` | `../shared/integration` | Manifest factory: extract request, create logger, attach, run with ALS |
 | `createMiddlewareLogger` | `../shared/middleware` | Lower-level lifecycle (custom mode): logger creation, route filtering, tail sampling, emit, enrich, drain |
 | `BaseEvlogOptions` | `../shared/middleware` | Base user-facing options type with `drain`, `enrich`, `keep`, `include`, `exclude`, `routes`, `plugins` |
-| `createLoggerStorage` | `../shared/storage` (`evlog/toolkit/storage`) | Factory returning `{ storage, useLogger }` for `AsyncLocalStorage`-backed `useLogger()`. Prefer `evlog/toolkit/storage` on Workers / edge |
+| `createLoggerStorage` | `../shared/storage` (`evlog/toolkit/storage`) | Factory returning `{ storage, useLogger }` for `AsyncLocalStorage`-backed `useLogger()`. Public entry: `evlog/toolkit/storage` only |
 | `shouldDeferEmitForResponse` | `../shared/streamResponse` | Defer the wide event until a streaming body closes (see Hono/Elysia) |
 
 `defineFrameworkIntegration` automatically:

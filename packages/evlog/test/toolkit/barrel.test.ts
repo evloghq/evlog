@@ -18,8 +18,8 @@ describe('evlog/toolkit barrel exports', () => {
     expect(toolkit.extractSafeNodeHeaders).toBeTypeOf('function')
   })
 
-  it('exports createLoggerStorage (also available from evlog/toolkit/storage)', () => {
-    expect(toolkit.createLoggerStorage).toBeTypeOf('function')
+  it('does not export createLoggerStorage, which lives on evlog/toolkit/storage only', () => {
+    expect(toolkit).not.toHaveProperty('createLoggerStorage')
   })
 
   it('exports extractErrorStatus', () => {
@@ -44,10 +44,6 @@ describe('evlog/toolkit barrel exports', () => {
 describe('evlog/toolkit/storage', () => {
   it('exports createLoggerStorage', () => {
     expect(toolkitStorage.createLoggerStorage).toBeTypeOf('function')
-  })
-
-  it('is the same helper as the toolkit barrel re-export', () => {
-    expect(toolkitStorage.createLoggerStorage).toBe(toolkit.createLoggerStorage)
   })
 })
 

@@ -7,7 +7,7 @@ Reference implementation showing the **complete** contract for a community evlog
 ## What this skeleton demonstrates
 
 - ~50 lines of glue. Everything else (header normalization, request-id, ALS, `log.fork()`, route filtering, sampling, emit, enrich, drain, plugin hooks) comes from `defineFrameworkIntegration` + `createMiddlewareLogger`.
-- Manifest mode: `extractRequest`, `attachLogger`, optional `storage`. Pick the same storage you pass to `createLoggerStorage()` (from `evlog/toolkit` or `evlog/toolkit/storage`) so `useLogger()` and `log.fork()` work.
+- Manifest mode: `extractRequest`, `attachLogger`, optional `storage`. Pick the same storage you pass to `createLoggerStorage()` (from `evlog/toolkit/storage`) so `useLogger()` and `log.fork()` work.
 - Full lifecycle: `try { await runWith(next) ; await finish({ status }) } catch (e) { await finish({ error: e }) ; throw }`.
 - `peerDependency` on `evlog`.
 
