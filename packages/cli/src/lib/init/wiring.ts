@@ -106,11 +106,6 @@ export function configCandidates(base: string): string[] {
   return CONFIG_EXTENSIONS.map(ext => `${base}.${ext}`)
 }
 
-/** Frameworks Nitro builds the server for, where `import.meta.dev` is replaced at build time. */
-function isNitroFamily(framework: InitFramework): boolean {
-  return framework === 'nuxt' || framework === 'nitro' || framework === 'tanstack-start'
-}
-
 /** A setting this run puts in `evlog.config.ts`. */
 export type ConfigSetting = 'drain' | 'enrich' | 'sampling'
 
@@ -167,19 +162,15 @@ export function factoryParts(input: WiringInput, settings: readonly ConfigSettin
   const wrap = (factory: string) => batched ? `pipeline(${factory})` : factory
   const prodList = prod.map(d => wrap(d.factory!)).join(', ')
   const options: string[] = []
-  /* Nitro replaces `import.meta.dev` at build time and leaves `NODE_ENV` to the
-     host, which a bare `node .output/server/index.mjs` never sets. Next and Hono
-     have no `import.meta.dev`. */
-  const nitro = isNitroFamily(input.framework)
-
+  /* `NODE_ENV` rather than `import.meta.dev`: the typed `ImportMeta.dev` only
+     exists once `nuxi prepare` has run, so a fresh Nuxt project flags it, while
+     `process.env` is typed by @types/node. Nitro inlines `NODE_ENV` as a literal
+     in its production build, so a bare `node .output/server/index.mjs` still
+     picks the production drain. */
   if (dev && prod.length === 1) {
-    options.push(nitro
-      ? `  drain: import.meta.dev ? ${dev.factory} : ${prodList},`
-      : `  drain: process.env.NODE_ENV === 'production' ? ${prodList} : ${dev.factory},`)
+    options.push(`  drain: process.env.NODE_ENV === 'production' ? ${prodList} : ${dev.factory},`)
   } else if (dev && prod.length > 1) {
-    blocks.push(nitro
-      ? `const drains = import.meta.dev\n  ? [${dev.factory}]\n  : [${prodList}]`
-      : `const drains = process.env.NODE_ENV === 'production'\n  ? [${prodList}]\n  : [${dev.factory}]`)
+    blocks.push(`const drains = process.env.NODE_ENV === 'production'\n  ? [${prodList}]\n  : [${dev.factory}]`)
     options.push('  drain: async ctx => void await Promise.all(drains.map(drain => drain(ctx))),')
   } else if (prod.length === 1) {
     options.push(`  drain: ${prodList},`)
@@ -188,9 +179,7 @@ export function factoryParts(input: WiringInput, settings: readonly ConfigSettin
     options.push('  drain: async ctx => void await Promise.all(drains.map(drain => drain(ctx))),')
   } else if (dev) {
     options.push('  // Local NDJSON under .evlog/logs, in development only.')
-    options.push(nitro
-      ? `  drain: import.meta.dev ? ${dev.factory} : undefined,`
-      : `  drain: process.env.NODE_ENV === 'production' ? undefined : ${dev.factory},`)
+    options.push(`  drain: process.env.NODE_ENV === 'production' ? undefined : ${dev.factory},`)
   }
 
   if (enrichers.length > 0) {
@@ -333,6 +322,11 @@ function configSnippet(input: WiringInput, settings: readonly ConfigSetting[], s
   const { imports, preamble, options } = factoryParts(input, settings)
   const body = [...(service ? [`  service: ${quote(input.service)},`] : []), ...options]
   return [imports.join('\n'), preamble.trim(), `defineEvlog({\n${body.join('\n')}\n})`].filter(Boolean).join('\n\n')
+}
+
+/** Frameworks Nitro builds the server for. */
+function isNitroFamily(framework: InitFramework): boolean {
+  return framework === 'nuxt' || framework === 'nitro' || framework === 'tanstack-start'
 }
 
 /** Drain and enricher plugins an earlier `evlog init` wrote under `server/plugins`. */
