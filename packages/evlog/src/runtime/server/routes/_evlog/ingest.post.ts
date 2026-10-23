@@ -200,7 +200,8 @@ export default defineEventHandler(async (event) => {
     headers,
   }
   const drainTasks: Array<Promise<unknown>> = [
-    nitroApp.hooks.callHook('evlog:drain', drainCtx).catch((err) => {
+    // hookable 6 (Nitro 3) returns undefined when no drain hook is async.
+    Promise.resolve(nitroApp.hooks.callHook('evlog:drain', drainCtx)).catch((err) => {
       console.error('[evlog] drain failed:', err)
     }),
   ]
