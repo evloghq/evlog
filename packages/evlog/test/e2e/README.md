@@ -59,7 +59,7 @@ Tokens are read from the workspace `.env` (already gitignored). Suites whose
 required env vars are missing are skipped with a visible "skipped: missing X"
 label, never silently green.
 
-Only `AXIOM_TOKEN` + `AXIOM_DATASET` are required for round-trip; the others
+Only `AXIOM_API_KEY` + `AXIOM_DATASET` are required for round-trip; the others
 are smoke-only.
 
 ## Run in CI
@@ -75,12 +75,12 @@ are smoke-only.
 
 The workflow expects these repo secrets:
 
-- `AXIOM_TOKEN` (PAT with `query:read` for round-trip, ingest token works for smoke)
+- `AXIOM_API_KEY` (PAT with `query:read` for round-trip, ingest token works for smoke)
 - `AXIOM_DATASET`
 - `AXIOM_ORG_ID` (required for PATs)
 - `POSTHOG_API_KEY`
 - `SENTRY_DSN`
-- `BETTER_STACK_SOURCE_TOKEN`
+- `BETTER_STACK_API_KEY`
 - `LOKI_ENDPOINT` (+ `LOKI_USER` / `LOKI_API_KEY` for Grafana Cloud, or a service container for self-hosted)
 - `CLICKHOUSE_ENDPOINT` (+ `CLICKHOUSE_PASSWORD` for ClickHouse Cloud, or a service container for self-hosted)
 
@@ -91,5 +91,5 @@ Set them with `gh secret set <NAME> --body '<value>'` or in the repo settings UI
 The default Axiom ingest token (`xaat-...`) cannot read events back. To
 enable full round-trip assertions, generate a Personal Access Token at
 [app.axiom.co/profile](https://app.axiom.co/profile) with the `query:read`
-scope and use it as `AXIOM_TOKEN`. Without it, the suite degrades to smoke
+scope and use it as `AXIOM_API_KEY`. Without it, the suite degrades to smoke
 tests and prints a warning.

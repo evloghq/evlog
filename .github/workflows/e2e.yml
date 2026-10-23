@@ -63,9 +63,9 @@ jobs:
       - name: Run e2e tests
         run: pnpm run test:e2e
         env:
-          AXIOM_TOKEN: ${{ secrets.AXIOM_TOKEN }}
+          AXIOM_API_KEY: ${{ secrets.AXIOM_TOKEN }}
           AXIOM_DATASET: ${{ secrets.AXIOM_DATASET }}
           AXIOM_ORG_ID: ${{ secrets.AXIOM_ORG_ID }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          BETTER_STACK_SOURCE_TOKEN: ${{ secrets.BETTER_STACK_SOURCE_TOKEN }}
+          BETTER_STACK_API_KEY: ${{ secrets.BETTER_STACK_SOURCE_TOKEN }}

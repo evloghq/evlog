@@ -156,7 +156,7 @@ export class EvlogModule implements NestModule {
    *   imports: [ConfigModule],
    *   inject: [ConfigService],
    *   useFactory: (config: ConfigService) => ({
-   *     drain: createAxiomDrain({ token: config.get('AXIOM_TOKEN') }),
+   *     drain: createAxiomDrain({ apiKey: config.get('AXIOM_API_KEY') }),
    *   }),
    * })
    * ```
