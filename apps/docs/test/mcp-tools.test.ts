@@ -16,7 +16,7 @@ const contentPaths = new Set(
   readdirSync(contentDir, { recursive: true })
     .map(String)
     .filter(file => file.endsWith('.md'))
-    .map(file => `/${file.replace(/\.md$/, '').split('/').map(segment => segment.replace(/^\d+\./, '')).join('/')}`),
+    .map(file => `/${file.replace(/\.md$/, '').split(/[\\/]/).map(segment => segment.replace(/^\d+\./, '')).join('/')}`),
 )
 
 describe('docs MCP tool overrides', () => {
