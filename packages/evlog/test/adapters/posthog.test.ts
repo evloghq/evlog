@@ -448,9 +448,17 @@ describe('posthog adapter', () => {
       expect(result.properties).not.toHaveProperty('$process_person_profile')
     })
 
-    it('keeps nested properties nested by default', () => {
+    it('flattens nested properties by default', () => {
       const event = createTestEvent({ ai: { costUsd: 0.01 } })
       const result = toPostHogEvent(event, { apiKey: 'phc_test' })
+
+      expect(result.properties['ai.costUsd']).toBe(0.01)
+      expect(result.properties).not.toHaveProperty('ai')
+    })
+
+    it('keeps nested properties nested in json shape', () => {
+      const event = createTestEvent({ ai: { costUsd: 0.01 } })
+      const result = toPostHogEvent(event, { apiKey: 'phc_test', recordShape: 'json' })
 
       expect(result.properties.ai).toEqual({ costUsd: 0.01 })
     })

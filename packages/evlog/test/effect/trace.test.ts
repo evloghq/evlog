@@ -154,7 +154,7 @@ describe('evlog/effect drains', () => {
     const [event] = body.batch
     expect(defined(event, 'posthog event').distinct_id).toBe('user_1')
     expect(event?.properties.traceId).toMatch(/^[\da-f]{32}$/)
-    expect(event?.properties.error).toMatchObject({ message: 'model timed out' })
+    expect(event?.properties['error.message']).toBe('model timed out')
   })
 
   it('sends the trace id to PostHog logs as the record trace id', async () => {
