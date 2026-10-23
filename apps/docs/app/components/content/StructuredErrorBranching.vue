@@ -275,7 +275,7 @@ function statusClass() {
                 <span class="font-mono text-[9px] tracking-widest uppercase text-dimmed">json envelope</span>
               </div>
               <pre class="font-mono text-[10px] leading-relaxed text-muted overflow-hidden"><code>{
-  <span class="text-sky-400">statusCode</span>: <span class="text-pink-400">402</span>,
+  <span class="text-sky-400">status</span>: <span class="text-pink-400">402</span>,
   <span class="text-sky-400">message</span>: <span class="text-emerald-400">'Payment failed'</span>,
   <span class="text-sky-400">data</span>: { <span class="text-sky-400">code</span>: <span class="text-emerald-400">'PAYMENT_DECLINED'</span> }
 }</code></pre>

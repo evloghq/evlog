@@ -82,7 +82,7 @@ describe.sequential('Nitro v2 server with evlog error handler', () => {
 
     expect(status).toBe(402)
     expect(body).toMatchObject({
-      statusCode: 402,
+      status: 402,
       message: 'Payment failed',
       url: '/throws',
       error: true,
@@ -92,6 +92,7 @@ describe.sequential('Nitro v2 server with evlog error handler', () => {
         link: 'https://docs.example.com/payments/declined',
       },
     })
+    for (const key of ['statusCode', 'statusText', 'statusMessage']) expect(body).not.toHaveProperty(key)
   }, 15_000)
 
   it('preserves data and message from a deliberate h3 createError', async () => {
@@ -99,7 +100,7 @@ describe.sequential('Nitro v2 server with evlog error handler', () => {
 
     expect(status).toBe(500)
     expect(body).toMatchObject({
-      statusCode: 500,
+      status: 500,
       url: '/throws-h3-data',
       error: true,
       message: 'Payment provider rejected the charge',
@@ -112,7 +113,7 @@ describe.sequential('Nitro v2 server with evlog error handler', () => {
 
     expect(status).toBe(500)
     expect(body).toMatchObject({
-      statusCode: 500,
+      status: 500,
       url: '/throws-plain',
       error: true,
       message: expect.any(String),

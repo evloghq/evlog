@@ -73,12 +73,12 @@ describe('errorHandler', () => {
 
   it('ends the Node response directly so h3 v1 cannot skip the flush (#374)', async () => {
     await invokeErrorHandler(new Error('boom'))
-    expect(mockResponseEnd).toHaveBeenCalledWith(expect.stringContaining('"statusCode":500'))
+    expect(mockResponseEnd).toHaveBeenCalledWith(expect.stringContaining('"status":500'))
   })
 
   it('flushes the response even when invoked without a handler context', async () => {
     await testErrorHandler(new Error('boom'), mockEvent)
-    expect(mockResponseEnd).toHaveBeenCalledWith(expect.stringContaining('"statusCode":500'))
+    expect(mockResponseEnd).toHaveBeenCalledWith(expect.stringContaining('"status":500'))
   })
 
   it('does not end the response twice when already ended', async () => {
@@ -132,7 +132,7 @@ describe('errorHandler', () => {
       expect(mockSetResponseHeader).toHaveBeenCalledWith(mockEvent, 'Content-Type', 'application/json')
 
       const sentBody = readResponseBody()
-      expect(sentBody.statusCode).toBe(402)
+      expect(sentBody.status).toBe(402)
       expect(sentBody.message).toBe('Payment failed')
       expect(sentBody.url).toBe('/api/test')
       expect(sentBody.error).toBe(true)
@@ -160,7 +160,7 @@ describe('errorHandler', () => {
       expect(mockSetResponseStatus).toHaveBeenCalledWith(mockEvent, 404)
 
       const sentBody = readResponseBody()
-      expect(sentBody.statusCode).toBe(404)
+      expect(sentBody.status).toBe(404)
       expect(sentBody.data).toEqual({ why: 'Resource does not exist' })
     })
 
@@ -205,8 +205,7 @@ describe('errorHandler', () => {
       expect(mockSetResponseStatus).toHaveBeenCalledWith(mockEvent, 400)
 
       const sentBody = readResponseBody()
-      expect(sentBody.statusCode).toBe(400)
-      expect(sentBody.statusMessage).toBe('Something went wrong')
+      expect(sentBody.status).toBe(400)
       expect(sentBody.message).toBe('Something went wrong')
       expect(sentBody.url).toBe('/api/test')
       expect(sentBody.error).toBe(true)
@@ -228,7 +227,6 @@ describe('errorHandler', () => {
 
       const sentBody = readResponseBody()
       expect(sentBody.message).toBe('Internal Server Error')
-      expect(sentBody.statusMessage).toBe('Internal Server Error')
     })
 
     it('preserves data from createError, like Nitro does', async () => {
@@ -255,7 +253,6 @@ describe('errorHandler', () => {
 
       const sentBody = readResponseBody()
       expect(sentBody.message).toBe('Internal Server Error')
-      expect(sentBody.statusMessage).toBe('Internal Server Error')
       expect(sentBody.data).toBeUndefined()
     })
 
@@ -304,7 +301,6 @@ describe('errorHandler', () => {
 
       const sentBody = readResponseBody()
       expect(sentBody.message).toBe('Invalid email format')
-      expect(sentBody.statusMessage).toBe('Invalid email format')
     })
 
     it('skips Nitro default logging for an expected 4xx EvlogError in production', async () => {
@@ -319,7 +315,7 @@ describe('errorHandler', () => {
       await invokeErrorHandler(evlogError)
 
       expect(defaultHandlerMock).not.toHaveBeenCalled()
-      expect(readResponseBody().statusCode).toBe(402)
+      expect(readResponseBody().status).toBe(402)
     })
 
     it('keeps Nitro default logging for an EvlogError with a 5xx status in production', async () => {
@@ -389,7 +385,7 @@ describe('errorHandler', () => {
       await invokeErrorHandler(evlogError)
 
       expect(mockResponseEnd).toHaveBeenCalled()
-      expect(readResponseBody().statusCode).toBe(402)
+      expect(readResponseBody().status).toBe(402)
     })
   })
 
