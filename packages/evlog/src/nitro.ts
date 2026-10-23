@@ -3,7 +3,6 @@ import type { DevTerminalInput, DevTerminalResolveInput } from './shared/dev-ter
 import { extractErrorStatus } from './shared/errors'
 import { resolveDevTerminal, shouldShowFrameworkOverlay } from './shared/dev-terminal'
 import { readEvlogConfigSync } from './shared/nitroConfigBridge'
-import { readErrorField } from './utils'
 
 export type { DevTerminalInput, DevTerminalPreset, DevPrettyErrorConfig, DevTerminalConfigObject, ResolvedPrettyError } from './shared/dev-terminal'
 export { resolveDevTerminal, shouldShowFrameworkOverlay } from './shared/dev-terminal'
@@ -337,7 +336,7 @@ export function buildPlainNitroErrorBody(
 export function serializeEvlogErrorResponse(error: Error, url: string): Record<string, unknown> {
   const status = extractErrorStatus(error)
   const { data } = error as { data?: unknown }
-  const statusMessage = (readErrorField(error, 'statusMessage') as string | undefined) || error.message
+  const statusMessage = (error as { statusMessage?: string }).statusMessage || error.message
   return {
     url,
     status,

@@ -1,4 +1,3 @@
-import { readErrorField } from '../utils'
 import { evlogErrorDataKey, isEvlogError } from './error-brand'
 
 /**
@@ -8,6 +7,10 @@ import { evlogErrorDataKey, isEvlogError } from './error-brand'
 const ERROR_FIELDS = ['code', 'status', 'data', 'internal', 'why', 'fix', 'link'] as const
 
 const NONE: readonly string[] = []
+
+function readErrorField(error: Error, key: string): unknown {
+  return (error as unknown as Record<string, unknown>)[key]
+}
 
 /** A plain write to `__proto__` replaces the prototype instead of storing a field. */
 function defineField(target: Record<string, unknown>, key: string, value: unknown): void {

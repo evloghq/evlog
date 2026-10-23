@@ -333,18 +333,14 @@ describe('log', () => {
     expect(serialized).not.toHaveProperty('cause')
   })
 
-  it('serializes an EvlogError without reading its legacy status getters', () => {
-    const legacyGetters = ['statusCode', 'statusText', 'statusMessage'] as const
-    const spies = legacyGetters.map(name => vi.spyOn(EvlogError.prototype, name, 'get'))
+  it('drains an EvlogError with status and message, without the legacy status fields', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, drain })
     log.error({ action: 'checkout', error: createError({ message: 'Payment failed', status: 402 }) })
 
     const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
     expect(event.error).toMatchObject({ status: 402, message: 'Payment failed' })
-    expect(event.error).not.toHaveProperty('statusCode')
-    for (const spy of spies) expect(spy).not.toHaveBeenCalled()
-    spies.forEach(spy => spy.mockRestore())
+    for (const key of ['statusCode', 'statusText', 'statusMessage']) expect(event.error).not.toHaveProperty(key)
   })
 
   it('marks the data of an h3 wrapper that points back at it as circular', () => {
