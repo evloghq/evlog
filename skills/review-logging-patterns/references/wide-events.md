@@ -161,6 +161,7 @@ export default defineEventHandler(async (event) => {
       message: 'Payment failed',
       why: error.message,
       fix: 'Try a different payment method',
+      link: 'https://docs.example.com/payments/declined',
     })
   }
 
@@ -257,6 +258,7 @@ export default defineEventHandler(async (event) => {
       message: 'Payment failed',
       why: error.message,
       fix: 'Try a different payment method',
+      link: 'https://docs.example.com/payments/declined',
     })
   }
   // emit() called automatically

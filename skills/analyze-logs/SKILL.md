@@ -115,6 +115,7 @@ Each line is a self-contained JSON object (wide event). Key fields:
 | `error` | `object` | Error details: `name`, `message`, `stack`, `code`, `status`, `data` (the payload passed to `createError`) |
 | `error.why` | `string` | Human-readable explanation of what went wrong |
 | `error.fix` | `string` | Suggested fix for the error |
+| `error.link` | `string` | URL of a page that explains the error or how to resolve it |
 | `source` | `string` | `client` for browser logs, absent for server logs |
 | `userAgent` | `object` | Parsed browser/OS/device info |
 
@@ -143,7 +144,7 @@ For each relevant event:
 
 1. **What happened**: summarize the `path`, `method`, `status`, `level`
 2. **Why it failed** (errors): read `error.message`, `error.why`, and the stack trace
-3. **How to fix**: check `error.fix` for suggested remediation
+3. **How to fix**: check `error.fix` for suggested remediation, and open `error.link` when there is one
 4. **Context**: examine application-specific fields for business context (user info, payment details, etc.)
 5. **Patterns**: look for recurring errors, degrading performance, or correlated failures
 
@@ -191,7 +192,7 @@ Look for: client errors that don't have corresponding server errors (network iss
 ## Important notes
 
 - Each line is a **complete, self-contained event**. Unlike traditional logs, you don't need to correlate multiple lines. One line has all the context for one request.
-- The `error.why` and `error.fix` fields are evlog-specific structured error fields. When present, they provide the most actionable information. Logs written by evlog 2.x also repeat them as `error.data.why` and `error.data.fix`.
+- The `error.why`, `error.fix` and `error.link` fields are evlog-specific structured error fields. When present, they provide the most actionable information. Logs written by evlog 2.x also repeat them as `error.data.why`, `error.data.fix` and `error.data.link`.
 - `duration` is human-formatted with units (e.g. `"706ms"`). `durationMs` is the same duration in milliseconds; filter and sort on `durationMs`.
 - Events with `"source":"client"` originated from browser-side logging and were sent to the server via the HTTP drain endpoint.
 - Log files are `.gitignore`'d automatically. They exist only on the local machine or server where the app runs.

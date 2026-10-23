@@ -74,7 +74,7 @@ We're in the age of AI agents writing and debugging code. When an agent encounte
 
 Traditional logs force agents to grep through noise. evlog gives them:
 - **One event per request** with all context in one place
-- **Self-documenting errors** with `why` and `fix` fields
+- **Self-documenting errors** with `why`, `fix` and `link` fields
 - **Structured JSON** that's easy to parse and reason about
 
 Your AI copilot will thank you.

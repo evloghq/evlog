@@ -69,7 +69,7 @@ pnpm evlog map
 | `evlog logs` | The last 50 wide events the fs drain wrote, oldest first |
 | `evlog logs errors` | The ones that failed: a `5xx`, an `error` or `fatal` level, or an `error` block |
 | `evlog logs slow [--over 1s]` | Over the bar (default 500ms), worst first |
-| `evlog logs <requestId>` | One request in full: error with `why`/`fix`, audit record, business fields |
+| `evlog logs <requestId>` | One request in full: error with `why`/`fix`/`link`, audit record, business fields |
 | `evlog logs stats` | Per route: count, errors, p50, p95; then by status class and level |
 | `evlog logs --where 'payment.amount>5000' --where audit.outcome=failure` | Any field on the event: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~regex`, present, `!absent` |
 | `evlog logs --url http://localhost:8787/_evlog/logs` | Read the memory drain's dev endpoint instead of files |

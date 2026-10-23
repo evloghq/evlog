@@ -84,6 +84,7 @@ catch (error) {
 - Does the error message explain what happened?
 - Is there a `why` explaining the root cause?
 - Is there a `fix` suggesting a solution?
+- Is there a `link` to a page that explains the error, when one exists?
 - Is the original error preserved as `cause`?
 
 ### 3. Request Handler Audit

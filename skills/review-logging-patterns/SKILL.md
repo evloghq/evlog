@@ -1280,7 +1280,7 @@ See [references/structured-errors.md](references/structured-errors.md) for commo
 | Anti-Pattern | Fix |
 |--------------|-----|
 | Multiple `console.log` in one function | Single wide event with `log.set()` |
-| `throw new Error('...')` | `throw createError({ message, status, why, fix })` |
+| `throw new Error('...')` | `throw createError({ message, status, why, fix, link })` |
 | `console.error(e); throw e` | `log.error(e); throw createError(...)` |
 | No logging in request handlers | Add `useLogger(event)` / `useLogger()` / `createRequestLogger()` |
 | Flat log data `{ uid, n, t }` | Grouped objects: `{ user: {...}, cart: {...} }` |
