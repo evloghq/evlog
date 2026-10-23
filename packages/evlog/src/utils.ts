@@ -1,5 +1,4 @@
 import type { EnvironmentContext, LogLevel } from './types'
-import { isEvlogError } from './shared/error-brand'
 
 /**
  * Milliseconds elapsed since `startTime`, never negative.
@@ -287,18 +286,4 @@ export function isoNow(): string {
     _isoCached = _isoDate.toISOString()
   }
   return _isoCached
-}
-
-/**
- * Reads a field of an error the way the serializers copy it. The legacy
- * `statusCode`, `statusText` and `statusMessage` of an `EvlogError` are getters
- * over `status` and `message`, so they are read from those fields directly and
- * the getters are left for user code to call.
- */
-export function readErrorField(error: Error, key: string): unknown {
-  if (isEvlogError(error)) {
-    if (key === 'statusCode') return (error as { status?: unknown }).status
-    if (key === 'statusText' || key === 'statusMessage') return error.message
-  }
-  return (error as unknown as Record<string, unknown>)[key]
 }

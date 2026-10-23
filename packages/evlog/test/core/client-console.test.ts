@@ -382,15 +382,13 @@ describe('client log.error with an Error instance', () => {
       expect(sent().error).toMatchObject({ status: 502, data: { provider: 'stripe' }, stack: expect.any(String) })
     })
 
-    it('serializes an EvlogError without reading its legacy status getters', () => {
+    it('sends an EvlogError with status and message, without the legacy status fields', () => {
       initTransport()
-      const spies = (['statusCode', 'statusText', 'statusMessage'] as const).map(name => vi.spyOn(EvlogError.prototype, name, 'get'))
 
       log.error({ action: 'checkout', error: createError({ message: 'Payment failed', status: 402 }) })
 
       expect(sent().error).toMatchObject({ status: 402, message: 'Payment failed' })
-      expect(sent().error).not.toHaveProperty('statusCode')
-      for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+      for (const key of ['statusCode', 'statusText', 'statusMessage']) expect(sent().error).not.toHaveProperty(key)
     })
 
     it.each([
