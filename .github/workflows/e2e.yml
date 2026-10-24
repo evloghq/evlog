@@ -6,11 +6,15 @@ name: e2e
 #   - we don't want to spam the destinations on every push
 #   - they are slower than unit tests (real network, ingestion lag)
 #
+# The sandbox job runs the Loki and ClickHouse round-trip suites against local
+# containers, and checks that the sandbox Grafana reads what they hold. It needs
+# no secrets and no cloud account.
+#
 # Triggers:
-#   - daily cron (3:00 UTC) — daily health check
-#   - push to main — confirm a merge didn't break anything
-#   - workflow_dispatch — manual run from the Actions tab
-#   - PR labelled `e2e` — opt-in for adapter changes (only on PRs from
+#   - daily cron (3:00 UTC): daily health check
+#   - push to main: confirm a merge didn't break anything
+#   - workflow_dispatch: manual run from the Actions tab
+#   - PR labelled `e2e`: opt-in for adapter changes (only on PRs from
 #     the same repo, never on forks)
 
 on:
@@ -24,6 +28,8 @@ on:
       - 'packages/evlog/src/shared/drain.ts'
       - 'packages/evlog/src/shared/http.ts'
       - 'packages/evlog/test/e2e/**'
+      - 'packages/evlog/test/e2e/docker-compose.yml'
+      - 'packages/evlog/test/e2e/seed.mjs'
       - '.github/workflows/e2e.yml'
   pull_request:
     types: [labeled, synchronize, opened]
@@ -62,3 +68,27 @@ jobs:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           BETTER_STACK_SOURCE_TOKEN: ${{ secrets.BETTER_STACK_SOURCE_TOKEN }}
+
+  sandbox:
+    # Same gate as the e2e job above.
+    if: |
+      github.event_name != 'pull_request' || (
+        contains(github.event.pull_request.labels.*.name, 'e2e')
+        && github.event.pull_request.head.repo.full_name == github.repository
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Prepare
+        run: pnpm run dev:prepare
+      - name: Start sandbox
+        run: pnpm run sandbox:up
+      - name: Run sandbox e2e tests
+        run: pnpm run sandbox:e2e
+      - name: Stop sandbox
+        if: always()
+        run: pnpm run sandbox:down
