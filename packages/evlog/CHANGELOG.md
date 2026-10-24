@@ -1,5 +1,172 @@
 # evlog
 
+## 3.0.0-beta.1
+
+### Major Changes
+
+- [#900](https://github.com/evloghq/evlog/pull/900) [`cd75745`](https://github.com/evloghq/evlog/commit/cd75745575bee294172277f76fcacdef2b59df5c) Thanks [@evlogai](https://github.com/apps/evlogai)! - A logged `EvlogError` carries `code`, `why`, `fix` and `link` once, at the top of `error`. Its `data` is now the payload passed to `createError({ data })` and nothing else, and it is left out when there is none. Before, the logged `data` repeated the guidance fields:
+
+  ```diff
+   "error": {
+     "name": "EvlogError",
+     "message": "Payment failed",
+     "code": "PAYMENT_DECLINED",
+     "status": 402,
+     "why": "Card declined by issuer",
+     "fix": "Try another card",
+  -  "data": { "retryAfter": 30, "code": "PAYMENT_DECLINED", "why": "Card declined by issuer", "fix": "Try another card" }
+  +  "data": { "retryAfter": 30 }
+   }
+  ```
+
+  This holds when h3 wraps the error too. A drain or saved query that read `error.data.why` should read `error.why`. The HTTP response is unchanged: its `data` still carries the guidance fields, which `parseError()` reads on the client.
+
+- [#936](https://github.com/evloghq/evlog/pull/936) [`bf38917`](https://github.com/evloghq/evlog/commit/bf38917caa720cfbf8328024aeec04004f288237) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog/nitro` is the Nitro 3 module, and the nitropack (Nitro 2) module moves to `evlog/nitro/v2`. `evlog/nitro/v3` is removed. Nitro 2 stays supported for all of evlog 3.
+
+  ```diff
+   // Nitro 3
+  -import evlog from 'evlog/nitro/v3'
+  -import { useLogger, createError, evlogErrorHandler } from 'evlog/nitro/v3'
+  +import evlog from 'evlog/nitro'
+  +import { useLogger, createError, evlogErrorHandler } from 'evlog/nitro'
+
+   // nitropack (Nitro 2)
+  -import evlog from 'evlog/nitro'
+  -import { useLogger } from 'evlog/nitro'
+  +import evlog from 'evlog/nitro/v2'
+  +import { useLogger } from 'evlog/nitro/v2'
+  ```
+
+  Rewrite the nitropack imports first, then the Nitro 3 ones, so an import is not moved twice. The Nuxt module needs no change: `evlog/nuxt` still runs on Nuxt 4's nitropack.
+
+- [#937](https://github.com/evloghq/evlog/pull/937) [`6387849`](https://github.com/evloghq/evlog/commit/63878495222278d43e1b6d7f4f9ae2153588f110) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The HTTP error body sent by the Nitro, Nuxt and SvelteKit error handlers carries the status in `status` and the text in `message` only. The `statusCode`, `statusText` and `statusMessage` fields are gone: they repeated `status` and `message`. `url`, `error: true` and `data` are unchanged, and `why`, `fix` and `link` stay under `data`.
+
+  ```diff
+   {
+     "url": "/api/checkout",
+     "status": 402,
+  -  "statusCode": 402,
+  -  "statusText": "Payment failed",
+  -  "statusMessage": "Payment failed",
+     "message": "Payment failed",
+     "error": true,
+     "data": { "why": "Card declined", "fix": "Use another card" }
+   }
+  ```
+
+  `parseError()` already reads `status` and `message`, so client code that goes through it needs no change. A client that read `statusCode` or `statusMessage` from the JSON body should read `status` and `message`. The HTTP status line itself is unchanged.
+
+- [#933](https://github.com/evloghq/evlog/pull/933) [`0e2d709`](https://github.com/evloghq/evlog/commit/0e2d70919a7a5ff357c0d02fc82f7b1e2450dfce) Thanks [@HugoRCD](https://github.com/HugoRCD)! - OTLP records default to the `compact` shape with OpenTelemetry semantic convention attributes. This applies to every drain built on the OTLP encoder: `evlog/otlp`, PostHog (logs and events mode), HyperDX and Sazabi.
+
+  - `recordShape` defaults to `'compact'`: the body is a one-line summary (`POST /api/checkout (500)`) and nested fields become dotted attributes (`user.id`). In PostHog events mode, nested properties are flattened the same way.
+  - `semanticConventions` defaults to `true`: records also carry `http.request.method`, `url.path`, `http.response.status_code`, `exception.*` and `gen_ai.*`, and the resource carries `deployment.environment.name`. The evlog field names stay.
+
+  For the same 100 events, the OTLP request shrinks from 151,235 to 140,250 bytes as JSON (2,804 to 2,198 gzipped) and from 76,839 to 63,925 bytes as protobuf.
+
+  To keep the 2.x output:
+
+  ```ts
+  createOTLPDrain({ recordShape: "json", semanticConventions: false });
+  createPostHogDrain({ recordShape: "json" });
+  ```
+
+- [#938](https://github.com/evloghq/evlog/pull/938) [`980c1d0`](https://github.com/evloghq/evlog/commit/980c1d014088f3cdb4d2b4251655a6fb824ac902) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Two optional peer ranges change:
+
+  - `eve` goes from `>=0.30.0` to `>=0.72.0`. `evlog/eve` no longer supports eve releases older than 0.72.
+  - `nitro` goes from `^3.0.260311-beta` to `>=3.0.0-0 <4.0.0-0`. The old range did not cover the later dated Nitro 3 betas such as `3.0.260903-beta`, and the new one covers every Nitro 3 beta and release without letting in Nitro 4.
+
+  The open-ended ranges stay open: `@nestjs/common` and `@nestjs/core` (`>=11.2.7`), `react-router` (`>=7.18.4`) and `hono` (`>=4.13.12`) accept new majors. evlog's own tests now run on NestJS 12, React Router 8, eve 0.83 and the latest Nitro 3 beta. `nitropack ^2.13.4` and `h3 ^1.15.11` are unchanged.
+
+- [#929](https://github.com/evloghq/evlog/pull/929) [`2316600`](https://github.com/evloghq/evlog/commit/2316600cb10f3fa9998ac42b9f058d4d5a278327) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Remove the `evlog/browser` entry. It was deprecated in 2.x and re-exported `evlog/http` under other names. Import from `evlog/http` instead:
+
+  ```diff
+  - import { createBrowserDrain, createBrowserLogDrain } from 'evlog/browser'
+  + import { createHttpDrain, createHttpLogDrain } from 'evlog/http'
+  ```
+
+  The types follow the same rename: `BrowserDrainConfig` is `HttpDrainConfig`, `BrowserLogDrainOptions` is `HttpLogDrainOptions`.
+
+- [#930](https://github.com/evloghq/evlog/pull/930) [`96af994`](https://github.com/evloghq/evlog/commit/96af994720ccd1e43b2a6b3a22a5911d0cfacb2c) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Remove the deprecated credential aliases. The Axiom and Better Stack drains, and the Nuxt module, read the API key from `apiKey` only.
+
+  | Removed                                                        | Use                                                  |
+  | -------------------------------------------------------------- | ---------------------------------------------------- |
+  | Axiom `token` option                                           | `apiKey`                                             |
+  | `AXIOM_TOKEN` / `NUXT_AXIOM_TOKEN`                             | `AXIOM_API_KEY` / `NUXT_AXIOM_API_KEY`               |
+  | Better Stack `sourceToken` option                              | `apiKey`                                             |
+  | `BETTER_STACK_SOURCE_TOKEN` / `NUXT_BETTER_STACK_SOURCE_TOKEN` | `BETTER_STACK_API_KEY` / `NUXT_BETTER_STACK_API_KEY` |
+  | Nuxt `evlog.axiom.token`                                       | `evlog.axiom.apiKey`                                 |
+
+  A project that still sets only the old name gets the drain's "Missing apiKey" error and sends nothing.
+
+  `applyDeprecatedAlias` is no longer exported from `evlog/toolkit`.
+
+- [#935](https://github.com/evloghq/evlog/pull/935) [`f8024f3`](https://github.com/evloghq/evlog/commit/f8024f30cccc5c1caca23cb169204915f12160bb) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `EvlogError` no longer has the `statusCode`, `statusText` and `statusMessage` getters, deprecated since 2.x. Read `status` for the HTTP status and `message` for the text:
+
+  ```diff
+   const error = createError({ message: 'Payment failed', status: 402 })
+  -error.statusCode    // 402
+  -error.statusMessage // 'Payment failed'
+  +error.status        // 402
+  +error.message       // 'Payment failed'
+  ```
+
+  Reading one of the removed fields now returns `undefined`, and TypeScript reports it. Errors thrown by h3 and Nuxt keep their own `statusCode`, and evlog still reads it from them.
+
+- [#931](https://github.com/evloghq/evlog/pull/931) [`9c74c54`](https://github.com/evloghq/evlog/commit/9c74c54dd125f57f65d299ba7b33f281a455a270) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Remove `createPostHogEventsDrain()` and the `PostHogEventsConfig` type from `evlog/posthog`. Both were deprecated in 2.x. Use the main drain in events mode, which takes the same options:
+
+  ```diff
+  - import { createPostHogEventsDrain } from 'evlog/posthog'
+  - initLogger({ drain: createPostHogEventsDrain({ eventName: 'server_request' }) })
+  + import { createPostHogDrain } from 'evlog/posthog'
+  + initLogger({ drain: createPostHogDrain({ mode: 'events', eventName: 'server_request' }) })
+  ```
+
+  `PostHogEventsConfig` was an alias of `PostHogConfig`. `sendToPostHogEvents()` and `sendBatchToPostHogEvents()` are unchanged.
+
+- [#900](https://github.com/evloghq/evlog/pull/900) [`cd75745`](https://github.com/evloghq/evlog/commit/cd75745575bee294172277f76fcacdef2b59df5c) Thanks [@evlogai](https://github.com/apps/evlogai)! - `status` is optional on `EvlogError`, on `createError()` options, and on error catalog entries (`defineErrorCatalog`, `defineError`). Core no longer defaults it to 500. An error that never reaches an HTTP response (an agent turn, a job, a cron task, a CLI script) has no `status`, and `toJSON()` and the logged event leave the field out.
+
+  Every HTTP boundary still answers 500 for an error without a `status`. This covers the Nuxt and Nitro error handlers, h3, Next, Hono, Express, Fastify, Elysia, NestJS, SvelteKit and `parseError()`. Code that read `error.status` directly and expected a number needs to handle `undefined`, or read the status the framework sends.
+
+  A non-HTTP error, logged without a status:
+
+  ```json
+  {
+    "name": "EvlogError",
+    "message": "Export job stalled",
+    "data": { "why": "No progress for 5 minutes", "fix": "Retry the export" },
+    "why": "No progress for 5 minutes",
+    "fix": "Retry the export"
+  }
+  ```
+
+  Before this change the same error also logged `status: 500`. No codemod is needed. Upgrade checklist: check code that reads `error.status` as a number, and any alert or sampling rule that matched on it.
+
+- [#932](https://github.com/evloghq/evlog/pull/932) [`5459485`](https://github.com/evloghq/evlog/commit/5459485199359dd9d664cec6bb46d1ae2d5dc4d3) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `createLoggerStorage` is no longer exported from `evlog/toolkit`. Import it from `evlog/toolkit/storage`, which has exported it since 2.x. The main toolkit barrel no longer pulls in `node:async_hooks`, so framework integrations built on it stay edge-safe.
+
+  ```diff
+  - import { createLoggerStorage, defineFrameworkIntegration } from 'evlog/toolkit'
+  + import { defineFrameworkIntegration } from 'evlog/toolkit'
+  + import { createLoggerStorage } from 'evlog/toolkit/storage'
+  ```
+
+### Minor Changes
+
+- [#944](https://github.com/evloghq/evlog/pull/944) [`8c66a09`](https://github.com/evloghq/evlog/commit/8c66a09505e004adf6be01a4490c5272ca1e92ac) Thanks [@evlogai](https://github.com/apps/evlogai)! - HyperDX and Sazabi now accept `semanticConventions`, and HyperDX also accepts `recordShape`, so a 2.x user can keep the 2.x output with `recordShape: 'json'` and `semanticConventions: false`. The defaults themselves changed in evloghq/evlog#933: both adapters now send the compact record shape with OpenTelemetry semantic conventions on.
+
+### Patch Changes
+
+- [#910](https://github.com/evloghq/evlog/pull/910) [`5ab0a8d`](https://github.com/evloghq/evlog/commit/5ab0a8d7baed98b2181a2ab75de09fa10ce532ce) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The `bearer` redaction built-in now runs before every other built-in, so a Bearer token is masked whole. A token shaped like an IBAN or a card number was partly rewritten first and then no longer matched: `Bearer FR76ABCD123456789012` was logged as `Bearer FR76****012`, and `Bearer 4111111111111111` as `Bearer ****1111`. Both are now `Bearer ***`, and so is a JWT after `Bearer`, which was logged as `Bearer eyJ***.***`.
+
+- [#905](https://github.com/evloghq/evlog/pull/905) [`94748e1`](https://github.com/evloghq/evlog/commit/94748e1b3a643c1768d3bef1b1eceebd3d6a1718) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `log.set()`, `emit()` and the redaction production turns on by default do less work per event. The error check that runs on every `set()` payload no longer allocates when the payload holds no error. Redaction copies a plain event once while it redacts, instead of a `structuredClone` followed by a walk per stage, and skips the built-in patterns on strings none of them can match. Events with a `Date`, a `Map`, a class instance or another value that is not plain JSON still go through the previous path. The event `timestamp` is now one flat string. The concatenated string it replaces made `JSON.stringify` of the event, in a drain or a console line, about three times slower on Node 26. Logged and drained events are unchanged.
+
+- [#907](https://github.com/evloghq/evlog/pull/907) [`7fca2ba`](https://github.com/evloghq/evlog/commit/7fca2bacda2516eb4a1eee91381a29bdf1c81681) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The `iban` redaction built-in masks a spaced IBAN whole when `creditCard` is also on, as it is with the default `redact: true`. The card pattern ran first and matched the digits inside it, so `FR76 3000 6000 0112 3456 7890 189` was logged as `FR76 ****3456 7890 189`. It is now `FR76****189`. A `builtins` list runs in a fixed order, whatever order it is written in.
+
+- [#907](https://github.com/evloghq/evlog/pull/907) [`7fca2ba`](https://github.com/evloghq/evlog/commit/7fca2bacda2516eb4a1eee91381a29bdf1c81681) Thanks [@HugoRCD](https://github.com/HugoRCD)! - A cycle in the context passed to `createLogger()` or `createRequestLogger()`, or in the fields passed to `emit()`, is logged as `'[Circular]'`, as it already was for `set()`. It used to overflow the stack when redaction was on, which it is by default in production. An `Error` in that context or in `emit()` fields is now serialized with its `name`, `message` and `stack` instead of being logged as `{}`.
+
+- [#907](https://github.com/evloghq/evlog/pull/907) [`7fca2ba`](https://github.com/evloghq/evlog/commit/7fca2bacda2516eb4a1eee91381a29bdf1c81681) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `log.set()` only merges plain objects. A class instance or a `Date` is now a value: the next `set()` on the same key replaces it. Before, merging into one wrote the new fields into the caller's own object, and a second `Date` on the same key was ignored. `log.set({ account })` followed by `log.set({ account: { plan: 'pro' } })` now logs `{ plan: 'pro' }` and leaves `account` untouched.
+
+- [#902](https://github.com/evloghq/evlog/pull/902) [`7f74e73`](https://github.com/evloghq/evlog/commit/7f74e7301cc418ffc7a6dcb3f88ae0c9f50e71dd) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Keep evlog 3's process-wide state apart from evlog 2. `3.0.0-beta.0` still stored its config under the 2.x registry key, so with both majors loaded in one process (for example a dependency still on evlog 2), each copy read and overwrote the other's config, drain and redaction, and the "Multiple major versions of evlog" warning never fired. 3.x now uses its own key and warns when a 2.x copy is also loaded.
+
 ## 3.0.0-beta.0
 
 ### Major Changes
