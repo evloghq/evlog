@@ -29,7 +29,7 @@
     "sandbox:up": "docker compose -f packages/evlog/test/e2e/docker-compose.yml up -d --wait",
     "sandbox:seed": "node packages/evlog/test/e2e/seed.mjs",
     "sandbox:down": "docker compose -f packages/evlog/test/e2e/docker-compose.yml down -v",
-    "sandbox:e2e": "LOKI_ENDPOINT=http://localhost:3100 CLICKHOUSE_ENDPOINT=http://localhost:8123 pnpm run test:e2e",
+    "sandbox:e2e": "LOKI_ENDPOINT=http://localhost:3100 CLICKHOUSE_ENDPOINT=http://localhost:8123 GRAFANA_ENDPOINT=http://localhost:3001 pnpm run test:e2e",
     "cli": "node packages/cli/bin/evlog.mjs",
     "content:lint": "node scripts/content-lint/index.mjs",
     "content:lint:test": "vitest run --root scripts/content-lint",
