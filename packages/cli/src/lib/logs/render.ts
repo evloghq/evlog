@@ -16,6 +16,12 @@ function str(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
+/** v3 logs carry `status` only; 2.x logs and older files carry `statusCode`. */
+function errorStatus(error: Record<string, unknown>): string | undefined {
+  const value = error.status ?? error.statusCode
+  return value !== undefined ? String(value) : undefined
+}
+
 function obj(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 }
@@ -120,7 +126,7 @@ export function formatEvent(style: Style, event: WideEvent): string {
     lines.push(...section(style, 'error', [
       ['name', str(error.name)],
       ['message', str(error.message)],
-      ['status', error.statusCode !== undefined ? String(error.statusCode) : undefined],
+      ['status', errorStatus(error)],
       ['code', str(error.code) ?? str(data?.code)],
       ['why', str(data?.why) ?? str(error.why)],
       ['fix', str(data?.fix) ?? str(error.fix)],
