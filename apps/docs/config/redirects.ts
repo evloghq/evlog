@@ -42,6 +42,10 @@ export const redirects: Record<string, RouteRedirect> = {
   '/adapters/self-hosted': r('/integrate/adapters/overview'),
   '/use-cases/audit': r('/use-cases/audit/overview'),
 
+  // `evlog upgrade` findings and the runtime deprecation warnings link here with a
+  // `#<codemod-slug>` fragment, so this URL outlives any move of the guide itself.
+  '/migrate/v3': r('/reference/migrate-v3'),
+
   // Getting Started → Start + Reference
   '/getting-started/introduction': r('/start/introduction'),
   '/getting-started/installation': r('/start/installation'),
