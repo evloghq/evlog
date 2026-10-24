@@ -141,6 +141,34 @@ describe('nitro plugin - enrichment pipeline (T7)', () => {
     consoleSpy.mockRestore()
   })
 
+  it('handles callHook returning undefined (hookable 6, no async hooks)', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(getHeaders).mockReturnValue({})
+
+    const mockHooks = {
+      callHook: vi.fn().mockReturnValue(undefined),
+    }
+
+    const mockEvent: ServerEvent = {
+      method: 'GET',
+      path: '/api/test',
+      context: {},
+    }
+
+    const emittedEvent: WideEvent = {
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      service: 'test',
+      environment: 'test',
+    }
+
+    await callEnrichAndDrain(asNitroApp(mockHooks), emittedEvent, mockEvent)
+
+    expect(mockHooks.callHook).toHaveBeenCalledWith('evlog:drain', expect.objectContaining({ event: emittedEvent }))
+    expect(consoleSpy).not.toHaveBeenCalled()
+    consoleSpy.mockRestore()
+  })
+
   it('enricher can mutate the event before drain receives it', async () => {
     const mockHeaders = { 'user-agent': 'TestBot/1.0' }
     vi.mocked(getHeaders).mockReturnValue(mockHeaders)

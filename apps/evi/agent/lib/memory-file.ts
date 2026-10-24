@@ -38,21 +38,27 @@ export function normalizeMemoryText(text: string): string {
   return normalized
 }
 
-/** `<index>: <text>` lines under the allocating header, entries sorted by index. */
+/**
+ * `<index>: <text>` lines under the allocating header, entries sorted by index.
+ * Refuses a document over the byte cap, as eve refuses to save one.
+ */
 export function formatMemoryDocument(document: MemoryDocument): string {
   const header = `${HEADER_PREFIX}${document.lastAllocatedIndex} -->\n`
-  if (document.entries.length === 0) return header
   const body = [...document.entries]
     .sort((a, b) => a.index - b.index)
-    .map(entry => `${entry.index}: ${entry.text}`)
-    .join('\n')
-  return `${header}${body}\n`
+    .map(entry => `${entry.index}: ${entry.text}\n`)
+    .join('')
+  const formatted = `${header}${body}`
+  if (utf8Bytes(formatted) > MAX_DOCUMENT_BYTES) {
+    throw new RangeError(`Memory document exceeds the ${MAX_DOCUMENT_BYTES} UTF-8 byte limit.`)
+  }
+  return formatted
 }
 
 /** The inverse of `formatMemoryDocument`, strict enough to catch drift. */
 export function parseMemoryDocument(content: string): MemoryDocument {
   const header = HEADER_PATTERN.exec(content)
-  if (header === null || !content.endsWith('\n')) {
+  if (header === null || !content.endsWith('\n') || utf8Bytes(content) > MAX_DOCUMENT_BYTES) {
     throw new TypeError('Not a valid eve file-memory document.')
   }
   const lastAllocatedIndex = Number(header[1])

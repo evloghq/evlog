@@ -345,6 +345,23 @@ check('init splits dev and production destinations', (dir) => {
   expect(/import\.meta\.dev|NODE_ENV/.test(wired), 'the two were not branched on the environment')
 })
 
+check('init writes an evlog.config.ts that type-checks before nuxi prepare', (dir) => {
+  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--prod-drain', 'axiom']))
+  expect(payload.written.some(file => file.file === 'evlog.config.ts'), 'init did not write evlog.config.ts')
+
+  const config = readFileSync(join(dir, 'evlog.config.ts'), 'utf8')
+  expect(!config.includes('import.meta.dev'), 'the config reads import.meta.dev, typed only once nuxi prepare has run')
+
+  /* Only @types/node is in scope: the ImportMeta augmentation comes from
+     nuxi prepare, which a fresh project has not run yet. */
+  writeFileSync(join(dir, 'tsconfig.evlog-check.json'), JSON.stringify({
+    compilerOptions: { strict: true, noEmit: true, module: 'esnext', moduleResolution: 'bundler', target: 'es2022', skipLibCheck: true, types: ['node'] },
+    files: ['evlog.config.ts'],
+  }))
+  const tsc = spawnSync(process.execPath, [join(ROOT, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.evlog-check.json'], { cwd: dir, encoding: 'utf8' })
+  expect(tsc.status === 0, `tsc reported errors:\n${tsc.stdout}${tsc.stderr}`)
+})
+
 check('init writes .env.example, never .env', (dir) => {
   const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--prod-drain', 'axiom']))
   const files = payload.written.map(file => file.file)

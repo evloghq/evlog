@@ -22,9 +22,9 @@ Score what your app can tell you when something goes wrong. Diagnose your instal
 ## Usage
 
 ```bash
-npx evlog init          # interactive setup — pick a destination, review the plan
-npx evlog agents        # teach your AI agents the evlog conventions
-npx evlog map           # score what is still dark
+npx evlog init              # interactive setup — pick a destination, review the plan
+npx evlog agents            # teach your AI agents the evlog conventions
+npx evlog map               # score what is still dark
 npx evlog map --json --no-write
 ```
 

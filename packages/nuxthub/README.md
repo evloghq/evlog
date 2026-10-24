@@ -15,7 +15,7 @@ Self-hosted log retention for [evlog](https://evlog.dev) using [NuxtHub](https:/
 Install the packages:
 
 ```bash
-npx nuxi module add @nuxthub/core @evlog/nuxthub
+pnpm dlx nuxi module add @nuxthub/core @evlog/nuxthub
 ```
 
 Add the module to your `nuxt.config.ts`:

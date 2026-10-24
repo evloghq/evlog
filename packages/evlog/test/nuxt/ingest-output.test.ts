@@ -64,6 +64,17 @@ describe('client ingest stdout output', () => {
     expect(callHook.mock.calls.filter(([name]) => name === 'evlog:drain')).toHaveLength(1)
   })
 
+  it('accepts a callHook that returns undefined (hookable 6, no async hooks)', async () => {
+    initLogger({ pretty: false, stringify: false })
+    callHook.mockReturnValueOnce(undefined).mockReturnValueOnce(undefined)
+
+    const res = await send('info', 'sync hooks')
+
+    expect(res.status).toBe(204)
+    expect(callHook.mock.calls.map(([name]) => name)).toEqual(['evlog:enrich', 'evlog:drain'])
+    expect(error).not.toHaveBeenCalled()
+  })
+
   it('redacts a client event before stdout, enrichers and drains', async () => {
     initLogger({ pretty: false, stringify: false, redact: true })
 
