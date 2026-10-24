@@ -54,11 +54,11 @@ describe('runUpgrade', () => {
     expect(report).toMatchObject({ schemaVersion: UPGRADE_SCHEMA_VERSION, from: 2, to: 3, write: false, summary: { auto: 3, report: 1 } })
     expect(report.files.sort()).toEqual(['app/drain.ts', 'nitro.config.ts', 'package.json'])
     expect(report.findings.find(finding => finding.file === 'app/legacy.ts')).toMatchObject({
-      id: 'v3/nitro-subpaths',
+      id: 'v3/nitro-entry-points',
       mode: 'report',
       fixed: false,
       line: 1,
-      docsUrl: 'https://evlog.dev/migrate/v3#nitro-subpaths',
+      docsUrl: 'https://evlog.dev/migrate/v3#nitro-entry-points',
     })
     expect(await readFile(join(cwd, 'nitro.config.ts'), 'utf8')).toBe(EVLOG_2_APP['nitro.config.ts'])
   })

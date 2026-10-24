@@ -16,7 +16,7 @@ export interface Edit extends Span {
  * `report` when the user has to make the change.
  */
 export interface UpgradeFinding {
-  /** The codemod that found it, e.g. `v3/nitro-subpaths`. */
+  /** The codemod that found it, e.g. `v3/nitro-entry-points`. */
   id: string
   /** Relative to the project root, POSIX separators. */
   file: string

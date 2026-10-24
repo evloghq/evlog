@@ -1,9 +1,9 @@
 import type { Migration } from '../../types'
-import browserToHttp from './browser-to-http'
-import nitroSubpaths from './nitro-subpaths'
+import browserEntryRemoved from './browser-entry-removed'
+import nitroEntryPoints from './nitro-entry-points'
 
 /** evlog 2 → 3. */
 export default {
   to: 3,
-  codemods: [nitroSubpaths, browserToHttp],
+  codemods: [nitroEntryPoints, browserEntryRemoved],
 } satisfies Migration

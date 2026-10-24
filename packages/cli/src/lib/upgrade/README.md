@@ -4,7 +4,7 @@
 
 ## Add a codemod
 
-1. Create `migrations/v3/<slug>.ts`. Its id is `v3/<slug>`, and the migration guide section has the same anchor (`/migrate/v3#<slug>`).
+1. Create `migrations/v3/<slug>.ts`. Its id is `v3/<slug>`, and `<slug>` is the anchor of its section in the migration guide (`/migrate/v3#<slug>`), which the docs derive from the heading text: `### Nitro entry points` is `nitro-entry-points`. MDC ignores `{#id}` on headings, so the slug follows the heading, not the other way round. `test/upgrade/docs.test.ts` fails when a codemod has no matching heading.
    - An entry that moved or renamed exports: `moveModules(id, { 'old/entry': { to: 'new/entry', exports: { oldName: 'newName' } } })`.
    - Anything else: a `Codemod` with `needles` (strings a file must contain to be parsed) and `create(ctx)`, which returns node-type listeners. Call `ctx.finding(node, message, edits)` to fix, or `ctx.finding(node, message)` to report.
 2. Add it to `migrations/v3/index.ts`. Order does not matter: every codemod reads the same parse, and the engine applies their edits together. Two codemods editing the same code fail the run.
