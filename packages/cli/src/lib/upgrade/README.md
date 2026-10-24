@@ -7,6 +7,8 @@
 1. Create `migrations/v3/<slug>.ts`. Its id is `v3/<slug>`, and `<slug>` is the anchor of its section in the migration guide (`/migrate/v3#<slug>`), which the docs derive from the heading text: `### Nitro entry points` is `nitro-entry-points`. MDC ignores `{#id}` on headings, so the slug follows the heading, not the other way round. `test/upgrade/docs.test.ts` fails when a codemod has no matching heading.
    - An entry that moved or renamed exports: `moveModules(id, { 'old/entry': { to: 'new/entry', exports: { oldName: 'newName' } } })`.
    - Anything else: a `Codemod` with `needles` (strings a file must contain to be parsed) and `create(ctx)`, which returns node-type listeners. Call `ctx.finding(node, message, edits)` to fix, or `ctx.finding(node, message)` to report.
+   - Combine both with `mergeVisitors` (`v3/posthog-events-drain-removed` renames a type with `moveModules` and rewrites calls next to it). Before renaming an import, check the names `bindingCollector` gathers, so the new name never collides with a local.
+   - Rewrite a binding only when every use of it can be rewritten. Otherwise report each use and leave the file as it was: a half-migrated binding compiles and behaves differently.
 2. Add it to `migrations/v3/index.ts`. Order does not matter: every codemod reads the same parse, and the engine applies their edits together. Two codemods editing the same code fail the run.
 3. Add `test/upgrade/fixtures/v3/<slug>/<case>/input.<ext>`, plus `output.<ext>` for the expected result and `findings.json` (`[{ "line", "mode" }]`) when something is reported. A case with neither is a negative fixture: nothing may change. `codemods.test.ts` picks every case up.
 
