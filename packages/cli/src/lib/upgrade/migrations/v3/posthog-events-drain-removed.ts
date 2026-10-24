@@ -1,4 +1,5 @@
 import type { CallExpression, IdentifierReference, ImportDeclaration, ImportSpecifier, Node, ObjectExpression } from 'oxc-parser'
+import { removeSpecifier } from '../../edits'
 import { moveModules, referenceText } from '../../rename-modules'
 import type { Codemod, CodemodContext, Edit, Span } from '../../types'
 import { bindingCollector, mergeVisitors } from '../../visitors'
@@ -154,16 +155,4 @@ function objectWithMode(source: string, object: ObjectExpression): Edit[] {
     return [{ start: last.end, end: last.end, text: multiline ? `,\n${indent(last)}${MODE}` : `, ${MODE}` }]
   }
   return [{ start: first.start, end: first.start, text: multiline ? `${MODE},\n${indent(first)}` : `${MODE}, ` }]
-}
-
-/** Delete `specifier` and its separating comma, or the whole declaration when it is the only one. */
-function removeSpecifier(source: string, declaration: ImportDeclaration, specifier: ImportSpecifier): Edit {
-  if (declaration.specifiers.length === 1) {
-    const end = source[declaration.end] === '\n' ? declaration.end + 1 : declaration.end
-    return { start: declaration.start, end, text: '' }
-  }
-  const after = /^\s*,\s*/.exec(source.slice(specifier.end))
-  if (after) return { start: specifier.start, end: specifier.end + after[0].length, text: '' }
-  const before = /,\s*$/.exec(source.slice(0, specifier.start))!
-  return { start: specifier.start - before[0].length, end: specifier.end, text: '' }
 }
