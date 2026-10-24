@@ -1,5 +1,17 @@
 # evlog
 
+## 2.34.0
+
+### Minor Changes
+
+- [#918](https://github.com/evloghq/evlog/pull/918) [`e3b6ab2`](https://github.com/evloghq/evlog/commit/e3b6ab259a44c7b037056b19e4c41ced153731fa) Thanks [@evlogai](https://github.com/apps/evlogai)! - The `evlog/vite` plugin now reads `evlog.config.ts` from the Vite root, the same file the CLI, Nuxt and Nitro read, so Vite-based apps (TanStack Start, React Router, SvelteKit, Astro) can keep their settings in the shared file. The file is the base and plugin options override it key by key. Only the serializable settings (`service`, `environment`, `enabled`, `pretty`, `silent`, `sampling`, `minLevel`, `stringify`) are read from the file; its functions (`drain`, `enrich`, `keep`, `plugins`) are not injected by the plugin. Without a file, the plugin output is unchanged. A file that fails to load fails the build with its path in the error.
+
+### Patch Changes
+
+- [#946](https://github.com/evloghq/evlog/pull/946) [`c7c5d8c`](https://github.com/evloghq/evlog/commit/c7c5d8c2d611ec1dfdf99998d650db2df1eb6892) Thanks [@evlogai](https://github.com/apps/evlogai)! - `pnpm dlx evlog <command>` and `pnpm dlx @evlog/cli <command>` work on pnpm 11 instead of hanging. pnpm 11 links packages from its global store, so the `evlog` bin in a dlx install could not find the `@evlog/cli` installed next to it and fetched it again, forever. The bin now also looks for `@evlog/cli` from the `node_modules/.bin` folder that launched it. If a fetch it started still lands back on it, it exits with status 1 and suggests `npx --yes @evlog/cli <command>` instead of fetching a third time.
+
+- [#927](https://github.com/evloghq/evlog/pull/927) [`b395334`](https://github.com/evloghq/evlog/commit/b395334d68b5737a0c08b7d4477194c4f140af86) Thanks [@nathanchase](https://github.com/nathanchase)! - The Nitro plugin and the client ingest route no longer throw `Cannot read properties of undefined (reading 'catch')` on every request under Nitro 3. hookable 6 returns `undefined` from `callHook` when no `evlog:drain` hook is registered or every registered hook is synchronous, and evlog now accepts that.
+
 ## 2.33.1
 
 ### Patch Changes
