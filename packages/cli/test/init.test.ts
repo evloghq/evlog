@@ -9,6 +9,7 @@ import { readConfig, RuntimeValue } from '../src/lib/config/read'
 import { formatInitReport } from '../src/lib/init/report'
 import { configuredService, planWiring } from '../src/lib/init/wiring'
 import type { FileAction, WiringPlan } from '../src/lib/init/wiring'
+import type { DrainId } from '../src/lib/init/catalog'
 import { detectPackageManager, installCommand } from '../src/lib/init/pm'
 import { detectNitroMajor, runInit } from '../src/lib/init/run'
 
@@ -367,7 +368,7 @@ describe('runInit', () => {
 
     const config = await readFile(join(cwd, 'evlog.config.ts'), 'utf8')
     expect(config).toContain(`import { createFsDrain } from 'evlog/fs'`)
-    expect(config).toContain('drain: import.meta.dev ? createFsDrain() : undefined,')
+    expect(config).toContain('drain: process.env.NODE_ENV === \'production\' ? undefined : createFsDrain(),')
   })
 
   it('honours --no-sink', async () => {
@@ -626,12 +627,12 @@ describe('evlog.config.ts drains', () => {
     })
     const { contents } = action(plan, 'evlog.config.ts')
 
-    expect(contents).toContain('  drain: import.meta.dev ? createFsDrain() : createAxiomDrain(),')
+    expect(contents).toContain('  drain: process.env.NODE_ENV === \'production\' ? createAxiomDrain() : createFsDrain(),')
     expect(contents).not.toContain('const drains')
     expect(contents).not.toContain('Promise.all')
   })
 
-  it('branches on import.meta.dev for the Nitro-based frameworks', async () => {
+  it('branches on NODE_ENV for the Nitro-based frameworks', async () => {
     const root = await project({ 'package.json': '{"name":"api"}' })
 
     const plan = await planWiring({
@@ -643,8 +644,45 @@ describe('evlog.config.ts drains', () => {
     })
     const { contents } = action(plan, 'evlog.config.ts')
 
-    expect(contents).toContain('const drains = import.meta.dev\n  ? [createFsDrain()]\n  : [createAxiomDrain(), createSentryDrain()]')
+    expect(contents).toContain('const drains = process.env.NODE_ENV === \'production\'\n  ? [createAxiomDrain(), createSentryDrain()]\n  : [createFsDrain()]')
     expect(contents).toContain('drain: async ctx => void await Promise.all(drains.map(drain => drain(ctx))),')
+  })
+
+  it('never reads import.meta.dev, which is untyped until nuxi prepare runs', async () => {
+    /* Nitro inlines NODE_ENV as a literal in its production build, so the same
+       condition holds in every Nitro-based framework and type-checks in a fresh
+       project, before nuxi prepare has generated the ImportMeta augmentation. */
+    for (const framework of ['nuxt', 'nitro', 'tanstack-start'] as const) {
+      const cases: { prodDrains: DrainId[], expected: string[] }[] = [
+        {
+          prodDrains: ['axiom'],
+          expected: [`  drain: process.env.NODE_ENV === 'production' ? createAxiomDrain() : createFsDrain(),`],
+        },
+        {
+          prodDrains: ['axiom', 'sentry'],
+          expected: ['const drains = process.env.NODE_ENV === \'production\'\n  ? [createAxiomDrain(), createSentryDrain()]\n  : [createFsDrain()]'],
+        },
+        {
+          prodDrains: [],
+          expected: [`  drain: process.env.NODE_ENV === 'production' ? undefined : createFsDrain(),`],
+        },
+      ]
+
+      for (const { prodDrains, expected } of cases) {
+        const root = await project({ 'package.json': '{"name":"api"}' })
+        const plan = await planWiring({
+          root,
+          framework,
+          service: 'api',
+          ...wiring({ devDrain: 'fs', prodDrains }),
+          nitroMajor: 3,
+        })
+        const { contents } = action(plan, 'evlog.config.ts')
+
+        for (const line of expected) expect(contents, `${framework}: ${line}`).toContain(line)
+        expect(contents, framework).not.toContain('import.meta.dev')
+      }
+    }
   })
 
   it('branches on NODE_ENV where there is no import.meta.dev', async () => {
@@ -672,7 +710,7 @@ describe('evlog.config.ts drains', () => {
     const { contents } = action(plan, 'evlog.config.ts')
 
     expect(contents).toContain('createDrainPipeline<DrainContext>')
-    expect(contents).toContain('  drain: import.meta.dev ? createFsDrain() : pipeline(createAxiomDrain()),')
+    expect(contents).toContain('  drain: process.env.NODE_ENV === \'production\' ? pipeline(createAxiomDrain()) : createFsDrain(),')
   })
 
   it('scopes the filesystem drain to development', async () => {
@@ -684,7 +722,7 @@ describe('evlog.config.ts drains', () => {
     const nitroPlan = await planWiring({ root: nitro, framework: 'nitro', service: 'api', ...wiring(), nitroMajor: 3 })
     const honoPlan = await planWiring({ root: hono, framework: 'hono', service: 'api', ...wiring(), nitroMajor: 3 })
 
-    expect(action(nitroPlan, 'evlog.config.ts').contents).toContain('drain: import.meta.dev ? createFsDrain() : undefined,')
+    expect(action(nitroPlan, 'evlog.config.ts').contents).toContain('drain: process.env.NODE_ENV === \'production\' ? undefined : createFsDrain(),')
     expect(action(honoPlan, 'evlog.config.ts').contents).toContain(`drain: process.env.NODE_ENV === 'production' ? undefined : createFsDrain(),`)
   })
 

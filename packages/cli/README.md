@@ -22,10 +22,10 @@ Score what your app can tell you when something goes wrong. Diagnose your instal
 ## Usage
 
 ```bash
-pnpm dlx evlog init          # interactive setup — pick a destination, review the plan
-pnpm dlx evlog agents        # teach your AI agents the evlog conventions
-pnpm dlx evlog map           # score what is still dark
-pnpm dlx evlog map --json --no-write
+npx evlog init              # interactive setup — pick a destination, review the plan
+npx evlog agents            # teach your AI agents the evlog conventions
+npx evlog map               # score what is still dark
+npx evlog map --json --no-write
 ```
 
 Without `@evlog/cli` installed, each run fetches it (a few seconds cold, about a second cached). Install it for a pinned, instant run, which is what CI wants:

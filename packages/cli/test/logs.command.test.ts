@@ -416,6 +416,33 @@ describe('rendering', () => {
   })
 })
 
+describe('error status row', () => {
+  const style = createStyle({ color: false })
+  const failing = (error: Record<string, unknown>) => event({
+    level: 'error',
+    status: 500,
+    error: { name: 'Error', message: 'Payment processing failed', ...error },
+  })
+
+  it('shows error.status when only status is set (v3 shape)', () => {
+    expect(formatEvent(style, failing({ status: 402 }))).toMatch(/^ {2}status\s+402$/m)
+  })
+
+  it('falls back to error.statusCode when status is missing (files written before v3)', () => {
+    expect(formatEvent(style, failing({ statusCode: 402 }))).toMatch(/^ {2}status\s+402$/m)
+  })
+
+  it('prefers error.status when both are set', () => {
+    const text = formatEvent(style, failing({ status: 404, statusCode: 500 }))
+    expect(text).toMatch(/^ {2}status\s+404$/m)
+    expect(text).not.toMatch(/^ {2}status\s+500$/m)
+  })
+
+  it('has no status row when neither field is set', () => {
+    expect(formatEvent(style, failing({}))).not.toMatch(/^ {2}status\s/m)
+  })
+})
+
 describe('logs command', () => {
   it('--json is an envelope with the events and the counts', async () => {
     const cwd = await makeSink()
