@@ -7,6 +7,7 @@ import {
   toSazabiOTLPEndpoint,
 } from '../../src/adapters/sazabi'
 import type { OTLPExportLogsRequest } from '../../src/adapters/otlp'
+import { sendBatchToOTLP } from '../../src/adapters/otlp'
 import { getFetchCall, getFetchHeaders, getFetchJson, mockFetch } from '../helpers/fetch'
 import { makeContext, makeWideEvent } from '../helpers/events'
 import { defined } from '../helpers/defined'
@@ -89,6 +90,50 @@ describe('sazabi adapter', () => {
       await sendToSazabi(event(), { endpoint: INTAKE_URL, recordShape: 'json' })
 
       expect(JSON.parse(firstRecord().body.stringValue)).toMatchObject({ path: '/api/checkout', user: { plan: 'pro' } })
+    })
+  })
+
+  describe('semantic conventions', () => {
+    const event = () => makeWideEvent({ method: 'POST', path: '/api/checkout', status: 500, user: { plan: 'pro' } })
+    const firstRecord = () => {
+      const body = getFetchJson<OTLPExportLogsRequest>(fetchSpy)
+      const resourceLog = defined(body.resourceLogs[0], 'resourceLogs[0]')
+      const scopeLog = defined(resourceLog.scopeLogs[0], 'scopeLogs[0]')
+      return defined(scopeLog.logRecords[0], 'logRecords[0]')
+    }
+    const attributeKeys = () => firstRecord().attributes.map(attribute => attribute.key)
+
+    it('maps semanticConventions through to the OTLP config, unset by default', () => {
+      expect(toSazabiOTLPConfig({ endpoint: INTAKE_URL, semanticConventions: false }).semanticConventions).toBe(false)
+      expect(toSazabiOTLPConfig({ endpoint: INTAKE_URL }).semanticConventions).toBeUndefined()
+    })
+
+    it('sends the same request as the shared OTLP default', async () => {
+      await sendToSazabi(event(), { endpoint: INTAKE_URL })
+      const sazabiBody = getFetchJson(fetchSpy)
+
+      fetchSpy.mockClear()
+      await sendBatchToOTLP([event()], { endpoint: INTAKE_URL })
+      expect(sazabiBody).toEqual(getFetchJson(fetchSpy))
+    })
+
+    it('adds OpenTelemetry attribute names by default', async () => {
+      await sendToSazabi(event(), { endpoint: INTAKE_URL })
+      expect(firstRecord().attributes).toContainEqual({ key: 'http.request.method', value: { stringValue: 'POST' } })
+    })
+
+    it('sends only the evlog field names with semanticConventions false', async () => {
+      await sendToSazabi(event(), { endpoint: INTAKE_URL, semanticConventions: false })
+      expect(attributeKeys()).toContain('method')
+      expect(attributeKeys()).not.toContain('http.request.method')
+    })
+
+    it('keeps the 2.x output with recordShape json and semanticConventions false', async () => {
+      await sendToSazabi(event(), { endpoint: INTAKE_URL, recordShape: 'json', semanticConventions: false })
+      expect(JSON.parse(firstRecord().body.stringValue)).toMatchObject({ path: '/api/checkout', user: { plan: 'pro' } })
+      expect(attributeKeys()).not.toContain('http.request.method')
+      expect(attributeKeys()).not.toContain('url.path')
+      expect(attributeKeys()).not.toContain('http.response.status_code')
     })
   })
 

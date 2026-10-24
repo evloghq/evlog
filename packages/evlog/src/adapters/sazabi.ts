@@ -24,10 +24,18 @@ export interface SazabiConfig {
   /**
    * Log record shape. Default: `'compact'`: the body is a one-line summary (`POST /api/checkout (500)`) and
    * nested fields flatten to dotted attributes (`user.plan`) that can be filtered on in Sazabi.
-   * `'json'` sends the serialized event as the body.
+   * `'json'` sends the serialized event as the body. To keep the 2.x output, set `'json'` and `semanticConventions: false`.
    * @see {@link OTLPRecordShape}
    */
   recordShape?: OTLPRecordShape
+  /**
+   * Also emit OpenTelemetry semantic convention attributes (`http.request.method`,
+   * `url.path`, `http.response.status_code`, `exception.*`, `gen_ai.*`) and the
+   * `deployment.environment.name` resource attribute, next to the evlog field names.
+   * Default: `true`. Set `false` to send the evlog field names only. Together with
+   * `recordShape: 'json'`, this keeps the 2.x output.
+   */
+  semanticConventions?: boolean
 }
 
 const ENDPOINT_ENV = ['NUXT_SAZABI_INTAKE_URL', 'SAZABI_INTAKE_URL']
@@ -39,6 +47,7 @@ const SAZABI_FIELDS: ConfigField<SazabiConfig>[] = [
   { key: 'timeout' },
   { key: 'retries' },
   { key: 'recordShape' },
+  { key: 'semanticConventions' },
 ]
 
 /**
@@ -61,6 +70,7 @@ export function toSazabiOTLPConfig(config: SazabiConfig): OTLPConfig {
     timeout: config.timeout,
     retries: config.retries,
     recordShape: config.recordShape,
+    semanticConventions: config.semanticConventions,
   }
 }
 

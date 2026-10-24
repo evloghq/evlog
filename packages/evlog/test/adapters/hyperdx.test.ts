@@ -7,6 +7,10 @@ import {
   toHyperDXOTLPConfig,
   createHyperDXDrain,
 } from '../../src/adapters/hyperdx'
+import type { OTLPExportLogsRequest } from '../../src/adapters/otlp'
+import { sendBatchToOTLP } from '../../src/adapters/otlp'
+import { getFetchJson } from '../helpers/fetch'
+import { defined } from '../helpers/defined'
 
 describe('hyperdx adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -146,6 +150,58 @@ describe('hyperdx adapter', () => {
         expect.stringContaining('[evlog/hyperdx] Missing apiKey'),
       )
       expect(fetchSpy).not.toHaveBeenCalled()
+    })
+  })
+  describe('OTLP record options', () => {
+    const event = (): WideEvent => createTestEvent({ method: 'POST', path: '/api/checkout', status: 500, user: { plan: 'pro' } })
+    const firstRecord = () => {
+      const body = getFetchJson<OTLPExportLogsRequest>(fetchSpy)
+      const resourceLog = defined(body.resourceLogs[0], 'resourceLogs[0]')
+      const scopeLog = defined(resourceLog.scopeLogs[0], 'scopeLogs[0]')
+      return defined(scopeLog.logRecords[0], 'logRecords[0]')
+    }
+    const attributeKeys = () => firstRecord().attributes.map(attribute => attribute.key)
+
+    it('toHyperDXOTLPConfig passes recordShape and semanticConventions through', () => {
+      expect(toHyperDXOTLPConfig({ apiKey: 'k', recordShape: 'json', semanticConventions: false })).toMatchObject({
+        recordShape: 'json',
+        semanticConventions: false,
+      })
+    })
+
+    it('leaves both options unset by default, so the shared OTLP defaults apply', () => {
+      const otlp = toHyperDXOTLPConfig({ apiKey: 'k' })
+      expect(otlp.recordShape).toBeUndefined()
+      expect(otlp.semanticConventions).toBeUndefined()
+    })
+
+    it('sends the same request as the shared OTLP default', async () => {
+      await sendToHyperDX(event(), { apiKey: 'k' })
+      const hyperdxBody = getFetchJson(fetchSpy)
+
+      fetchSpy.mockClear()
+      await sendBatchToOTLP([event()], { endpoint: 'https://otlp.example.com' })
+      expect(hyperdxBody).toEqual(getFetchJson(fetchSpy))
+    })
+
+    it('defaults to the compact shape with semantic conventions on', async () => {
+      await sendToHyperDX(event(), { apiKey: 'k' })
+      expect(firstRecord().body.stringValue).toBe('POST /api/checkout (500)')
+      expect(attributeKeys()).toEqual(expect.arrayContaining(['user.plan', 'http.request.method', 'http.response.status_code']))
+    })
+
+    it('keeps the 2.x output with recordShape json and semanticConventions false', async () => {
+      await sendToHyperDX(event(), { apiKey: 'k', recordShape: 'json', semanticConventions: false })
+      expect(JSON.parse(firstRecord().body.stringValue)).toMatchObject({ path: '/api/checkout', user: { plan: 'pro' } })
+      expect(attributeKeys()).not.toContain('http.request.method')
+      expect(attributeKeys()).not.toContain('url.path')
+    })
+
+    it('applies the same options when they are passed to createHyperDXDrain', async () => {
+      const drain = createHyperDXDrain({ apiKey: 'k', recordShape: 'json', semanticConventions: false })
+      await drain({ event: event(), request: { method: 'POST', path: '/api/checkout', requestId: 'r1' }, headers: {} })
+      expect(JSON.parse(firstRecord().body.stringValue)).toMatchObject({ path: '/api/checkout' })
+      expect(attributeKeys()).not.toContain('http.request.method')
     })
   })
 })
