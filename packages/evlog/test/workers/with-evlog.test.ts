@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { EvlogError } from '../../src/error'
 import { initWorkersLogger, withEvlog } from '../../src/workers'
 import {
   assertHttpEventEmitted,
@@ -122,6 +123,18 @@ describe('evlog/workers withEvlog', () => {
     }, { drain })
 
     await expect(fireWorker(worker, { path: '/api/fail' })).rejects.toThrow('boom')
+    await waitForDrainCalls(drain)
+
+    assertHttpEventEmitted(drain, { path: '/api/fail', level: 'error', status: 500 })
+  })
+
+  it('records an EvlogError with no status as a 500 and rethrows it', async () => {
+    const { drain } = createPipelineSpies()
+    const worker = withEvlog(() => {
+      throw new EvlogError({ message: 'Turn could not start' })
+    }, { drain })
+
+    await expect(fireWorker(worker, { path: '/api/fail' })).rejects.toThrow('Turn could not start')
     await waitForDrainCalls(drain)
 
     assertHttpEventEmitted(drain, { path: '/api/fail', level: 'error', status: 500 })
