@@ -120,4 +120,15 @@ describe.sequential('Nitro v2 server with evlog error handler', () => {
     })
     expect(body).not.toHaveProperty('data')
   }, 15_000)
+  it('answers 500 for an EvlogError with no status', async () => {
+    const { status, body } = await fetchJson('/throws-evlog-no-status')
+
+    expect(status).toBe(500)
+    expect(body).toMatchObject({
+      status: 500,
+      url: '/throws-evlog-no-status',
+      error: true,
+      message: expect.any(String),
+    })
+  }, 15_000)
 })

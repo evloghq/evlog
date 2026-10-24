@@ -153,6 +153,25 @@ describe('evlog/sveltekit', () => {
     expect(drainCtx.event.status).toBe(402)
   })
 
+  it('answers 500 and logs the event for an EvlogError with no status', async () => {
+    const { drain } = createPipelineSpies()
+    const handle = evlog({ drain })
+    const event = createMockEvent('GET', '/api/job')
+    const resolve = vi.fn(() => {
+      throw new EvlogError({ message: 'Turn could not start' })
+    })
+
+    const response = await handle({ event, resolve })
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toMatchObject({ message: 'Turn could not start' })
+
+    expect(drain).toHaveBeenCalledOnce()
+    const drainCtx = getDrainCallArg(defined(drain.mock.calls[0], 'drain call'))
+    expect(drainCtx.event.level).toBe('error')
+    expect(drainCtx.event.status).toBe(500)
+  })
+
   it('re-throws non-EvlogError errors', async () => {
     const handle = evlog()
     const event = createMockEvent('GET', '/api/fail')

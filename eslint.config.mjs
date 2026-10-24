@@ -36,4 +36,9 @@ export default createConfig(
     // to exercise specific checks. Not maintained to repo lint standards.
     ignores: ['packages/cli/test/map/fixtures/**'],
   },
+  {
+    // `evlog upgrade` fixtures are code before and after a codemod. They import
+    // entries that no longer exist (`evlog/browser`) on purpose.
+    ignores: ['packages/cli/test/upgrade/fixtures/**'],
+  },
 )
