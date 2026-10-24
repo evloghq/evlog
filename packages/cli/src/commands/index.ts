@@ -36,6 +36,10 @@ export const subCommands = {
     { name: 'map', description: 'Static observability map — Lighthouse for wide events' },
     () => import('./map'),
   ),
+  upgrade: lazyCommand(
+    { name: 'upgrade', description: 'Migrate this project to the newest evlog major' },
+    () => import('./upgrade'),
+  ),
   telemetry: lazyCommand(
     { name: 'telemetry', description: 'View or change anonymous usage telemetry settings' },
     () => import('./telemetry'),
