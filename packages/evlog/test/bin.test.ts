@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
-import { chmod, cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -14,8 +14,9 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
-/* Copied out of the workspace so neither the cwd nor the shim's own location
-   resolves @evlog/cli; fake runners on PATH record the call and exit 3. */
+/* Copied out of the workspace so neither the cwd, the shim's own location nor a
+   node_modules/.bin on PATH resolves @evlog/cli; fake runners on PATH record
+   the call and exit 3. */
 async function isolated(): Promise<{ dir: string, log: string, shim: string, env: NodeJS.ProcessEnv, calls: () => Promise<string> }> {
   const dir = await mkdtemp(join(tmpdir(), 'evlog-bin-'))
   tempDirs.push(dir)
@@ -31,7 +32,7 @@ async function isolated(): Promise<{ dir: string, log: string, shim: string, env
     dir,
     log,
     shim,
-    env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+    env: { ...process.env, PATH: [dir, ...(process.env.PATH ?? '').split(delimiter).filter(entry => !entry.endsWith(join('node_modules', '.bin')))].join(delimiter) },
     calls: async () => (await readFile(log, 'utf8')).trim(),
   }
 }
@@ -65,6 +66,27 @@ describe('evlog bin', () => {
       env: { ...env, npm_config_user_agent: 'pnpm/10.0.0 npm/? node/v22.0.0' },
     }).catch(() => undefined)
     expect(await calls()).toBe('pnpm dlx @evlog/cli doctor')
+  })
+
+  it('runs the @evlog/cli of the node_modules/.bin that launched it', async () => {
+    const { dir, shim, env, calls } = await isolated()
+    /* pnpm 11 dlx: this bin is linked from the global store, outside the dlx
+       folder, and @evlog/cli sits in the dlx node_modules whose .bin is on PATH. */
+    const modules = join(dir, 'dlx', 'node_modules')
+    const cli = join(modules, '@evlog', 'cli')
+    await mkdir(join(cli, 'bin'), { recursive: true })
+    await mkdir(join(cli, 'dist'))
+    await mkdir(join(modules, '.bin'))
+    await writeFile(join(cli, 'package.json'), JSON.stringify({ name: '@evlog/cli', main: 'dist/index.js', bin: { evlog: './bin/evlog.mjs' } }))
+    await writeFile(join(cli, 'dist', 'index.js'), '')
+    await writeFile(join(cli, 'bin', 'evlog.mjs'), 'console.log(`cli ${process.argv.slice(2).join(\' \')}`)\n')
+    const { stdout } = await run(process.execPath, [shim, 'map', '--json'], {
+      cwd: tmpdir(),
+      timeout: 20_000,
+      env: { ...env, PATH: `${join(modules, '.bin')}:${env.PATH}`, npm_config_user_agent: 'pnpm/11.28.3 npm/? node/v24.21.0' },
+    })
+    expect(stdout.trim()).toBe('cli map --json')
+    await expect(calls()).rejects.toThrow('ENOENT')
   })
 
   it('stops when the fetch it started runs this bin again', async () => {

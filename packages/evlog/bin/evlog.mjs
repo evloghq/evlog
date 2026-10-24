@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
+import { basename, delimiter, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const PACKAGE = '@evlog/cli'
@@ -10,11 +10,20 @@ const PACKAGE = '@evlog/cli'
    starts does not fetch again. */
 const GUARD = 'EVLOG_CLI_WRAPPER'
 
+/* pnpm 11 links packages from a global store, so in `pnpm dlx` this bin cannot
+   see the @evlog/cli installed next to it. The node_modules/.bin that launched
+   it can. */
+function launchers() {
+  return (process.env.PATH ?? '').split(delimiter)
+    .filter(dir => basename(dir) === '.bin' && basename(dirname(dir)) === 'node_modules')
+    .map(dir => join(dir, '..', '..', 'package.json'))
+}
+
 /* The project's own install wins over a hoisted one, so an app that pins the
    CLI in a monorepo runs that pin. The package exports a single entry, so its
    root is found from there and the executable is read from its manifest. */
 function locate() {
-  for (const from of [join(process.cwd(), 'package.json'), import.meta.url]) {
+  for (const from of [join(process.cwd(), 'package.json'), import.meta.url, ...launchers()]) {
     try {
       return dirname(dirname(createRequire(from).resolve(PACKAGE)))
     } catch (error) {
