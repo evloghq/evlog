@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import type { SignalKind } from '../src/define'
 import { defineSignal } from '../src/define'
+import type { EvaluationAnswer, EvaluationQuestion } from '../src/evaluate'
 import { toQuestion, toVerdict } from '../src/evaluate'
 
 const fault = defineSignal({
@@ -9,6 +11,13 @@ const fault = defineSignal({
 })
 const severity = defineSignal({ name: 'severity', ask: 'How urgent?', score: ['noise', 'watch', 'page'] })
 const silent = defineSignal({ name: 'silent', ask: 'Left empty-handed?', criteria: { true: 'No order created' } })
+
+describe('evaluation types', () => {
+  it('cover only the question types a signal asks', () => {
+    expectTypeOf<EvaluationQuestion['type']>().toEqualTypeOf<SignalKind>()
+    expectTypeOf<EvaluationAnswer['type']>().toEqualTypeOf<SignalKind>()
+  })
+})
 
 describe('toQuestion', () => {
   it('maps each signal kind to the AI SDK question shape', () => {

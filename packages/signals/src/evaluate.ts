@@ -1,9 +1,9 @@
 import type { Experimental_EvaluationAnswer, Experimental_EvaluationModel, Experimental_EvaluationQuestion, JSONValue } from 'ai'
 import { experimental_evaluate } from 'ai'
-import type { Signal, Verdict } from './define'
+import type { Signal, SignalKind, Verdict } from './define'
 
 export type EvaluationModel = Experimental_EvaluationModel
-export type EvaluationQuestion = Experimental_EvaluationQuestion
+export type EvaluationQuestion = Extract<Experimental_EvaluationQuestion, { type: SignalKind }>
 export type EvaluationAnswer = Experimental_EvaluationAnswer<EvaluationQuestion>
 
 /** JSON the model can read. Built from the event by {@link SignalsOptions.state}. */
