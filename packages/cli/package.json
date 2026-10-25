@@ -58,17 +58,17 @@
     "@clack/prompts": "^1.8.1",
     "@evlog/telemetry": "workspace:*",
     "citty": "^0.2.2",
-    "oxc-parser": "^0.152.0"
+    "oxc-parser": "^0.155.0"
   },
   "peerDependencies": {
-    "evlog": ">=2.31.0"
+    "evlog": ">=2.33.1"
   },
   "devDependencies": {
     "evlog": "workspace:*",
-    "tsdown": "^0.23.0",
+    "tsdown": "^0.23.1",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "publishConfig": {
     "access": "public"

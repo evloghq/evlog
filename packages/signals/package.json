@@ -57,16 +57,16 @@
     "demo": "tsx scripts/demo.ts"
   },
   "devDependencies": {
-    "ai": "^7.0.127",
+    "ai": "^7.0.150",
     "evlog": "workspace:*",
-    "tsdown": "^0.23.0",
+    "tsdown": "^0.23.1",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "peerDependencies": {
     "ai": ">=7.0.105 <8.0.0",
-    "evlog": "^2.30.0"
+    "evlog": "^2.33.1"
   },
   "publishConfig": {
     "access": "public"

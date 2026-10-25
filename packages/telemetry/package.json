@@ -63,11 +63,11 @@
     "std-env": "^4.3.0"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.11",
-    "tsdown": "^0.23.0",
+    "@vitest/coverage-v8": "^4.1.12",
+    "tsdown": "^0.23.1",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "publishConfig": {
     "access": "public"
