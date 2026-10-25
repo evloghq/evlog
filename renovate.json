@@ -13,8 +13,11 @@
     },
     {
       "description": "Same weekly window as the repo (nuxt preset uses a broader schedule for framework packages)",
-      "matchPackagePatterns": ["^@nuxt/", "^nuxt"],
-      "schedule": ["before 3am on Monday"]
+      "schedule": ["before 3am on Monday"],
+      "matchPackageNames": [
+        "/^@nuxt//",
+        "/^nuxt/"
+      ]
     },
     {
       "description": "eve and its extensions declare a shared capability contract, so they bump together",
