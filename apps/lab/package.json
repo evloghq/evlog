@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@nuxt/fonts": "0.14.0",
-    "@nuxt/icon": "^2.5.1",
+    "@nuxt/icon": "^2.6.0",
     "@nuxt/ui": "^4.12.0",
     "@nuxtjs/color-mode": "^4.0.1",
     "@vercel/analytics": "^2.0.1",
