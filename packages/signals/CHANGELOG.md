@@ -1,5 +1,11 @@
 # @evlog/signals
 
+## 0.2.2
+
+### Patch Changes
+
+- [#955](https://github.com/evloghq/evlog/pull/955) [`d96a2ad`](https://github.com/evloghq/evlog/commit/d96a2adaca00b241b55ebeaa1218e77aca0eb3ec) Thanks [@renovate](https://github.com/apps/renovate)! - `EvaluationQuestion` and `EvaluationAnswer` cover only the `boolean`, `choice` and `score` types a signal asks. Recent `ai` 7 releases added a `box` question type, which made an exhaustive `switch` over `question.type` in a custom `AnswerFn` fail to type-check.
+
 ## 0.2.1
 
 ### Patch Changes
