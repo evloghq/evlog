@@ -4,6 +4,7 @@ import { createLineIndex, matchVueScript, walkAst } from '../map/parse'
 import type { Codemod, CodemodContext, Edit, Migration, Span, UpgradeFinding } from './types'
 import { docsUrlFor } from './docs'
 import { bumpEvlogRange } from './version'
+import { mergeVisitors } from './visitors'
 
 export interface MigrateInput {
   /** Relative path → contents, for every file that may hold code. */
@@ -121,19 +122,10 @@ function runCodemods(migration: Migration, file: string, source: string): Upgrad
     return findings
   }
 
-  const visitors = active.map(codemod => codemod.create(contextFor(codemod)))
-  const listeners = new Map<string, Array<(node: Node, parent: Node | null) => void>>()
-  for (const visitor of visitors) {
-    for (const [type, listener] of Object.entries(visitor)) {
-      if (type === 'onEnd' || !listener) continue
-      listeners.set(type, [...(listeners.get(type) ?? []), listener as (node: Node, parent: Node | null) => void])
-    }
-  }
-  walkAst(program, (node, parent) => {
-    const forType = listeners.get(node.type)
-    if (forType) for (const listener of forType) listener(node, parent)
-  })
-  for (const visitor of visitors) visitor.onEnd?.()
+  const visitor = mergeVisitors(active.map(codemod => codemod.create(contextFor(codemod))))
+  const listeners = visitor as Record<string, ((node: Node, parent: Node | null) => void) | undefined>
+  walkAst(program, (node, parent) => listeners[node.type]?.(node, parent))
+  visitor.onEnd?.()
   return findings
 }
 
