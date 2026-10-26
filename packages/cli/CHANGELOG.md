@@ -1,5 +1,39 @@
 # @evlog/cli
 
+## 1.0.0-beta.1
+
+### Minor Changes
+
+- [#936](https://github.com/evloghq/evlog/pull/936) [`bf38917`](https://github.com/evloghq/evlog/commit/bf38917caa720cfbf8328024aeec04004f288237) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog init` writes the Nitro import for the evlog major installed in the project. On evlog 3 it imports `evlog/nitro` for Nitro 3 and `evlog/nitro/v2` for nitropack, and on evlog 2 it keeps `evlog/nitro/v3` and `evlog/nitro`. The TanStack Start error middleware snippet follows the same rule. `evlog config` reads the module options from any of the three subpaths.
+
+  When the project has no evlog yet, a prerelease of the CLI installs `evlog@beta` and a release installs `evlog`, so the import paths it writes match the evlog it installs.
+
+- [#870](https://github.com/evloghq/evlog/pull/870) [`df39d50`](https://github.com/evloghq/evlog/commit/df39d50d9d576f4e36bd91d881b22c57d9d83f47) Thanks [@evlogai](https://github.com/apps/evlogai)! - Add `evlog upgrade`, which migrates a project to evlog 3. It reads the evlog range in `package.json` and runs every migration above it.
+
+  ```bash
+  npx @evlog/cli@latest upgrade          # show each fix and what needs a person, change nothing
+  npx @evlog/cli@latest upgrade --write  # apply the fixes and move evlog to ^3 in package.json
+  ```
+
+  This release rewrites two things:
+
+  - The Nitro imports: `evlog/nitro` becomes `evlog/nitro/v2` and `evlog/nitro/v3` becomes `evlog/nitro`, including `import()`, `require.resolve()` and `import.meta.resolve()`.
+  - `evlog/browser` becomes `evlog/http`, with `createBrowserDrain`, `createBrowserLogDrain`, `BrowserDrainConfig` and `BrowserLogDrainOptions` renamed to their `Http` names wherever the file uses them.
+
+  Code that cannot be rewritten safely is reported with its file, line and a link to the migration guide: a dynamic import of a module whose exports were renamed, an `export *` from it, or the module named in a plain string. The dry run exits 1 while anything is left, and `--write` exits 1 while reported findings remain. `--write` refuses to run on uncommitted git changes unless you pass `--force`. `--json` prints the report with a `schemaVersion`.
+
+  Running it again after `--write` does nothing, because `package.json` already says evlog 3.
+
+- [#953](https://github.com/evloghq/evlog/pull/953) [`c1d76de`](https://github.com/evloghq/evlog/commit/c1d76deb121190d0506664119a2ddff49c7fbded) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog upgrade` renames the removed credential options to `apiKey`: `token` on the Axiom drain and `sourceToken` on the Better Stack drain, in drain calls and in `evlog.axiom` of a Nuxt config. It reports an options object that sets both names, options built elsewhere, and the old `AXIOM_TOKEN`, `NUXT_AXIOM_TOKEN`, `BETTER_STACK_SOURCE_TOKEN` and `NUXT_BETTER_STACK_SOURCE_TOKEN` environment variables.
+
+- [#954](https://github.com/evloghq/evlog/pull/954) [`ffa40ae`](https://github.com/evloghq/evlog/commit/ffa40ae5aae971ee877f8554015c98e2ab7fca5f) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog upgrade` moves `createLoggerStorage` imports and re-exports from `evlog/toolkit` to `evlog/toolkit/storage`. The other names in the statement stay on `evlog/toolkit`, and the moved name joins an existing `evlog/toolkit/storage` import when the file has one. It reports `export *` from `evlog/toolkit`, which no longer includes `createLoggerStorage`, and namespace, `import()` or `require()` reads of it.
+
+- [#953](https://github.com/evloghq/evlog/pull/953) [`c1d76de`](https://github.com/evloghq/evlog/commit/c1d76deb121190d0506664119a2ddff49c7fbded) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog upgrade` rewrites `createPostHogEventsDrain(options)` to `createPostHogDrain({ mode: 'events', ...options })` and `PostHogEventsConfig` to `PostHogConfig`. It reports the function passed as a value, re-exported, or called with spread arguments, and leaves that binding as it was.
+
+### Patch Changes
+
+- [#920](https://github.com/evloghq/evlog/pull/920) [`4324afd`](https://github.com/evloghq/evlog/commit/4324afd7507a14d614a2e6ee4de0a49d966d0dd5) Thanks [@evlogai](https://github.com/apps/evlogai)! - `@evlog/cli` now installs next to evlog 2.31 and later as well as 3.0 betas. Before, `npm i -D @evlog/cli@beta` in a project still on evlog 2.x failed with `ERESOLVE`, because the peer range only allowed 3.0 betas. The minimum is 2.31.0, the first 2.x release the CLI has been built against.
+
 ## 1.0.0-beta.0
 
 ### Patch Changes

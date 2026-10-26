@@ -13,7 +13,31 @@
     "@evlog/telemetry": "0.3.4"
   },
   "changesets": [
+    "bearer-before-iban",
+    "cli-init-nitro-subpath",
+    "cli-peer-evlog-2",
     "error-status-field",
-    "require-node-22"
+    "evlog-upgrade-scaffold",
+    "faster-set-and-redaction",
+    "hyperdx-sazabi-otlp-options",
+    "iban-before-card",
+    "logged-error-guidance-once",
+    "logger-cycles-in-context",
+    "merge-plain-objects-only",
+    "nitro-entry-v3",
+    "nitro-error-body-status",
+    "otlp-compact-defaults",
+    "peer-ranges-v3",
+    "registry-major-3",
+    "remove-browser-entry",
+    "remove-credential-aliases",
+    "remove-error-status-getters",
+    "remove-posthog-events-drain",
+    "require-node-22",
+    "status-optional-on-error",
+    "toolkit-storage-entry-only",
+    "upgrade-credential-aliases",
+    "upgrade-logger-storage",
+    "upgrade-posthog-events-drain"
   ]
 }
