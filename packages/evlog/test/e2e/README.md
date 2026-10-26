@@ -14,6 +14,7 @@ your users do.
 | `better-stack.e2e.ts` | Better Stack | Smoke (source token is write-only) |
 | `loki.e2e.ts` | Grafana Loki | **Round-trip** via the query API — local container or Grafana Cloud |
 | `clickhouse.e2e.ts` | ClickHouse | **Round-trip** via `SELECT` — local container or ClickHouse Cloud |
+| `grafana.e2e.ts` | Sandbox Grafana | Datasources healthy, drained events readable through Grafana, every dashboard query valid against the ClickHouse schema |
 
 Every event is tagged with `e2e: true`, `e2e_run_id`, `e2e_branch`, `e2e_sha`,
 `e2e_test`, `e2e_correlation_id` so you can grep / clean it from the

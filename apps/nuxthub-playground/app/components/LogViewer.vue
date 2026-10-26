@@ -33,6 +33,12 @@ function parseJson(value: string | null) {
   }
 }
 
+/** v3 logs carry `status` only; 2.x logs and older files carry `statusCode`. */
+function errorStatus(value: string | null) {
+  const error = parseJson(value)
+  return error?.status ?? error?.statusCode
+}
+
 function flattenData(obj: Record<string, any>, depth = 0): Array<{ key: string, value: string | null, depth: number }> {
   const rows: Array<{ key: string, value: string | null, depth: number }> = []
   for (const [key, val] of Object.entries(obj)) {
@@ -193,8 +199,8 @@ onUnmounted(() => {
             >
               {{ parseJson(log.error).data.link }}
             </a>
-            <div v-if="parseJson(log.error).statusCode" style="margin-top: 0.4rem; color: #718096; font-size: 0.78rem;">
-              Status: {{ parseJson(log.error).statusCode }}
+            <div v-if="errorStatus(log.error)" style="margin-top: 0.4rem; color: #718096; font-size: 0.78rem;">
+              Status: {{ errorStatus(log.error) }}
             </div>
           </div>
 

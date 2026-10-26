@@ -15,6 +15,12 @@
 - Updated dependencies [[`24ca3e3`](https://github.com/evloghq/evlog/commit/24ca3e3c1fde0e16582abc125019f8995d0a48e4), [`32ded2c`](https://github.com/evloghq/evlog/commit/32ded2cb572f8184f24a938539eff30f24a1d455), [`a0187db`](https://github.com/evloghq/evlog/commit/a0187db7a500e5a51bcaa98e5f32ca1fe6df42e5), [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21)]:
   - evlog@3.0.0-beta.0
 
+## 0.2.2
+
+### Patch Changes
+
+- [#955](https://github.com/evloghq/evlog/pull/955) [`d96a2ad`](https://github.com/evloghq/evlog/commit/d96a2adaca00b241b55ebeaa1218e77aca0eb3ec) Thanks [@renovate](https://github.com/apps/renovate)! - `EvaluationQuestion` and `EvaluationAnswer` cover only the `boolean`, `choice` and `score` types a signal asks. Recent `ai` 7 releases added a `box` question type, which made an exhaustive `switch` over `question.type` in a custom `AnswerFn` fail to type-check.
+
 ## 0.2.1
 
 ### Patch Changes
