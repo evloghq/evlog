@@ -328,4 +328,34 @@ describe.sequential('Nitro v3 Server with evlog', () => {
       data: { orderId: 'ord_1', retryable: true },
     })
   })
+
+  it.sequential('keeps the error when an earlier error hook is still running', async () => {
+    const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const id = crypto.randomUUID()
+
+    try {
+      const res = await server.fetch(new Request(new URL('/throws', server.url), {
+        headers: { 'x-test-delayed-error': id },
+      }))
+      expect(res.status, await res.clone().text()).toBe(402)
+      expect(parseError(await res.json()).message).toBe('Payment failed')
+
+      const result = await vi.waitFor(async () => {
+        const response = await server.fetch(new Request(new URL(`/delayed-error-result?id=${id}`, server.url)))
+        const snapshot = await response.json()
+        expect(snapshot.finished).toBe(true)
+        return snapshot
+      })
+
+      expect(result.events).toHaveLength(1)
+      expect(result.events[0]).toMatchObject({
+        level: 'error',
+        status: 402,
+        error: { message: 'Payment failed' },
+      })
+      expect(warnings.mock.calls.flat().join('\n')).not.toContain('after the wide event was emitted')
+    } finally {
+      warnings.mockRestore()
+    }
+  })
 })
