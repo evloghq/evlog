@@ -329,33 +329,33 @@ describe.sequential('Nitro v3 Server with evlog', () => {
     })
   })
 
-  it.sequential('keeps the error when an earlier error hook is still running', async () => {
-    const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  it.each([
+    { when: 'an earlier error hook is still running', header: 'x-test-delayed-error', path: '/throws', status: 402, message: 'Payment failed' },
+    { when: 'a request hook failed before the handler', header: 'x-test-delayed-error', path: '/throws?earlier-error=1', status: 402, message: 'Payment failed' },
+    { when: 'an older error hook resumes during sampling', header: 'x-test-delayed-error', path: '/throws?earlier-error=1&resume-during-keep=1', status: 402, message: 'Payment failed' },
+    { when: 'an error is captured during sampling', header: 'x-test-error-during-keep', path: '/error-during-keep', status: 200, message: 'captured during sampling' },
+  ])('keeps the error when $when', async ({ header, path, status, message }) => {
     const id = crypto.randomUUID()
+    const res = await server.fetch(new Request(new URL(path, server.url), {
+      headers: { [header]: id },
+    }))
+    expect(res.status, await res.clone().text()).toBe(status)
+    if (status === 402) expect(parseError(await res.json()).message).toBe(message)
 
-    try {
-      const res = await server.fetch(new Request(new URL('/throws', server.url), {
-        headers: { 'x-test-delayed-error': id },
-      }))
-      expect(res.status, await res.clone().text()).toBe(402)
-      expect(parseError(await res.json()).message).toBe('Payment failed')
+    const result = await vi.waitFor(async () => {
+      const response = await server.fetch(new Request(new URL(`/delayed-error-result?id=${id}`, server.url)))
+      const snapshot = await response.json()
+      expect(snapshot.finished).toBe(true)
+      expect(snapshot.events).toHaveLength(1)
+      return snapshot
+    })
 
-      const result = await vi.waitFor(async () => {
-        const response = await server.fetch(new Request(new URL(`/delayed-error-result?id=${id}`, server.url)))
-        const snapshot = await response.json()
-        expect(snapshot.finished).toBe(true)
-        return snapshot
-      })
-
-      expect(result.events).toHaveLength(1)
-      expect(result.events[0]).toMatchObject({
-        level: 'error',
-        status: 402,
-        error: { message: 'Payment failed' },
-      })
-      expect(warnings.mock.calls.flat().join('\n')).not.toContain('after the wide event was emitted')
-    } finally {
-      warnings.mockRestore()
-    }
+    expect(result.events).toHaveLength(1)
+    expect(result.events[0]).toMatchObject({
+      level: 'error',
+      status,
+      error: { message },
+    })
+    expect(result.warnings.join('\n')).not.toContain('after the wide event was emitted')
   })
 })

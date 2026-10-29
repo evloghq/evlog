@@ -1,13 +1,7 @@
 import { definePlugin } from 'nitro'
 import type { DrainContext } from '../../../../src/types'
-import { results } from '../delayed-error-hook'
 
 export default definePlugin((nitroApp) => {
-  nitroApp.hooks.hook('error', (_error, { event }) => {
-    const result = results.get(event?.req.headers.get('x-test-delayed-error') ?? '')
-    if (result) result.finished = true
-  })
-
   nitroApp.hooks.hook('evlog:drain', (ctx: DrainContext) => {
     if (process.env.EVLOG_TEST_LOG !== '1') return
     console.log('[TEST:DRAIN]', JSON.stringify({

@@ -72,7 +72,9 @@ async function emitWithTailSampling(
   const runner = getGlobalPluginRunner()
   if (runner.hasKeep) await runner.runKeep(tailCtx)
 
-  return log.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
+  const emittedEvent = log.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
+  ctx._evlogEmitted = true
+  return emittedEvent
 }
 
 function getSafeRequestHeaders(event: HTTPEvent): Record<string, string> {
@@ -289,7 +291,7 @@ export default definePlugin(async (nitroApp) => {
     // Nitro does not await error hooks, so an earlier async hook can delay ours.
     ctx._evlogEmitting = true
     try {
-      const captured = ctx.nitro?.errors?.[0]?.error
+      const captured = ctx.nitro?.errors?.at(-1)?.error
       if (captured) recordError(log, captured)
 
       // Streaming responses (SSE, NDJSON, chunked) emit at header time: h3 v2's
@@ -300,7 +302,6 @@ export default definePlugin(async (nitroApp) => {
       // observable from this hook.
       log.set({ status: res.status })
       const emittedEvent = await emitWithTailSampling(hooks, log, event, res.status, ctx)
-      ctx._evlogEmitted = true
       await callEnrichAndDrain(hooks, emittedEvent, event, res)
     } finally {
       delete ctx._evlogEmitting
@@ -314,17 +315,21 @@ export default definePlugin(async (nitroApp) => {
     const ctx = e.req.context
     if (!ctx?._evlogShouldEmit) return
     const log = ctx.log as RequestLogger | undefined
-    if (!log || ctx._evlogEmitted || ctx._evlogEmitting) return
+    if (!log || ctx._evlogEmitted) return
+
+    // A delayed hook must not replace a newer error already captured for this request.
+    const errors = ctx.nitro?.errors
+    if (ctx._evlogEmitting && errors?.some(entry => entry.error === error) && errors.at(-1)?.error !== error) return
+
+    const actualError = recordError(log, error)
+    if (ctx._evlogEmitting) return
 
     ctx._evlogEmitting = true
     try {
-      const actualError = recordError(log, error)
-
       const errorStatus = extractErrorStatus(actualError)
       log.set({ status: errorStatus })
 
       const emittedEvent = await emitWithTailSampling(hooks, log, e, errorStatus, ctx)
-      ctx._evlogEmitted = true
       if (emittedEvent) {
         void callEnrichAndDrain(hooks, emittedEvent, e, undefined, { deferDrain: true }).catch((err) => {
           console.error('[evlog] background enrich/drain failed:', err)

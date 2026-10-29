@@ -10,7 +10,7 @@ export default defineConfig({
   errorHandler: resolve(evlogRoot, 'nitro-v3/errorHandler.ts'),
   plugins: [
     resolve(__dirname, 'delayed-error-hook.ts'),
-    resolve(evlogRoot, 'nitro-v3/plugin.ts'),
+    resolve(__dirname, 'evlog-plugin.ts'),
   ],
   alias: {
     'evlog': resolve(evlogRoot, 'index.ts'),
