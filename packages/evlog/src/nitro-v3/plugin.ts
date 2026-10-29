@@ -92,6 +92,13 @@ function getSafeResponseHeaders(res: Response): Record<string, string> | undefin
   return filterSafeHeaders(headers)
 }
 
+// Nitro records a handler error on the request context before `response` runs,
+// but its `error` hook may still be queued behind slower listeners. That listener owns the emit.
+function hasNitroError(ctx: Record<string, unknown>): boolean {
+  const nitro = ctx.nitro as { errors?: unknown[] } | undefined
+  return (nitro?.errors?.length ?? 0) > 0
+}
+
 function buildHookContext(
   event: HTTPEvent,
   res?: Response,
@@ -271,7 +278,7 @@ export default definePlugin(async (nitroApp) => {
   hooks.hook('response', async (res, event) => {
     const ctx = event.req.context
     // Skip if already emitted by error hook or route was filtered out
-    if (ctx?._evlogEmitted || ctx?._evlogEmitting || !ctx?._evlogShouldEmit) return
+    if (ctx?._evlogEmitted || ctx?._evlogEmitting || !ctx?._evlogShouldEmit || hasNitroError(ctx)) return
 
     const log = ctx.log as RequestLogger | undefined
     if (!log) return
