@@ -1,5 +1,11 @@
 # evlog
 
+## 2.34.1
+
+### Patch Changes
+
+- [#963](https://github.com/evloghq/evlog/pull/963) [`15b833e`](https://github.com/evloghq/evlog/commit/15b833eca6b799dbc0bdfa2a7bbdcc2c256b3630) Thanks [@onmax](https://github.com/onmax)! - Keep request errors in Nitro 3 wide events when an earlier async error hook delays evlog's hook. Emit once without late-write warnings.
+
 ## 2.34.0
 
 ### Minor Changes
