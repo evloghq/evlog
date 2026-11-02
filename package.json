@@ -8,7 +8,7 @@
   },
   "author": "HugoRCD",
   "license": "MIT",
-  "packageManager": "pnpm@11.28.8",
+  "packageManager": "pnpm@11.28.10",
   "scripts": {
     "dev": "turbo run dev --filter=evlog-playground",
     "dev:prepare": "turbo run dev:prepare",
@@ -48,20 +48,20 @@
     "release": "turbo run build --filter='./packages/*' && changeset publish"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "^4.0.34",
+    "@ai-sdk/provider": "^4.0.35",
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.1",
     "@hrcd/eslint-config": "^3.0.3",
     "@types/node": "^25.9.9",
-    "ai": "^7.0.153",
+    "ai": "^7.0.159",
     "automd": "^0.4.3",
-    "dotenv-cli": "^11.0.0",
+    "dotenv-cli": "^11.1.0",
     "eslint": "^9.39.5",
     "h3": "^1.15.11",
     "turbo": "^2.11.10",
     "typescript": "^6.0.3",
     "vitest": "^4.1.12",
-    "vue-tsc": "^3.3.13"
+    "vue-tsc": "^3.3.14"
   },
   "engines": {
     "node": "24.x"
