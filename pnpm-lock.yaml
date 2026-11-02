@@ -96,8 +96,8 @@ importers:
         specifier: ^12.11.1
         version: 12.11.1
       docus:
-        specifier: https://pkg.pr.new/docus@f0325509
-        version: https://pkg.pr.new/docus@f0325509(fbd961a7f3ba48b8c439684df5a8c061)
+        specifier: ^5.15.0
+        version: 5.15.0(fbd961a7f3ba48b8c439684df5a8c061)
       motion-v:
         specifier: ^2.8.0
         version: 2.8.0(@vueuse/core@14.4.0(vue@3.5.44(typescript@6.0.3)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vue@3.5.44(typescript@6.0.3))
@@ -10682,9 +10682,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  docus@https://pkg.pr.new/docus@f0325509:
-    resolution: {integrity: sha512-XBuNjIo1GNNkf+EGdLzwhI9Mbzg25EgjTDwDXHFHlCYZmSWKP+fAT/YlOhl5/JqHWCxPghHZsJ6+8zWdmWDh3Q==, tarball: https://pkg.pr.new/docus@f0325509}
-    version: 5.14.0
+  docus@5.15.0:
+    resolution: {integrity: sha512-BpxKFAHRofgojds9s2O+2SPAZREYj9Jbf2bh5l0OL4IJb45JHohYiMad1gszkVtrH7kXrbTzAVe/p2OOvgdm9Q==}
     peerDependencies:
       better-sqlite3: 12.x
       nuxt: 4.x
@@ -30290,7 +30289,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  docus@https://pkg.pr.new/docus@f0325509(fbd961a7f3ba48b8c439684df5a8c061):
+  docus@5.15.0(fbd961a7f3ba48b8c439684df5a8c061):
     dependencies:
       '@ai-sdk/gateway': 4.0.126(zod@4.6.7)
       '@ai-sdk/mcp': 2.0.74(zod@4.6.7)
