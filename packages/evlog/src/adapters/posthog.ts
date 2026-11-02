@@ -67,6 +67,14 @@ export interface PostHogConfig {
    * @see {@link OTLPRecordShape}
    */
   recordShape?: OTLPRecordShape
+  /**
+   * Also emit OpenTelemetry semantic convention attributes (`http.request.method`,
+   * `url.path`, `http.response.status_code`, `exception.*`, `gen_ai.*`) and the
+   * `deployment.environment.name` resource attribute, next to the evlog field names.
+   * Default: `true`. Set `false` to send the evlog field names only. Together with
+   * `recordShape: 'json'`, this keeps the 2.x output. Logs mode only.
+   */
+  semanticConventions?: boolean
   /** Request timeout in milliseconds. Default: 5000 */
   timeout?: number
   /** Number of retry attempts on transient failures. Default: 2 */
@@ -90,6 +98,7 @@ const POSTHOG_FIELDS: ConfigField<PostHogConfig>[] = [
   { key: 'distinctIdField' },
   { key: 'sessionIdField' },
   { key: 'recordShape' },
+  { key: 'semanticConventions' },
   { key: 'timeout' },
   { key: 'retries' },
 ]
@@ -102,6 +111,7 @@ function toOTLPConfig(config: PostHogConfig): OTLPConfig {
   return {
     endpoint: `${resolveHost(config)}/i`,
     ...(config.recordShape ? { recordShape: config.recordShape } : {}),
+    semanticConventions: config.semanticConventions,
     headers: { Authorization: `Bearer ${config.apiKey}` },
     timeout: config.timeout,
     retries: config.retries,

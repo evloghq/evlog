@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { createPostHogDrain, sendBatchToPostHog, sendBatchToPostHogEvents, sendToPostHog, sendToPostHogEvents, toPostHogEvent } from '../../src/adapters/posthog'
+import type { OTLPExportLogsRequest } from '../../src/adapters/otlp'
+import { sendBatchToOTLP } from '../../src/adapters/otlp'
+import { getFetchJson } from '../helpers/fetch'
+import { defined } from '../helpers/defined'
 
 describe('posthog adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -644,6 +648,53 @@ describe('posthog adapter', () => {
         expect.stringContaining('[evlog/posthog-events] Missing apiKey'),
       )
       expect(fetchSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('OTLP record options', () => {
+    const requestEvent = (): WideEvent => createTestEvent({ method: 'POST', path: '/api/checkout', status: 500, user: { plan: 'pro' } })
+    const firstRecord = () => {
+      const body = getFetchJson<OTLPExportLogsRequest>(fetchSpy)
+      const resourceLog = defined(body.resourceLogs[0], 'resourceLogs[0]')
+      const scopeLog = defined(resourceLog.scopeLogs[0], 'scopeLogs[0]')
+      return defined(scopeLog.logRecords[0], 'logRecords[0]')
+    }
+    const attributeKeys = () => firstRecord().attributes.map(attribute => attribute.key)
+
+    it('sends the same request as the shared OTLP default when both options are unset', async () => {
+      await sendToPostHog(requestEvent(), { apiKey: 'phc_test' })
+      const postHogBody = getFetchJson(fetchSpy)
+
+      fetchSpy.mockClear()
+      await sendBatchToOTLP([requestEvent()], { endpoint: 'https://us.i.posthog.com/i' })
+      expect(postHogBody).toEqual(getFetchJson(fetchSpy))
+    })
+
+    it('defaults to the compact shape with semantic conventions on', async () => {
+      await sendToPostHog(requestEvent(), { apiKey: 'phc_test' })
+      expect(firstRecord().body.stringValue).toBe('POST /api/checkout (500)')
+      expect(attributeKeys()).toEqual(expect.arrayContaining(['user.plan', 'http.request.method', 'http.response.status_code']))
+    })
+
+    it('drops the semantic convention names with semanticConventions false, and keeps the evlog field names', async () => {
+      await sendToPostHog(requestEvent(), { apiKey: 'phc_test', semanticConventions: false })
+      expect(attributeKeys()).toEqual(expect.arrayContaining(['method', 'user.plan']))
+      expect(attributeKeys()).not.toContain('http.request.method')
+      expect(attributeKeys()).not.toContain('url.path')
+    })
+
+    it('keeps the 2.x output with recordShape json and semanticConventions false', async () => {
+      await sendToPostHog(requestEvent(), { apiKey: 'phc_test', recordShape: 'json', semanticConventions: false })
+      expect(JSON.parse(firstRecord().body.stringValue)).toMatchObject({ path: '/api/checkout', user: { plan: 'pro' } })
+      expect(attributeKeys()).not.toContain('http.request.method')
+      expect(attributeKeys()).not.toContain('url.path')
+    })
+
+    it('applies the same options when they are passed to createPostHogDrain', async () => {
+      const drain = createPostHogDrain({ apiKey: 'phc_test', recordShape: 'json', semanticConventions: false })
+      await drain({ event: requestEvent(), request: { method: 'POST', path: '/api/checkout', requestId: 'r1' }, headers: {} })
+      expect(JSON.parse(firstRecord().body.stringValue)).toMatchObject({ path: '/api/checkout' })
+      expect(attributeKeys()).not.toContain('http.request.method')
     })
   })
 })
