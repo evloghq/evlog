@@ -508,7 +508,7 @@ export interface LoggerConfig {
    * ```
    */
   plugins?: Array<import('./shared/plugin').EvlogPlugin>
-  /** @internal Suppress the "silent without drain" warning (used by hook-based frameworks like Nitro/Nuxt) */
+  /** @internal Suppress the "silent without drain" warning. Kept because next, nitro and nitro-v3 initialize before their drain is attached; test/core/silent-drain-warning.test.ts fails without it. */
   _suppressDrainWarning?: boolean
 }
 
