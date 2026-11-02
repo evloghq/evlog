@@ -1,0 +1,27 @@
+{
+  "name": "evlog-docs-next",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "nuxt dev",
+    "dev:prepare": "nuxt prepare",
+    "build": "nuxt build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@number-flow/vue": "^0.5.2",
+    "@nuxt/ui": "^4.12.0",
+    "@vueuse/core": "^14.4.0",
+    "comark-docs": "link:../../../comark-docs-versions",
+    "motion-v": "^2.8.0",
+    "nuxt": "^4.6.1",
+    "posthog-js": "^1.438.19",
+    "shaders": "^2.5.135"
+  },
+  "devDependencies": {
+    "@iconify-json/logos": "^1.2.17",
+    "eslint": "^9.39.5"
+  }
+}

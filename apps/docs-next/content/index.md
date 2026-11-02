@@ -1,0 +1,567 @@
+---
+title: evlog — Digging through logs is not observability. It's hope.
+description: A modern TypeScript logger built for everything you ship — scripts, libraries, jobs, edge, requests. Simple logs, wide events, and structured errors in one API.
+navigation: false
+seo:
+  title: "evlog — TypeScript logger for wide events & structured logs"
+  description: "Digging through logs is not observability. It's hope. evlog is a TypeScript logger: structured logs, wide events and actionable errors in one API."
+---
+
+::landing-hero
+#title
+Digging through logs :br is not observability. :br It's hope
+
+#description
+A modern TypeScript logger built for everything you ship. Simple logs, wide events, and structured errors: one API, every context.
+::
+
+::landing-logos
+::
+
+::landing-features
+#body
+  :::features-feature-simple-api
+  ---
+  link: /start/quick-start
+  link-label: Quick start guide
+  ---
+  #headline
+  Simple API
+
+  #title
+  Set context. :br Get answers
+
+  #description
+  Accumulate context with log.set, throw structured errors with why and fix, group recurring errors in typed catalogs. One wide event captures everything, whether the request succeeds or fails.
+  :::
+
+  :::features-feature-agent-ready
+  ---
+  link: /skills
+  link-label: Agent skills setup
+  ---
+  #headline
+  Agent Ready
+
+  #title
+  Built for agents
+
+  #description
+  Structured fields, machine-readable context, and actionable metadata that give AI agents everything they need to diagnose and resolve issues on their own. Enable the file system drain to write NDJSON logs locally and let agents read them directly.
+  :::
+
+  :::features-feature-cli-map
+  ---
+  link: /map
+  link-label: evlog map guide
+  ---
+  #headline
+  Observability Score
+
+  #title
+  Find logging gaps :br in your source
+
+  #description
+  Run `evlog map` to find missing evlog patterns in supported Nuxt, Nitro, Next.js App Router, TanStack Start, Hono, Express, and Fastify entry points. The score summarizes static checks and suggests fixes. It does not run your handlers or verify the logs they produce.
+  :::
+
+  :::features-feature-adapters
+  ---
+  link: /drains
+  link-label: Explore adapters
+  ---
+  #headline
+  Drain Pipeline
+
+  #title
+  Send everywhere
+
+  #description
+  Batched writes, automatic retries with backoff, and fan-out to multiple destinations. Your logs flow through a pipeline that never blocks your response.
+  :::
+
+  :::features-feature-client-drain
+  ---
+  link: /drains/http
+  link-label: Client logging guide
+  ---
+  #headline
+  Client Logs
+
+  #title
+  See the full picture
+
+  #description
+  Capture browser events and drain them to your server. Automatic batching, retries, and page-aware flushing with the same pipeline from client to server.
+  :::
+
+  :::features-feature-sampling
+  ---
+  link: /events/sampling
+  link-label: Sampling guide
+  ---
+  #headline
+  Sampling
+
+  #title
+  Keep what matters
+
+  #description
+  Two-tier filtering: head sampling drops noise by level, tail sampling rescues critical events. Never miss errors, slow requests, or critical paths.
+  :::
+
+  :::features-feature-audit
+  ---
+  link: /audit
+  link-label: Audit logs guide
+  ---
+  #headline
+  Audit Logs
+
+  #title
+  Compliance-ready :br by composition
+
+  #description
+  First-class who-did-what trails as a thin layer on top of wide events. One enricher, one drain wrapper, one helper. Tamper-evident hash chains, denied actions, redact-aware diffs, idempotency keys for safe retries, and typed action catalogs for refactor-safe alerting, all from the main entrypoint, no parallel pipeline.
+  :::
+
+  :::features-feature-ai-sdk
+  ---
+  link: /integrations/ai-sdk
+  link-label: AI SDK integration
+  ---
+  #headline
+  AI Observability
+
+  #title
+  Make AI calls :br observable
+
+  #description
+  Your AI endpoints are black boxes. You don't know how many tokens each request burns, which tools the model called, or how fast the stream was. Wrap your model with one line and every call is captured into the wide event. Cost estimation, tool execution timing, streaming performance, cache hits, reasoning tokens, and multi-step agent breakdowns.
+  :::
+
+  :::features-feature-performance
+  ---
+  link: /reference/performance
+  link-label: Benchmark results
+  ---
+  #headline
+  Performance
+
+  #title
+  Add logging, :br not overhead
+
+  #description
+  Zero runtime dependencies in the core package. Accumulate context and emit one event per operation. Inspect the benchmark workloads and measure your payload, output, and drain configuration before estimating production cost.
+  :::
+
+  :::features-feature-frameworks
+  ---
+  link: /integrations
+  link-label: Framework integrations
+  ---
+  #headline
+  Frameworks
+
+  #title
+  Your stack. Covered
+
+  #description
+  Integrations for Nuxt, Next.js, SvelteKit, Hono, Express, Fastify, and other documented stacks. Each guide covers its setup and request-logger access. For Vite projects, add `evlog/vite` for auto-initialization, debug stripping, and source locations.
+
+  #nuxt
+  ```ts [server/api/checkout.post.ts]
+  export default defineEventHandler(async (event) => {
+    const log = useLogger(event)
+    const { cartId } = await readBody(event)
+
+    const cart = await db.findCart(cartId)
+    log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    const charge = await stripe.charge(cart.total)
+    log.set({ stripe: { chargeId: charge.id } })
+
+    if (!charge.success) {
+      throw createError({
+        status: 402,
+        message: 'Payment failed',
+        why: charge.decline_reason,
+        fix: 'Try a different payment method',
+      })
+    }
+
+    return { orderId: charge.id }
+  })
+  ```
+
+  #nextjs
+  ```ts [app/api/checkout/route.ts]
+  import { withEvlog, useLogger } from '@/lib/evlog'
+  import { createError } from 'evlog'
+
+  export const POST = withEvlog(async (req) => {
+    const log = useLogger()
+    const { cartId } = await req.json()
+
+    const cart = await db.findCart(cartId)
+    log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    const charge = await stripe.charge(cart.total)
+    log.set({ stripe: { chargeId: charge.id } })
+
+    if (!charge.success) {
+      throw createError({
+        status: 402,
+        message: 'Payment failed',
+        why: charge.decline_reason,
+        fix: 'Try a different payment method',
+      })
+    }
+
+    return Response.json({ orderId: charge.id })
+  })
+  ```
+
+  #sveltekit
+  ```ts [src/routes/api/checkout/+server.ts]
+  import { json } from '@sveltejs/kit'
+  import { createError } from 'evlog'
+  import { useLogger } from 'evlog/sveltekit'
+  import type { RequestHandler } from './$types'
+
+  export const POST: RequestHandler = async ({ request }) => {
+    const log = useLogger()
+    const { cartId } = await request.json()
+
+    const cart = await db.findCart(cartId)
+    log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    const charge = await stripe.charge(cart.total)
+    log.set({ stripe: { chargeId: charge.id } })
+
+    if (!charge.success) {
+      throw createError({
+        status: 402,
+        message: 'Payment failed',
+        why: charge.decline_reason,
+        fix: 'Try a different payment method',
+      })
+    }
+
+    return json({ orderId: charge.id })
+  }
+  ```
+
+  #nitro
+  ```ts [routes/api/checkout.post.ts]
+  import { defineHandler, readBody } from 'nitro/h3'
+  import { useLogger, createError } from 'evlog/nitro'
+
+  export default defineHandler(async (event) => {
+    const log = useLogger(event)
+    const { cartId } = await readBody(event)
+
+    const cart = await db.findCart(cartId)
+    log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    const charge = await stripe.charge(cart.total)
+    log.set({ stripe: { chargeId: charge.id } })
+
+    if (!charge.success) {
+      throw createError({
+        status: 402,
+        message: 'Payment failed',
+        why: charge.decline_reason,
+        fix: 'Try a different payment method',
+      })
+    }
+
+    return { orderId: charge.id }
+  })
+  ```
+
+  #tanstack-start
+  ```ts [src/routes/api/checkout.ts]
+  import { createFileRoute } from '@tanstack/react-router'
+  import { useRequest } from 'nitro/context'
+  import { createError } from 'evlog'
+  import type { RequestLogger } from 'evlog'
+
+  export const Route = createFileRoute('/api/checkout')({
+    server: {
+      handlers: {
+        POST: async ({ request }) => {
+          const req = useRequest()
+          const log = req.context.log as RequestLogger
+          const { cartId } = await request.json()
+
+          const cart = await db.findCart(cartId)
+          log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+          const charge = await stripe.charge(cart.total)
+          log.set({ stripe: { chargeId: charge.id } })
+
+          if (!charge.success) {
+            throw createError({
+              status: 402,
+              message: 'Payment failed',
+              why: charge.decline_reason,
+              fix: 'Try a different payment method',
+            })
+          }
+
+          return Response.json({ orderId: charge.id })
+        },
+      },
+    },
+  })
+  ```
+
+  #react-router
+  ```ts [app/routes/api.checkout.tsx]
+  import { loggerContext } from 'evlog/react-router'
+  import { createError } from 'evlog'
+
+  export async function action({ request, context }: Route.ActionArgs) {
+    const log = context.get(loggerContext)
+    const { cartId } = await request.json()
+
+    const cart = await db.findCart(cartId)
+    log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    const charge = await stripe.charge(cart.total)
+    log.set({ stripe: { chargeId: charge.id } })
+
+    if (!charge.success) {
+      throw createError({
+        status: 402,
+        message: 'Payment failed',
+        why: charge.decline_reason,
+        fix: 'Try a different payment method',
+      })
+    }
+
+    return Response.json({ orderId: charge.id })
+  }
+  ```
+
+  #nestjs
+  ```ts [app.module.ts]
+  import { Module } from '@nestjs/common'
+  import { EvlogModule } from 'evlog/nestjs'
+  import { createAxiomDrain } from 'evlog/axiom'
+
+  @Module({
+    imports: [
+      EvlogModule.forRoot({
+        drain: createAxiomDrain(),
+      }),
+    ],
+  })
+  export class AppModule {}
+  ```
+
+  #express
+  ```ts [src/index.ts]
+  import { evlog, useLogger } from 'evlog/express'
+  import { createAxiomDrain } from 'evlog/axiom'
+
+  const app = express()
+  app.use(evlog({ drain: createAxiomDrain() }))
+
+  app.post('/checkout', async (req, res) => {
+    const log = useLogger()
+    const { cartId } = req.body
+
+    const cart = await db.findCart(cartId)
+    log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    const charge = await stripe.charge(cart.total)
+    log.set({ stripe: { chargeId: charge.id } })
+
+    res.json({ orderId: charge.id })
+  })
+  ```
+
+  #hono
+  ```ts [src/index.ts]
+  import { evlog, type EvlogVariables } from 'evlog/hono'
+  import { createAxiomDrain } from 'evlog/axiom'
+
+  const app = new Hono<EvlogVariables>()
+  app.use(evlog({ drain: createAxiomDrain() }))
+
+  app.post('/checkout', async (c) => {
+    const log = c.get('log')
+    const { cartId } = await c.req.json()
+
+    const cart = await db.findCart(cartId)
+    log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    const charge = await stripe.charge(cart.total)
+    log.set({ stripe: { chargeId: charge.id } })
+
+    return c.json({ orderId: charge.id })
+  })
+  ```
+
+  #fastify
+  ```ts [src/index.ts]
+  import { evlog } from 'evlog/fastify'
+  import { createAxiomDrain } from 'evlog/axiom'
+
+  const app = Fastify({ logger: false })
+  await app.register(evlog, { drain: createAxiomDrain() })
+
+  app.post('/checkout', async (request) => {
+    const { cartId } = request.body
+
+    const cart = await db.findCart(cartId)
+    request.log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    const charge = await stripe.charge(cart.total)
+    request.log.set({ stripe: { chargeId: charge.id } })
+
+    return { orderId: charge.id }
+  })
+  ```
+
+  #elysia
+  ```ts [src/index.ts]
+  import { evlog } from 'evlog/elysia'
+  import { createAxiomDrain } from 'evlog/axiom'
+
+  const app = new Elysia()
+    .use(evlog({ drain: createAxiomDrain() }))
+    .post('/checkout', async ({ log, body }) => {
+      const { cartId } = body
+
+      const cart = await db.findCart(cartId)
+      log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+      const charge = await stripe.charge(cart.total)
+      log.set({ stripe: { chargeId: charge.id } })
+
+      return { orderId: charge.id }
+    })
+  ```
+
+  #orpc
+  ```ts [server/orpc.ts]
+  import { os } from '@orpc/server'
+  import { RPCHandler } from '@orpc/server/fetch'
+  import { evlog, withEvlog, type EvlogOrpcContext } from 'evlog/orpc'
+  import { createAxiomDrain } from 'evlog/axiom'
+
+  const base = os.$context<EvlogOrpcContext>().use(evlog())
+
+  const router = {
+    checkout: base
+      .input(z.object({ cartId: z.string() }))
+      .handler(async ({ input, context }) => {
+        const cart = await db.findCart(input.cartId)
+        context.log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+        const charge = await stripe.charge(cart.total)
+        context.log.set({ stripe: { chargeId: charge.id } })
+
+        return { orderId: charge.id }
+      }),
+  }
+
+  const handler = withEvlog(new RPCHandler(router), { drain: createAxiomDrain() })
+  ```
+
+  #effect
+  ```ts [src/index.ts]
+  import { Effect, Layer } from 'effect'
+  import { HttpRouter, HttpServerRequest, HttpServerResponse } from 'effect/http'
+  import { EvlogLogger, routerLayer } from 'evlog/effect'
+  import { createAxiomDrain } from 'evlog/axiom'
+
+  const Checkout = HttpRouter.add('POST', '/checkout', Effect.gen(function* () {
+    const log = yield* EvlogLogger
+    const { cartId } = yield* HttpServerRequest.schemaBodyJson(CheckoutBody)
+
+    const cart = yield* Carts.find(cartId)
+    log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    const charge = yield* Stripe.charge(cart.total)
+    log.set({ stripe: { chargeId: charge.id } })
+
+    return HttpServerResponse.jsonUnsafe({ orderId: charge.id })
+  }))
+
+  const Routes = Checkout.pipe(Layer.provide(routerLayer({ drain: createAxiomDrain() })))
+  ```
+
+  #cloudflare
+  ```ts [src/worker.ts]
+  import { defineWorkerFetch, initWorkersLogger } from 'evlog/workers'
+
+  initWorkersLogger({ env: { service: 'checkout-worker' } })
+
+  export default defineWorkerFetch(async (request, env, _ctx, log) => {
+    const { cartId } = await request.json()
+    const cart = await env.DB.findCart(cartId)
+    log.set({ cart: { items: cart.items.length, total: cart.total } })
+
+    log.emit()
+    return Response.json({ orderId: cart.id })
+  })
+  ```
+
+  #bun
+  ```ts [scripts/migrate-users.ts]
+  import { initLogger, createLogger } from 'evlog'
+
+  initLogger({ env: { service: 'migrate' } })
+
+  const log = createLogger({ task: 'user-migration' })
+
+  const users = await db.query('SELECT * FROM legacy_users')
+  log.set({ found: users.length })
+
+  for (const user of users) {
+    await newDb.upsert({ id: user.id, email: user.email, plan: user.plan })
+  }
+
+  log.set({ migrated: users.length, status: 'complete' })
+  log.emit()
+  ```
+
+  :::
+::
+
+::landing-faq
+#headline
+FAQ
+#title
+Before you install
+#body
+  ::accordion{type="single"}
+    ::accordion-item{label="I already use pino. What actually changes?"}
+    evlog supplies a context accumulator and integrations that finish the request event. `log.set()` adds fields during the operation, and the emitted event carries its outcome and error together. Pino can also emit a completed object once, with accumulation managed by your application. `createError()` adds `why` and `fix`, and a [catalog](/errors/catalogs) gives recurring failures a stable code. Call signatures, serializers, and output configuration need an explicit migration. See [the comparison for your stack](/v2/reference/vs-other-loggers).
+    ::
+    ::accordion-item{label="My app is already in production. Is it too late?"}
+    No, and you do not have to guess where to start. `evlog map` reads your source and scores every entry point on the context it will hand you when it breaks, then names the ones to fix first. It needs no traffic, no agent, and no deploy, so you get that list before the next incident instead of during it. Day one or year three, the work is the same list. See [adding it to an app already in production](/map).
+    ::
+    ::accordion-item{label="Do I have to change where my logs go?"}
+    No, and you keep the platform you already pay for. evlog produces the events, a drain ships them: Axiom, Datadog, Sentry, Better Stack, PostHog, Loki, ClickHouse, OTLP, or the filesystem. Changing provider is a drain swap, not an architecture change, because your handlers never name a destination. If you are building the platform rather than buying one, that same pipeline is where you plug in. See [how a drain keeps the destination out of your code](/drains).
+    ::
+    ::accordion-item{label="Will it cost me more to ship these logs?"}
+    It usually costs less. One request leaves one event instead of four lines, which measures **56% fewer bytes and 75% fewer events** on the checkout shape in the [log cost guide](/reference/performance), because the level, timestamp, host and request bindings stop repeating on every line. Which of those two numbers moves your bill depends on your provider: most charge per GB ingested, so you save on bytes, while a provider that also bills per million events indexed rewards the event count instead. Then [sampling](/events/sampling) drops what you were never going to read and force-keeps errors and slow requests. Price it against your own traffic on [which number moves your bill](/reference/performance).
+    ::
+    ::accordion-item{label="How much work is it to adopt?"}
+    You migrate one handler at a time. Two calls are worth learning: `log.set()`, which adds context to the event in flight, and `createError()`, which attaches a `why` and a `fix` to an error instead of a bare stack. See [how much of this you need on day one](/start/quick-start), or [what evlog is](/start/introduction) if you want the shape before the code.
+    ::
+    ::accordion-item{label="What does it cost at runtime?"}
+    The core package has **zero runtime dependencies**. Execution cost depends on context size, redaction, output, and delivery. A silent construction benchmark excludes console serialization and remote export, so it cannot establish a fixed cost per production request. Follow [what it costs on one real request](/reference/performance) to measure the complete path on your runtime.
+    ::
+  ::
+::
+
+::landing-cta
+#description
+One logger for every context. Set it up in 10 minutes. Your future self will thank you.
+::
