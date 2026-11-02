@@ -1,0 +1,465 @@
+@theme static {
+  --color-blue-400: #2853ff;
+  --color-blue-500: #2853ff;
+}
+
+@theme {
+  --font-sans: "Geist", sans-serif;
+  --font-mono: "Geist Mono", monospace;
+  --font-pixel: "Geist Pixel Line", monospace;
+  --font-pixel-square: "Geist Pixel Line", monospace;
+}
+
+:root,
+.dark {
+  --ui-radius: 0;
+  --ui-primary: var(--ui-color-primary-500);
+  --ui-bg: var(--color-zinc-950);
+  --ui-text-dimmed: var(--color-zinc-400);
+}
+
+@layer base {
+  :root {
+    @apply selection:bg-primary selection:text-white;
+  }
+
+  html, body {
+    @apply bg-default text-default;
+  }
+}
+
+.section-label {
+  @apply font-pixel text-[10px] uppercase tracking-widest text-muted mb-4 flex items-center;
+}
+
+.section-label::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  background-color: var(--ui-color-primary-500);
+  margin-right: 0.5rem;
+  box-shadow: 0 0 8px var(--ui-color-primary-500);
+}
+
+.section-title {
+  @apply font-pixel text-4xl md:text-5xl lg:text-6xl tracking-tight text-highlighted;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+/**
+ * The blurred duplicate that gives a title its glow. Effect only — typography
+ * stays in the markup, since the header logo glows at its own size.
+ *
+ * Its own compositing layer, so the blur rasterizes once and the pulse only
+ * changes opacity. CSS animations do not stop off-screen, so on the main layer
+ * every title on the page paid for its filter continuously.
+ */
+.title-glow {
+  @apply absolute inset-0 blur-xs pointer-events-none;
+  will-change: opacity;
+  transform: translateZ(0);
+  animation: title-glow-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes title-glow-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-glow {
+    animation: none;
+  }
+}
+
+.landing-code pre[style] {
+  background-color: var(--ui-bg-muted) !important;
+}
+
+.landing-code > div > div {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-border) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--ui-border);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--ui-border-accented);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/*
+ * Docs tokens. Lines and surfaces are opaque, so a joint or a crossing never draws brighter.
+ * Blue only means kept, emitted or current; amber only means an error.
+ * Radius steps by size: 4px inline, 8px controls and rows, 12px blocks.
+ * Set on the root too, so menus portalled out of the shell read the same tokens.
+ */
+:root:has(.docs-shell),
+.docs-shell {
+  --ui-bg: #09090b;
+  --ui-text-dimmed: #6b6b74;
+  --ui-text-muted: #a3a3ad;
+  --ui-text-default: #d4d4d9;
+  --ui-text-highlighted: #f0f0f2;
+
+  --d-line: #1c1c20;
+  --d-line-strong: #2a2a30;
+  --d-raised: #0e0e11;
+  --d-raised-strong: #17171b;
+  --d-signal: #2853ff;
+  --d-signal-text: #8fa3ff;
+  --d-warn: #e8a54b;
+
+  --d-r-sm: 4px;
+  --d-r-md: 8px;
+  --d-r-lg: 12px;
+
+  --d-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --d-ease-move: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.docs-shell :focus {
+  outline: none;
+}
+
+.docs-shell :focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--d-signal) 75%, transparent);
+  outline-offset: 2px;
+}
+
+.docs-shell a:focus-visible {
+  border-radius: var(--d-r-sm);
+}
+
+/* Inside a scroll area or a clipped card an outside ring is cut off, so the ring is drawn inside. */
+.docs-shell nav a:focus-visible,
+.docs-shell nav button:focus-visible,
+.docs-shell .d-card :focus-visible {
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+/* Blue stays out of the navigation: its keyboard ring is the rail's grey. */
+.docs-shell nav :focus-visible,
+.docs-shell .d-card :focus-visible {
+  outline-color: #8a8a93;
+  outline-width: 1.5px;
+}
+
+/*
+ * The tree evlog prints its events with (├─ └─). Every pixel of line is drawn once: each row owns its
+ * slice of trunk (stopping at its bend on the last row) and its rounded branch, which sits on top.
+ * Hovering a row lights the way to it: the trunk through every row above, down to its bend, then its
+ * branch. The current page's path is the same shape in a brighter step and wins over hover. Both trunk
+ * halves are registered colours so the gradient fades instead of snapping.
+ */
+@property --rail-top {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #4a4a52;
+}
+
+@property --rail-low {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #4a4a52;
+}
+
+.d-rail {
+  --rail-mid: 14px;
+  --rail-path: #a1a1aa;
+  --rail-hover: #7a7a83;
+  --rail-base: #4a4a52;
+  margin: 2px 0 4px 3px;
+}
+
+.d-rail > li {
+  --rail-turn: calc(var(--rail-mid, 15px) - var(--rail-bend, 6px));
+  position: relative;
+  padding-left: 20px;
+}
+
+.d-rail > li::after {
+  --rail-top: var(--rail-base);
+  --rail-low: var(--rail-base);
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--rail-top) var(--rail-turn), var(--rail-low) var(--rail-turn));
+  transition: --rail-top 160ms ease, --rail-low 160ms ease;
+}
+
+.d-rail > li:last-child::after {
+  bottom: auto;
+  height: var(--rail-turn);
+}
+
+.d-rail > li::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: var(--rail-turn);
+  left: 0;
+  width: 9px;
+  height: var(--rail-bend, 6px);
+  border-bottom: 1px solid var(--rail-base);
+  border-left: 1px solid var(--rail-base);
+  border-bottom-left-radius: var(--rail-bend, 6px);
+  transition: border-color 160ms ease;
+}
+
+@media (hover: hover) {
+  .d-rail > li:where(:has(~ li > a:hover))::after {
+    --rail-top: var(--rail-hover);
+    --rail-low: var(--rail-hover);
+    z-index: 2;
+  }
+
+  .d-rail > li:where(:has(> a:hover))::after {
+    --rail-top: var(--rail-hover);
+  }
+
+  .d-rail > li:where(:has(> a:hover))::before {
+    border-color: var(--rail-hover);
+  }
+}
+
+.d-rail > li[data-path]::after {
+  --rail-top: var(--rail-path);
+  --rail-low: var(--rail-path);
+  z-index: 2;
+}
+
+.d-rail > li[data-lit]::after {
+  --rail-top: var(--rail-path);
+  z-index: auto;
+}
+
+.d-rail > li[data-lit]::before {
+  border-color: var(--rail-path);
+}
+
+/* A collapsible block that animates its real height. */
+.d-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+[data-folding] .d-collapse {
+  transition: grid-template-rows 300ms var(--d-ease), opacity 200ms ease;
+}
+
+.d-collapse[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.d-collapse > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/*
+ * A sidebar entry's pages or sections, opening and closing with the reader's path. The entry being
+ * left folds away while the next one opens, on the same curve, so what is below slides instead of
+ * jumping. The page itself still changes instantly.
+ */
+.d-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms var(--d-ease);
+}
+
+.d-fold[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+
+.d-fold > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.d-fold > * > * {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 280ms var(--d-ease);
+}
+
+.d-fold[data-open='true'] > * > * {
+  opacity: 1;
+  transform: none;
+  transition: opacity 220ms ease 70ms, transform 280ms var(--d-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .d-fold,
+  .d-fold > * > * {
+    transition: none;
+  }
+}
+
+/* Scroll areas fade at the edge that has more content, following the scroll position. */
+@property --d-fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --d-fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+.d-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 200ms ease;
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--d-fade-top), #000 calc(100% - var(--d-fade-bottom)), transparent);
+}
+
+.d-scroll:hover {
+  scrollbar-color: var(--d-line-strong) transparent;
+}
+
+@supports (animation-timeline: scroll()) {
+  .d-scroll {
+    animation: d-scroll-fade linear both;
+    animation-timeline: scroll(self);
+  }
+
+  @keyframes d-scroll-fade {
+    0% { --d-fade-top: 0px; --d-fade-bottom: 40px; }
+    6% { --d-fade-top: 32px; }
+    94% { --d-fade-bottom: 40px; }
+    100% { --d-fade-top: 32px; --d-fade-bottom: 0px; }
+  }
+}
+
+/* Two states in one grid cell: they cross-fade in place, so the box never changes size. */
+.d-stack {
+  display: grid;
+}
+
+.d-stack > * {
+  grid-area: 1 / 1;
+}
+
+.d-xfade {
+  transition: opacity 240ms var(--d-ease), filter 240ms var(--d-ease), transform 240ms var(--d-ease), visibility 0s;
+}
+
+.d-xfade[data-on='false'] {
+  visibility: hidden;
+  opacity: 0;
+  filter: blur(3px);
+  transform: translateY(3px);
+  transition: opacity 160ms ease, filter 160ms ease, transform 160ms ease, visibility 0s linear 160ms;
+}
+
+.d-swap-enter-active,
+.d-swap-leave-active {
+  transition: opacity 240ms var(--d-ease), filter 240ms var(--d-ease), transform 240ms var(--d-ease);
+}
+
+.d-swap-enter-from {
+  opacity: 0;
+  filter: blur(3px);
+  transform: translateY(3px);
+}
+
+.d-swap-leave-to {
+  opacity: 0;
+  filter: blur(3px);
+  transform: translateY(-3px);
+}
+
+/* Figures share one vocabulary: a step reveals with opacity and a 4px rise. */
+.d-step {
+  transition: opacity 420ms var(--d-ease), transform 420ms var(--d-ease), color 240ms ease;
+}
+
+.d-step[data-on='false'] {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .d-step {
+    transition: opacity 200ms ease;
+  }
+
+  .d-step[data-on='false'],
+  .d-swap-enter-from,
+  .d-swap-leave-to {
+    transform: none;
+  }
+}
+
+/* Before a framework is chosen, its tile shows a few marks in turn: one every two seconds. */
+.fw-cycle > * {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: fw-cycle 12s var(--d-ease) infinite both;
+}
+
+@keyframes fw-cycle {
+  0% {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(3px);
+  }
+  4%,
+  14% {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+  18%,
+  100% {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fw-cycle > * {
+    animation: none;
+  }
+
+  .fw-cycle > :first-child {
+    opacity: 1;
+  }
+}
