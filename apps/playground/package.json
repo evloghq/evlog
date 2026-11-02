@@ -19,7 +19,7 @@
     "better-auth": "^1.7.12",
     "better-sqlite3": "^12.11.1",
     "evlog": "workspace:*",
-    "nuxt": "^4.6.1",
+    "nuxt": "^4.6.3",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
