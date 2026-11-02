@@ -407,9 +407,9 @@ The [docs](https://www.evlog.dev) cover everything the README summarizes:
 - [AI SDK integration](https://www.evlog.dev/use-cases/ai-sdk/overview) for token usage, tool calls and cost
 - [eve](https://www.evlog.dev/use-cases/eve) for one wide event per agent turn
 
-## Adapters
+## Drains
 
-Send your logs to external observability platforms with built-in drain adapters, wired from a Nitro plugin:
+Send your logs to external observability platforms with built-in drains, wired from a Nitro plugin:
 
 ```typescript
 // server/plugins/evlog-drain.ts
@@ -436,7 +436,7 @@ export default defineNitroPlugin((nitroApp) => {
 | Memory (any runtime, Workers included) | `evlog/memory` |
 | Browser to server (batched HTTP) | `evlog/http` |
 
-Each adapter's configuration and environment variables are documented at [evlog.dev/integrate/adapters/overview](https://www.evlog.dev/integrate/adapters/overview). For production volume, wrap a drain with `createDrainPipeline` from `evlog/pipeline` for batching, retry with backoff, and buffer overflow protection (see the [drain pipeline docs](https://www.evlog.dev/extend/drain-pipeline)), and use [sampling](https://www.evlog.dev/learn/sampling) (head rates and tail keep rules) to control cost.
+Each drain's configuration and environment variables are documented at [evlog.dev/integrate/adapters/overview](https://www.evlog.dev/integrate/adapters/overview). For production volume, wrap a drain with `createDrainPipeline` from `evlog/pipeline` for batching, retry with backoff, and buffer overflow protection (see the [drain pipeline docs](https://www.evlog.dev/extend/drain-pipeline)), and use [sampling](https://www.evlog.dev/learn/sampling) (head rates and tail keep rules) to control cost.
 
 ### `createError(options)`
 
@@ -528,7 +528,7 @@ In production (`pretty: false`), logs are emitted as JSON for machine parsing.
 
 ## CLI
 
-evlog ships an `evlog` executable, still early, that scores what your app can tell you when something goes wrong. It reads your project on disk, with no traffic and no instrumentation, finds every entry point, and names the ones to fix first. Worth trying once you have anything wired; hand the report to an agent if you like.
+evlog ships an `evlog` executable, still early, that maps what your app can tell you when something goes wrong. It reads your project on disk, with no traffic and no instrumentation, finds every entry point, and names the ones to fix first. Worth trying once you have anything wired; hand the report to an agent if you like.
 
 ```bash
 npx evlog map
@@ -547,7 +547,7 @@ FIX FIRST
 
 | Command | What it does |
 |---------|-------------|
-| `evlog map` | Score every entry point and list the three worth fixing first |
+| `evlog map` | Map every entry point and list the three worth fixing first |
 | `evlog map <route-or-file>` | Explain one entry point in full, with the shape it could take |
 | `evlog map --all` | Every entry point as a check matrix |
 | `evlog map --min-score <n>` | Exit 1 below the threshold — a CI gate |
@@ -557,7 +557,7 @@ Same code in, same verdict out, with the file and line for every finding, which 
 
 > **Early days:** the CLI is tested and safe to run on any project, but it is young: seven framework adapters today, rules still being refined. Expect verdicts and scores to move between releases. The executable runs [`@evlog/cli`](https://npmjs.com/package/@evlog/cli) when it is installed and fetches it with your package manager otherwise, so `evlog` itself adds no dependency; add `@evlog/cli` as a dev dependency for a pinned, instant run when you gate CI on the number.
 
-Docs: [CLI](https://www.evlog.dev/cli/overview) · [`evlog map`](https://www.evlog.dev/cli/map) · [Rules](https://www.evlog.dev/cli/rules) · [Scoring](https://www.evlog.dev/cli/scoring) · [CI](https://www.evlog.dev/cli/ci)
+Docs: [CLI](https://www.evlog.dev/cli/overview) · [`evlog map`](https://www.evlog.dev/cli/map) · [Rules](https://www.evlog.dev/cli/rules) · [Score](https://www.evlog.dev/cli/scoring) · [CI](https://www.evlog.dev/cli/ci)
 
 ## Agent Skills
 
@@ -576,7 +576,7 @@ Once installed, your AI assistant will:
 - Help refactor scattered `console.log` calls into structured events
 - Guide you to use `createError()` for self-documenting errors
 - Ensure proper use of `useLogger(event)` in Nuxt/Nitro routes
-- Optionally run [`evlog map`](https://www.evlog.dev/cli/map) (`npx evlog map`) to score dark entry points. Early, worth trying
+- Optionally run [`evlog map`](https://www.evlog.dev/cli/map) (`npx evlog map`) to map dark entry points. Early, worth trying
 
 ### Examples
 
