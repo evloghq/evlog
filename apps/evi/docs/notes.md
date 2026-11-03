@@ -5,6 +5,8 @@ the way it does, kept here so the code does not have to carry the paragraph.
 
 ## eve
 
+How the eve runtime behaves under this agent: channels, tools, skills, models, session limits and evals, plus the GitHub App and iMessage paths that reach the agent through it.
+
 **Authored channels report `channel:<name>`, framework ones report a bare name.**
 `agent/channels/github.ts` is `channel:github`, while `http`, `schedule` and
 `subagent` arrive bare. Comparing `ctx.channel.kind === 'github'` never matches,
@@ -67,10 +69,9 @@ them, but that is eve's to do: the upstream fix is consuming the chat-sdk
 
 **Reasoning levels are per-model.** `GET /v1/models` exposes `reasoning_options`;
 DeepSeek V4 Flash advertises only `high` and `xhigh`. Setting `low` or `medium`
-produced erratic, non-monotonic reasoning volume rather than an error.
+is accepted without an error.
 
-**Session limits default to 40M input tokens and no output cap**, which puts one
-runaway session near $8 at current prices. Evi keeps the 40M input cap and sets
+**Session limits default to 40M input tokens and no output cap**, so nothing bounds the output one runaway session can generate. Evi keeps the 40M input cap and sets
 1M output. Output counts reasoning, and at each model step eve gives the
 children an even split of the parent's remaining window, so a 250k cap kept
 stopping a content pass that spent about 460k reasoning tokens across its
@@ -78,13 +79,9 @@ reviewers: children got windows of about 14k and asked for approval in a
 thread nobody was watching. Approving grants a fresh window of the same size, so the
 cap sets the prompt cadence, not the total spend.
 
-**Eval runs leak sessions.** `t.succeeded()` accepts a healthy open session, so
-each run leaves a `sessionTimeoutWorkflow` queued against a dead dev server. Later
-runs print a growing wall of `[world-local] Queue delivery failed`. The queued
-work grows every run and obscures real failures in the output.
+**Eval runs leak sessions.** The mechanism, and what to change about it, is in [observability.md](./observability.md).
 
-**`sessionEvent` has never been observed firing.** It emits on session
-completion, which the eval runner never reaches.
+**`sessionEvent` has never been observed firing.** Why, and how to confirm it, is in [observability.md](./observability.md).
 
 ### Dynamic tools: executes stay inline
 
@@ -203,12 +200,15 @@ resolves through your own Vercel identity, the user-scoped path.
 ## Telemetry
 
 **The agent's telemetry MCP authenticates with its Vercel OIDC token, not a
-shared password.** The connection sends `process.env.VERCEL_OIDC_TOKEN` (the
-same token the turbo remote-cache tool uses); the telemetry app verifies it
-against Vercel's team JWKS and trusts only the `evi` project's production
-environment (`apps/telemetry/server/utils/vercel-oidc.ts`). Locally there is no
-OIDC token, and the dashboard's soft auth means a password-less local dashboard
-stays open. If the evi project's OIDC issuer mode ever changes, the constants in
+shared password.** The connection calls `getVercelOidcToken()` on every call
+(`agent/connections/telemetry.ts`), the same helper the turbo remote-cache tool
+uses (`agent/tools/turbo.ts`). The telemetry app verifies the token against
+Vercel's team JWKS and trusts only the `evi` project's production environment
+(`apps/telemetry/server/utils/vercel-oidc.ts`). Locally the token exists only
+after `vercel env pull`, so a plain `eve dev` session has none to send. The
+telemetry app's `/mcp` endpoint takes a password or an OIDC token
+(`apps/telemetry/server/utils/mcp-auth.ts`).
+If the evi project's OIDC issuer mode ever changes, the constants in
 `vercel-oidc.ts` move with it.
 
 ## evlog
