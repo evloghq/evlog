@@ -84,3 +84,5 @@ minimumReleaseAgeExclude:
   - nitro
   - rolldown
   - workflow
+  # Renovate security update: @sveltejs/kit@3.0.0
+  - "@sveltejs/kit@3.0.0"
