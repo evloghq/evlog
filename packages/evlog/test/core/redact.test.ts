@@ -586,6 +586,36 @@ describe('redactEvent - secrets built-in', () => {
     })
   })
 
+  it('replaces keys ending in apiKey, privateKey, credentials, authorization, dsn or connectionString', () => {
+    const result = redact({
+      apiKey: 'k1',
+      api_key: 'k2',
+      privateKey: 'p1',
+      private_key: 'p2',
+      credentials: { user: 'u' },
+      authorization: 'Basic abc',
+      dsn: 'https://key@example.com/1',
+      connectionString: 'postgres://u:p@h',
+      connection_string: 'postgres://u:p@h',
+    })
+    expect(result).toEqual({
+      apiKey: '[REDACTED]',
+      api_key: '[REDACTED]',
+      privateKey: '[REDACTED]',
+      private_key: '[REDACTED]',
+      credentials: '[REDACTED]',
+      authorization: '[REDACTED]',
+      dsn: '[REDACTED]',
+      connectionString: '[REDACTED]',
+      connection_string: '[REDACTED]',
+    })
+  })
+
+  it('keeps cache and idempotency keys, which only end in key', () => {
+    const event = { cacheKey: 'user:42', idempotencyKey: 'ord_123', key: 'short', monkey: 'banana' }
+    expect(redact(event)).toEqual(event)
+  })
+
   it('keeps token counters and keys that only start with a secret word', () => {
     const event = {
       ai: { totalTokens: 1200, inputTokens: 800, tokensPerSecond: 42 },
@@ -617,8 +647,8 @@ describe('redactEvent - secrets built-in', () => {
   })
 })
 
-/** The built-ins `redact: true` runs, in their run order. The credential ones run only when listed. */
-const DEFAULT_PATTERNS = ['bearer', 'iban', 'creditCard', 'email', 'ipv4', 'phone', 'jwt'] as const
+/** The built-ins `redact: true` runs, in their run order. */
+const DEFAULT_PATTERNS = ['bearer', 'apiKeys', 'privateKey', 'urlPassword', 'iban', 'creditCard', 'email', 'ipv4', 'phone', 'jwt'] as const
 
 function maskerSources(config: RedactConfig): string[] {
   return defined(config._maskers, 'maskers').map(([pattern]) => pattern.source)

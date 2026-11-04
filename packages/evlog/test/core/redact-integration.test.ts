@@ -556,10 +556,26 @@ describe('credentials detected by value', () => {
     '-----END RSA PRIVATE KEY-----',
   ].join('\n')
 
-  it('leaves credentials as they are with redact: true or a config that does not list them', () => {
+  it('masks credentials with redact: true and with a config that does not set builtins', () => {
     const event = { value: ['ghp', body(36)].join('_'), key: pem, url: 'postgres://user:hunter2@db:5432/app' }
-    expect(redactEvent(event, defined(resolveRedactConfig(true), 'redact config'))).toEqual(event)
-    expect(redactEvent(event, defined(resolveRedactConfig({ paths: ['user.ssn'] }), 'redact config'))).toEqual(event)
+    const masked = { value: 'ghp_***', key: '-----BEGIN RSA PRIVATE KEY-----***', url: 'postgres://user:***@db:5432/app' }
+    expect(redactEvent(event, defined(resolveRedactConfig(true), 'redact config'))).toEqual(masked)
+    expect(redactEvent(event, defined(resolveRedactConfig({ paths: ['user.ssn'] }), 'redact config'))).toEqual(masked)
+  })
+
+  it('leaves credentials as they are when builtins lists the defaults without the credential ones', () => {
+    const event = { value: ['ghp', body(36)].join('_'), url: 'redis://:s3cret@cache:6379' }
+    const config = defined(resolveRedactConfig({ builtins: ['creditCard', 'email', 'ipv4', 'phone', 'jwt', 'bearer', 'iban', 'secrets'] }), 'redact config')
+    expect(redactEvent(event, config)).toEqual(event)
+  })
+
+  it('masks a credential-shaped value under a credential key name', () => {
+    const event = { apiKey: body(20), authorization: 'Basic dXNlcjpwYXNz', dsn: 'https://key@o0.ingest.sentry.io/1' }
+    expect(redactEvent(event, defined(resolveRedactConfig(true), 'redact config'))).toEqual({
+      apiKey: '[REDACTED]',
+      authorization: '[REDACTED]',
+      dsn: '[REDACTED]',
+    })
   })
 
   it.each([

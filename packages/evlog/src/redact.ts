@@ -377,23 +377,23 @@ export const builtinPatterns = {
 
 export type BuiltinPatternName = keyof typeof builtinPatterns
 
-/** Built-ins that run only when listed in `builtins`: `redact: true` and a config without `builtins` leave them off. */
-const OPT_IN_BUILTINS: ReadonlySet<BuiltinPatternName> = new Set(['apiKeys', 'privateKey', 'urlPassword'])
-
 /** Every name accepted by `RedactConfig.builtins`: the value patterns plus key-based `secrets`. */
 export type BuiltinRedactName = BuiltinPatternName | 'secrets'
 
 /**
- * Keys whose name ends in `password`, `passwd`, `secret` or `token`, case-insensitive:
- * `password`, `newPassword`, `client_secret`, `accessToken`, `API_TOKEN`. Plural
- * counters such as `totalTokens` or `tokensPerSecond` do not match.
+ * Keys whose name ends in one of the secret words, case-insensitive:
+ * `password`, `newPassword`, `client_secret`, `accessToken`, `API_TOKEN`,
+ * `apiKey`, `private_key`, `credentials`, `authorization`, `dsn`, `connectionString`.
+ * Suffixes only, so `cacheKey`, `idempotencyKey` and `tokensPerSecond` do not match.
  */
-const SECRET_KEY = /(?:password|passwd|secret|token)$/i
+const SECRET_KEY = /(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|credentials|authorization|dsn|connection[_-]?string)$/i
 
-/** {@link SECRET_KEY} only matches a key ending in `d`, `t` or `n`; the last character rules most keys out first. */
+/** The last letters a {@link SECRET_KEY} match can end in (`d`, `t`, `n`, `y`, `s`, `g`); checking the last character rules most keys out first. */
+const SECRET_KEY_ENDINGS = new Set('dtnysg'.split('').map(c => c.charCodeAt(0)))
+
 function isSecretKey(key: string): boolean {
   const last = key.charCodeAt(key.length - 1) | 0x20
-  return (last === 0x64 || last === 0x74 || last === 0x6E) && SECRET_KEY.test(key)
+  return SECRET_KEY_ENDINGS.has(last) && SECRET_KEY.test(key)
 }
 
 /**
@@ -431,18 +431,15 @@ function redactSecretKeys(obj: unknown, replacement: RedactReplacement, path: Ar
 /**
  * Resolve a `redact` option (boolean or object) into a concrete `RedactConfig`.
  *
- * - `true` → the default built-in patterns with smart masking, no custom paths
+ * - `true` → all built-in patterns with smart masking, no custom paths
  * - `{ ... }` → built-in maskers merged with user config (opt-out: `builtins: false`)
  * - `false` / `undefined` → `undefined` (no redaction)
- *
- * The default built-ins are every pattern except `apiKeys`, `privateKey` and
- * `urlPassword`, which run only when `builtins` lists them.
  */
 export function resolveRedactConfig(input: boolean | RedactConfig | undefined): RedactConfig | undefined {
   if (input === undefined || input === false) return undefined
 
   if (input === true) {
-    return { _maskers: builtinMaskers(isDefaultBuiltin), _secretKeys: true }
+    return { _maskers: builtinMaskers(), _secretKeys: true }
   }
 
   if (input.builtins === false) {
@@ -455,7 +452,7 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
   const { builtins } = input
   const maskers = Array.isArray(builtins)
     ? builtinMaskers(name => builtins.includes(name))
-    : builtinMaskers(isDefaultBuiltin)
+    : builtinMaskers()
 
   return {
     ...input,
@@ -465,12 +462,8 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
   }
 }
 
-function isDefaultBuiltin(name: BuiltinPatternName): boolean {
-  return !OPT_IN_BUILTINS.has(name)
-}
-
-/** Fresh maskers for the selected built-ins, in {@link builtinPatterns} order. */
-function builtinMaskers(include: (name: BuiltinPatternName) => boolean): Masker[] {
+/** Fresh maskers for the selected built-ins (all of them by default), in {@link builtinPatterns} order. */
+function builtinMaskers(include: (name: BuiltinPatternName) => boolean = () => true): Masker[] {
   return (Object.keys(builtinPatterns) as BuiltinPatternName[])
     .filter(include)
     .map((name) => {
@@ -621,7 +614,7 @@ function cloneForRedaction(event: Record<string, unknown>): Record<string, unkno
  * Returns a deep clone with redaction applied. Strategies run in order:
  * 0. **Transform**: user hook, sees raw values so it can derive replacements; the stages below still run after it.
  * 1. **Path-based**: dot-notation paths with optional globs (`password`, `**.password`, `*_token`, `user.*`) — full value replacement.
- *    The `secrets` built-in adds every key ending in `password`, `passwd`, `secret` or `token`.
+ *    The `secrets` built-in adds every key ending in a secret word (`password`, `token`, `apiKey`, `dsn`, ...).
  * 2. **Masker-based**: built-in patterns with smart partial masking (e.g. `****1111`).
  * 3. **Pattern-based**: custom RegExp patterns on string values replaced with `replacement`.
  *

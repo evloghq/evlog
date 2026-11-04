@@ -1129,25 +1129,12 @@ evlog: {
 | `phone` | `+33 6 12 34 56 78` | `+33 ****5678` |
 | `jwt` | `eyJhbGciOi...` | `eyJ***.***` |
 | `bearer` | `Bearer sk_live_abc...` | `Bearer ***` |
-| `iban` | `FR76 3000 6000 ...189` | `FR76****189` |
-
-**Opt-in credential patterns** match the value under any key and inside longer strings. They are off by default, and `builtins` runs only the names it lists, so add them next to the defaults:
-
-| Pattern | Example Input | Masked Output |
-|---------|---------------|---------------|
 | `apiKeys` | `ghp_` followed by 36 characters | `ghp_***` |
 | `privateKey` | `-----BEGIN RSA PRIVATE KEY-----` block | `-----BEGIN RSA PRIVATE KEY-----***` |
 | `urlPassword` | `postgres://app:hunter2@db` | `postgres://app:***@db` |
+| `iban` | `FR76 3000 6000 ...189` | `FR76****189` |
 
-```typescript
-evlog: {
-  redact: {
-    builtins: ['creditCard', 'email', 'ipv4', 'phone', 'jwt', 'bearer', 'iban', 'secrets', 'apiKeys', 'privateKey', 'urlPassword'],
-  }
-}
-```
-
-`apiKeys` covers GitHub, npm, Anthropic, OpenAI, Stripe, Slack and AWS key IDs by their fixed prefix. Suggest them when the code logs provider tokens, private keys or connection strings, even under keys that `secrets` does not cover (`apiKey`, `authorization`, `dsn`).
+`apiKeys`, `privateKey` and `urlPassword` match the value under any key and inside longer strings. `apiKeys` covers GitHub, npm, Anthropic, OpenAI, Stripe, Slack and AWS key IDs by their fixed prefix. The `secrets` built-in replaces the value of any key ending in `password`, `passwd`, `secret`, `token`, `apiKey`, `privateKey`, `credentials`, `authorization`, `dsn` or `connectionString`, so a credential logged under those keys is masked whatever its shape. All of them are on by default in evlog 3. On evlog 2.35 and later, the three value patterns exist but run only when listed in `builtins`.
 
 Works in all frameworks: Nuxt (`evlog` config), Nitro (`evlog()` module options), Next.js (`createEvlog()`), standalone (`initLogger()`), and all middleware integrations (Hono, Express, Fastify, Elysia, NestJS).
 
