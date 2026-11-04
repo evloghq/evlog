@@ -4,6 +4,7 @@ import type { BuiltinPatternName } from '../../src/redact'
 import { createLogger, initLogger, log } from '../../src/logger'
 import { createPipelineSpies, waitForDrainCalls } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
+import { fastestRunMs } from '../helpers/timers'
 
 
 describe('initLogger + redact integration', () => {
@@ -492,9 +493,7 @@ describe('built-in smart masking', () => {
       `eyJa.${'-eyJ.'.repeat(13_107)}`,
     ]
     for (const input of inputs) {
-      const start = performance.now()
-      redactEvent({ input }, config)
-      expect(performance.now() - start, input.slice(0, 16)).toBeLessThan(100)
+      expect(fastestRunMs(() => redactEvent({ input }, config)), input.slice(0, 16)).toBeLessThan(100)
     }
   })
 
@@ -675,9 +674,7 @@ describe('credentials detected by value', () => {
       `a://u:${'1?'.repeat(32_000)}`,
     ]
     for (const input of inputs) {
-      const start = performance.now()
-      redactEvent({ input }, config)
-      expect(performance.now() - start, input.slice(0, 16)).toBeLessThan(100)
+      expect(fastestRunMs(() => redactEvent({ input }, config)), input.slice(0, 16)).toBeLessThan(100)
     }
   })
 })

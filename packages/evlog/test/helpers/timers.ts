@@ -25,6 +25,27 @@ export async function withFakeTimers<T>(fn: () => T | Promise<T>): Promise<T> {
 }
 
 /**
+ * Milliseconds taken by the fastest of `runs` calls of `fn`, after one untimed
+ * warm-up call. Linear-time bounds assert on this: a loaded machine can pause
+ * any single call, but an input that triggers super-linear work is slow on every run.
+ *
+ * @example
+ * ```ts
+ * expect(fastestRunMs(() => redactEvent({ input }, config))).toBeLessThan(100)
+ * ```
+ */
+export function fastestRunMs(fn: () => unknown, runs = 3): number {
+  fn()
+  let fastest = Infinity
+  for (let i = 0; i < runs; i++) {
+    const start = performance.now()
+    fn()
+    fastest = Math.min(fastest, performance.now() - start)
+  }
+  return fastest
+}
+
+/**
  * Flush queued microtasks. Cheaper and more deterministic than
  * `await new Promise(r => setTimeout(r, 0))` for tests that just need
  * pending promises to settle.

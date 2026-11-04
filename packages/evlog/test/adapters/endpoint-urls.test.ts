@@ -3,6 +3,7 @@ import { resolveClickHouseUrl } from '../../src/adapters/clickhouse'
 import { resolveDatadogIntakeUrl } from '../../src/adapters/datadog'
 import { resolveLokiPushUrl } from '../../src/adapters/loki'
 import { toSazabiOTLPEndpoint } from '../../src/adapters/sazabi'
+import { fastestRunMs } from '../helpers/timers'
 
 describe('drain endpoint URLs', () => {
   it('trim trailing slashes in linear time', () => {
@@ -15,9 +16,7 @@ describe('drain endpoint URLs', () => {
       ['sazabi', toSazabiOTLPEndpoint],
     ]
     for (const [name, resolve] of resolvers) {
-      const start = performance.now()
-      resolve(endpoint)
-      expect(performance.now() - start, name).toBeLessThan(100)
+      expect(fastestRunMs(() => resolve(endpoint)), name).toBeLessThan(100)
     }
   })
 })

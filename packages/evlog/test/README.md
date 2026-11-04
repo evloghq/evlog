@@ -10,6 +10,7 @@ Goals: fast (full suite < 2s locally), deterministic, no fake-greens, no console
 | A drain spy was called within a few microtasks of a request returning | `await waitForDrainCalls(drain)` before drilling into `drain.mock.calls` |
 | A specific event field is set after `log.set(...)` | `findEventViaDrain(drain, e => e.path === ...)` then assert on the returned event |
 | A duration / threshold-based behavior | `vi.useFakeTimers()` + `vi.advanceTimersByTime(N)` + `vi.useRealTimers()` (do *not* `await new Promise(setTimeout)`) |
+| An input is processed in linear time | `expect(fastestRunMs(() => fn(input))).toBeLessThan(100)` from `helpers/timers.ts`, not one `performance.now()` pair: a loaded CI machine can pause a single call |
 | Narrowing after `expect(x).toBeDefined()` | `defined(x, 'label')` from `helpers/defined.ts` — not `x!` |
 | Accessing the request logger inside a route handler test | `useLogger()` — not `req.log!` (keep one test per framework that asserts `req.log` is attached) |
 | An adapter posts the right URL / body / headers | `mockFetch()` from `helpers/fetch.ts` + `getFetchCall` / `getFetchJson` / `getFetchHeaders` |
@@ -71,7 +72,7 @@ test/
     defined.ts             # defined() / getDrainCallArg() — type-safe narrowing without `!`
     frameworkMatrix.ts     # describeStandardHttpMatrix(adapter)
     slowReporter.ts        # CI-only reporter for tests > EVLOG_SLOW_TEST_BUDGET_MS (default 500ms)
-    timers.ts              # withFakeTimers / flushMicrotasks
+    timers.ts              # withFakeTimers / flushMicrotasks / fastestRunMs
 
   core/                    # logger, pipeline, redact, error, audit, catalog, fork, utils, identity, middleware, client-console
     logger.test.ts
