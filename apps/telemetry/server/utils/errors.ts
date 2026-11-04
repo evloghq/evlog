@@ -20,8 +20,8 @@ export const telemetryErrors = defineErrorCatalog('telemetry', {
   SESSION_SECRET_TOO_SHORT: {
     status: 500,
     message: 'Dashboard session secret is missing or too short',
-    why: 'NUXT_SESSION_PASSWORD must be at least 32 characters — it encrypts the session cookie and is a different value from ANALYTICS_PASSWORD (the login password you type in)',
-    fix: 'Generate a secret with `openssl rand -base64 32` and set it as NUXT_SESSION_PASSWORD in the deployment environment, then redeploy',
+    why: 'NUXT_APP_SECRET must be at least 32 characters — the session cookie is sealed with a key derived from it, and it is a different value from ANALYTICS_PASSWORD (the login password you type in). NUXT_SESSION_PASSWORD is no longer read',
+    fix: 'Generate a secret with `openssl rand -base64 32` and set it as NUXT_APP_SECRET in the deployment environment, then redeploy',
   },
   INVALID_PASSWORD: {
     status: 401,
