@@ -781,10 +781,11 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
   const errorEntries = errorData !== undefined
     ? buildErrorEntries(errorData, state.prettyError)
     : []
-  const contextEntries: TreeEntry[] = [
+  const fieldEntries: TreeEntry[] = [
     ...restEntries.map(([key, value]) => ({ key, value: formatValue(value) })),
     ...aiEntries,
-  ].map(escapeTreeEntry)
+  ]
+  const contextEntries = browser ? fieldEntries : fieldEntries.map(escapeTreeEntry)
   const allEntries: TreeEntry[] = errorEntries.length > 0
     ? [...errorEntries, ...contextEntries]
     : contextEntries

@@ -371,7 +371,7 @@ function escapeErrorContext(context: NormalizedErrorContext): NormalizedErrorCon
     fix: escape(context.fix),
     link: escape(context.link),
     cause: escape(context.cause),
-    stack: context.stack?.split('\n').map(escapeControlChars).join('\n'),
+    stack: context.stack?.split(/\r?\n/).map(escapeControlChars).join('\n'),
   }
 }
 
@@ -384,7 +384,7 @@ export function buildErrorEntries(
 ): PrettyErrorTreeEntry[] {
   const context = normalizeErrorContext(error)
   if (!context) return []
-  const normalized = escapeErrorContext(context)
+  const normalized = isBrowser() ? context : escapeErrorContext(context)
 
   const cwd = options.cwd ?? (typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.')
   const compact = options.compact ?? isDev()

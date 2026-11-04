@@ -217,6 +217,14 @@ describe('buildErrorEntries', () => {
     expect(children.some(line => line.includes('hidden in node_modules'))).toBe(true)
   })
 
+  it('keeps the frames of a stack with CRLF line endings', () => {
+    const lf = buildErrorEntries({ message: 'Payment failed', stack: SAMPLE_STACK }, { snippet: false, stackDepth: 2, compact: false })
+    const crlf = buildErrorEntries({ message: 'Payment failed', stack: SAMPLE_STACK.replaceAll('\n', '\r\n') }, { snippet: false, stackDepth: 2, compact: false })
+
+    expect(crlf[0]?.children).toEqual(lf[0]?.children)
+    expect(crlf[0]?.children?.some(line => line.includes('server/api/test.get.ts:100'))).toBe(true)
+  })
+
   it('omits redundant caused-by when it matches the message', () => {
     const entries = buildErrorEntries({
       message: 'Payment failed',
