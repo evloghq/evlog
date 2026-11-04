@@ -17,10 +17,31 @@ const EMAIL_SHAPE = /[\w.+-]@[\w-]{1,63}(?:\.[\w-]{1,63})*\.[a-zA-Z]{2}/
 const CARD_SHAPE = /\d{4}[\s-]?\d{4}/
 
 /**
- * Every built-in pattern needs a digit, an `@`, `eyJ` or the word `bearer`, so a
- * string with none of them is left as it is without running a single pattern.
+ * Every built-in pattern needs a digit, an `@`, a token prefix, `-----BEGIN`,
+ * `://`, `eyJ` or the word `bearer`, so a string with none of them is left as it
+ * is without running a single pattern. Keep this a superset of the patterns.
  */
-const BUILTIN_SIGNAL = /[\d@]|eyJ|bearer/i
+const BUILTIN_SIGNAL = /[\d@]|eyJ|bearer|-----BEGIN|gh[pousr]_|github_pat_|npm_|sk-|[sr]k_live_|xox|xapp-|AKIA|ASIA/i
+
+/** Literal prefixes of the `apiKeys` built-in, longest match first where one prefix extends another. */
+const API_KEY_PREFIXES = [
+  'github_pat_',
+  'ghp_',
+  'gho_',
+  'ghu_',
+  'ghs_',
+  'ghr_',
+  'npm_',
+  'sk-ant-',
+  'sk-proj-',
+  'sk_live_',
+  'rk_live_',
+  'xoxb-',
+  'xoxp-',
+  'xapp-',
+  'AKIA',
+  'ASIA',
+]
 
 /** Compiled matchers for {@link RedactConfig.paths} glob patterns. */
 export interface RedactPathMatchers {
@@ -261,6 +282,27 @@ export const builtinPatterns = {
     gate: (v: string) => v.length >= 15 && BEARER_WORD.test(v),
     mask: () => 'Bearer ***',
   },
+  /** Provider API keys and tokens by fixed prefix → ghp_*** (GitHub, npm, Anthropic, OpenAI, Stripe, Slack, AWS) */
+  apiKeys: {
+    // Every alternative starts with a literal prefix, so the scan stays linear.
+    pattern: /github_pat_[A-Za-z0-9_]{22,}|gh[pousr]_[A-Za-z0-9]{36,}|npm_[A-Za-z0-9]{36,}|sk-ant-[A-Za-z0-9_-]{32,}|sk-proj-[A-Za-z0-9_-]{32,}|[sr]k_live_[A-Za-z0-9]{24,}|xox[bp]-[A-Za-z0-9-]{10,}|xapp-[A-Za-z0-9-]{10,}|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g,
+    // The shortest match is 15 characters (`xoxb-` plus 10), so anything shorter skips the scan.
+    gate: (v: string) => v.length >= 15,
+    mask: (m: string) => `${API_KEY_PREFIXES.find(prefix => m.startsWith(prefix)) ?? ''}***`,
+  },
+  /** PEM private key blocks → -----BEGIN RSA PRIVATE KEY-----*** */
+  privateKey: {
+    // A block with no END runs to the end of the value. The scan never restarts inside it, so the cost stays linear, and text after a stray BEGIN is masked too.
+    pattern: /-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]{0,40}PRIVATE KEY-----|$)/g,
+    gate: (v: string) => v.includes('-----BEGIN'),
+    mask: (m: string) => `${m.slice(0, m.indexOf('-----', 5) + 5)}***`,
+  },
+  /** URLs with a password → postgres://user:***@host */
+  urlPassword: {
+    pattern: /\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/@]{1,256}:[^\s@/]{1,256}@/gi,
+    gate: (v: string) => v.includes('://') && v.includes('@'),
+    mask: (m: string) => `${m.slice(0, m.indexOf(':', m.indexOf('://') + 3) + 1)}***@`,
+  },
   /** IBAN → FR76****189 (country + check digits + last 3) */
   iban: {
     pattern: /\b[A-Z]{2}\d{2}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}[\s-]?[\dA-Z]{0,4}\b/g,
@@ -336,16 +378,19 @@ export type BuiltinPatternName = keyof typeof builtinPatterns
 export type BuiltinRedactName = BuiltinPatternName | 'secrets'
 
 /**
- * Keys whose name ends in `password`, `passwd`, `secret` or `token`, case-insensitive:
- * `password`, `newPassword`, `client_secret`, `accessToken`, `API_TOKEN`. Plural
- * counters such as `totalTokens` or `tokensPerSecond` do not match.
+ * Keys whose name ends in one of the secret words, case-insensitive:
+ * `password`, `newPassword`, `client_secret`, `accessToken`, `API_TOKEN`,
+ * `apiKey`, `private_key`, `credentials`, `authorization`, `dsn`, `connectionString`.
+ * Suffixes only, so `cacheKey`, `idempotencyKey` and `tokensPerSecond` do not match.
  */
-const SECRET_KEY = /(?:password|passwd|secret|token)$/i
+const SECRET_KEY = /(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|credentials|authorization|dsn|connection[_-]?string)$/i
 
-/** {@link SECRET_KEY} only matches a key ending in `d`, `t` or `n`; the last character rules most keys out first. */
+/** The last letters a {@link SECRET_KEY} match can end in (`d`, `t`, `n`, `y`, `s`, `g`); checking the last character rules most keys out first. */
+const SECRET_KEY_ENDINGS = new Set('dtnysg'.split('').map(c => c.charCodeAt(0)))
+
 function isSecretKey(key: string): boolean {
   const last = key.charCodeAt(key.length - 1) | 0x20
-  return (last === 0x64 || last === 0x74 || last === 0x6E) && SECRET_KEY.test(key)
+  return SECRET_KEY_ENDINGS.has(last) && SECRET_KEY.test(key)
 }
 
 /**

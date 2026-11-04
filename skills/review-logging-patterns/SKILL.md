@@ -1129,7 +1129,12 @@ evlog: {
 | `phone` | `+33 6 12 34 56 78` | `+33 ****5678` |
 | `jwt` | `eyJhbGciOi...` | `eyJ***.***` |
 | `bearer` | `Bearer sk_live_abc...` | `Bearer ***` |
+| `apiKeys` | `ghp_` followed by 36 characters | `ghp_***` |
+| `privateKey` | `-----BEGIN RSA PRIVATE KEY-----` block | `-----BEGIN RSA PRIVATE KEY-----***` |
+| `urlPassword` | `postgres://user:hunter2@db` | `postgres://user:***@db` |
 | `iban` | `FR76 3000 6000 ...189` | `FR76****189` |
+
+`apiKeys` covers GitHub, npm, Anthropic, OpenAI, Stripe, Slack and AWS key IDs by their fixed prefix. The `secrets` built-in replaces the value of any key ending in `password`, `passwd`, `secret`, `token`, `apiKey`, `privateKey`, `credentials`, `authorization`, `dsn` or `connectionString`, so a credential logged under those keys is masked whatever its shape.
 
 Works in all frameworks: Nuxt (`evlog` config), Nitro (`evlog()` module options), Next.js (`createEvlog()`), standalone (`initLogger()`), and all middleware integrations (Hono, Express, Fastify, Elysia, NestJS).
 

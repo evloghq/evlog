@@ -486,6 +486,9 @@ describe('redactEvent - built-in pre-checks', () => {
     ['jwt', 'eyJ.a.b', 'eyJ***.***'],
     ['bearer', 'Bearer abcdefgh', 'Bearer ***'],
     ['iban', 'DE89370400440532', 'DE89****532'],
+    ['apiKeys', ['ghp', 'a'.repeat(36)].join('_'), 'ghp_***'],
+    ['privateKey', '-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----***'],
+    ['urlPassword', 'a://b:c@', 'a://b:***@'],
   ]
 
   it.each(shortest)('%s masks its shortest match and keeps one character less', (name, value, masked) => {
@@ -504,7 +507,7 @@ describe('redactEvent - built-in pre-checks', () => {
     const reference = (value: string) => maskers.reduce((acc, { pattern, mask }) => acc.replace(new RegExp(pattern.source, pattern.flags), mask), value)
     const config = defined(resolveRedactConfig({ builtins: Object.keys(builtinPatterns) as Array<keyof typeof builtinPatterns> }), 'redact config')
     const alphabet = '0123456789abcdeyJBrRE@.-+()/= \t'
-    const pieces = ['eyJ', 'Bearer ', 'bearer\t', '4111 1111 1111 1111', '4111-1111', '@example.com', 'jane.doe+x@mail.example.co', 'FR76', '192.168.', 'node_modules/.pnpm/a@1.2.3_@b+c@4.5.6_d/', ':1204:17)']
+    const pieces = ['eyJ', 'Bearer ', 'bearer\t', '4111 1111 1111 1111', '4111-1111', '@example.com', 'jane.doe+x@mail.example.co', 'FR76', '192.168.', 'node_modules/.pnpm/a@1.2.3_@b+c@4.5.6_d/', ':1204:17)', 'ghp_', 'gho_', 'github_pat_', 'npm_', 'sk-ant-', 'sk-proj-', 'sk_live_', 'rk_live_', 'xoxb-', 'xoxp-', 'xapp-', 'AKIA', 'ASIA', '-----BEGIN PRIVATE KEY-----', 'postgres://a:']
     let seed = 1
     const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
     for (let i = 0; i < 5000; i++) {
@@ -575,6 +578,36 @@ describe('redactEvent - secrets built-in', () => {
       env: { API_TOKEN: '[REDACTED]', SECRET: '[REDACTED]' },
       sessions: [{ token: '[REDACTED]' }],
     })
+  })
+
+  it('replaces keys ending in apiKey, privateKey, credentials, authorization, dsn or connectionString', () => {
+    const result = redact({
+      apiKey: 'k1',
+      api_key: 'k2',
+      privateKey: 'p1',
+      private_key: 'p2',
+      credentials: { user: 'u' },
+      authorization: 'Basic abc',
+      dsn: 'https://key@example.com/1',
+      connectionString: 'postgres://u:p@h',
+      connection_string: 'postgres://u:p@h',
+    })
+    expect(result).toEqual({
+      apiKey: '[REDACTED]',
+      api_key: '[REDACTED]',
+      privateKey: '[REDACTED]',
+      private_key: '[REDACTED]',
+      credentials: '[REDACTED]',
+      authorization: '[REDACTED]',
+      dsn: '[REDACTED]',
+      connectionString: '[REDACTED]',
+      connection_string: '[REDACTED]',
+    })
+  })
+
+  it('keeps cache and idempotency keys, which only end in key', () => {
+    const event = { cacheKey: 'user:42', idempotencyKey: 'ord_123', key: 'short', monkey: 'banana' }
+    expect(redact(event)).toEqual(event)
   })
 
   it('keeps token counters and keys that only start with a secret word', () => {

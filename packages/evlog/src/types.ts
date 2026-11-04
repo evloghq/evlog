@@ -150,13 +150,13 @@ export interface RedactConfig {
    * - `false` → no built-ins, only custom `paths` and `patterns`
    * - `['email', 'creditCard', ...]` → only the listed built-ins
    *
-   * Available: `'creditCard'`, `'email'`, `'ipv4'`, `'phone'`, `'jwt'`, `'bearer'`, `'iban'`, `'secrets'`
+   * Available: `'creditCard'`, `'email'`, `'ipv4'`, `'phone'`, `'jwt'`, `'bearer'`, `'apiKeys'`, `'privateKey'`, `'urlPassword'`, `'iban'`, `'secrets'`
    *
    * `'secrets'` matches key names instead of values: any key ending in `password`,
    * `passwd`, `secret` or `token` (case-insensitive) has its value replaced with
    * `replacement`. Booleans and `null` are kept.
    */
-  builtins?: false | Array<'creditCard' | 'email' | 'ipv4' | 'phone' | 'jwt' | 'bearer' | 'iban' | 'secrets'>
+  builtins?: false | Array<'creditCard' | 'email' | 'ipv4' | 'phone' | 'jwt' | 'bearer' | 'apiKeys' | 'privateKey' | 'urlPassword' | 'iban' | 'secrets'>
   /**
    * Replacement used for path- and custom pattern redaction.
    * Built-in patterns use smart partial masking instead (e.g. `****1111` for credit cards).
