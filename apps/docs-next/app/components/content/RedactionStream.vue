@@ -14,6 +14,7 @@ const fields: Field[] = [
   { key: 'user.ip', raw: '192.168.1.42', masked: '***.***.***.42', rule: 'ipv4' },
   { key: 'payment.card', raw: '4111111111111111', masked: '****1111', rule: 'creditCard' },
   { key: 'headers.authorization', raw: 'Bearer sk_live_abc123def', masked: 'Bearer ***', rule: 'bearer' },
+  { key: 'db.url', raw: 'postgres://app:hunter2@db:5432', masked: 'postgres://app:***@db:5432', rule: 'urlPassword' },
   { key: 'account.password', raw: 'hunter2-correct-horse', masked: '[REDACTED]', rule: 'secrets' },
   { key: 'cart.total', raw: '9999' },
 ]

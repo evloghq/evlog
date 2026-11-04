@@ -15,7 +15,7 @@ type PmKey = keyof typeof PM_COMMANDS
 
 const PM_KEYS = Object.keys(PM_COMMANDS) as PmKey[]
 
-const AGENTS_COMMAND = 'pnpm dlx skills add https://www.evlog.dev'
+const AGENTS_COMMAND = 'npx skills add https://www.evlog.dev'
 
 const audiences: { key: Audience, label: string }[] = [
   { key: 'humans', label: 'For humans' },
