@@ -192,6 +192,9 @@ export function compactStackForStorage(stack: string | undefined, maxFrames = 5)
   return [head, ...useful.map(f => f.raw)].join('\n')
 }
 
+/** `file:line:column`, the end of a frame line. */
+const FRAME_LOCATION = /^(.+):(\d+):(\d+)$/
+
 /**
  * Parse a V8 stack trace string into frames.
  */
@@ -205,12 +208,17 @@ export function parseStackFrames(stack: string | undefined): StackFrame[] {
     const trimmed = line.trim()
     if (!trimmed.startsWith('at ')) continue
 
-    const withFn = trimmed.match(/^at (.+?) \((.+):(\d+):(\d+)\)$/)
+    // The name ends at the first ` (`, found with indexOf: a lazy name group before a greedy
+    // path group backtracks quadratically on a line that repeats ` (`, which an error message can carry.
+    const open = trimmed.indexOf(' (', 4)
+    const withFn = open !== -1 && trimmed.endsWith(')')
+      ? trimmed.slice(open + 2, -1).match(FRAME_LOCATION)
+      : null
     if (withFn) {
-      const [, fn, file, lineStr, colStr] = withFn
+      const [, file, lineStr, colStr] = withFn
       frames.push({
         raw: trimmed,
-        fn,
+        fn: trimmed.slice(3, open),
         file,
         line: Number(lineStr),
         column: Number(colStr),
@@ -219,25 +227,11 @@ export function parseStackFrames(stack: string | undefined): StackFrame[] {
       continue
     }
 
-    const withoutFn = trimmed.match(/^at (.+):(\d+):(\d+)$/)
+    const withoutFn = trimmed.slice(3).match(FRAME_LOCATION)
     if (withoutFn) {
       const [, file, lineStr, colStr] = withoutFn
       frames.push({
         raw: trimmed,
-        file,
-        line: Number(lineStr),
-        column: Number(colStr),
-        isApp: isAppPath(file!),
-      })
-      continue
-    }
-
-    const asyncFn = trimmed.match(/^at async (.+?) \((.+):(\d+):(\d+)\)$/)
-    if (asyncFn) {
-      const [, fn, file, lineStr, colStr] = asyncFn
-      frames.push({
-        raw: trimmed,
-        fn: `async ${fn}`,
         file,
         line: Number(lineStr),
         column: Number(colStr),
