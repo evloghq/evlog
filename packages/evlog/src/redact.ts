@@ -279,7 +279,8 @@ export const builtinPatterns = {
   },
   /** URLs with a password → postgres://user:***@host, redis://:***@host */
   urlPassword: {
-    pattern: /\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/@]{0,256}:[^\s@/]{1,256}@/gi,
+    // The password may hold `@`, `?` or `#` and ends at the last `@` before the path or a query. Digits followed by `?` or `#` are a port and a query, not a password.
+    pattern: /\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/?#@]{0,256}:(?!\d{1,5}[?#])[^\s/@]+(?:@[^\s/?#@]*)*@/gi,
     mask: (m: string) => `${m.slice(0, m.indexOf(':', m.indexOf('://') + 3) + 1)}***@`,
   },
   /** IBAN → FR76****189 (country + check digits + last 3) */

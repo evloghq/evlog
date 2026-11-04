@@ -625,6 +625,36 @@ describe('credentials detected by value', () => {
     expect(redact({ url: 'https://example.com:8080/a@b' })).toEqual({ url: 'https://example.com:8080/a@b' })
   })
 
+  it('masks a URL password longer than 256 characters', () => {
+    expect(redact({ url: `redis://:${'x'.repeat(300)}@cache:6379` })).toEqual({ url: 'redis://:***@cache:6379' })
+  })
+
+  it.each([
+    ['redis://:p@ssword@cache:6379', 'redis://:***@cache:6379'],
+    ['postgres://app:p@ss@db.internal:5432/app', 'postgres://app:***@db.internal:5432/app'],
+  ])('masks a URL password that contains @ up to the last @ before the host (%s)', (url, masked) => {
+    expect(redact({ url })).toEqual({ url: masked })
+  })
+
+  it.each([
+    'postgres://user:pa?ss@host',
+    'postgres://user:pa#ss@host',
+  ])('masks a URL password that contains ? or # (%s)', (url) => {
+    expect(redact({ url })).toEqual({ url: 'postgres://user:***@host' })
+  })
+
+  it.each([
+    'https://example.com:8080?contact=a@b',
+    'https://example.com:8080#to=a@b',
+    'https://example.com?time=12:30&to=a@b',
+  ])('does not read a query or fragment as a URL password (%s)', (url) => {
+    expect(redact({ url })).toEqual({ url })
+  })
+
+  it('keeps the host and query when the query after the password holds an @', () => {
+    expect(redact({ url: 'http://user:pass@host:8080?x=a@b' })).toEqual({ url: 'http://user:***@host:8080?x=a@b' })
+  })
+
   it('masks tokens in linear time on long attacker-controlled input', () => {
     const inputs = [
       'ghp_'.repeat(13_107),
@@ -638,6 +668,11 @@ describe('credentials detected by value', () => {
       'a://:'.repeat(13_107),
       `a://${'a:'.repeat(16_384)}`,
       `${'a'.repeat(32)}://${'a'.repeat(256)}:${'a'.repeat(65_000)}`,
+      `${'a.'.repeat(16)}a://u:${'a'.repeat(65_000)}`,
+      `a://u:${'?'.repeat(65_000)}`,
+      `a://u:a${'@?'.repeat(32_000)}`,
+      `a://u:a${'@a'.repeat(32_000)}/`,
+      `a://u:${'1?'.repeat(32_000)}`,
     ]
     for (const input of inputs) {
       const start = performance.now()
