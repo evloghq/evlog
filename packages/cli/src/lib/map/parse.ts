@@ -130,11 +130,11 @@ function extractVueScript(source: string): string | null {
 
 /** The `<script setup>` block of a Vue file, else its `<script>`, with the offset its code starts at. */
 export function matchVueScript(source: string): { code: string, index: number } | null {
-  const scriptSetup = source.match(/<script[^>]*setup[^>]*>([\s\S]*?)<\/script>/i)
+  const scriptSetup = source.match(/<script[^>]*setup[^>]*>([\s\S]*?)<\/script[^>]*>/i)
   if (scriptSetup?.[1] !== undefined && scriptSetup.index !== undefined) {
     return { code: scriptSetup[1], index: scriptSetup.index + scriptSetup[0].indexOf('>') + 1 }
   }
-  const plain = source.match(/<script[^>]*>([\s\S]*?)<\/script>/i)
+  const plain = source.match(/<script[^>]*>([\s\S]*?)<\/script[^>]*>/i)
   if (plain?.[1] !== undefined && plain.index !== undefined) {
     return { code: plain[1], index: plain.index + plain[0].indexOf('>') + 1 }
   }
