@@ -1,7 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>nuxt/renovate-config-nuxt"
+    "github>nuxt/renovate-config-nuxt",
+    "customManagers:githubActionsVersions"
   ],
   "minimumReleaseAge": "2 days",
   "schedule": ["before 3am on Monday"],
@@ -23,6 +24,19 @@
       "description": "eve and its extensions declare a shared capability contract, so they bump together",
       "matchPackageNames": ["eve", "@agent-browser/eve", "@github-tools/eve-extension"],
       "groupName": "eve"
+    },
+    {
+      "description": "Evi stays on its pinned eve and extensions until eve 1.0 is stable: later 0.x releases change the agent APIs it uses",
+      "matchFileNames": ["apps/evi/package.json"],
+      "matchPackageNames": ["eve", "@agent-browser/eve", "@github-tools/eve-extension"],
+      "enabled": false
+    },
+    {
+      "description": "Keep the eve peer floor where it is: a new eve release must not raise the minimum evlog accepts",
+      "matchFileNames": ["packages/evlog/package.json"],
+      "matchDepTypes": ["peerDependencies"],
+      "matchPackageNames": ["eve"],
+      "rangeStrategy": "widen"
     }
   ],
   "postUpdateOptions": ["pnpmDedupe"]

@@ -16,6 +16,21 @@ function str(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
+const CONTROL_CHAR = /[\x00-\x08\x0A-\x1F\x7F-\x9F]/g
+
+/**
+ * Escape the control characters in a value read from a log, so a logged request
+ * cannot move the cursor, erase a line or send an escape sequence to the terminal.
+ * Tab is kept, newline and carriage return become `\n` and `\r`, the others `\uXXXX`.
+ */
+function printable(text: string): string {
+  return text.replace(CONTROL_CHAR, (char) => {
+    if (char === '\n') return '\\n'
+    if (char === '\r') return '\\r'
+    return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
+  })
+}
+
 /** v3 logs carry `status` only; 2.x logs and older files carry `statusCode`. */
 function errorStatus(error: Record<string, unknown>): string | undefined {
   const value = error.status ?? error.statusCode
@@ -83,26 +98,33 @@ export type Sourced = WideEvent & { [SOURCE]?: string }
 export function formatLine(style: Style, event: Sourced): string {
   const status = typeof field(event, 'status') === 'number' ? field(event, 'status') as number : undefined
   const method = str(field(event, 'method'))
-  const path = str(field(event, 'path')) ?? str(field(event, 'operation')) ?? event.service
-  const where = method ? `${method.padEnd(6)} ${path}` : `       ${path}`
-  const { text, color } = summary(event)
+  const path = printable(str(field(event, 'path')) ?? str(field(event, 'operation')) ?? event.service)
+  const where = method ? `${printable(method).padEnd(6)} ${path}` : `       ${path}`
+  const summarized = summary(event)
+  const text = printable(summarized.text)
   const source = event[SOURCE]
   const columns = [
     style.paint('dim', clock(event.timestamp)),
     ...(source ? [style.paint('cyan', source.padEnd(12))] : []),
     where.padEnd(44),
-    style.paint(statusColor(status, event.level), status !== undefined ? String(status) : event.level.padEnd(3)),
-    style.paint('dim', (event.duration ?? '').padStart(7)),
-    color ? style.paint(color, text) : text,
+    style.paint(statusColor(status, event.level), status !== undefined ? String(status) : printable(event.level).padEnd(3)),
+    style.paint('dim', printable(event.duration ?? '').padStart(7)),
+    summarized.color ? style.paint(summarized.color, text) : text,
   ]
   return columns.join('  ').trimEnd()
 }
 
-function section(style: Style, title: string, rows: Array<[string, string | undefined]>): string[] {
-  const kept = rows.filter((row): row is [string, string] => row[1] !== undefined && row[1] !== '')
+/** A row whose value is a list prints one item per line, aligned under the first. */
+function section(style: Style, title: string, rows: Array<[string, string | string[] | undefined]>): string[] {
+  const kept = rows.filter((row): row is [string, string | string[]] => row[1] !== undefined && row[1].length > 0)
   if (kept.length === 0) return []
   const width = Math.max(...kept.map(([key]) => key.length))
-  return [style.paint('dim', title.toUpperCase()), ...kept.map(([key, value]) => `  ${key.padEnd(width)}  ${value}`), '']
+  const indent = ' '.repeat(width + 4)
+  return [
+    style.paint('dim', title.toUpperCase()),
+    ...kept.map(([key, value]) => `  ${key.padEnd(width)}  ${(Array.isArray(value) ? value : [value]).map(printable).join(`\n${indent}`)}`),
+    '',
+  ]
 }
 
 /** The whole event, grouped by what a reader looks for first, then the rest as JSON. */
@@ -122,7 +144,7 @@ export function formatEvent(style: Style, event: WideEvent): string {
     ['at', event.timestamp],
   ]))
   if (error) {
-    const stack = str(error.stack)?.split('\n').slice(1, 4).map(line => line.trim()).join('\n' + ' '.repeat(9))
+    const stack = str(error.stack)?.split('\n').slice(1, 4).map(line => line.trim())
     lines.push(...section(style, 'error', [
       ['name', str(error.name)],
       ['message', str(error.message)],
@@ -145,7 +167,7 @@ export function formatEvent(style: Style, event: WideEvent): string {
   }
   const rest = Object.fromEntries(Object.entries(event).filter(([key]) => !STANDARD.has(key)))
   if (Object.keys(rest).length > 0) {
-    lines.push(style.paint('dim', 'FIELDS'), ...JSON.stringify(rest, null, 2).split('\n').map(line => `  ${line}`))
+    lines.push(style.paint('dim', 'FIELDS'), ...JSON.stringify(rest, null, 2).split('\n').map(line => `  ${printable(line)}`))
   }
   return lines.join('\n').trimEnd()
 }
@@ -177,14 +199,15 @@ function describe(query: LogsQuery): string {
 function formatStats(style: Style, stats: LogsStats): string[] {
   const lines: string[] = []
   const ms = (value: number | undefined): string => (value === undefined ? '–' : `${value}ms`)
-  const width = Math.max(5, ...stats.byRoute.map(row => row.route.length))
+  const routes = stats.byRoute.map(row => printable(row.route))
+  const width = Math.max(5, ...routes.map(route => route.length))
   lines.push(style.paint('dim', `${'ROUTE'.padEnd(width)}  ${'COUNT'.padStart(5)}  ${'ERRORS'.padStart(6)}  ${'P50'.padStart(7)}  ${'P95'.padStart(7)}`))
-  for (const row of stats.byRoute) {
+  stats.byRoute.forEach((row, index) => {
     const errors = row.errors > 0 ? style.paint('red', String(row.errors).padStart(6)) : String(row.errors).padStart(6)
-    lines.push(`${row.route.padEnd(width)}  ${String(row.count).padStart(5)}  ${errors}  ${ms(row.p50).padStart(7)}  ${ms(row.p95).padStart(7)}`)
-  }
+    lines.push(`${routes[index]!.padEnd(width)}  ${String(row.count).padStart(5)}  ${errors}  ${ms(row.p50).padStart(7)}  ${ms(row.p95).padStart(7)}`)
+  })
   const classes = Object.entries(stats.byStatus).sort().map(([key, count]) => `${key} ${count}`).join(' · ')
-  const levels = Object.entries(stats.byLevel).sort((a, b) => b[1] - a[1]).map(([key, count]) => `${key} ${count}`).join(' · ')
+  const levels = Object.entries(stats.byLevel).sort((a, b) => b[1] - a[1]).map(([key, count]) => `${printable(key)} ${count}`).join(' · ')
   lines.push('', `${style.paint('dim', 'status')}  ${classes}`, `${style.paint('dim', 'level ')}  ${levels}`)
   return lines
 }

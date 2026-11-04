@@ -1,4 +1,4 @@
-import { colors, isBrowser, isDev } from '../utils'
+import { colors, escapeControlChars, isBrowser, isDev } from '../utils'
 import type { ResolvedPrettyError } from './dev-terminal'
 
 /** @internal Server-only snippet reader registered by Nitro plugin or initLogger. */
@@ -192,6 +192,9 @@ export function compactStackForStorage(stack: string | undefined, maxFrames = 5)
   return [head, ...useful.map(f => f.raw)].join('\n')
 }
 
+/** `file:line:column`, the end of a frame line. */
+const FRAME_LOCATION = /^(.+):(\d+):(\d+)$/
+
 /**
  * Parse a V8 stack trace string into frames.
  */
@@ -205,12 +208,17 @@ export function parseStackFrames(stack: string | undefined): StackFrame[] {
     const trimmed = line.trim()
     if (!trimmed.startsWith('at ')) continue
 
-    const withFn = trimmed.match(/^at (.+?) \((.+):(\d+):(\d+)\)$/)
+    // The name ends at the first ` (`, found with indexOf: a lazy name group before a greedy
+    // path group backtracks quadratically on a line that repeats ` (`, which an error message can carry.
+    const open = trimmed.indexOf(' (', 4)
+    const withFn = open !== -1 && trimmed.endsWith(')')
+      ? trimmed.slice(open + 2, -1).match(FRAME_LOCATION)
+      : null
     if (withFn) {
-      const [, fn, file, lineStr, colStr] = withFn
+      const [, file, lineStr, colStr] = withFn
       frames.push({
         raw: trimmed,
-        fn,
+        fn: trimmed.slice(3, open),
         file,
         line: Number(lineStr),
         column: Number(colStr),
@@ -219,25 +227,11 @@ export function parseStackFrames(stack: string | undefined): StackFrame[] {
       continue
     }
 
-    const withoutFn = trimmed.match(/^at (.+):(\d+):(\d+)$/)
+    const withoutFn = trimmed.slice(3).match(FRAME_LOCATION)
     if (withoutFn) {
       const [, file, lineStr, colStr] = withoutFn
       frames.push({
         raw: trimmed,
-        file,
-        line: Number(lineStr),
-        column: Number(colStr),
-        isApp: isAppPath(file!),
-      })
-      continue
-    }
-
-    const asyncFn = trimmed.match(/^at async (.+?) \((.+):(\d+):(\d+)\)$/)
-    if (asyncFn) {
-      const [, fn, file, lineStr, colStr] = asyncFn
-      frames.push({
-        raw: trimmed,
-        fn: `async ${fn}`,
         file,
         line: Number(lineStr),
         column: Number(colStr),
@@ -369,6 +363,8 @@ export function buildErrorEntries(
 ): PrettyErrorTreeEntry[] {
   const normalized = normalizeErrorContext(error)
   if (!normalized) return []
+  // Frames are parsed and snippets read from the raw stack; only printed text is escaped.
+  const printable = isBrowser() ? (text: string) => text : escapeControlChars
 
   const cwd = options.cwd ?? (typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.')
   const compact = options.compact ?? isDev()
@@ -388,17 +384,17 @@ export function buildErrorEntries(
     pushTreeSpacer(children)
     if (showFrames) {
       const snippet = readCodeSnippet(primary.file, primary.line, snippetContextLines)
-      children.push(`${colors.dim}   ${formatFrameLocation(primary, cwd)}${colors.reset}`)
+      children.push(`${colors.dim}   ${printable(formatFrameLocation(primary, cwd))}${colors.reset}`)
       if (snippet) {
         children.push(...formatSnippetLines(snippet))
       }
     } else {
-      children.push(`${colors.dim}   ${formatFrameLocation(primary, cwd)}${colors.reset}`)
+      children.push(`${colors.dim}   ${printable(formatFrameLocation(primary, cwd))}${colors.reset}`)
     }
   }
 
   if (normalized.code) {
-    children.push(`${colors.dim}Code:${colors.reset} ${normalized.code}`)
+    children.push(`${colors.dim}Code:${colors.reset} ${printable(normalized.code)}`)
   }
 
   const hasGuidance = Boolean(normalized.why || normalized.fix || normalized.link)
@@ -407,17 +403,17 @@ export function buildErrorEntries(
   }
 
   if (normalized.why) {
-    children.push(...formatGuidanceLine('Why', normalized.why, colors.yellow))
+    children.push(...formatGuidanceLine('Why', printable(normalized.why), colors.yellow))
   }
   if (normalized.fix) {
-    children.push(...formatGuidanceLine('Fix', normalized.fix, colors.cyan))
+    children.push(...formatGuidanceLine('Fix', printable(normalized.fix), colors.cyan))
   }
   if (normalized.link) {
-    children.push(`${colors.dim}More:${colors.reset} ${normalized.link}`)
+    children.push(`${colors.dim}More:${colors.reset} ${printable(normalized.link)}`)
   }
 
   if (normalized.cause && normalized.cause !== normalized.message) {
-    children.push(`${colors.dim}Caused by:${colors.reset} ${normalized.cause}`)
+    children.push(`${colors.dim}Caused by:${colors.reset} ${printable(normalized.cause)}`)
   }
 
   const hiddenCount = guidanceOnly ? 0 : frames.filter(f => !f.isApp || isInternalErrorFrame(f)).length
@@ -433,14 +429,14 @@ export function buildErrorEntries(
       children.push(`${colors.gray}stack${colors.reset}`)
     }
     for (const frame of tailFrames) {
-      children.push(`${colors.gray}  ${formatCollapsedFrame(frame, cwd)}${colors.reset}`)
+      children.push(`${colors.gray}  ${printable(formatCollapsedFrame(frame, cwd))}${colors.reset}`)
     }
   }
 
   return [
     {
       key: 'error',
-      value: `${colors.red}${colors.bold}${normalized.message}${colors.reset}`,
+      value: `${colors.red}${colors.bold}${printable(normalized.message)}${colors.reset}`,
       children: children.length > 0 ? children : undefined,
     },
   ]

@@ -3,6 +3,7 @@ import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { trimTrailingSlashes } from '../utils'
 
 const DEFAULT_TABLE = 'evlog_events'
 const DEFAULT_DATABASE = 'default'
@@ -130,7 +131,7 @@ export function toJSONEachRow(events: WideEvent[], transform: (event: WideEvent)
 
 /** Build the HTTP interface URL carrying the INSERT query and settings. */
 export function resolveClickHouseUrl(config: ClickHouseConfig): string {
-  const base = config.endpoint.replace(/\/+$/, '')
+  const base = trimTrailingSlashes(config.endpoint)
   const database = config.database ?? DEFAULT_DATABASE
   const table = config.table ?? DEFAULT_TABLE
   const asyncInsert = config.asyncInsert ?? true

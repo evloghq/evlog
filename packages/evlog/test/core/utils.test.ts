@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { colors, elapsedMs, formatDuration, formatMessage, getLevelColor, hasMessageSpecifiers, isBrowser, isClient, isDev, isLevelEnabled, isServer, isoNow, matchesPattern } from '../../src/utils'
+import { colors, elapsedMs, formatDuration, formatMessage, getLevelColor, hasMessageSpecifiers, isBrowser, isClient, isDev, isLevelEnabled, isServer, isoNow, matchesPattern, trimTrailingSlashes } from '../../src/utils'
 import { shouldLog } from '../../src/shared/routes'
 
 describe('elapsedMs', () => {
@@ -447,6 +447,16 @@ describe('shouldLog', () => {
       expect(shouldLog('/api/_content/query', include, exclude)).toBe(false)
       expect(shouldLog('/api/_nuxt_icon/foo', include, exclude)).toBe(false)
     })
+  })
+})
+
+describe('trimTrailingSlashes', () => {
+  it('removes every trailing slash and keeps the others', () => {
+    expect(trimTrailingSlashes('https://in.example.com///')).toBe('https://in.example.com')
+    expect(trimTrailingSlashes('https://in.example.com/v1/logs/')).toBe('https://in.example.com/v1/logs')
+    expect(trimTrailingSlashes('https://in.example.com')).toBe('https://in.example.com')
+    expect(trimTrailingSlashes('///')).toBe('')
+    expect(trimTrailingSlashes('')).toBe('')
   })
 })
 

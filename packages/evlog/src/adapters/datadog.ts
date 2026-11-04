@@ -4,6 +4,7 @@ import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { formatEventSummary } from '../shared/event'
+import { trimTrailingSlashes } from '../utils'
 
 export interface DatadogConfig {
   /** Datadog API key with Logs intake permission */
@@ -146,9 +147,9 @@ export function toDatadogLog(event: WideEvent): Record<string, unknown> {
  */
 export function resolveDatadogIntakeUrl(config: Pick<DatadogConfig, 'site' | 'intakeUrl'>): string {
   if (config.intakeUrl) {
-    return config.intakeUrl.replace(/\/+$/, '')
+    return trimTrailingSlashes(config.intakeUrl)
   }
-  const site = (config.site ?? DEFAULT_SITE).replace(/^\./, '').replace(/\/+$/, '')
+  const site = trimTrailingSlashes((config.site ?? DEFAULT_SITE).replace(/^\./, ''))
   return `https://http-intake.logs.${site}/api/v2/logs`
 }
 
