@@ -1,0 +1,2 @@
+# Branch protection on main and v3 holds every PR until a code owner approves it.
+* @HugoRCD
