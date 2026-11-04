@@ -1,5 +1,25 @@
 # evlog
 
+## 3.0.0-beta.2
+
+### Major Changes
+
+- [#996](https://github.com/evloghq/evlog/pull/996) [`df6c5a1`](https://github.com/evloghq/evlog/commit/df6c5a1f1db9eb10ddb8e8c3c1b692c68de26c2a) Thanks [@evlogai](https://github.com/apps/evlogai)! - Default redaction now detects credentials by value, not only by key name. Provider tokens are masked wherever they appear, including inside a longer string: GitHub (`ghp_`, `gho_`, `github_pat_` and the other GitHub prefixes), npm, Anthropic, OpenAI, Stripe, Slack and AWS key IDs. Before, a token logged under `apiKey` or inside a sentence passed through unchanged. Now `ghp_` followed by 36 characters is logged as `ghp_***`. A PEM private key block is masked whole and keeps only its header, and the password in a URL is masked: `postgres://user:hunter2@db` becomes `postgres://user:***@db`. The `secrets` key list also covers `apiKey`, `api_key`, `privateKey`, `credentials`, `authorization`, `dsn` and `connectionString`, while `cacheKey` and `idempotencyKey` are left alone. To drop the value detection, list the built-ins you want in `builtins` without `apiKeys`, `privateKey` and `urlPassword`. See the migration guide for the upgrade steps.
+
+### Minor Changes
+
+- [#975](https://github.com/evloghq/evlog/pull/975) [`0d8a0b3`](https://github.com/evloghq/evlog/commit/0d8a0b31dbdf165cb16faf6b644d4a26741783a5) Thanks [@evlogai](https://github.com/apps/evlogai)! - PostHog logs mode now accepts `semanticConventions`, like HyperDX and Sazabi. It defaults to `true`, the v3 OTLP default. To keep the 2.x output, set `recordShape: 'json'` and `semanticConventions: false`.
+
+### Patch Changes
+
+- [#993](https://github.com/evloghq/evlog/pull/993) [`06b7277`](https://github.com/evloghq/evlog/commit/06b72774ac38bd22e84f9262dd5da55372a60355) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Widen the optional `nitro` peer range so that `nitro@3.0.261029-rc` installs without a peer conflict. Before, npm failed with ERESOLVE and pnpm printed a peer warning when a project used the Nitro release candidate with evlog 2.x.
+
+- [#993](https://github.com/evloghq/evlog/pull/993) [`06b7277`](https://github.com/evloghq/evlog/commit/06b72774ac38bd22e84f9262dd5da55372a60355) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Parse stack frames in linear time. A stack line that starts with `at ` and repeats ` (`, which an error message containing a newline puts in the stack, took time that grew with the square of its length: close to 400 ms for a 40,000-character message, and twice that when the line starts with `at async`. The Sentry drain parses stacks in production, and error serialization and pretty output parse them in development, so an error message built from request input could block the event loop. Frames are parsed the same way as before.
+
+- [#993](https://github.com/evloghq/evlog/pull/993) [`06b7277`](https://github.com/evloghq/evlog/commit/06b72774ac38bd22e84f9262dd5da55372a60355) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Escape control characters in pretty output on Node. Before, a value such as a user agent containing `\r\x1b[2K` was written to the terminal as is, so it could erase the line it was printed on and write a fake log line in its place. Field keys and values, the request method and path, error messages and guidance, AI fields and tagged logs now print control characters as `\r`, `\n` and `\u001b`, the way JSON output already shows them, so a multi-line value now prints on one line. Tabs are kept. JSON output is unchanged.
+
+- [#993](https://github.com/evloghq/evlog/pull/993) [`06b7277`](https://github.com/evloghq/evlog/commit/06b72774ac38bd22e84f9262dd5da55372a60355) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Keep request errors in Nitro 3 wide events when an earlier async error hook delays evlog's hook. Emit once without late-write warnings.
+
 ## 3.0.0-beta.1
 
 ### Major Changes
