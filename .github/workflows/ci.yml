@@ -262,7 +262,10 @@ jobs:
         run: pnpm run build:package
 
       - name: Publish
-        run: pnpx pkg-pr-new@0.0.93 publish --compact --no-template --pnpm './packages/evlog' './packages/nuxthub' './packages/telemetry' './packages/cli' './packages/signals'
+        env:
+          # renovate: datasource=npm depName=pkg-pr-new
+          PKG_PR_NEW_VERSION: 0.0.93
+        run: pnpx "pkg-pr-new@${PKG_PR_NEW_VERSION}" publish --compact --no-template --pnpm './packages/evlog' './packages/nuxthub' './packages/telemetry' './packages/cli' './packages/signals'
 
   # Single required check, so branch protection survives job renames
   ci:

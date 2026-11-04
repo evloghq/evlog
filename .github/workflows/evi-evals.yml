@@ -61,7 +61,7 @@ jobs:
         if: env.HAS_VERCEL == 'true'
         working-directory: apps/evi
         run: |
-          pnpm dlx vercel@65.9.0 pull --yes --environment=preview --token="$VERCEL_TOKEN"
+          pnpm dlx "vercel@${VERCEL_PULL_CLI_VERSION}" pull --yes --environment=preview --token="$VERCEL_TOKEN"
           # Never fail the job over this: no token degrades to skipping the
           # connect-dependent evals, which is the same state as no secrets.
           token=$(grep -h '^VERCEL_OIDC_TOKEN=' .vercel/.env*.local 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"') || true
@@ -72,6 +72,8 @@ jobs:
             echo "::warning::No VERCEL_OIDC_TOKEN in the pulled environment — connect-dependent evals will be skipped."
           fi
         env:
+          # renovate: datasource=npm depName=vercel
+          VERCEL_PULL_CLI_VERSION: 65.9.0
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
