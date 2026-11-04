@@ -82,6 +82,35 @@ describe('parseStackFrames', () => {
     expect(primary?.line).toBe(100)
   })
 
+  it('reads the function name up to the first ` (` and the location from the end of the line', () => {
+    const frames = parseStackFrames(`Error: x
+    at handler (/Users/dev/My Project (copy)/server/api/a.ts:3:7)
+    at async Object.run (file:///Users/dev/project/server/run.ts:12:5)
+    at eval (eval at compile (file:///Users/dev/project/lib/tpl.js:4:9), <anonymous>:1:2)
+    at file:///Users/dev/project/server/b.ts:8:1
+    at new Promise (<anonymous>)`)
+
+    expect(frames.map(({ fn, file, line, column }) => ({ fn, file, line, column }))).toEqual([
+      { fn: 'handler', file: '/Users/dev/My Project (copy)/server/api/a.ts', line: 3, column: 7 },
+      { fn: 'async Object.run', file: 'file:///Users/dev/project/server/run.ts', line: 12, column: 5 },
+      { fn: 'eval', file: 'eval at compile (file:///Users/dev/project/lib/tpl.js:4:9), <anonymous>', line: 1, column: 2 },
+      { fn: undefined, file: 'file:///Users/dev/project/server/b.ts', line: 8, column: 1 },
+    ])
+  })
+
+  it('parses attacker-shaped frame lines in linear time', () => {
+    const lines = [
+      `at a${' ('.repeat(32_768)}`,
+      `at async a${' ('.repeat(32_768)}`,
+      `at a (${'1:'.repeat(32_768)})`,
+    ]
+    for (const line of lines) {
+      const start = performance.now()
+      parseStackFrames(`Error: invalid value\n    ${line}`)
+      expect(performance.now() - start, line.slice(0, 16)).toBeLessThan(100)
+    }
+  })
+
   it('skips evlog internal frames from createError throws', () => {
     const stack = `Error: Payment processing failed
     at new EvlogError (file:///Users/dev/project/packages/evlog/src/error.ts:166:10)
