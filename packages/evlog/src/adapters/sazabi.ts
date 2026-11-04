@@ -2,6 +2,7 @@ import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import { defineDrain } from '../shared/drain'
+import { trimTrailingSlashes } from '../utils'
 import type { OTLPConfig, OTLPRecordShape } from './otlp'
 import { sendBatchToOTLP } from './otlp'
 
@@ -46,7 +47,7 @@ const SAZABI_FIELDS: ConfigField<SazabiConfig>[] = [
  * trailing slashes and a pasted `/v1/logs` suffix are removed.
  */
 export function toSazabiOTLPEndpoint(endpoint: string): string {
-  return endpoint.trim().replace(/\/+$/, '').replace(/\/v1\/logs$/, '')
+  return trimTrailingSlashes(endpoint.trim()).replace(/\/v1\/logs$/, '')
 }
 
 /**

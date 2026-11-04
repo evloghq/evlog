@@ -141,6 +141,16 @@ export function escapeFormatString(str: string): string {
   return str.replace(/%/g, '%%')
 }
 
+/**
+ * Remove the trailing `/` characters of a URL. A loop rather than `/\/+$/`,
+ * which takes quadratic time on a run of slashes that does not end the string.
+ */
+export function trimTrailingSlashes(url: string): string {
+  let end = url.length
+  while (end > 0 && url.charCodeAt(end - 1) === 0x2F) end--
+  return url.slice(0, end)
+}
+
 const CONTROL_CHAR = /[\x00-\x08\x0A-\x1F\x7F-\x9F]/g
 
 /**
