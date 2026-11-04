@@ -459,7 +459,7 @@
     "@orpc/server": "^1.16.1",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
-    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/kit": "^3.0.0",
     "@swc/core": "^1.16.21",
     "@tanstack/start-client-core": "^1.170.39",
     "@types/express": "^5.0.6",
