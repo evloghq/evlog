@@ -12,6 +12,7 @@ import {
   toDatadogLog,
   createDatadogDrain,
 } from '../../src/adapters/datadog'
+import { getFetchCall } from '../helpers/fetch'
 
 describe('datadog adapter', () => {
   /** Request bodies are gzipped: inflate before parsing. */
@@ -345,10 +346,7 @@ describe('datadog adapter', () => {
 
       await sendBatchToDatadog(events, { apiKey: 'test-key' })
 
-      const bodies = fetchSpy.mock.calls.map((call) => {
-        const [, options] = call as [string, RequestInit]
-        return gunzipSync(options.body as Uint8Array)
-      })
+      const bodies = await Promise.all(Array.from({ length: fetchSpy.mock.calls.length }, async (_, index) => gunzipSync(new Uint8Array(await new Response(getFetchCall(fetchSpy, index).init.body).arrayBuffer()))))
       expect(bodies.map(body => JSON.parse(body.toString('utf8')).length)).toEqual([2, 1])
       for (const body of bodies) expect(body.byteLength).toBeLessThanOrEqual(5_000_000)
     })

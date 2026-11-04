@@ -221,8 +221,10 @@ export async function sendToDatadog(event: WideEvent, config: DatadogConfig): Pr
 export async function sendBatchToDatadog(events: WideEvent[], config: DatadogConfig): Promise<void> {
   if (events.length === 0) return
   const options = { label: 'Datadog', source: 'datadog', timeout: config.timeout, retries: config.retries }
-  const logs = events.map(event => JSON.stringify(toDatadogLog(event)))
-  for (const chunk of chunkSerialized(logs, DATADOG_MAX_ENTRIES_PER_REQUEST, DATADOG_MAX_PAYLOAD_BYTES - 2)) {
-    await sendEncodedDrainRequest(encodeDatadogRequest(chunk, config), options)
+  for (let start = 0; start < events.length; start += DATADOG_MAX_ENTRIES_PER_REQUEST) {
+    const logs = events.slice(start, start + DATADOG_MAX_ENTRIES_PER_REQUEST).map(event => JSON.stringify(toDatadogLog(event)))
+    for (const chunk of chunkSerialized(logs, DATADOG_MAX_ENTRIES_PER_REQUEST, DATADOG_MAX_PAYLOAD_BYTES - 2)) {
+      await sendEncodedDrainRequest(encodeDatadogRequest(chunk, config), options)
+    }
   }
 }

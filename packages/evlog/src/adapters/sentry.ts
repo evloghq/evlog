@@ -456,10 +456,12 @@ export async function sendBatchToSentry(events: WideEvent[], config: SentryConfi
   if (events.length === 0) return
   const traced = events.map(withTraceId)
   const options = { label: 'Sentry', source: 'sentry', timeout: config.timeout, retries: config.retries }
-  const logs = traced.map(event => JSON.stringify(toSentryLog(event, config)))
   const maxLogBytes = SENTRY_MAX_LOG_ITEM_BYTES - SENTRY_LOG_ITEM_PREFIX.length - SENTRY_LOG_ITEM_SUFFIX.length
-  for (const chunk of chunkSerialized(logs, SENTRY_MAX_LOGS_PER_ENVELOPE, maxLogBytes)) {
-    await sendEncodedDrainRequest(encodeSentryRequest(chunk, config), options)
+  for (let start = 0; start < traced.length; start += SENTRY_MAX_LOGS_PER_ENVELOPE) {
+    const logs = traced.slice(start, start + SENTRY_MAX_LOGS_PER_ENVELOPE).map(event => JSON.stringify(toSentryLog(event, config)))
+    for (const chunk of chunkSerialized(logs, SENTRY_MAX_LOGS_PER_ENVELOPE, maxLogBytes)) {
+      await sendEncodedDrainRequest(encodeSentryRequest(chunk, config), options)
+    }
   }
   if (!config.issues) return
 

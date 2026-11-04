@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { createPostHogDrain, createPostHogEventsDrain, sendBatchToPostHog, sendBatchToPostHogEvents, sendToPostHog, sendToPostHogEvents, toPostHogEvent } from '../../src/adapters/posthog'
+import { getFetchCall } from '../helpers/fetch'
 
 describe('posthog adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -573,10 +574,7 @@ describe('posthog adapter', () => {
 
       await sendBatchToPostHogEvents(events, { apiKey: 'phc_test' })
 
-      const bodies = fetchSpy.mock.calls.map((call) => {
-        const [, options] = call as [string, RequestInit]
-        return options.body as string
-      })
+      const bodies = await Promise.all(Array.from({ length: fetchSpy.mock.calls.length }, (_, index) => new Response(getFetchCall(fetchSpy, index).init.body).text()))
       expect(bodies.map(body => JSON.parse(body).batch.length)).toEqual([2, 1])
       for (const body of bodies) {
         expect(JSON.parse(body).api_key).toBe('phc_test')

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { sendBatchToAxiom, sendToAxiom, createAxiomDrain } from '../../src/adapters/axiom'
 import { enableDeprecationWarnings } from '../helpers/deprecations'
+import { getFetchJson } from '../helpers/fetch'
 
 describe('axiom adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -218,10 +219,7 @@ describe('axiom adapter', () => {
 
       await sendBatchToAxiom(events, { dataset: 'my-dataset', apiKey: 'test-token' })
 
-      const sizes = fetchSpy.mock.calls.map((call) => {
-        const [, options] = call as [string, RequestInit]
-        return JSON.parse(options.body as string).length
-      })
+      const sizes = Array.from({ length: fetchSpy.mock.calls.length }, (_, index) => getFetchJson<unknown[]>(fetchSpy, index).length)
       expect(sizes).toEqual([10_000, 1])
     })
 

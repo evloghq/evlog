@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { defined } from '../helpers/defined'
+import { getFetchCall } from '../helpers/fetch'
 import { EVLOG_VERSION } from '../../src/shared/http'
 import { sendBatchToSentry, sendToSentry, toSentryErrorEvent, toSentryLog, createSentryDrain } from '../../src/adapters/sentry'
 
@@ -317,10 +318,8 @@ describe('sentry adapter', () => {
         dsn: 'https://public@o123.ingest.sentry.io/456',
       })
 
-      const payloads = fetchSpy.mock.calls.map((call) => {
-        const [, options] = call as [string, RequestInit]
-        return (options.body as string).split('\n')[2]!
-      })
+      const bodies = await Promise.all(Array.from({ length: fetchSpy.mock.calls.length }, (_, index) => new Response(getFetchCall(fetchSpy, index).init.body).text()))
+      const payloads = bodies.map(body => defined(body.split('\n')[2], 'log item payload'))
       expect(payloads.map(payload => JSON.parse(payload).items.length)).toEqual([2, 1])
       for (const payload of payloads) expect(new TextEncoder().encode(payload).byteLength).toBeLessThanOrEqual(1024 * 1024)
     })
