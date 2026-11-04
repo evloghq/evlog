@@ -1,4 +1,5 @@
 import type { H3Event } from 'h3'
+import type { RuntimeConfig } from 'nuxt/schema'
 
 /**
  * The password gate is opt-in: it only activates once `ANALYTICS_PASSWORD`
@@ -16,13 +17,12 @@ export async function requireDashboardSession(event: H3Event): Promise<void> {
 }
 
 /**
- * `nuxt-auth-utils` (via h3's iron-webcrypto sealing) silently requires a
- * 32+ character `NUXT_SESSION_PASSWORD` to encrypt the session cookie — set
- * it too short (or reuse `ANALYTICS_PASSWORD`, which is often short and
- * memorable) and the seal call throws deep inside `setUserSession`, well
- * after the password check already passed. Checking this upfront lets the
- * login route fail with an actionable error instead of a cryptic one.
+ * `nuxt-auth-utils` seals the session cookie with a key Nuxt derives from
+ * `appSecret` (`NUXT_APP_SECRET`), which must be 32+ characters. Unset or too
+ * short (often from reusing `ANALYTICS_PASSWORD`), the derivation throws
+ * inside `setUserSession`, after the password check already passed. Checking
+ * upfront lets the login route fail with an error that names the variable.
  */
-export function isSessionSecretValid(secret: string | undefined): boolean {
-  return !!secret && secret.length >= 32
+export function isSessionSecretValid(config: Pick<RuntimeConfig, 'appSecret'>): boolean {
+  return !!config.appSecret && config.appSecret.length >= 32
 }

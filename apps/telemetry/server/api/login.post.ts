@@ -13,11 +13,7 @@ export default defineEventHandler(async (event) => {
     throw telemetryErrors.LOGIN_NOT_CONFIGURED()
   }
 
-  // Fail loudly here instead of letting the session cookie sealing throw a
-  // cryptic h3/iron error after the password check has already passed —
-  // NUXT_SESSION_PASSWORD is easy to confuse with ANALYTICS_PASSWORD since
-  // both get set together when deploying.
-  if (!isSessionSecretValid(useRuntimeConfig().session.password)) {
+  if (!isSessionSecretValid(useRuntimeConfig())) {
     throw telemetryErrors.SESSION_SECRET_TOO_SHORT()
   }
 
