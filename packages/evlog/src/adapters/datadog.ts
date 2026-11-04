@@ -1,6 +1,7 @@
 import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
+import { chunkSerialized } from '../shared/chunk'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { formatEventSummary } from '../shared/event'
@@ -189,21 +190,19 @@ export function createDatadogDrain(overrides?: Partial<DatadogConfig>) {
   })
 }
 
-/** Datadog's Logs intake accepts at most 1000 entries per request: larger batches are split. */
+/** Datadog's Logs intake accepts at most 1000 entries and 5 MB uncompressed per request: larger batches are split. */
 const DATADOG_MAX_ENTRIES_PER_REQUEST = 1000
+const DATADOG_MAX_PAYLOAD_BYTES = 5_000_000
 
-/**
- * Encode a batch of wide events into the Datadog Logs intake request. Shared by
- * {@link createDatadogDrain} and {@link sendBatchToDatadog}.
- */
-function encodeDatadogRequest(events: WideEvent[], config: DatadogConfig): HttpDrainRequest {
+/** Encode serialized Datadog logs into one Logs intake request. */
+function encodeDatadogRequest(logs: string[], config: DatadogConfig): HttpDrainRequest {
   return {
     url: resolveDatadogIntakeUrl(config),
     headers: {
       'Content-Type': 'application/json',
       'DD-API-KEY': config.apiKey,
     },
-    body: JSON.stringify(events.map(toDatadogLog)),
+    body: `[${logs.join(',')}]`,
     compression: 'gzip',
   }
 }
@@ -216,12 +215,14 @@ export async function sendToDatadog(event: WideEvent, config: DatadogConfig): Pr
 }
 
 /**
- * Send a batch of wide events to Datadog, one request per 1000 events.
+ * Send a batch of wide events to Datadog, split into requests of at most 1000
+ * entries and 5 MB uncompressed.
  */
 export async function sendBatchToDatadog(events: WideEvent[], config: DatadogConfig): Promise<void> {
   if (events.length === 0) return
   const options = { label: 'Datadog', source: 'datadog', timeout: config.timeout, retries: config.retries }
-  for (let start = 0; start < events.length; start += DATADOG_MAX_ENTRIES_PER_REQUEST) {
-    await sendEncodedDrainRequest(encodeDatadogRequest(events.slice(start, start + DATADOG_MAX_ENTRIES_PER_REQUEST), config), options)
+  const logs = events.map(event => JSON.stringify(toDatadogLog(event)))
+  for (const chunk of chunkSerialized(logs, DATADOG_MAX_ENTRIES_PER_REQUEST, DATADOG_MAX_PAYLOAD_BYTES - 2)) {
+    await sendEncodedDrainRequest(encodeDatadogRequest(chunk, config), options)
   }
 }

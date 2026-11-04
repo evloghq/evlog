@@ -144,6 +144,19 @@ describe('better-stack adapter', () => {
   })
 
   describe('sendBatchToBetterStack', () => {
+    it('splits a batch above 10 MiB into several requests', async () => {
+      const events = Array.from({ length: 3 }, (_, index) => createTestEvent({ requestId: String(index), payload: 'x'.repeat(4 * 1024 * 1024) }))
+
+      await sendBatchToBetterStack(events, { apiKey: 'test-key' })
+
+      const bodies = fetchSpy.mock.calls.map((call) => {
+        const [, options] = call as [string, RequestInit]
+        return options.body as string
+      })
+      expect(bodies.map(body => JSON.parse(body).length)).toEqual([2, 1])
+      for (const body of bodies) expect(new TextEncoder().encode(body).byteLength).toBeLessThanOrEqual(10 * 1024 * 1024)
+    })
+
     it('sends multiple events in a single request', async () => {
       const events = [
         createTestEvent({ requestId: '1' }),

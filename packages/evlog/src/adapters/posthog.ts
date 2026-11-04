@@ -1,8 +1,9 @@
 import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
+import { chunkSerialized, utf8ByteLength } from '../shared/chunk'
 import type { HttpDrainRequest } from '../shared/drain'
-import { defineDrain, defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { flattenRecord } from '../shared/event'
 import { warnDeprecated } from '../shared/deprecate'
 import { sendBatchToOTLP } from './otlp'
@@ -212,7 +213,7 @@ export function createPostHogDrain(overrides?: Partial<PostHogConfig>) {
   const mode: PostHogMode = overrides?.mode ?? 'logs'
 
   if (mode === 'events') {
-    return defineHttpDrain<PostHogConfig>({
+    return defineDrain<PostHogConfig>({
       name: 'posthog-events',
       resolve: async () => {
         const config = await resolveAdapterConfig<PostHogConfig>('posthog', POSTHOG_FIELDS, overrides)
@@ -222,8 +223,9 @@ export function createPostHogDrain(overrides?: Partial<PostHogConfig>) {
         }
         return config as PostHogConfig
       },
-      label: 'PostHog',
-      encode: encodePostHogEventsRequest,
+      send: sendBatchToPostHogEvents,
+      // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+      rawSend: (events, config) => sendBatchToPostHogEvents(events, { ...config, retries: config.retries ?? 0 }),
     })
   }
 
@@ -279,31 +281,31 @@ export async function sendToPostHogEvents(event: WideEvent, config: PostHogConfi
   await sendBatchToPostHogEvents([event], config)
 }
 
+/** PostHog's `/batch/` endpoint accepts request bodies under 20 MB: larger batches are split. */
+const POSTHOG_MAX_BATCH_BYTES = 20_000_000
+
 /**
- * Send a batch of events to PostHog via the custom-events `/batch/` API.
+ * Send a batch of events to PostHog via the custom-events `/batch/` API, split
+ * into requests under 20 MB.
  */
 export async function sendBatchToPostHogEvents(events: WideEvent[], config: PostHogConfig): Promise<void> {
   if (events.length === 0) return
-  await sendEncodedDrainRequest(encodePostHogEventsRequest(events, config), {
-    label: 'PostHog',
-    source: 'posthog',
-    timeout: config.timeout,
-    retries: config.retries,
-  })
+  const options = { label: 'PostHog', source: 'posthog', timeout: config.timeout, retries: config.retries }
+  const prefix = JSON.stringify({ api_key: config.apiKey, batch: [] }).slice(0, -2)
+  const entries = events.map(event => JSON.stringify(toPostHogEvent(event, config)))
+  for (const chunk of chunkSerialized(entries, Infinity, POSTHOG_MAX_BATCH_BYTES - utf8ByteLength(prefix) - 2)) {
+    await sendEncodedDrainRequest(encodePostHogEventsRequest(prefix, chunk, config), options)
+  }
 }
 
 /**
- * Encode a batch of wide events into the PostHog custom-events `/batch/`
- * request. Shared by {@link createPostHogDrain} in `events` mode and
- * {@link sendBatchToPostHogEvents}.
+ * Encode serialized PostHog events into one custom-events `/batch/` request.
+ * `prefix` is the body up to the opening bracket of `batch`.
  */
-function encodePostHogEventsRequest(events: WideEvent[], config: PostHogConfig): HttpDrainRequest {
+function encodePostHogEventsRequest(prefix: string, entries: string[], config: PostHogConfig): HttpDrainRequest {
   return {
     url: `${resolveHost(config)}/batch/`,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: config.apiKey,
-      batch: events.map(event => toPostHogEvent(event, config)),
-    }),
+    body: `${prefix}${entries.join(',')}]}`,
   }
 }

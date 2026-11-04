@@ -340,6 +340,19 @@ describe('datadog adapter', () => {
       expect(sizes).toEqual([1000, 500])
     })
 
+    it('splits a batch above 5 MB uncompressed into several requests', async () => {
+      const events = Array.from({ length: 3 }, (_, index) => createTestEvent({ requestId: String(index), payload: 'x'.repeat(2_000_000) }))
+
+      await sendBatchToDatadog(events, { apiKey: 'test-key' })
+
+      const bodies = fetchSpy.mock.calls.map((call) => {
+        const [, options] = call as [string, RequestInit]
+        return gunzipSync(options.body as Uint8Array)
+      })
+      expect(bodies.map(body => JSON.parse(body.toString('utf8')).length)).toEqual([2, 1])
+      for (const body of bodies) expect(body.byteLength).toBeLessThanOrEqual(5_000_000)
+    })
+
     it('sends multiple events in one request', async () => {
       const events = [
         createTestEvent({ requestId: '1' }),

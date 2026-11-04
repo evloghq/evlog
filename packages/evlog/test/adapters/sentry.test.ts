@@ -310,6 +310,21 @@ describe('sentry adapter', () => {
       expect(counts).toEqual([100, 100, 50])
     })
 
+    it('splits logs whose item payload would exceed 1 MiB into several envelopes', async () => {
+      const events = Array.from({ length: 3 }, (_, index) => createTestEvent({ requestId: String(index), payload: 'x'.repeat(400_000) }))
+
+      await sendBatchToSentry(events, {
+        dsn: 'https://public@o123.ingest.sentry.io/456',
+      })
+
+      const payloads = fetchSpy.mock.calls.map((call) => {
+        const [, options] = call as [string, RequestInit]
+        return (options.body as string).split('\n')[2]!
+      })
+      expect(payloads.map(payload => JSON.parse(payload).items.length)).toEqual([2, 1])
+      for (const payload of payloads) expect(new TextEncoder().encode(payload).byteLength).toBeLessThanOrEqual(1024 * 1024)
+    })
+
     it('does not send request for empty events array', async () => {
       await sendBatchToSentry([], {
         dsn: 'https://public@o123.ingest.sentry.io/456',
