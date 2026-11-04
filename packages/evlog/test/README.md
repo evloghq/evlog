@@ -10,7 +10,7 @@ Goals: fast (full suite < 2s locally), deterministic, no fake-greens, no console
 | A drain spy was called within a few microtasks of a request returning | `await waitForDrainCalls(drain)` before drilling into `drain.mock.calls` |
 | A specific event field is set after `log.set(...)` | `findEventViaDrain(drain, e => e.path === ...)` then assert on the returned event |
 | A duration / threshold-based behavior | `vi.useFakeTimers()` + `vi.advanceTimersByTime(N)` + `vi.useRealTimers()` (do *not* `await new Promise(setTimeout)`) |
-| An input is processed in linear time | `expect(fastestRunMs(() => fn(input))).toBeLessThan(100)` from `helpers/timers.ts`, not one `performance.now()` pair: a loaded CI machine can pause a single call |
+| An input is processed in linear time | `expect(fastestRunMs(() => fn(input))).toBeLessThan(100)` from `helpers/timers.ts`, not one `performance.now()` pair: a loaded CI machine can pause a single call. The input must be adversarial and large, around 64k characters built by repeating the pattern's prefix (`'ghp_'.repeat(13_107)`), because a quadratic scan of a short input also finishes under 100 ms |
 | Narrowing after `expect(x).toBeDefined()` | `defined(x, 'label')` from `helpers/defined.ts` — not `x!` |
 | Accessing the request logger inside a route handler test | `useLogger()` — not `req.log!` (keep one test per framework that asserts `req.log` is attached) |
 | An adapter posts the right URL / body / headers | `mockFetch()` from `helpers/fetch.ts` + `getFetchCall` / `getFetchJson` / `getFetchHeaders` |
