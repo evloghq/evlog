@@ -11,6 +11,8 @@
 /packages/*/package.json           @HugoRCD
 /pnpm-lock.yaml                    @HugoRCD
 /pnpm-workspace.yaml               @HugoRCD
+/.pnpmfile.cjs                     @HugoRCD
+/.pnpmfile.mjs                     @HugoRCD
 /renovate.json                     @HugoRCD
 /.node-version                     @HugoRCD
 /.nvmrc                            @HugoRCD
