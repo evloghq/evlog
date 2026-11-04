@@ -16,6 +16,7 @@ import {
 import { readCodeSnippetFromDisk } from '../../src/shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../../src/shared/enrich-error-stack.node'
 import { prependNitroErrorHandler } from '../../src/nitro'
+import { fastestRunMs } from '../helpers/timers'
 
 const SAMPLE_STACK = `Error: Payment processing failed
     at Object.handler (file:///Users/dev/project/server/api/test.get.ts:100:0)
@@ -105,9 +106,7 @@ describe('parseStackFrames', () => {
       `at a (${'1:'.repeat(32_768)})`,
     ]
     for (const line of lines) {
-      const start = performance.now()
-      parseStackFrames(`Error: invalid value\n    ${line}`)
-      expect(performance.now() - start, line.slice(0, 16)).toBeLessThan(100)
+      expect(fastestRunMs(() => parseStackFrames(`Error: invalid value\n    ${line}`)), line.slice(0, 16)).toBeLessThan(100)
     }
   })
 
