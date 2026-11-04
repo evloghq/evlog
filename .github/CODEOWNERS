@@ -1,27 +1,2 @@
-# Files that decide what the release job installs, runs and publishes.
-# Branch protection on main and v3 holds a PR that touches one until a code owner approves it.
-
-# Workflows, the setup action, and this file
-/.github/                          @HugoRCD
-
-# What `pnpm install` resolves, and the lifecycle scripts it runs in every workspace package
-/package.json                      @HugoRCD
-/apps/*/package.json               @HugoRCD
-/examples/*/package.json           @HugoRCD
-/packages/*/package.json           @HugoRCD
-/pnpm-lock.yaml                    @HugoRCD
-/pnpm-workspace.yaml               @HugoRCD
-/.pnpmfile.cjs                     @HugoRCD
-/.pnpmfile.mjs                     @HugoRCD
-/renovate.json                     @HugoRCD
-/.node-version                     @HugoRCD
-/.nvmrc                            @HugoRCD
-
-# Build and release
-/turbo.json                        @HugoRCD
-/.changeset/config.json            @HugoRCD
-/.changeset/pre.json               @HugoRCD
-/packages/*/tsdown.config.ts       @HugoRCD
-/packages/nuxthub/build.config.ts  @HugoRCD
-/scripts/release-notes/            @HugoRCD
-/scripts/stage-release/            @HugoRCD
+# Branch protection on main and v3 holds every PR until a code owner approves it.
+* @HugoRCD
