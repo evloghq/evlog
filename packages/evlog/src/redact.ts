@@ -17,10 +17,31 @@ const EMAIL_SHAPE = /[\w.+-]@[\w-]{1,63}(?:\.[\w-]{1,63})*\.[a-zA-Z]{2}/
 const CARD_SHAPE = /\d{4}[\s-]?\d{4}/
 
 /**
- * Every built-in pattern needs a digit, an `@`, `eyJ` or the word `bearer`, so a
- * string with none of them is left as it is without running a single pattern.
+ * Every built-in pattern needs a digit, an `@`, a token prefix, `-----BEGIN`,
+ * `eyJ` or the word `bearer`, so a string with none of them is left as it is
+ * without running a single pattern. Keep this a superset of the patterns.
  */
-const BUILTIN_SIGNAL = /[\d@]|eyJ|bearer/i
+const BUILTIN_SIGNAL = /[\d@]|eyJ|bearer|-----BEGIN|gh[pousr]_|github_pat_|npm_|sk-|[sr]k_live_|xox|xapp-|AKIA|ASIA/i
+
+/** Literal prefixes of the `apiKeys` built-in, longest match first where one prefix extends another. */
+const API_KEY_PREFIXES = [
+  'github_pat_',
+  'ghp_',
+  'gho_',
+  'ghu_',
+  'ghs_',
+  'ghr_',
+  'npm_',
+  'sk-ant-',
+  'sk-proj-',
+  'sk_live_',
+  'rk_live_',
+  'xoxb-',
+  'xoxp-',
+  'xapp-',
+  'AKIA',
+  'ASIA',
+]
 
 /** Compiled matchers for {@link RedactConfig.paths} glob patterns. */
 export interface RedactPathMatchers {
@@ -251,8 +272,10 @@ export function redactValueByPaths(
  * Each builtin preserves just enough signal for debugging while scrubbing PII.
  * They run on every string of every wide event, so each must stay linear in the input length.
  * They run in this order. Bearer comes first so its token is masked whole before
- * a shorter pattern rewrites part of it. IBAN comes before credit cards, whose pattern
- * matches the digits inside a spaced IBAN and would leave the rest of it in the clear.
+ * a shorter pattern rewrites part of it. The credential patterns follow for the same
+ * reason: `email` would otherwise rewrite the `pass@host` part of a URL first.
+ * IBAN comes before credit cards, whose pattern matches the digits inside a spaced
+ * IBAN and would leave the rest of it in the clear.
  */
 export const builtinPatterns = {
   /** Bearer tokens → Bearer *** */
@@ -260,6 +283,28 @@ export const builtinPatterns = {
     pattern: /\bBearer\s+[\w\-.~+/]{8,}=*/gi,
     gate: (v: string) => v.length >= 15 && BEARER_WORD.test(v),
     mask: () => 'Bearer ***',
+  },
+  /** Provider API keys and tokens by fixed prefix → ghp_*** (GitHub, npm, Anthropic, OpenAI, Stripe, Slack, AWS) */
+  apiKeys: {
+    // Every alternative starts with a literal prefix, so the scan stays linear.
+    pattern: /github_pat_[A-Za-z0-9_]{22,}|gh[pousr]_[A-Za-z0-9]{36,}|npm_[A-Za-z0-9]{36,}|sk-ant-[A-Za-z0-9_-]{32,}|sk-proj-[A-Za-z0-9_-]{32,}|[sr]k_live_[A-Za-z0-9]{24,}|xox[bp]-[A-Za-z0-9-]{10,}|xapp-[A-Za-z0-9-]{10,}|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g,
+    // The shortest match is 15 characters (`xoxb-` plus 10), so anything shorter skips the scan.
+    gate: (v: string) => v.length >= 15,
+    mask: (m: string) => `${API_KEY_PREFIXES.find(prefix => m.startsWith(prefix)) ?? ''}***`,
+  },
+  /** PEM private key blocks → -----BEGIN RSA PRIVATE KEY-----*** */
+  privateKey: {
+    // A block with no END runs to the end of the value. The scan never restarts inside it, so the cost stays linear, and text after a stray BEGIN is masked too.
+    pattern: /-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]{0,40}PRIVATE KEY-----|$)/g,
+    gate: (v: string) => v.includes('-----BEGIN'),
+    mask: (m: string) => `${m.slice(0, m.indexOf('-----', 5) + 5)}***`,
+  },
+  /** URLs with a password → postgres://user:***@host, redis://:***@host */
+  urlPassword: {
+    // The password may hold `@`, `?` or `#` and ends at the last `@` before the path or a query. Digits followed by `?` or `#` are a port and a query, not a password.
+    pattern: /\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/?#@]{0,256}:(?!\d{1,5}[?#])[^\s/@]+(?:@[^\s/?#@]*)*@/gi,
+    gate: (v: string) => v.includes('://') && v.includes('@'),
+    mask: (m: string) => `${m.slice(0, m.indexOf(':', m.indexOf('://') + 3) + 1)}***@`,
   },
   /** IBAN → FR76****189 (country + check digits + last 3) */
   iban: {
@@ -332,6 +377,9 @@ export const builtinPatterns = {
 
 export type BuiltinPatternName = keyof typeof builtinPatterns
 
+/** Built-ins that run only when listed in `builtins`: `redact: true` and a config without `builtins` leave them off. */
+const OPT_IN_BUILTINS: ReadonlySet<BuiltinPatternName> = new Set(['apiKeys', 'privateKey', 'urlPassword'])
+
 /** Every name accepted by `RedactConfig.builtins`: the value patterns plus key-based `secrets`. */
 export type BuiltinRedactName = BuiltinPatternName | 'secrets'
 
@@ -383,15 +431,18 @@ function redactSecretKeys(obj: unknown, replacement: RedactReplacement, path: Ar
 /**
  * Resolve a `redact` option (boolean or object) into a concrete `RedactConfig`.
  *
- * - `true` → all built-in patterns with smart masking, no custom paths
+ * - `true` → the default built-in patterns with smart masking, no custom paths
  * - `{ ... }` → built-in maskers merged with user config (opt-out: `builtins: false`)
  * - `false` / `undefined` → `undefined` (no redaction)
+ *
+ * The default built-ins are every pattern except `apiKeys`, `privateKey` and
+ * `urlPassword`, which run only when `builtins` lists them.
  */
 export function resolveRedactConfig(input: boolean | RedactConfig | undefined): RedactConfig | undefined {
   if (input === undefined || input === false) return undefined
 
   if (input === true) {
-    return { _maskers: allBuiltinMaskers(), _secretKeys: true }
+    return { _maskers: builtinMaskers(isDefaultBuiltin), _secretKeys: true }
   }
 
   if (input.builtins === false) {
@@ -403,11 +454,8 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
 
   const { builtins } = input
   const maskers = Array.isArray(builtins)
-    ? (Object.keys(builtinPatterns) as BuiltinPatternName[])
-      .filter(name => builtins.includes(name))
-      .map(name => builtinPatterns[name])
-      .map(b => [cloneRegex(b.pattern), b.mask, b.gate] as Masker)
-    : allBuiltinMaskers()
+    ? builtinMaskers(name => builtins.includes(name))
+    : builtinMaskers(isDefaultBuiltin)
 
   return {
     ...input,
@@ -417,8 +465,18 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
   }
 }
 
-function allBuiltinMaskers(): Masker[] {
-  return Object.values(builtinPatterns).map(b => [cloneRegex(b.pattern), b.mask, b.gate] as Masker)
+function isDefaultBuiltin(name: BuiltinPatternName): boolean {
+  return !OPT_IN_BUILTINS.has(name)
+}
+
+/** Fresh maskers for the selected built-ins, in {@link builtinPatterns} order. */
+function builtinMaskers(include: (name: BuiltinPatternName) => boolean): Masker[] {
+  return (Object.keys(builtinPatterns) as BuiltinPatternName[])
+    .filter(include)
+    .map((name) => {
+      const { pattern, mask, gate } = builtinPatterns[name]
+      return [cloneRegex(pattern), mask, gate] as Masker
+    })
 }
 
 function cloneRegex(re: RegExp): RegExp {

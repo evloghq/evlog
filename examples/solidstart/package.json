@@ -11,7 +11,7 @@
     "@solidjs/router": "^0.15.4",
     "@solidjs/start": "^1.2.1",
     "evlog": "workspace:*",
-    "solid-js": "^1.9.11"
+    "solid-js": "^1.9.18"
   },
   "devDependencies": {
     "typescript": "^5.7.0"
