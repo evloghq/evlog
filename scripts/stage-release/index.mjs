@@ -60,7 +60,7 @@ function workspacePackages() {
 
 /** Every version of `name` on npm, or none when the package does not exist yet. */
 async function npmVersions(name) {
-  const res = await fetch(`${REGISTRY}/${name.replace('/', '%2f')}`, {
+  const res = await fetch(`${REGISTRY}/${encodeURIComponent(name)}`, {
     headers: { accept: 'application/vnd.npm.install-v1+json' },
   })
   if (res.status === 404) return []
