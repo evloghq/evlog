@@ -21,7 +21,11 @@
  *    the run was started by hand, is packed with `pnpm pack` (which resolves
  *    `workspace:` ranges the way `pnpm publish` does) and staged with the
  *    dist-tag `changeset publish` would use.
- * 3. The run waits for the staged versions to be approved, then tags them on HEAD.
+ * 3. The run waits for the staged versions to be approved, and tags each one on
+ *    HEAD as soon as it is on npm.
+ *
+ * Every tag is created as soon as its version is on npm, so an error later in the
+ * run, a failed stage or a failed poll, does not drop it.
  *
  * A push never stages a version an earlier run already staged, so an
  * unapproved version is not staged again on every merge.
@@ -37,7 +41,7 @@ import { appendFileSync, existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { approvalSummary, distTag, idOf, plan, REGISTRY, stageIdFrom } from './lib.mjs'
+import { approvalSummary, distTag, idOf, plan, REGISTRY, stageIdFrom, waitForApproval } from './lib.mjs'
 
 const APPROVAL_WINDOW_MINUTES = 30
 const POLL_INTERVAL_MS = 20_000
@@ -94,21 +98,9 @@ function stage(pkg, tag, destination) {
   return { ...pkg, tag, stageId }
 }
 
-async function waitForApproval(staged) {
-  const deadline = Date.now() + APPROVAL_WINDOW_MINUTES * 60_000
-  const approved = []
-  let pending = staged
-  while (pending.length > 0 && Date.now() < deadline) {
-    await sleep(POLL_INTERVAL_MS)
-    const live = await Promise.all(pending.map(async pkg => (await npmVersions(pkg.name)).includes(pkg.version)))
-    for (const [index, pkg] of pending.entries()) {
-      if (!live[index]) continue
-      approved.push(pkg)
-      console.error(`${idOf(pkg)} is on npm`)
-    }
-    pending = pending.filter((_, index) => !live[index])
-  }
-  return { approved, pending }
+function tag(pkg, commit) {
+  git('tag', idOf(pkg), '-m', idOf(pkg), commit)
+  console.log(`New tag: ${idOf(pkg)}`)
 }
 
 const packages = workspacePackages()
@@ -120,6 +112,8 @@ const { release, stage: toStage, waiting } = plan(packages, {
   tagged: new Set(packages.map(idOf).filter(id => git('tag', '--list', id) === id)),
   previousVersions: previousVersions(packages),
 })
+
+for (const pkg of release) tag(pkg, versionCommit(pkg))
 
 const destination = mkdtempSync(join(tmpdir(), 'evlog-stage-'))
 const staged = toStage.map(pkg => stage(pkg, distTag(preState, versions.get(pkg.name)), destination))
@@ -134,12 +128,16 @@ for (const pkg of waiting) {
   console.log(`::warning::${idOf(pkg)} is staged and waiting for approval. Once approved, run release.yml on ${branch} again to tag and release it.`)
 }
 
-const { approved, pending } = await waitForApproval(staged)
+const pending = await waitForApproval(staged, {
+  isLive: async pkg => (await npmVersions(pkg.name)).includes(pkg.version),
+  onApproved: (pkg) => {
+    console.error(`${idOf(pkg)} is on npm`)
+    tag(pkg, 'HEAD')
+  },
+  sleep: () => sleep(POLL_INTERVAL_MS),
+  deadline: Date.now() + APPROVAL_WINDOW_MINUTES * 60_000,
+})
 
-for (const [pkg, commit] of [...release.map(pkg => [pkg, versionCommit(pkg)]), ...approved.map(pkg => [pkg, 'HEAD'])]) {
-  git('tag', idOf(pkg), '-m', idOf(pkg), commit)
-  console.log(`New tag: ${idOf(pkg)}`)
-}
 for (const pkg of pending) {
   console.log(`::warning::${idOf(pkg)} was not approved within ${APPROVAL_WINDOW_MINUTES} minutes (stage ${pkg.stageId}). Once approved, run release.yml on ${branch} again to tag and release it.`)
 }

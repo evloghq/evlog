@@ -55,6 +55,37 @@ export function plan(packages, { published, tagged, previousVersions }) {
   return out
 }
 
+/**
+ * Poll until every staged version is on npm or the deadline passes, and hand each one
+ * to `onApproved` as soon as it is seen. A poll that fails still reports the versions
+ * the same poll found, then throws.
+ *
+ * @param {WorkspacePackage[]} staged
+ * @param {object} options
+ * @param {(pkg: WorkspacePackage) => Promise<boolean>} options.isLive whether the version is on npm
+ * @param {(pkg: WorkspacePackage) => void} options.onApproved
+ * @param {() => Promise<void>} options.sleep the wait before each poll
+ * @param {number} options.deadline
+ * @param {() => number} [options.now]
+ * @returns {Promise<WorkspacePackage[]>} the versions still pending at the deadline
+ */
+export async function waitForApproval(staged, { isLive, onApproved, sleep, deadline, now = Date.now }) {
+  let pending = staged
+  while (pending.length > 0 && now() < deadline) {
+    await sleep()
+    const results = await Promise.allSettled(pending.map(isLive))
+    const stillPending = []
+    for (const [index, pkg] of pending.entries()) {
+      if (results[index].status === 'fulfilled' && results[index].value) onApproved(pkg)
+      else stillPending.push(pkg)
+    }
+    pending = stillPending
+    const failed = results.find(result => result.status === 'rejected')
+    if (failed) throw failed.reason
+  }
+  return pending
+}
+
 /** The stage id in `npm stage publish --json` output, which is keyed by package name. */
 export function stageIdFrom(stdout, name) {
   const stageId = JSON.parse(stdout)[name]?.stageId
@@ -82,7 +113,9 @@ export function approvalSummary({ staged, waiting, branch, windowMinutes }) {
       '| --- | --- | --- |',
       ...staged.map(pkg => `| \`${idOf(pkg)}\` | \`${pkg.tag}\` | \`npm stage approve ${pkg.stageId} --registry=${REGISTRY}/\` |`),
       '',
-      `Approve each one with the command above or from the Staged packages tab on npmjs.com. This job waits ${windowMinutes} minutes, then tags every approved version and creates its GitHub release. For a version approved later, run ${rerun}.`,
+      `Approve each one with the command above or from the Staged packages tab on npmjs.com. This job waits up to ${windowMinutes} minutes and tags each version once it is approved; the GitHub releases are created when the wait ends. For a version approved later, run ${rerun}.`,
+      '',
+      `Approve only the newest stage of a package, and reject any older one still pending (\`npm stage list <package> --registry=${REGISTRY}/\`, then \`npm stage reject <id> --registry=${REGISTRY}/\`). An older stage approved after a newer one moves the dist-tag back to the older version.`,
       '',
     )
   }
