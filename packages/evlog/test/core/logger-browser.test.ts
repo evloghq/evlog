@@ -127,4 +127,16 @@ describe('browser pretty printing', () => {
     expect(noteCall).toBeDefined()
     expect(noteCall![0]).toContain('50%% off')
   })
+
+  it('keeps line breaks in field values and error messages', () => {
+    const logger = createRequestLogger({ method: 'GET', path: '/x' })
+    logger.set({ note: 'first\nsecond' })
+    logger.error(new Error('bad\ninput'))
+    logger.emit()
+
+    const output = logSpy.mock.calls.map(([fmt]: string[]) => fmt).join('\n')
+    expect(output).toContain('first\nsecond')
+    expect(output).toContain('bad\ninput')
+    expect(output).not.toContain('\\n')
+  })
 })
