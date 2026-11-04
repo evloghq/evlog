@@ -1,5 +1,15 @@
 # @evlog/cli
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- [#996](https://github.com/evloghq/evlog/pull/996) [`df6c5a1`](https://github.com/evloghq/evlog/commit/df6c5a1f1db9eb10ddb8e8c3c1b692c68de26c2a) Thanks [@evlogai](https://github.com/apps/evlogai)! - `evlog config` lists `apiKeys`, `privateKey` and `urlPassword` among the default redaction built-ins, as evlog 3 runs them by default.
+
+- [#993](https://github.com/evloghq/evlog/pull/993) [`06b7277`](https://github.com/evloghq/evlog/commit/06b72774ac38bd22e84f9262dd5da55372a60355) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Escape control characters in `evlog logs` output. Before, a logged value such as a request path containing `\r\x1b[2K` was printed to the terminal as is, so it could erase the line it was on and print a fake log line in its place. The one-line view, the full view of one event, its `FIELDS` block and the `stats` table now print control characters as `\r`, `\n` and `\u001b`, the way evlog's pretty output does since its last patch. Tabs are kept. `--json` output is unchanged.
+
+- [#993](https://github.com/evloghq/evlog/pull/993) [`06b7277`](https://github.com/evloghq/evlog/commit/06b72774ac38bd22e84f9262dd5da55372a60355) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map` now reads a Vue route file whose `<script>` block closes with `</script >` or another closing tag that has whitespace before `>`. Before, it found no script in that file and skipped it.
+
 ## 1.0.0-beta.1
 
 ### Minor Changes
