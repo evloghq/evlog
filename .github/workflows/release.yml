@@ -12,6 +12,8 @@ permissions: {}
 
 jobs:
   release:
+    # npm's trusted publisher only accepts this environment, which only main and v3 can deploy to
+    environment: npm-publish
     permissions:
       contents: write
       pull-requests: write
@@ -45,7 +47,6 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
 
       # changesets sets `published` before it exits on a failed package, so these steps still
