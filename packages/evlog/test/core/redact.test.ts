@@ -486,9 +486,9 @@ describe('redactEvent - built-in pre-checks', () => {
     ['jwt', 'eyJ.a.b', 'eyJ***.***'],
     ['bearer', 'Bearer abcdefgh', 'Bearer ***'],
     ['iban', 'DE89370400440532', 'DE89****532'],
-    ['apiKeys', ['ghp', 'a'.repeat(36)].join('_'), 'ghp_***'],
+    ['apiKeys', 'xoxb-abcdefghij', 'xoxb-***'],
     ['privateKey', '-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----***'],
-    ['urlPassword', 'a://b:c@', 'a://b:***@'],
+    ['urlPassword', 'a://:b@', 'a://:***@'],
   ]
 
   it.each(shortest)('%s masks its shortest match and keeps one character less', (name, value, masked) => {
@@ -502,12 +502,18 @@ describe('redactEvent - built-in pre-checks', () => {
     expect(redactEvent({ jwt: 'eyJabc.def.ghi', auth: 'bearer abcdefghij' }, config)).toEqual({ jwt: 'eyJ***.***', auth: 'Bearer ***' })
   })
 
+  it('masks a token and a private key block that carry no digit and no @', () => {
+    const config = defined(resolveRedactConfig({ builtins: ['apiKeys', 'privateKey'] }), 'redact config')
+    const token = ['ghp', 'a'.repeat(36)].join('_')
+    expect(redactEvent({ token, key: '-----BEGIN PRIVATE KEY-----\nabc' }, config)).toEqual({ token: 'ghp_***', key: '-----BEGIN PRIVATE KEY-----***' })
+  })
+
   it('gives the same result as running every pattern on every string', () => {
     const maskers = Object.values(builtinPatterns)
     const reference = (value: string) => maskers.reduce((acc, { pattern, mask }) => acc.replace(new RegExp(pattern.source, pattern.flags), mask), value)
     const config = defined(resolveRedactConfig({ builtins: Object.keys(builtinPatterns) as Array<keyof typeof builtinPatterns> }), 'redact config')
     const alphabet = '0123456789abcdeyJBrRE@.-+()/= \t'
-    const pieces = ['eyJ', 'Bearer ', 'bearer\t', '4111 1111 1111 1111', '4111-1111', '@example.com', 'jane.doe+x@mail.example.co', 'FR76', '192.168.', 'node_modules/.pnpm/a@1.2.3_@b+c@4.5.6_d/', ':1204:17)', 'ghp_', 'gho_', 'github_pat_', 'npm_', 'sk-ant-', 'sk-proj-', 'sk_live_', 'rk_live_', 'xoxb-', 'xoxp-', 'xapp-', 'AKIA', 'ASIA', '-----BEGIN PRIVATE KEY-----', 'postgres://a:']
+    const pieces = ['eyJ', 'Bearer ', 'bearer\t', '4111 1111 1111 1111', '4111-1111', '@example.com', 'jane.doe+x@mail.example.co', 'FR76', '192.168.', 'node_modules/.pnpm/a@1.2.3_@b+c@4.5.6_d/', ':1204:17)', 'ghp_', 'gho_', 'github_pat_', 'npm_', 'sk-ant-', 'sk-proj-', 'sk_live_', 'rk_live_', 'xoxb-', 'xoxp-', 'xapp-', 'AKIA', 'ASIA', ['ghp', 'a'.repeat(36)].join('_'), '-----BEGIN PRIVATE KEY-----', '-----END PRIVATE KEY-----', 'postgres://a:', 'a://:']
     let seed = 1
     const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
     for (let i = 0; i < 5000; i++) {
@@ -641,6 +647,17 @@ describe('redactEvent - secrets built-in', () => {
   })
 })
 
+/** The built-ins `redact: true` runs, in their run order. */
+const DEFAULT_PATTERNS = ['bearer', 'apiKeys', 'privateKey', 'urlPassword', 'iban', 'creditCard', 'email', 'ipv4', 'phone', 'jwt'] as const
+
+function maskerSources(config: RedactConfig): string[] {
+  return defined(config._maskers, 'maskers').map(([pattern]) => pattern.source)
+}
+
+function patternSources(names: ReadonlyArray<keyof typeof builtinPatterns>): string[] {
+  return names.map(name => builtinPatterns[name].pattern.source)
+}
+
 describe('resolveRedactConfig', () => {
   it('returns undefined for false', () => {
     expect(resolveRedactConfig(false)).toBeUndefined()
@@ -650,15 +667,20 @@ describe('resolveRedactConfig', () => {
     expect(resolveRedactConfig(undefined)).toBeUndefined()
   })
 
-  it('returns all built-in maskers for true', () => {
+  it('returns the default built-in maskers for true', () => {
     const config = defined(resolveRedactConfig(true), 'redact config')
-    expect(config._maskers).toHaveLength(Object.keys(builtinPatterns).length)
+    expect(maskerSources(config)).toEqual(patternSources(DEFAULT_PATTERNS))
   })
 
-  it('includes built-in maskers by default when object is passed', () => {
+  it('includes the default built-in maskers when object is passed', () => {
     const config = defined(resolveRedactConfig({ paths: ['user.password'] }), 'redact config')
     expect(config.paths).toEqual(['user.password'])
-    expect(config._maskers).toHaveLength(Object.keys(builtinPatterns).length)
+    expect(maskerSources(config)).toEqual(patternSources(DEFAULT_PATTERNS))
+  })
+
+  it('runs a credential built-in only when listed, in built-in order whatever the list order', () => {
+    const config = defined(resolveRedactConfig({ builtins: ['email', 'urlPassword', 'apiKeys'] }), 'redact config')
+    expect(maskerSources(config)).toEqual(patternSources(['apiKeys', 'urlPassword', 'email']))
   })
 
   it('disables built-ins with builtins: false', () => {
@@ -710,9 +732,14 @@ describe('normalizeRedactConfig', () => {
     expect(normalizeRedactConfig(false)).toBeUndefined()
   })
 
-  it('resolves true to all built-in maskers', () => {
+  it('resolves true to the default built-in maskers', () => {
     const config = defined(normalizeRedactConfig(true), 'redact config')
-    expect(defined(config._maskers, 'maskers').length).toBe(Object.keys(builtinPatterns).length)
+    expect(maskerSources(config)).toEqual(patternSources(DEFAULT_PATTERNS))
+  })
+
+  it('keeps a credential built-in listed in a config that crossed the JSON bridge', () => {
+    const config = defined(normalizeRedactConfig(JSON.parse(JSON.stringify({ builtins: ['urlPassword'] }))), 'redact config')
+    expect(redactEvent({ url: 'postgres://app:hunter2@db:5432/app' }, config)).toEqual({ url: 'postgres://app:***@db:5432/app' })
   })
 
   it('preserves paths and replacement', () => {
@@ -728,7 +755,7 @@ describe('normalizeRedactConfig', () => {
     const config = defined(normalizeRedactConfig({
       patterns: ['\\b\\d{4}\\b'],
     }), 'redact config')
-    expect(config._maskers).toHaveLength(Object.keys(builtinPatterns).length)
+    expect(maskerSources(config)).toEqual(patternSources(DEFAULT_PATTERNS))
     expect(config.patterns).toHaveLength(1)
     expect(defined(config.patterns?.[0], 'patterns[0]').source).toBe('\\b\\d{4}\\b')
   })

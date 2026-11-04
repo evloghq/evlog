@@ -44,6 +44,14 @@
   - evlog@3.0.0-beta.0
   - @evlog/telemetry@1.0.0-beta.0
 
+## 0.11.2
+
+### Patch Changes
+
+- [#990](https://github.com/evloghq/evlog/pull/990) [`b4c170f`](https://github.com/evloghq/evlog/commit/b4c170fb0ae178ab1e5bb63369d365882877c61e) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Escape control characters in `evlog logs` output. Before, a logged value such as a request path containing `\r\x1b[2K` was printed to the terminal as is, so it could erase the line it was on and print a fake log line in its place. The one-line view, the full view of one event, its `FIELDS` block and the `stats` table now print control characters as `\r`, `\n` and `\u001b`, the way evlog's pretty output does since its last patch. Tabs are kept. `--json` output is unchanged.
+
+- [#992](https://github.com/evloghq/evlog/pull/992) [`6f6e9db`](https://github.com/evloghq/evlog/commit/6f6e9dba09776f7491d5330aa1371a820b426dc6) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map` now reads a Vue route file whose `<script>` block closes with `</script >` or another closing tag that has whitespace before `>`. Before, it found no script in that file and skipped it.
+
 ## 0.11.1
 
 ### Patch Changes

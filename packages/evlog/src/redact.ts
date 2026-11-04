@@ -18,8 +18,8 @@ const CARD_SHAPE = /\d{4}[\s-]?\d{4}/
 
 /**
  * Every built-in pattern needs a digit, an `@`, a token prefix, `-----BEGIN`,
- * `://`, `eyJ` or the word `bearer`, so a string with none of them is left as it
- * is without running a single pattern. Keep this a superset of the patterns.
+ * `eyJ` or the word `bearer`, so a string with none of them is left as it is
+ * without running a single pattern. Keep this a superset of the patterns.
  */
 const BUILTIN_SIGNAL = /[\d@]|eyJ|bearer|-----BEGIN|gh[pousr]_|github_pat_|npm_|sk-|[sr]k_live_|xox|xapp-|AKIA|ASIA/i
 
@@ -272,8 +272,10 @@ export function redactValueByPaths(
  * Each builtin preserves just enough signal for debugging while scrubbing PII.
  * They run on every string of every wide event, so each must stay linear in the input length.
  * They run in this order. Bearer comes first so its token is masked whole before
- * a shorter pattern rewrites part of it. IBAN comes before credit cards, whose pattern
- * matches the digits inside a spaced IBAN and would leave the rest of it in the clear.
+ * a shorter pattern rewrites part of it. The credential patterns follow for the same
+ * reason: `email` would otherwise rewrite the `pass@host` part of a URL first.
+ * IBAN comes before credit cards, whose pattern matches the digits inside a spaced
+ * IBAN and would leave the rest of it in the clear.
  */
 export const builtinPatterns = {
   /** Bearer tokens → Bearer *** */
@@ -297,9 +299,10 @@ export const builtinPatterns = {
     gate: (v: string) => v.includes('-----BEGIN'),
     mask: (m: string) => `${m.slice(0, m.indexOf('-----', 5) + 5)}***`,
   },
-  /** URLs with a password → postgres://user:***@host */
+  /** URLs with a password → postgres://user:***@host, redis://:***@host */
   urlPassword: {
-    pattern: /\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/@]{1,256}:[^\s@/]{1,256}@/gi,
+    // The password may hold `@`, `?` or `#` and ends at the last `@` before the path or a query. Digits followed by `?` or `#` are a port and a query, not a password.
+    pattern: /\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/?#@]{0,256}:(?!\d{1,5}[?#])[^\s/@]+(?:@[^\s/?#@]*)*@/gi,
     gate: (v: string) => v.includes('://') && v.includes('@'),
     mask: (m: string) => `${m.slice(0, m.indexOf(':', m.indexOf('://') + 3) + 1)}***@`,
   },
@@ -436,7 +439,7 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
   if (input === undefined || input === false) return undefined
 
   if (input === true) {
-    return { _maskers: allBuiltinMaskers(), _secretKeys: true }
+    return { _maskers: builtinMaskers(), _secretKeys: true }
   }
 
   if (input.builtins === false) {
@@ -448,11 +451,8 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
 
   const { builtins } = input
   const maskers = Array.isArray(builtins)
-    ? (Object.keys(builtinPatterns) as BuiltinPatternName[])
-      .filter(name => builtins.includes(name))
-      .map(name => builtinPatterns[name])
-      .map(b => [cloneRegex(b.pattern), b.mask, b.gate] as Masker)
-    : allBuiltinMaskers()
+    ? builtinMaskers(name => builtins.includes(name))
+    : builtinMaskers()
 
   return {
     ...input,
@@ -462,8 +462,14 @@ export function resolveRedactConfig(input: boolean | RedactConfig | undefined): 
   }
 }
 
-function allBuiltinMaskers(): Masker[] {
-  return Object.values(builtinPatterns).map(b => [cloneRegex(b.pattern), b.mask, b.gate] as Masker)
+/** Fresh maskers for the selected built-ins (all of them by default), in {@link builtinPatterns} order. */
+function builtinMaskers(include: (name: BuiltinPatternName) => boolean = () => true): Masker[] {
+  return (Object.keys(builtinPatterns) as BuiltinPatternName[])
+    .filter(include)
+    .map((name) => {
+      const { pattern, mask, gate } = builtinPatterns[name]
+      return [cloneRegex(pattern), mask, gate] as Masker
+    })
 }
 
 function cloneRegex(re: RegExp): RegExp {
@@ -608,7 +614,7 @@ function cloneForRedaction(event: Record<string, unknown>): Record<string, unkno
  * Returns a deep clone with redaction applied. Strategies run in order:
  * 0. **Transform**: user hook, sees raw values so it can derive replacements; the stages below still run after it.
  * 1. **Path-based**: dot-notation paths with optional globs (`password`, `**.password`, `*_token`, `user.*`) — full value replacement.
- *    The `secrets` built-in adds every key ending in `password`, `passwd`, `secret` or `token`.
+ *    The `secrets` built-in adds every key ending in a secret word (`password`, `token`, `apiKey`, `dsn`, ...).
  * 2. **Masker-based**: built-in patterns with smart partial masking (e.g. `****1111`).
  * 3. **Pattern-based**: custom RegExp patterns on string values replaced with `replacement`.
  *

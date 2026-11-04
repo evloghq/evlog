@@ -200,6 +200,28 @@
 
 - [#860](https://github.com/evloghq/evlog/pull/860) [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21) Thanks [@evlogai](https://github.com/apps/evlogai)! - The published packages no longer ship `.map` files. They pointed to `src/`, which is not part of the package, so they only added to the install size. `evlog` drops from 330 files (about 2.0 MB unpacked) to 178 files (about 865 KB). No runtime or API change.
 
+## 2.35.0
+
+### Minor Changes
+
+- [#999](https://github.com/evloghq/evlog/pull/999) [`b69c86e`](https://github.com/evloghq/evlog/commit/b69c86e6815741b0f34fbea4dd0db32702358374) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Add three opt-in redaction built-ins that detect credentials by value, under any key and inside longer strings. `apiKeys` masks GitHub, npm, Anthropic, OpenAI, Stripe and Slack tokens and AWS access key IDs to their prefix (`ghp_***`), `privateKey` masks a PEM private key block after its header, and `urlPassword` masks the password in a URL (`postgres://app:***@db`). They are off by default, so `redact: true` logs what it did before. `builtins` runs only the names it lists, so add them next to the defaults:
+
+  ```ts
+  redact: {
+    builtins: ['creditCard', 'email', 'ipv4', 'phone', 'jwt', 'bearer', 'iban', 'secrets', 'apiKeys', 'privateKey', 'urlPassword'],
+  }
+  ```
+
+### Patch Changes
+
+- [#974](https://github.com/evloghq/evlog/pull/974) [`75389a3`](https://github.com/evloghq/evlog/commit/75389a3c2415aee4bbc003e766a3318b785bab64) Thanks [@evlogai](https://github.com/apps/evlogai)! - Widen the optional `nitro` peer range so that `nitro@3.0.261029-rc` installs without a peer conflict. Before, npm failed with ERESOLVE and pnpm printed a peer warning when a project used the Nitro release candidate with evlog 2.x.
+
+- [#988](https://github.com/evloghq/evlog/pull/988) [`8a0aef6`](https://github.com/evloghq/evlog/commit/8a0aef6c79b20afbcefa074e4b552ce1ccbd72ec) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Parse stack frames in linear time. A stack line that starts with `at ` and repeats ` (`, which an error message containing a newline puts in the stack, took time that grew with the square of its length: close to 400 ms for a 40,000-character message, and twice that when the line starts with `at async`. The Sentry drain parses stacks in production, and error serialization and pretty output parse them in development, so an error message built from request input could block the event loop. Frames are parsed the same way as before.
+
+- [#981](https://github.com/evloghq/evlog/pull/981) [`3446e4a`](https://github.com/evloghq/evlog/commit/3446e4a30477bd149f41d9e27e0450e9484714d4) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Escape control characters in pretty output on Node. Before, a value such as a user agent containing `\r\x1b[2K` was written to the terminal as is, so it could erase the line it was printed on and write a fake log line in its place. Field keys and values, the request method and path, error messages and guidance, AI fields and tagged logs now print control characters as `\r`, `\n` and `\u001b`, the way JSON output already shows them, so a multi-line value now prints on one line. Tabs are kept. JSON output is unchanged.
+
+- [#963](https://github.com/evloghq/evlog/pull/963) [`15b833e`](https://github.com/evloghq/evlog/commit/15b833eca6b799dbc0bdfa2a7bbdcc2c256b3630) Thanks [@onmax](https://github.com/onmax)! - Keep request errors in Nitro 3 wide events when an earlier async error hook delays evlog's hook. Emit once without late-write warnings.
+
 ## 2.34.0
 
 ### Minor Changes

@@ -1131,10 +1131,10 @@ evlog: {
 | `bearer` | `Bearer sk_live_abc...` | `Bearer ***` |
 | `apiKeys` | `ghp_` followed by 36 characters | `ghp_***` |
 | `privateKey` | `-----BEGIN RSA PRIVATE KEY-----` block | `-----BEGIN RSA PRIVATE KEY-----***` |
-| `urlPassword` | `postgres://user:hunter2@db` | `postgres://user:***@db` |
+| `urlPassword` | `postgres://app:hunter2@db` | `postgres://app:***@db` |
 | `iban` | `FR76 3000 6000 ...189` | `FR76****189` |
 
-`apiKeys` covers GitHub, npm, Anthropic, OpenAI, Stripe, Slack and AWS key IDs by their fixed prefix. The `secrets` built-in replaces the value of any key ending in `password`, `passwd`, `secret`, `token`, `apiKey`, `privateKey`, `credentials`, `authorization`, `dsn` or `connectionString`, so a credential logged under those keys is masked whatever its shape.
+`apiKeys`, `privateKey` and `urlPassword` match the value under any key and inside longer strings. `apiKeys` covers GitHub, npm, Anthropic, OpenAI, Stripe, Slack and AWS key IDs by their fixed prefix. The `secrets` built-in replaces the value of any key ending in `password`, `passwd`, `secret`, `token`, `apiKey`, `privateKey`, `credentials`, `authorization`, `dsn` or `connectionString`, so a credential logged under those keys is masked whatever its shape. All of them are on by default in evlog 3. On evlog 2.35 and later, the three value patterns exist but run only when listed in `builtins`.
 
 Works in all frameworks: Nuxt (`evlog` config), Nitro (`evlog()` module options), Next.js (`createEvlog()`), standalone (`initLogger()`), and all middleware integrations (Hono, Express, Fastify, Elysia, NestJS).
 

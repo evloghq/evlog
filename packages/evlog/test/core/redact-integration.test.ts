@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { redactEvent, resolveRedactConfig } from '../../src/redact'
+import { builtinPatterns, redactEvent, resolveRedactConfig } from '../../src/redact'
+import type { BuiltinPatternName } from '../../src/redact'
 import { createLogger, initLogger, log } from '../../src/logger'
 import { createPipelineSpies, waitForDrainCalls } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
@@ -15,6 +16,14 @@ describe('initLogger + redact integration', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     initLogger()
+  })
+
+  it('masks a credential by value in emitted wide events when its built-in is listed', () => {
+    const token = ['npm', 'aZ9'.repeat(12)].join('_')
+    initLogger({ pretty: false, redact: { builtins: ['apiKeys'] } })
+
+    const event = defined(createLogger({ note: `publish with ${token}` }).emit(), 'emitted event')
+    expect(event.note).toBe('publish with npm_***')
   })
 
   it('redacts paths in emitted wide events', () => {
@@ -535,9 +544,39 @@ describe('built-in smart masking', () => {
 })
 
 describe('credentials detected by value', () => {
-  const redact = (event: Record<string, unknown>) => redactEvent(event, defined(resolveRedactConfig(true), 'redact config'))
+  const everyBuiltin = Object.keys(builtinPatterns) as BuiltinPatternName[]
+  const config = defined(resolveRedactConfig({ builtins: everyBuiltin }), 'redact config')
+  const redact = (event: Record<string, unknown>) => redactEvent(event, config)
   // Fake credentials built from fragments, so no literal token-shaped string sits in the source.
   const body = (n: number) => 'aZ9'.repeat(Math.ceil(n / 3)).slice(0, n)
+  const pem = [
+    '-----BEGIN RSA PRIVATE KEY-----',
+    'MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun',
+    'VTLw7onLRnrq0/IzW7yWR7QkrmBL7jTKEn5u+qKhbwKfBstIs+bMY2Zkp18gnTxK',
+    '-----END RSA PRIVATE KEY-----',
+  ].join('\n')
+
+  it('masks credentials with redact: true and with a config that does not set builtins', () => {
+    const event = { value: ['ghp', body(36)].join('_'), key: pem, url: 'postgres://user:hunter2@db:5432/app' }
+    const masked = { value: 'ghp_***', key: '-----BEGIN RSA PRIVATE KEY-----***', url: 'postgres://user:***@db:5432/app' }
+    expect(redactEvent(event, defined(resolveRedactConfig(true), 'redact config'))).toEqual(masked)
+    expect(redactEvent(event, defined(resolveRedactConfig({ paths: ['user.ssn'] }), 'redact config'))).toEqual(masked)
+  })
+
+  it('leaves credentials as they are when builtins lists the defaults without the credential ones', () => {
+    const event = { value: ['ghp', body(36)].join('_'), url: 'redis://:s3cret@cache:6379' }
+    const config = defined(resolveRedactConfig({ builtins: ['creditCard', 'email', 'ipv4', 'phone', 'jwt', 'bearer', 'iban', 'secrets'] }), 'redact config')
+    expect(redactEvent(event, config)).toEqual(event)
+  })
+
+  it('masks a credential-shaped value under a credential key name', () => {
+    const event = { apiKey: body(20), authorization: 'Basic dXNlcjpwYXNz', dsn: 'https://key@o0.ingest.sentry.io/1' }
+    expect(redactEvent(event, defined(resolveRedactConfig(true), 'redact config'))).toEqual({
+      apiKey: '[REDACTED]',
+      authorization: '[REDACTED]',
+      dsn: '[REDACTED]',
+    })
+  })
 
   it.each([
     ['GitHub classic token', ['ghp', body(36)].join('_'), 'ghp_***'],
@@ -575,12 +614,6 @@ describe('credentials detected by value', () => {
   })
 
   it('masks a PEM private key block whole, keeping its header', () => {
-    const pem = [
-      '-----BEGIN RSA PRIVATE KEY-----',
-      'MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun',
-      'VTLw7onLRnrq0/IzW7yWR7QkrmBL7jTKEn5u+qKhbwKfBstIs+bMY2Zkp18gnTxK',
-      '-----END RSA PRIVATE KEY-----',
-    ].join('\n')
     expect(redact({ key: pem, after: 'done' })).toEqual({ key: '-----BEGIN RSA PRIVATE KEY-----***', after: 'done' })
   })
 
@@ -590,27 +623,55 @@ describe('credentials detected by value', () => {
 
   it('masks the password in a URL and keeps the user and host', () => {
     expect(redact({ url: 'postgres://user:hunter2@db.internal:5432/app' })).toEqual({ url: 'postgres://user:***@db.internal:5432/app' })
-    expect(redact({ url: 'redis://:s3cret@cache:6379' })).toEqual({ url: 'redis://:s3cret@cache:6379' })
+  })
+
+  it('masks a URL password with no user name', () => {
+    expect(redact({ url: 'redis://:s3cret@cache:6379' })).toEqual({ url: 'redis://:***@cache:6379' })
+  })
+
+  it.each([
+    ['email listed first', ['email', 'urlPassword']],
+    ['urlPassword listed first', ['urlPassword', 'email']],
+  ] as const)('keeps the host of a URL when email masking is on too (%s)', (_label, builtins) => {
+    const event = redactEvent({ url: 'postgres://user:hunter2@db.internal:5432/app' }, defined(resolveRedactConfig({ builtins: [...builtins] }), 'redact config'))
+    expect(event).toEqual({ url: 'postgres://user:***@db.internal:5432/app' })
   })
 
   it('does not treat a host with a port or a path as a URL password', () => {
     expect(redact({ url: 'https://example.com:8080/a@b' })).toEqual({ url: 'https://example.com:8080/a@b' })
   })
 
-  it('keeps a plain email address in a URL-free string', () => {
-    expect(redact({ to: 'alice@example.com' })).toEqual({ to: 'a***@***.com' })
+  it('masks a URL password longer than 256 characters', () => {
+    expect(redact({ url: `redis://:${'x'.repeat(300)}@cache:6379` })).toEqual({ url: 'redis://:***@cache:6379' })
   })
 
-  it('masks a credential-shaped value under a credential key name', () => {
-    expect(redact({ apiKey: body(20), authorization: 'Basic dXNlcjpwYXNz', dsn: 'https://key@o0.ingest.sentry.io/1' })).toEqual({
-      apiKey: '[REDACTED]',
-      authorization: '[REDACTED]',
-      dsn: '[REDACTED]',
-    })
+  it.each([
+    ['redis://:p@ssword@cache:6379', 'redis://:***@cache:6379'],
+    ['postgres://app:p@ss@db.internal:5432/app', 'postgres://app:***@db.internal:5432/app'],
+  ])('masks a URL password that contains @ up to the last @ before the host (%s)', (url, masked) => {
+    expect(redact({ url })).toEqual({ url: masked })
+  })
+
+  it.each([
+    'postgres://user:pa?ss@host',
+    'postgres://user:pa#ss@host',
+  ])('masks a URL password that contains ? or # (%s)', (url) => {
+    expect(redact({ url })).toEqual({ url: 'postgres://user:***@host' })
+  })
+
+  it.each([
+    'https://example.com:8080?contact=a@b',
+    'https://example.com:8080#to=a@b',
+    'https://example.com?time=12:30&to=a@b',
+  ])('does not read a query or fragment as a URL password (%s)', (url) => {
+    expect(redact({ url })).toEqual({ url })
+  })
+
+  it('keeps the host and query when the query after the password holds an @', () => {
+    expect(redact({ url: 'http://user:pass@host:8080?x=a@b' })).toEqual({ url: 'http://user:***@host:8080?x=a@b' })
   })
 
   it('masks tokens in linear time on long attacker-controlled input', () => {
-    const config = defined(resolveRedactConfig(true), 'redact config')
     const inputs = [
       'ghp_'.repeat(13_107),
       'github_pat_'.repeat(5_958),
@@ -620,8 +681,14 @@ describe('credentials detected by value', () => {
       '-----BEGIN PRIVATE KEY-----'.repeat(2_340),
       '-----BEGIN PRIVATE KEY-----\n'.repeat(2_200),
       'a://a:'.repeat(10_923),
+      'a://:'.repeat(13_107),
       `a://${'a:'.repeat(16_384)}`,
       `${'a'.repeat(32)}://${'a'.repeat(256)}:${'a'.repeat(65_000)}`,
+      `${'a.'.repeat(16)}a://u:${'a'.repeat(65_000)}`,
+      `a://u:${'?'.repeat(65_000)}`,
+      `a://u:a${'@?'.repeat(32_000)}`,
+      `a://u:a${'@a'.repeat(32_000)}/`,
+      `a://u:${'1?'.repeat(32_000)}`,
     ]
     for (const input of inputs) {
       const start = performance.now()
