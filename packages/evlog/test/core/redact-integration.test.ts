@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { redactEvent, resolveRedactConfig } from '../../src/redact'
+import { builtinPatterns, redactEvent, resolveRedactConfig } from '../../src/redact'
+import type { BuiltinPatternName } from '../../src/redact'
 import { createLogger, initLogger, log } from '../../src/logger'
 import { createPipelineSpies, waitForDrainCalls } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
@@ -15,6 +16,14 @@ describe('initLogger + redact integration', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     initLogger()
+  })
+
+  it('masks a credential by value in emitted wide events when its built-in is listed', () => {
+    const token = ['npm', 'aZ9'.repeat(12)].join('_')
+    initLogger({ pretty: false, redact: { builtins: ['apiKeys'] } })
+
+    const event = defined(createLogger({ note: `publish with ${token}` }).emit(), 'emitted event')
+    expect(event.note).toBe('publish with npm_***')
   })
 
   it('redacts paths in emitted wide events', () => {
@@ -531,5 +540,109 @@ describe('built-in smart masking', () => {
     expect(event.de).toContain('DE89')
     expect(event.de).not.toContain('3704')
     expect(event.safe).toBe('no iban here')
+  })
+})
+
+describe('credentials detected by value', () => {
+  const everyBuiltin = Object.keys(builtinPatterns) as BuiltinPatternName[]
+  const config = defined(resolveRedactConfig({ builtins: everyBuiltin }), 'redact config')
+  const redact = (event: Record<string, unknown>) => redactEvent(event, config)
+  // Fake credentials built from fragments, so no literal token-shaped string sits in the source.
+  const body = (n: number) => 'aZ9'.repeat(Math.ceil(n / 3)).slice(0, n)
+  const pem = [
+    '-----BEGIN RSA PRIVATE KEY-----',
+    'MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun',
+    'VTLw7onLRnrq0/IzW7yWR7QkrmBL7jTKEn5u+qKhbwKfBstIs+bMY2Zkp18gnTxK',
+    '-----END RSA PRIVATE KEY-----',
+  ].join('\n')
+
+  it('leaves credentials as they are with redact: true or a config that does not list them', () => {
+    const event = { value: ['ghp', body(36)].join('_'), key: pem, url: 'postgres://user:hunter2@db:5432/app' }
+    expect(redactEvent(event, defined(resolveRedactConfig(true), 'redact config'))).toEqual(event)
+    expect(redactEvent(event, defined(resolveRedactConfig({ paths: ['user.ssn'] }), 'redact config'))).toEqual(event)
+  })
+
+  it.each([
+    ['GitHub classic token', ['ghp', body(36)].join('_'), 'ghp_***'],
+    ['GitHub OAuth token', ['gho', body(36)].join('_'), 'gho_***'],
+    ['GitHub user-to-server token', ['ghu', body(36)].join('_'), 'ghu_***'],
+    ['GitHub server-to-server token', ['ghs', body(36)].join('_'), 'ghs_***'],
+    ['GitHub refresh token', ['ghr', body(36)].join('_'), 'ghr_***'],
+    ['GitHub fine-grained token', ['github', 'pat', body(22), body(59)].join('_'), 'github_pat_***'],
+    ['npm token', ['npm', body(36)].join('_'), 'npm_***'],
+    ['Anthropic key', ['sk', 'ant', 'api03', body(95)].join('-'), 'sk-ant-***'],
+    ['OpenAI project key', ['sk', 'proj', body(40)].join('-'), 'sk-proj-***'],
+    ['Stripe secret key', ['sk', 'live', body(24)].join('_'), 'sk_live_***'],
+    ['Stripe restricted key', ['rk', 'live', body(24)].join('_'), 'rk_live_***'],
+    ['Slack bot token', ['xoxb', '1234567890', 'abcdefghij'].join('-'), 'xoxb-***'],
+    ['Slack user token', ['xoxp', '1234567890', 'abcdefghij'].join('-'), 'xoxp-***'],
+    ['Slack app token', ['xapp', '1', 'A0', '1234567890', 'abcdef'].join('-'), 'xapp-***'],
+    ['AWS access key ID', ['AKIA', 'IOSFODNN7EXAMPLE'].join(''), 'AKIA***'],
+    ['AWS session key ID', ['ASIA', 'IOSFODNN7EXAMPLE'].join(''), 'ASIA***'],
+  ])('masks a %s by its prefix, keeping the prefix', (_label, token, masked) => {
+    expect(redact({ value: token })).toEqual({ value: masked })
+  })
+
+  it('masks a token inside a longer string', () => {
+    const token = ['ghp', body(36)].join('_')
+    expect(redact({ message: `pushed with ${token} from ci` })).toEqual({ message: 'pushed with ghp_*** from ci' })
+  })
+
+  it('masks a token logged under a key that is not a secret word', () => {
+    const token = ['npm', body(36)].join('_')
+    expect(redact({ note: token, log: `npm config set ${token}` })).toEqual({ note: 'npm_***', log: 'npm config set npm_***' })
+  })
+
+  it('leaves a token-shaped word that is not a complete credential alone', () => {
+    expect(redact({ short: 'ghp_abc', word: 'github_pat' })).toEqual({ short: 'ghp_abc', word: 'github_pat' })
+  })
+
+  it('masks a PEM private key block whole, keeping its header', () => {
+    expect(redact({ key: pem, after: 'done' })).toEqual({ key: '-----BEGIN RSA PRIVATE KEY-----***', after: 'done' })
+  })
+
+  it('masks an unterminated PEM block to the end of the string, so nothing after the header leaks', () => {
+    expect(redact({ key: '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEF\nrest of the value' })).toEqual({ key: '-----BEGIN PRIVATE KEY-----***' })
+  })
+
+  it('masks the password in a URL and keeps the user and host', () => {
+    expect(redact({ url: 'postgres://user:hunter2@db.internal:5432/app' })).toEqual({ url: 'postgres://user:***@db.internal:5432/app' })
+  })
+
+  it('masks a URL password with no user name', () => {
+    expect(redact({ url: 'redis://:s3cret@cache:6379' })).toEqual({ url: 'redis://:***@cache:6379' })
+  })
+
+  it.each([
+    ['email listed first', ['email', 'urlPassword']],
+    ['urlPassword listed first', ['urlPassword', 'email']],
+  ] as const)('keeps the host of a URL when email masking is on too (%s)', (_label, builtins) => {
+    const event = redactEvent({ url: 'postgres://user:hunter2@db.internal:5432/app' }, defined(resolveRedactConfig({ builtins: [...builtins] }), 'redact config'))
+    expect(event).toEqual({ url: 'postgres://user:***@db.internal:5432/app' })
+  })
+
+  it('does not treat a host with a port or a path as a URL password', () => {
+    expect(redact({ url: 'https://example.com:8080/a@b' })).toEqual({ url: 'https://example.com:8080/a@b' })
+  })
+
+  it('masks tokens in linear time on long attacker-controlled input', () => {
+    const inputs = [
+      'ghp_'.repeat(13_107),
+      'github_pat_'.repeat(5_958),
+      'AKIA'.repeat(16_384),
+      'sk-ant-'.repeat(9_362),
+      'xoxb-1-'.repeat(9_362),
+      '-----BEGIN PRIVATE KEY-----'.repeat(2_340),
+      '-----BEGIN PRIVATE KEY-----\n'.repeat(2_200),
+      'a://a:'.repeat(10_923),
+      'a://:'.repeat(13_107),
+      `a://${'a:'.repeat(16_384)}`,
+      `${'a'.repeat(32)}://${'a'.repeat(256)}:${'a'.repeat(65_000)}`,
+    ]
+    for (const input of inputs) {
+      const start = performance.now()
+      redactEvent({ input }, config)
+      expect(performance.now() - start, input.slice(0, 16)).toBeLessThan(100)
+    }
   })
 })

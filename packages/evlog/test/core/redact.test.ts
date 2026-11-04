@@ -528,6 +528,17 @@ describe('redactEvent - secrets built-in', () => {
   })
 })
 
+/** The built-ins `redact: true` runs, in their run order. The credential ones run only when listed. */
+const DEFAULT_PATTERNS = ['bearer', 'iban', 'creditCard', 'email', 'ipv4', 'phone', 'jwt'] as const
+
+function maskerSources(config: RedactConfig): string[] {
+  return defined(config._maskers, 'maskers').map(([pattern]) => pattern.source)
+}
+
+function patternSources(names: ReadonlyArray<keyof typeof builtinPatterns>): string[] {
+  return names.map(name => builtinPatterns[name].pattern.source)
+}
+
 describe('resolveRedactConfig', () => {
   it('returns undefined for false', () => {
     expect(resolveRedactConfig(false)).toBeUndefined()
@@ -537,15 +548,20 @@ describe('resolveRedactConfig', () => {
     expect(resolveRedactConfig(undefined)).toBeUndefined()
   })
 
-  it('returns all built-in maskers for true', () => {
+  it('returns the default built-in maskers for true', () => {
     const config = defined(resolveRedactConfig(true), 'redact config')
-    expect(config._maskers).toHaveLength(Object.keys(builtinPatterns).length)
+    expect(maskerSources(config)).toEqual(patternSources(DEFAULT_PATTERNS))
   })
 
-  it('includes built-in maskers by default when object is passed', () => {
+  it('includes the default built-in maskers when object is passed', () => {
     const config = defined(resolveRedactConfig({ paths: ['user.password'] }), 'redact config')
     expect(config.paths).toEqual(['user.password'])
-    expect(config._maskers).toHaveLength(Object.keys(builtinPatterns).length)
+    expect(maskerSources(config)).toEqual(patternSources(DEFAULT_PATTERNS))
+  })
+
+  it('runs a credential built-in only when listed, in built-in order whatever the list order', () => {
+    const config = defined(resolveRedactConfig({ builtins: ['email', 'urlPassword', 'apiKeys'] }), 'redact config')
+    expect(maskerSources(config)).toEqual(patternSources(['apiKeys', 'urlPassword', 'email']))
   })
 
   it('disables built-ins with builtins: false', () => {
@@ -597,9 +613,14 @@ describe('normalizeRedactConfig', () => {
     expect(normalizeRedactConfig(false)).toBeUndefined()
   })
 
-  it('resolves true to all built-in maskers', () => {
+  it('resolves true to the default built-in maskers', () => {
     const config = defined(normalizeRedactConfig(true), 'redact config')
-    expect(defined(config._maskers, 'maskers').length).toBe(Object.keys(builtinPatterns).length)
+    expect(maskerSources(config)).toEqual(patternSources(DEFAULT_PATTERNS))
+  })
+
+  it('keeps a credential built-in listed in a config that crossed the JSON bridge', () => {
+    const config = defined(normalizeRedactConfig(JSON.parse(JSON.stringify({ builtins: ['urlPassword'] }))), 'redact config')
+    expect(redactEvent({ url: 'postgres://app:hunter2@db:5432/app' }, config)).toEqual({ url: 'postgres://app:***@db:5432/app' })
   })
 
   it('preserves paths and replacement', () => {
@@ -615,7 +636,7 @@ describe('normalizeRedactConfig', () => {
     const config = defined(normalizeRedactConfig({
       patterns: ['\\b\\d{4}\\b'],
     }), 'redact config')
-    expect(config._maskers).toHaveLength(Object.keys(builtinPatterns).length)
+    expect(maskerSources(config)).toEqual(patternSources(DEFAULT_PATTERNS))
     expect(config.patterns).toHaveLength(1)
     expect(defined(config.patterns?.[0], 'patterns[0]').source).toBe('\\b\\d{4}\\b')
   })
