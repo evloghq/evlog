@@ -141,6 +141,22 @@ export function escapeFormatString(str: string): string {
   return str.replace(/%/g, '%%')
 }
 
+const CONTROL_CHAR = /[\x00-\x08\x0A-\x1F\x7F-\x9F]/g
+
+/**
+ * Escape control characters in a value printed to a terminal, so it cannot
+ * move the cursor, erase or start a line, or send an escape sequence.
+ * Tab is kept, newline and carriage return become `\n` and `\r`, and the
+ * others become `\uXXXX` (`\u001b` for ESC).
+ */
+export function escapeControlChars(str: string): string {
+  return str.replace(CONTROL_CHAR, (char) => {
+    if (char === '\n') return '\\n'
+    if (char === '\r') return '\\r'
+    return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
+  })
+}
+
 /**
  * True when a message string contains a `%s`, `%d` or `%j` specifier, so
  * trailing log arguments have something to interpolate into.

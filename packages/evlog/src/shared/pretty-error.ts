@@ -1,4 +1,4 @@
-import { colors, isBrowser, isDev } from '../utils'
+import { colors, escapeControlChars, isBrowser, isDev } from '../utils'
 import type { ResolvedPrettyError } from './dev-terminal'
 
 /** @internal Server-only snippet reader registered by Nitro plugin or initLogger. */
@@ -360,6 +360,21 @@ function formatGuidanceLine(label: string, text: string, labelColor: string): st
   return lines
 }
 
+/** The stack is escaped line by line so its frames still parse. */
+function escapeErrorContext(context: NormalizedErrorContext): NormalizedErrorContext {
+  const escape = (value: string | undefined) => value === undefined ? undefined : escapeControlChars(value)
+  return {
+    ...context,
+    message: escapeControlChars(context.message),
+    code: escape(context.code),
+    why: escape(context.why),
+    fix: escape(context.fix),
+    link: escape(context.link),
+    cause: escape(context.cause),
+    stack: context.stack?.split('\n').map(escapeControlChars).join('\n'),
+  }
+}
+
 /**
  * Build pretty-print tree entries for a wide-event `error` field.
  */
@@ -367,8 +382,9 @@ export function buildErrorEntries(
   error: unknown,
   options: PrettyErrorOptions = {},
 ): PrettyErrorTreeEntry[] {
-  const normalized = normalizeErrorContext(error)
-  if (!normalized) return []
+  const context = normalizeErrorContext(error)
+  if (!context) return []
+  const normalized = escapeErrorContext(context)
 
   const cwd = options.cwd ?? (typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.')
   const compact = options.compact ?? isDev()
