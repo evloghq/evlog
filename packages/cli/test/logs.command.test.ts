@@ -8,7 +8,7 @@ import logs, { runLogs } from '../src/commands/logs'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
 import { buildQuery, computeStats, matchesId, matchesWhere, parseDuration, parseTime, parseWhere } from '../src/lib/logs/query'
-import { formatEvent, formatLine } from '../src/lib/logs/render'
+import { formatEvent, formatLine, formatLogsReport } from '../src/lib/logs/render'
 import { createStyle } from '../src/core/output'
 
 const NOW = new Date('2026-10-01T12:00:00.000Z')
@@ -413,6 +413,63 @@ describe('rendering', () => {
     expect(text).toContain('at handler (checkout.ts:12:3)')
     expect(text).toContain('"cart"')
     expect(text).not.toContain('"error"')
+  })
+})
+
+describe('control characters in logged values', () => {
+  // The only escape sequences the CLI writes itself are SGR colour codes.
+  const ownColors = /\x1B\[[0-9;]*m/g
+  const controlChar = /[\x00-\x08\x0A-\x1F\x7F-\x9F]/
+  const style = createStyle({ color: true })
+  const spoof = '\r\x1B[2K\x1B[32m11:00:00  GET    /admin  200'
+  const escaped = '\\r\\u001b[2K\\u001b[32m11:00:00  GET    /admin  200'
+
+  function visibleLines(text: string): string[] {
+    return text.replace(ownColors, '').split('\n')
+  }
+
+  it('escapes them in the one-line view', () => {
+    const lines = [
+      formatLine(style, event({ method: `GET${spoof}`, path: `/x${spoof}`, duration: `1ms${spoof}`, user: { id: `u${spoof}` } })),
+      formatLine(style, event({ status: undefined, level: `info${spoof}` })),
+      formatLine(style, event({ level: 'error', status: 500, error: { name: 'Error', message: `boom${spoof}`, data: { why: `why${spoof}` } } })),
+      formatLine(style, event({ audit: { action: `billing.refund${spoof}`, actor: { type: 'user', id: 'usr_42' }, outcome: 'success' } })),
+    ]
+    for (const line of lines) {
+      expect(visibleLines(line)).toHaveLength(1)
+      expect(line.replace(ownColors, '')).not.toMatch(controlChar)
+      expect(line).toContain(escaped)
+    }
+  })
+
+  it('escapes them in the full view of one event, fields included', () => {
+    const text = formatEvent(style, event({
+      level: 'error',
+      status: 500,
+      requestId: `aaaaaaaa${spoof}`,
+      error: { name: 'Error', message: `boom${spoof}`, data: { why: `why\nsecond line` }, stack: `Error: boom\n    at handler${spoof} (checkout.ts:12:3)\n    at run (h3.mjs:2017:19)` },
+      note: `n\u009B2K\u007F`,
+    }))
+    for (const line of visibleLines(text)) expect(line).not.toMatch(controlChar)
+    expect(text).toContain(`aaaaaaaa${escaped}`)
+    expect(text).toContain('why      why\\nsecond line')
+    expect(text).toContain(`at handler${escaped} (checkout.ts:12:3)`)
+    expect(text).toMatch(/^ {11}at run \(h3\.mjs:2017:19\)$/m)
+    expect(text).toContain('"note": "n\\u009b2K\\u007f"')
+  })
+
+  it('escapes them in the stats table', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-logs-'))
+    tempDirs.push(cwd)
+    await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'shop' }))
+    const dir = join(cwd, '.evlog', 'logs')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, '2026-10-01.jsonl'), `${JSON.stringify(event({ path: `/x${spoof}`, level: `info${spoof}` }))}\n`)
+    const result = await runLogs(fakeContext(cwd, { color: true }), { what: 'stats' }, { now: NOW })
+    const report = formatLogsReport(fakeContext(cwd, { color: true }), result)
+    for (const line of visibleLines(report)) expect(line).not.toMatch(controlChar)
+    expect(report).toContain(`GET /x${escaped}`)
+    expect(report).toContain(`info${escaped} 1`)
   })
 })
 
