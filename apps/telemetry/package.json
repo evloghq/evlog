@@ -12,25 +12,25 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.11",
+    "@electric-sql/pglite": "^0.5.14",
     "@evlog/telemetry": "workspace:*",
     "@number-flow/vue": "^0.5.2",
     "@nuxt/fonts": "^0.14.0",
-    "@nuxt/icon": "^2.6.0",
+    "@nuxt/icon": "^2.6.2",
     "@nuxt/ui": "^4.12.0",
-    "@nuxthub/core": "^0.10.11",
-    "@nuxtjs/color-mode": "^4.0.1",
-    "@nuxtjs/mcp-toolkit": "^0.24.2",
+    "@nuxthub/core": "^0.10.12",
+    "@nuxtjs/color-mode": "^4.1.0",
+    "@nuxtjs/mcp-toolkit": "^0.24.3",
     "drizzle-kit": "^0.31.11",
     "drizzle-orm": "^0.45.4",
     "evlog": "workspace:*",
     "nostics": "^1.3.0",
-    "nuxt": "^4.6.1",
-    "nuxt-auth-utils": "^0.5.32",
+    "nuxt": "^4.6.3",
+    "nuxt-auth-utils": "^0.6.0",
     "nuxt-charts": "^2.2.3",
     "postgres": "^3.4.9",
     "zod": "^4.6.7",
-    "jose": "^6.2.13"
+    "jose": "^6.2.14"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

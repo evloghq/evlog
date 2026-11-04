@@ -1879,6 +1879,94 @@ describe('pretty-print array field values', () => {
   })
 })
 
+describe('pretty-print control characters', () => {
+  // The only escape sequences evlog writes itself are SGR colour codes.
+  const ownColors = /\x1B\[[0-9;]*m/g
+  const controlChar = /[\x00-\x08\x0B-\x1F\x7F-\x9F]/
+
+  function printed(): string {
+    return vi.mocked(console.log).mock.calls.map(call => String(call[0])).join('\n')
+  }
+
+  function visible(output: string): string {
+    return output.replace(ownColors, '')
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    initLogger({ pretty: true, env: { service: 'demo' } })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('escapes control characters in the request line, field keys and field values', () => {
+    const logger = createRequestLogger({ method: 'GET', path: '/x\r\x1B[2K', requestId: 'r1' })
+    logger.set({
+      'userAgent': 'curl\r\x1B[2K\x1B[32mINFO [demo] GET /admin 200',
+      'title\x1B]0;pwned\x07': 'x',
+      'nested': { value: 'a\x9Bb\x7F' },
+      'multiline': 'first\nsecond',
+    })
+    logger.emit()
+
+    const output = visible(printed())
+    expect(output).not.toMatch(controlChar)
+    expect(output).toContain('GET /x\\r\\u001b[2K')
+    expect(output).toContain('curl\\r\\u001b[2K\\u001b[32mINFO [demo] GET /admin 200')
+    expect(output).toContain('title\\u001b]0;pwned\\u0007:')
+    expect(output).toContain('value=a\\u009bb\\u007f')
+    expect(output).toContain('first\\nsecond')
+  })
+
+  it('escapes control characters in error message and guidance', () => {
+    const logger = createRequestLogger({ method: 'POST', path: '/x', requestId: 'r2' })
+    logger.error(createError({ message: 'bad\r\x1B[2Kinput', why: 'why\x1B[1A', fix: 'fix\x1B]52;c;cHduZWQ=\x07', status: 400 }))
+    logger.emit()
+
+    const output = visible(printed())
+    expect(output).not.toMatch(controlChar)
+    expect(output).toContain('bad\\r\\u001b[2Kinput')
+    expect(output).toContain('why\\u001b[1A')
+    expect(output).toContain('fix\\u001b]52;c;cHduZWQ=\\u0007')
+  })
+
+  it('escapes control characters in AI fields', () => {
+    const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r3' })
+    logger.set({
+      ai: {
+        model: 'gpt\x1B[2K',
+        toolCalls: [{ name: 'search\r', input: { q: 'x' } }],
+        prompt: '[user] hi\x1B[2K\rthere',
+      },
+    })
+    logger.emit()
+
+    const output = visible(printed())
+    expect(output).not.toMatch(controlChar)
+    expect(output).toContain('gpt\\u001b[2K')
+    expect(output).toContain('search\\r(')
+    expect(output).toContain('[user] hi\\u001b[2K\\rthere')
+  })
+
+  it('escapes control characters in tagged logs', () => {
+    log.info('auth\x1B[2K', 'login\r\x1B[32mok')
+
+    const output = visible(printed())
+    expect(output).not.toMatch(controlChar)
+    expect(output).toContain('[auth\\u001b[2K] login\\r\\u001b[32mok')
+  })
+
+  it('keeps tabs and its own colours', () => {
+    log.info({ action: 'a\tb' })
+
+    const output = printed()
+    expect(output).toContain('a\tb')
+    expect(output).toMatch(ownColors)
+  })
+})
+
 describe('printf interpolation', () => {
   function loggedEvent(level: LogLevel, emit: () => void): WideEvent {
     const { drain } = createPipelineSpies()

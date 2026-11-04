@@ -2,7 +2,7 @@
 
 A tiny, self-hostable analytics dashboard for [`@evlog/telemetry`](https://npmjs.com/package/@evlog/telemetry) run events — built to receive run events from anything that reports to it — a CLI someone typed, a GitHub Actions job, a Vercel build, an AI coding agent, a cron script — store them in Postgres via [NuxtHub](https://hub.nuxt.com) + Drizzle ORM, and show what's happening: totals and their trend, where the runs came from, latency, version adoption, and a raw events browser.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/evloghq/evlog/tree/main/apps/telemetry&project-name=evlog-telemetry&repository-name=evlog-telemetry&products=%5B%7B%22type%22%3A%22integration%22%2C%22group%22%3A%22postgres%22%2C%22protocol%22%3A%22storage%22%7D%5D&env=ANALYTICS_PASSWORD,NUXT_SESSION_PASSWORD&envDescription=Dashboard+password+and+a+32%2B+char+session+secret)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/evloghq/evlog/tree/main/apps/telemetry&project-name=evlog-telemetry&repository-name=evlog-telemetry&products=%5B%7B%22type%22%3A%22integration%22%2C%22group%22%3A%22postgres%22%2C%22protocol%22%3A%22storage%22%7D%5D&env=ANALYTICS_PASSWORD,NUXT_APP_SECRET&envDescription=Dashboard+password+and+a+32%2B+char+session+secret)
 
 ## What you get
 
@@ -24,7 +24,7 @@ See the architecture writeup in the docs: [evlog.dev — telemetry ingest](https
 Click the button above. During setup:
 
 1. Pick a Postgres provider from the Vercel Marketplace (Neon, Supabase, ...) — this auto-injects the connection string. NuxtHub picks up `DATABASE_URL`, `POSTGRES_URL`, or `POSTGRESQL_URL` automatically, so whichever name the integration creates just works.
-2. Set `ANALYTICS_PASSWORD` (the dashboard login — whatever you want to type in) and `NUXT_SESSION_PASSWORD` (32+ *random* chars from `openssl rand -base64 32` — this is a cookie-encryption secret, not a password you type in, and must not be the same value as `ANALYTICS_PASSWORD`).
+2. Set `ANALYTICS_PASSWORD` (the dashboard login — whatever you want to type in) and `NUXT_APP_SECRET` (32+ *random* chars from `openssl rand -base64 32` — this is a cookie-encryption secret, not a password you type in, and must not be the same value as `ANALYTICS_PASSWORD`).
 3. Point each tool's telemetry `endpoint` at `https://<your-deployment>/api/telemetry/ingest`. Anything using `@evlog/telemetry` reports the same event shape, so CLIs, CI jobs and scripts all land in the same dashboard.
 
 Table migrations (`server/db/migrations/postgresql/`) apply automatically during `nuxi build`/deploy — nothing to run by hand.
@@ -75,7 +75,7 @@ aim it at the throwaway apps `pnpm cli:sandbox` builds under `.sandbox/` — fou
 frameworks with deliberately uneven instrumentation, so `map` reports four
 different scores.
 
-Once you're ready to point this at production data, copy `.env.example` to `.env` and fill in `DATABASE_URL` (and `ANALYTICS_PASSWORD` / `NUXT_SESSION_PASSWORD` if you want the dashboard locked down).
+Once you're ready to point this at production data, copy `.env.example` to `.env` and fill in `DATABASE_URL` (and `ANALYTICS_PASSWORD` / `NUXT_APP_SECRET` if you want the dashboard locked down).
 
 Changed `server/db/schema.ts`? Run `pnpm --filter evlog-telemetry exec nuxt db generate` to generate the matching migration and commit the result.
 

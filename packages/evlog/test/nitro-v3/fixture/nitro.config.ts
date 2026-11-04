@@ -8,7 +8,10 @@ const evlogRoot = resolve(__dirname, '../../../src')
 export default defineConfig({
   serverDir: './',
   errorHandler: resolve(evlogRoot, 'nitro-v3/errorHandler.ts'),
-  plugins: [resolve(evlogRoot, 'nitro-v3/plugin.ts')],
+  plugins: [
+    resolve(__dirname, 'delayed-error-hook.ts'),
+    resolve(__dirname, 'evlog-plugin.ts'),
+  ],
   alias: {
     'evlog': resolve(evlogRoot, 'index.ts'),
   },

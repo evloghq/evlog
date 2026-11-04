@@ -3,6 +3,7 @@ import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { trimTrailingSlashes } from '../utils'
 
 /** Default Loki push path appended to {@link LokiConfig.endpoint}. */
 const LOKI_PUSH_PATH = '/loki/api/v1/push'
@@ -67,7 +68,7 @@ const LOKI_FIELDS: ConfigField<LokiConfig>[] = [
 
 /** Resolve the push URL, tolerating an endpoint that already carries the path. */
 export function resolveLokiPushUrl(endpoint: string): string {
-  const trimmed = endpoint.replace(/\/+$/, '')
+  const trimmed = trimTrailingSlashes(endpoint)
   return trimmed.endsWith(LOKI_PUSH_PATH) ? trimmed : `${trimmed}${LOKI_PUSH_PATH}`
 }
 

@@ -18,20 +18,19 @@ describe('isAuthEnabled', () => {
 })
 
 describe('isSessionSecretValid', () => {
-  it('rejects undefined and empty secrets', () => {
-    expect(isSessionSecretValid(undefined)).toBe(false)
-    expect(isSessionSecretValid('')).toBe(false)
+  it('rejects an unset appSecret', () => {
+    expect(isSessionSecretValid({ appSecret: '' })).toBe(false)
   })
 
-  it('rejects secrets shorter than 32 characters', () => {
+  it('rejects an appSecret shorter than 32 characters', () => {
     // The exact trap that breaks login: reusing a short, memorable
-    // ANALYTICS_PASSWORD as NUXT_SESSION_PASSWORD too.
-    expect(isSessionSecretValid('same-password-as-analytics')).toBe(false)
+    // ANALYTICS_PASSWORD as NUXT_APP_SECRET too.
+    expect(isSessionSecretValid({ appSecret: 'same-password-as-analytics' })).toBe(false)
   })
 
-  it('accepts secrets of 32 characters or more', () => {
-    expect(isSessionSecretValid('a'.repeat(32))).toBe(true)
-    expect(isSessionSecretValid('a'.repeat(44))).toBe(true)
+  it('accepts an appSecret of 32 characters or more', () => {
+    expect(isSessionSecretValid({ appSecret: 'a'.repeat(32) })).toBe(true)
+    expect(isSessionSecretValid({ appSecret: 'a'.repeat(44) })).toBe(true)
   })
 })
 

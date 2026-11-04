@@ -3,6 +3,7 @@ import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { trimTrailingSlashes } from '../utils'
 
 interface BaseAxiomConfig {
   /** Axiom dataset name. */
@@ -179,13 +180,13 @@ function resolveIngestUrl(config: AxiomConfig): string {
     if (parsed.pathname === '' || parsed.pathname === '/') {
       parsed.pathname = `/v1/ingest/${encodedDataset}`
     } else {
-      parsed.pathname = parsed.pathname.replace(/\/+$/, '')
+      parsed.pathname = trimTrailingSlashes(parsed.pathname)
     }
     parsed.searchParams.set('timestamp-field', 'timestamp')
     return parsed.toString()
   } catch {
     console.warn(`[evlog/axiom] edgeUrl "${config.edgeUrl}" is not a valid URL, falling back to string concatenation.`)
-    const trimmed = config.edgeUrl.replace(/\/+$/, '')
+    const trimmed = trimTrailingSlashes(config.edgeUrl)
     return `${trimmed}/v1/ingest/${encodedDataset}?timestamp-field=timestamp`
   }
 }

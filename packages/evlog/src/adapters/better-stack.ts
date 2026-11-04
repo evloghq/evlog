@@ -3,6 +3,7 @@ import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { trimTrailingSlashes } from '../utils'
 
 export interface BetterStackConfig {
   /** Better Stack API key. */
@@ -69,7 +70,7 @@ export function createBetterStackDrain(overrides?: Partial<BetterStackConfig>) {
  */
 function encodeBetterStackRequest(events: WideEvent[], config: BetterStackConfig): HttpDrainRequest {
   return {
-    url: (config.endpoint ?? 'https://in.logs.betterstack.com').replace(/\/+$/, ''),
+    url: trimTrailingSlashes(config.endpoint ?? 'https://in.logs.betterstack.com'),
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,

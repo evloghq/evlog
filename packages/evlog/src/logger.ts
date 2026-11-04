@@ -9,7 +9,7 @@ import { resolveDevTerminal } from './shared/dev-terminal'
 import { globalConfig } from './shared/globalRegistry'
 import { publishWideEvent } from './shared/wideEventChannel'
 import { createErrorSerializer } from './shared/serialize-error'
-import { colors, cssColors, detectEnvironment, elapsedMs, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern } from './utils'
+import { colors, cssColors, detectEnvironment, elapsedMs, escapeControlChars, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern } from './utils'
 
 const { serializeError, serializeErrorsIn } = createErrorSerializer(stack => isDev() ? compactStackForStorage(stack) : stack)
 
@@ -438,7 +438,7 @@ function emitTaggedLog(level: LogLevel, tag: string, message: string): void {
     } else {
       const color = getLevelColor(level)
       const timestamp = isoNow().slice(11, 23)
-      writeOwnOutput(() => console.log(`${colors.dim}${timestamp}${colors.reset} ${color}[${tag}]${colors.reset} ${message}`))
+      writeOwnOutput(() => console.log(`${colors.dim}${timestamp}${colors.reset} ${color}[${escapeControlChars(tag)}]${colors.reset} ${escapeControlChars(message)}`))
     }
 
     return
@@ -692,6 +692,15 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
   return entries
 }
 
+/** Field and AI entries hold no colour codes of their own, so every string in them is escaped. */
+function escapeTreeEntry(entry: TreeEntry): TreeEntry {
+  return {
+    key: escapeControlChars(entry.key),
+    value: escapeControlChars(entry.value),
+    children: entry.children?.map(escapeControlChars),
+  }
+}
+
 function flushPrettyLines(lines: string[]): void {
   if (lines.length === 0) return
   if (
@@ -729,11 +738,11 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
     styles.push(cssColors.dim, cssColors.reset, lc, cssColors.reset, cssColors.cyan, cssColors.reset)
   } else {
     const lc = getLevelColor(levelLabel)
-    parts.push(`${colors.dim}${ts}${colors.reset} ${lc}${levelLabel.toUpperCase()}${colors.reset} ${colors.cyan}[${service}]${colors.reset}`)
+    parts.push(`${colors.dim}${ts}${colors.reset} ${lc}${levelLabel.toUpperCase()}${colors.reset} ${colors.cyan}[${escapeControlChars(String(service))}]${colors.reset}`)
   }
 
   if (rest.method && rest.path) {
-    parts.push(browser ? ` ${escapeFormatString(String(rest.method))} ${escapeFormatString(String(rest.path))}` : ` ${rest.method} ${rest.path}`)
+    parts.push(browser ? ` ${escapeFormatString(String(rest.method))} ${escapeFormatString(String(rest.path))}` : ` ${escapeControlChars(String(rest.method))} ${escapeControlChars(String(rest.path))}`)
     delete rest.method
     delete rest.path
   }
@@ -747,7 +756,7 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
       parts.push(` %c${rest.status}%c`)
       styles.push(sc, cssColors.reset)
     } else {
-      parts.push(` ${sc}${rest.status}${colors.reset}`)
+      parts.push(` ${sc}${escapeControlChars(String(rest.status))}${colors.reset}`)
     }
     delete rest.status
   }
@@ -757,7 +766,7 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
       parts.push(` %c${escapeFormatString(`in ${rest.duration}`)}%c`)
       styles.push(cssColors.dim, cssColors.reset)
     } else {
-      parts.push(` ${colors.dim}in ${rest.duration}${colors.reset}`)
+      parts.push(` ${colors.dim}in ${escapeControlChars(String(rest.duration))}${colors.reset}`)
     }
     delete rest.duration
   }
@@ -780,10 +789,11 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
   const errorEntries = errorData !== undefined
     ? buildErrorEntries(errorData, state.prettyError)
     : []
-  const contextEntries: TreeEntry[] = [
+  const fieldEntries: TreeEntry[] = [
     ...restEntries.map(([key, value]) => ({ key, value: formatValue(value) })),
     ...aiEntries,
   ]
+  const contextEntries = browser ? fieldEntries : fieldEntries.map(escapeTreeEntry)
   const allEntries: TreeEntry[] = errorEntries.length > 0
     ? [...errorEntries, ...contextEntries]
     : contextEntries

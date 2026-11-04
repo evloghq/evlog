@@ -72,7 +72,9 @@ async function emitWithTailSampling(
   const runner = getGlobalPluginRunner()
   if (runner.hasKeep) await runner.runKeep(tailCtx)
 
-  return log.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
+  const emittedEvent = log.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
+  ctx._evlogEmitted = true
+  return emittedEvent
 }
 
 function getSafeRequestHeaders(event: HTTPEvent): Record<string, string> {
@@ -268,6 +270,16 @@ export default definePlugin(async (nitroApp) => {
     ctx.log = log
   })
 
+  const recordError = (log: RequestLogger, error: Error): Error => {
+    const actualError = (error.cause as Error)?.name === 'EvlogError'
+      ? error.cause as Error
+      : error
+
+    void enrichErrorStackForDev(actualError, { pretty: evlogConfig?.pretty })
+    log.error(actualError)
+    return actualError
+  }
+
   hooks.hook('response', async (res, event) => {
     const ctx = event.req.context
     // Skip if already emitted by error hook or route was filtered out
@@ -276,19 +288,24 @@ export default definePlugin(async (nitroApp) => {
     const log = ctx.log as RequestLogger | undefined
     if (!log) return
 
-    const emitSuccessResponse = async (responseStatus: number) => {
-      log.set({ status: responseStatus })
-      const emittedEvent = await emitWithTailSampling(hooks, log, event, responseStatus, ctx)
-      await callEnrichAndDrain(hooks, emittedEvent, event, res)
-    }
+    // Nitro does not await error hooks, so an earlier async hook can delay ours.
+    ctx._evlogEmitting = true
+    try {
+      const captured = ctx.nitro?.errors?.at(-1)?.error
+      if (captured) recordError(log, captured)
 
-    // Streaming responses (SSE, NDJSON, chunked) emit at header time: h3 v2's
-    // `onResponse` hook cannot swap the outgoing response (`H3Event.res` is a
-    // getter-only accessor, and `toResponse` sends the original response no
-    // matter what the hook does), so wrapping the body here would only lock the
-    // original stream and break the response. Stream-lifetime metrics are not
-    // observable from this hook.
-    await emitSuccessResponse(res.status)
+      // Streaming responses (SSE, NDJSON, chunked) emit at header time: h3 v2's
+      // `onResponse` hook cannot swap the outgoing response (`H3Event.res` is a
+      // getter-only accessor, and `toResponse` sends the original response no
+      // matter what the hook does), so wrapping the body here would only lock the
+      // original stream and break the response. Stream-lifetime metrics are not
+      // observable from this hook.
+      log.set({ status: res.status })
+      const emittedEvent = await emitWithTailSampling(hooks, log, event, res.status, ctx)
+      await callEnrichAndDrain(hooks, emittedEvent, event, res)
+    } finally {
+      delete ctx._evlogEmitting
+    }
   })
 
   hooks.hook('error', async (error, { event }) => {
@@ -298,23 +315,22 @@ export default definePlugin(async (nitroApp) => {
     const ctx = e.req.context
     if (!ctx?._evlogShouldEmit) return
     const log = ctx.log as RequestLogger | undefined
-    if (!log) return
+    if (!log || ctx._evlogEmitted) return
+
+    // A delayed hook must not replace a newer error already captured for this request.
+    const errors = ctx.nitro?.errors
+    if (ctx._evlogEmitting && errors?.some(entry => entry.error === error) && errors.at(-1)?.error !== error) return
+
+    const actualError = recordError(log, error)
+    if (ctx._evlogEmitting) return
 
     ctx._evlogEmitting = true
     try {
-      const actualError = (error.cause as Error)?.name === 'EvlogError'
-        ? error.cause as Error
-        : error as Error
-
-      void enrichErrorStackForDev(actualError, { pretty: evlogConfig?.pretty })
-      log.error(actualError)
-
       const errorStatus = extractErrorStatus(actualError)
       log.set({ status: errorStatus })
 
       const emittedEvent = await emitWithTailSampling(hooks, log, e, errorStatus, ctx)
       if (emittedEvent) {
-        ctx._evlogEmitted = true
         void callEnrichAndDrain(hooks, emittedEvent, e, undefined, { deferDrain: true }).catch((err) => {
           console.error('[evlog] background enrich/drain failed:', err)
         })
