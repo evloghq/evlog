@@ -1131,6 +1131,24 @@ evlog: {
 | `bearer` | `Bearer sk_live_abc...` | `Bearer ***` |
 | `iban` | `FR76 3000 6000 ...189` | `FR76****189` |
 
+**Opt-in credential patterns** match the value under any key and inside longer strings. They are off by default, and `builtins` runs only the names it lists, so add them next to the defaults:
+
+| Pattern | Example Input | Masked Output |
+|---------|---------------|---------------|
+| `apiKeys` | `ghp_` followed by 36 characters | `ghp_***` |
+| `privateKey` | `-----BEGIN RSA PRIVATE KEY-----` block | `-----BEGIN RSA PRIVATE KEY-----***` |
+| `urlPassword` | `postgres://app:hunter2@db` | `postgres://app:***@db` |
+
+```typescript
+evlog: {
+  redact: {
+    builtins: ['creditCard', 'email', 'ipv4', 'phone', 'jwt', 'bearer', 'iban', 'secrets', 'apiKeys', 'privateKey', 'urlPassword'],
+  }
+}
+```
+
+`apiKeys` covers GitHub, npm, Anthropic, OpenAI, Stripe, Slack and AWS key IDs by their fixed prefix. Suggest them when the code logs provider tokens, private keys or connection strings, even under keys that `secrets` does not cover (`apiKey`, `authorization`, `dsn`).
+
 Works in all frameworks: Nuxt (`evlog` config), Nitro (`evlog()` module options), Next.js (`createEvlog()`), standalone (`initLogger()`), and all middleware integrations (Hono, Express, Fastify, Elysia, NestJS).
 
 ---
