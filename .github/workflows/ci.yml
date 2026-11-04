@@ -233,8 +233,11 @@ jobs:
     name: Publish preview package
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Not gated on the other jobs: a preview is most useful while the PR is red
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    # Not gated on the other jobs: a preview is most useful while the PR is red.
+    # No preview for fork PRs: pkg.pr.new would serve the fork's code under the evlog name.
+    if: >-
+      (github.event_name != 'push' || github.ref == 'refs/heads/main')
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: read
       id-token: write # remote cache OIDC
@@ -259,7 +262,10 @@ jobs:
         run: pnpm run build:package
 
       - name: Publish
-        run: pnpx pkg-pr-new publish --compact --no-template --pnpm './packages/evlog' './packages/nuxthub' './packages/telemetry' './packages/cli' './packages/signals'
+        env:
+          # renovate: datasource=npm depName=pkg-pr-new
+          PKG_PR_NEW_VERSION: 0.0.93
+        run: pnpx "pkg-pr-new@${PKG_PR_NEW_VERSION}" publish --compact --no-template --pnpm './packages/evlog' './packages/nuxthub' './packages/telemetry' './packages/cli' './packages/signals'
 
   # Single required check, so branch protection survives job renames
   ci:
