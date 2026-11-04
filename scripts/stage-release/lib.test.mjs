@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { approvalSummary, distTag, plan, stageIdFrom } from './lib.mjs'
+import { approvalSummary, distTag, plan, stageIdFrom, waitForApproval } from './lib.mjs'
 
 const evlog = { name: 'evlog', version: '2.35.0', dir: 'packages/evlog' }
 const cli = { name: '@evlog/cli', version: '0.12.0', dir: 'packages/cli' }
@@ -73,6 +73,51 @@ describe('stageIdFrom', () => {
   })
 })
 
+describe('waitForApproval', () => {
+  const noWait = async () => {}
+
+  it('reports each version on the poll that first sees it on npm', async () => {
+    let poll = 0
+    const seen = []
+    const pending = await waitForApproval([evlog, cli], {
+      isLive: async pkg => pkg === evlog || poll >= 2,
+      onApproved: pkg => seen.push([pkg.name, poll]),
+      sleep: async () => { poll += 1 },
+      deadline: Number.POSITIVE_INFINITY,
+    })
+    expect(seen).toEqual([['evlog', 1], ['@evlog/cli', 2]])
+    expect(pending).toEqual([])
+  })
+
+  it('reports the versions a failed poll found before it throws', async () => {
+    const approved = []
+    const failure = waitForApproval([cli, evlog], {
+      isLive: async (pkg) => {
+        if (pkg.name === '@evlog/cli') throw new Error('GET @evlog/cli from npm failed: 503')
+        return true
+      },
+      onApproved: pkg => approved.push(pkg),
+      sleep: noWait,
+      deadline: Number.POSITIVE_INFINITY,
+    })
+    await expect(failure).rejects.toThrow('GET @evlog/cli from npm failed: 503')
+    expect(approved).toEqual([evlog])
+  })
+
+  it('returns what is still pending at the deadline', async () => {
+    let clock = 0
+    const pending = await waitForApproval([evlog], {
+      isLive: async () => false,
+      onApproved: () => { throw new Error('nothing is approved') },
+      sleep: async () => { clock += 1 },
+      deadline: 3,
+      now: () => clock,
+    })
+    expect(pending).toEqual([evlog])
+    expect(clock).toBe(3)
+  })
+})
+
 describe('approvalSummary', () => {
   it('lists each staged version with its approve command', () => {
     const summary = approvalSummary({
@@ -82,8 +127,10 @@ describe('approvalSummary', () => {
       windowMinutes: 30,
     })
     expect(summary).toContain('| `evlog@2.35.0` | `latest` | `npm stage approve abc --registry=https://registry.npmjs.org/` |')
-    expect(summary).toContain('waits 30 minutes')
+    expect(summary).toContain('waits up to 30 minutes and tags each version once it is approved')
     expect(summary).toContain('`gh workflow run release.yml --ref main`')
+    expect(summary).toContain('Approve only the newest stage of a package')
+    expect(summary).toContain('`npm stage reject <id> --registry=https://registry.npmjs.org/`')
     expect(summary).not.toContain('Waiting for approval')
   })
 
