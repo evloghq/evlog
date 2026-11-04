@@ -225,6 +225,20 @@ describe('buildErrorEntries', () => {
     expect(crlf[0]?.children?.some(line => line.includes('server/api/test.get.ts:100'))).toBe(true)
   })
 
+  it('reads the snippet from the frame path as written and escapes it only for display', () => {
+    const reader = vi.fn(() => null)
+    registerPrettyErrorSnippetReader(reader)
+    try {
+      const file = '/Users/dev/project/server/api/te\x07st.get.ts'
+      const entries = buildErrorEntries({ message: 'x', stack: `Error: x\n    at handler (${file}:10:5)` }, { snippet: true, cwd: '/Users/dev/project' })
+
+      expect(reader).toHaveBeenCalledWith(file, 10, expect.any(Number))
+      expect(entries[0]?.children).toContain('\x1B[2m   at handler (server/api/te\\u0007st.get.ts:10)\x1B[0m')
+    } finally {
+      registerPrettyErrorSnippetReader(null)
+    }
+  })
+
   it('omits redundant caused-by when it matches the message', () => {
     const entries = buildErrorEntries({
       message: 'Payment failed',

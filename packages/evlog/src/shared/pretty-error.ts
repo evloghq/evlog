@@ -360,21 +360,6 @@ function formatGuidanceLine(label: string, text: string, labelColor: string): st
   return lines
 }
 
-/** The stack is escaped line by line so its frames still parse. */
-function escapeErrorContext(context: NormalizedErrorContext): NormalizedErrorContext {
-  const escape = (value: string | undefined) => value === undefined ? undefined : escapeControlChars(value)
-  return {
-    ...context,
-    message: escapeControlChars(context.message),
-    code: escape(context.code),
-    why: escape(context.why),
-    fix: escape(context.fix),
-    link: escape(context.link),
-    cause: escape(context.cause),
-    stack: context.stack?.split(/\r?\n/).map(escapeControlChars).join('\n'),
-  }
-}
-
 /**
  * Build pretty-print tree entries for a wide-event `error` field.
  */
@@ -382,9 +367,10 @@ export function buildErrorEntries(
   error: unknown,
   options: PrettyErrorOptions = {},
 ): PrettyErrorTreeEntry[] {
-  const context = normalizeErrorContext(error)
-  if (!context) return []
-  const normalized = isBrowser() ? context : escapeErrorContext(context)
+  const normalized = normalizeErrorContext(error)
+  if (!normalized) return []
+  // Frames are parsed and snippets read from the raw stack; only printed text is escaped.
+  const printable = isBrowser() ? (text: string) => text : escapeControlChars
 
   const cwd = options.cwd ?? (typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.')
   const compact = options.compact ?? isDev()
@@ -404,17 +390,17 @@ export function buildErrorEntries(
     pushTreeSpacer(children)
     if (showFrames) {
       const snippet = readCodeSnippet(primary.file, primary.line, snippetContextLines)
-      children.push(`${colors.dim}   ${formatFrameLocation(primary, cwd)}${colors.reset}`)
+      children.push(`${colors.dim}   ${printable(formatFrameLocation(primary, cwd))}${colors.reset}`)
       if (snippet) {
         children.push(...formatSnippetLines(snippet))
       }
     } else {
-      children.push(`${colors.dim}   ${formatFrameLocation(primary, cwd)}${colors.reset}`)
+      children.push(`${colors.dim}   ${printable(formatFrameLocation(primary, cwd))}${colors.reset}`)
     }
   }
 
   if (normalized.code) {
-    children.push(`${colors.dim}Code:${colors.reset} ${normalized.code}`)
+    children.push(`${colors.dim}Code:${colors.reset} ${printable(normalized.code)}`)
   }
 
   const hasGuidance = Boolean(normalized.why || normalized.fix || normalized.link)
@@ -423,17 +409,17 @@ export function buildErrorEntries(
   }
 
   if (normalized.why) {
-    children.push(...formatGuidanceLine('Why', normalized.why, colors.yellow))
+    children.push(...formatGuidanceLine('Why', printable(normalized.why), colors.yellow))
   }
   if (normalized.fix) {
-    children.push(...formatGuidanceLine('Fix', normalized.fix, colors.cyan))
+    children.push(...formatGuidanceLine('Fix', printable(normalized.fix), colors.cyan))
   }
   if (normalized.link) {
-    children.push(`${colors.dim}More:${colors.reset} ${normalized.link}`)
+    children.push(`${colors.dim}More:${colors.reset} ${printable(normalized.link)}`)
   }
 
   if (normalized.cause && normalized.cause !== normalized.message) {
-    children.push(`${colors.dim}Caused by:${colors.reset} ${normalized.cause}`)
+    children.push(`${colors.dim}Caused by:${colors.reset} ${printable(normalized.cause)}`)
   }
 
   const hiddenCount = guidanceOnly ? 0 : frames.filter(f => !f.isApp || isInternalErrorFrame(f)).length
@@ -449,14 +435,14 @@ export function buildErrorEntries(
       children.push(`${colors.gray}stack${colors.reset}`)
     }
     for (const frame of tailFrames) {
-      children.push(`${colors.gray}  ${formatCollapsedFrame(frame, cwd)}${colors.reset}`)
+      children.push(`${colors.gray}  ${printable(formatCollapsedFrame(frame, cwd))}${colors.reset}`)
     }
   }
 
   return [
     {
       key: 'error',
-      value: `${colors.red}${colors.bold}${normalized.message}${colors.reset}`,
+      value: `${colors.red}${colors.bold}${printable(normalized.message)}${colors.reset}`,
       children: children.length > 0 ? children : undefined,
     },
   ]
