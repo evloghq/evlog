@@ -1,6 +1,7 @@
 import type { AsyncLocalStorage } from 'node:async_hooks'
 import type { RequestLogger } from '../types'
-import type { AuditableLogger } from '../audit'
+import type { AuditableLogger, ForkableLogger } from '../audit'
+import type { ForkLifecycle } from './fork'
 import { attachForkToLogger } from './fork'
 import { extractSafeHeaders, extractSafeNodeHeaders } from './headers'
 import type { BaseEvlogOptions, MiddlewareLoggerOptions, MiddlewareLoggerResult } from './middleware'
@@ -20,21 +21,10 @@ export interface ExtractedRequest {
   requestId?: string
 }
 
-/** Manifest passed to {@link defineFrameworkIntegration}. */
-export interface FrameworkIntegrationSpec<TCtx> {
+interface FrameworkIntegrationBase<TCtx> {
   /** Stable identifier used in error messages. */
   name: string
   extractRequest: (ctx: TCtx) => ExtractedRequest
-  /** Attach the request logger to the framework context (`c.set('log', logger)`). */
-  attachLogger: (ctx: TCtx, logger: AuditableLogger) => void
-  /**
-   * AsyncLocalStorage instance backing `useLogger()`. Required for frameworks
-   * where the logger is accessed off the request context (Express, Fastify,
-   * NestJS). When set, `log.fork()` is auto-attached to the request logger.
-   */
-  storage?: AsyncLocalStorage<RequestLogger>
-  /** Fork lifecycle hooks (only used when `storage` is set). */
-  forkLifecycle?: import('./fork').ForkLifecycle
   /**
    * Extract platform `waitUntil` from the framework context (Cloudflare Workers
    * `ExecutionContext`, Vercel Edge, …). Applied on each `start()` call;
@@ -42,6 +32,32 @@ export interface FrameworkIntegrationSpec<TCtx> {
    */
   extractWaitUntil?: (ctx: TCtx) => ((promise: Promise<unknown>) => void) | undefined
 }
+
+interface StorageFrameworkIntegrationSpec<TCtx> extends FrameworkIntegrationBase<TCtx> {
+  /** Attach the request logger to the framework context (`c.set('log', logger)`). */
+  attachLogger: (ctx: TCtx, logger: ForkableLogger) => void
+  /**
+   * AsyncLocalStorage instance backing `useLogger()`. Required for frameworks
+   * where the logger is accessed off the request context (Express, Fastify,
+   * NestJS). When set, `log.fork()` is auto-attached to the request logger.
+   */
+  storage: AsyncLocalStorage<RequestLogger>
+  /** Fork lifecycle hooks (only used when `storage` is set). */
+  forkLifecycle?: ForkLifecycle
+}
+
+interface StoragelessFrameworkIntegrationSpec<TCtx> extends FrameworkIntegrationBase<TCtx> {
+  /** Attach the request logger to the framework context (`c.set('log', logger)`). */
+  attachLogger: (ctx: TCtx, logger: AuditableLogger) => void
+  storage?: undefined
+  forkLifecycle?: undefined
+}
+
+/**
+ * Manifest passed to {@link defineFrameworkIntegration}. With `storage`, the
+ * logger passed to `attachLogger` has `log.fork()`.
+ */
+export type FrameworkIntegrationSpec<TCtx> = StorageFrameworkIntegrationSpec<TCtx> | StoragelessFrameworkIntegrationSpec<TCtx>
 
 /** Result returned by {@link FrameworkIntegrationHelpers.start}. */
 export interface FrameworkRequestHandle extends MiddlewareLoggerResult {
@@ -120,10 +136,11 @@ export function defineFrameworkIntegration<TCtx>(
       const result = createMiddlewareLogger(middlewareOptions)
 
       if (!result.skipped) {
-        if (spec.storage) {
-          attachForkToLogger(spec.storage, result.logger, middlewareOptions, spec.forkLifecycle)
+        if (spec.storage === undefined) {
+          spec.attachLogger(ctx, result.logger)
+        } else {
+          spec.attachLogger(ctx, attachForkToLogger(spec.storage, result.logger, middlewareOptions, spec.forkLifecycle))
         }
-        spec.attachLogger(ctx, result.logger)
       }
 
       const { storage } = spec

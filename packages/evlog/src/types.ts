@@ -848,7 +848,8 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * resolves to the child logger while `fn` runs. The child emits its own wide event
    * when `fn` settles, with `operation` and `_parentRequestId` set for correlation.
    * Only available on integrations that attach this method (Express, Fastify, NestJS,
-   * SvelteKit, React Router, Next.js `withEvlog`, Elysia — see docs).
+   * SvelteKit, React Router, Next.js `withEvlog`, Elysia, Hono, oRPC — see docs).
+   * Their framework-native accessors are typed `ForkableLogger`, where `fork` is required.
    *
    * @param label - Value stored as `operation` on the child wide event.
    * @param fn - Function to run; may return a Promise. Errors are captured on the

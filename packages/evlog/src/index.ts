@@ -25,6 +25,7 @@ export type {
   AuditableLogger,
   DefinedAuditAction,
   DrainFn,
+  ForkableLogger,
   MockAudit,
   SignedChainState,
   SignedOptions,

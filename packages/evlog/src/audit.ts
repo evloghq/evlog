@@ -163,6 +163,12 @@ function markForceKeep<T extends object>(logger: RequestLogger<T>): void {
  */
 export type AuditableLogger<T extends object = Record<string, unknown>> = RequestLogger<T> & { audit: AuditMethod<T> }
 
+/**
+ * Request logger that a framework integration hands to route code (`c.get('log')`,
+ * `req.log`, `context.log`, …). {@link RequestLogger.fork} is always present on it.
+ */
+export type ForkableLogger<T extends object = Record<string, unknown>> = AuditableLogger<T> & Required<Pick<RequestLogger<T>, 'fork'>>
+
 /** Method shape attached to {@link AuditableLogger}. */
 export interface AuditMethod<T extends object = Record<string, unknown>> {
   (input: AuditInput): void

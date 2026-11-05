@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Elysia } from 'elysia'
-import type { AuditableLogger } from '../audit'
+import type { AuditableLogger, ForkableLogger } from '../audit'
 import {
   bindAsyncLocalStorage,
   clearAsyncLocalStorage,
@@ -135,7 +135,7 @@ export function evlog(options: EvlogElysiaOptions = {}) {
       requestState.set(request, { finish, skipped, logger })
     })
     .derive({ as: 'global' }, ({ request }) => {
-      return { log: requestState.get(request)?.logger as AuditableLogger }
+      return { log: requestState.get(request)?.logger as ForkableLogger }
     })
     // Claim streaming responses here: `onAfterResponse` fires once the response
     // is handed off, which for an SSE / chunked body is long before the stream
