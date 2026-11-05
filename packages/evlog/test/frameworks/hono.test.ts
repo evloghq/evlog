@@ -586,7 +586,7 @@ describe('evlog/hono', () => {
       app.get('/api/test', (c) => {
         const log = c.get('log')
         expect(typeof log.fork).toBe('function')
-        log.fork!('cleanup', () => {
+        log.fork('cleanup', () => {
           useLogger().set({ cleaned: true })
         })
         return c.json({ ok: true })

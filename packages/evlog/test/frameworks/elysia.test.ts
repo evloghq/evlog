@@ -229,6 +229,22 @@ describe('evlog/elysia', () => {
     expect(drain).not.toHaveBeenCalled()
   })
 
+  it('runs log.fork() work on excluded routes', async () => {
+    let ran = false
+    const app = new Elysia()
+      .use(evlog({ exclude: ['/_internal/**'] }))
+      .get('/_internal/probe', async ({ log }) => {
+        await log.fork('probe', () => {
+          ran = true
+        })
+        return { ok: true }
+      })
+
+    const response = await request(app, '/_internal/probe')
+    expect(response.status).toBe(200)
+    expect(ran).toBe(true)
+  })
+
   describe('drain / enrich / keep', () => {
     it('calls drain with emitted event (shared helpers)', async () => {
       const { drain } = createPipelineSpies()
