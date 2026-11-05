@@ -1,5 +1,11 @@
 # evlog
 
+## 2.35.1
+
+### Patch Changes
+
+- [#1007](https://github.com/evloghq/evlog/pull/1007) [`b9a6239`](https://github.com/evloghq/evlog/commit/b9a6239d6196b2db647ea86adbac2ef0a27aa380) Thanks [@danielroe](https://github.com/danielroe)! - Register the Nitro v3 error handler and plugin in the Nuxt module when running on Nitro 3, so error responses keep their status code and JSON content type under Nuxt 5.
+
 ## 2.35.0
 
 ### Minor Changes
