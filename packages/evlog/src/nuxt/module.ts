@@ -15,6 +15,7 @@ import type { Nitro, NitroConfig } from 'nitropack'
 import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from '../types'
 import type { DevTerminalInput } from '../shared/dev-terminal'
 import { prependNitroErrorHandler, serializeBundledEvlogConfig } from '../nitro'
+import { getNitroVersionSafe } from '../shared/nitroVersion'
 import { prepareRedactForBridge } from '../redact'
 import { findEvlogConfigFile, registerEvlogConfigPlugin } from '../shared/configPlugin'
 import { createStripPlugin } from '../vite/strip'
@@ -334,6 +335,7 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
   defaults: {},
   setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
+    const isNitroV3 = getNitroVersionSafe(nuxt) === 3
 
     if (options.axiom?.token !== undefined) {
       warnDeprecated('nuxt:axiom.token', '[evlog/nuxt] evlog.axiom.token is deprecated and removed in v3, use evlog.axiom.apiKey.')
@@ -381,7 +383,9 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
     // often cannot resolve useRuntimeConfig().evlog via dynamic import reliably).
     // @ts-expect-error nitro:config hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:config', (nitroConfig: NitroConfig) => {
-      const evlogHandler = resolver.resolve('../nitro/errorHandler').replace(/\\/g, '/')
+      const evlogHandler = resolver.resolve(
+        isNitroV3 ? '../nitro/v3/errorHandler' : '../nitro/errorHandler',
+      ).replace(/\\/g, '/')
       // Nitro's DeepPartial config types array entries as possibly undefined; the helper expects string paths.
       nitroConfig.errorHandler = prependNitroErrorHandler(
         nitroConfig.errorHandler as string | string[] | undefined,
@@ -428,7 +432,7 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
       })
     }
 
-    addServerPlugin(resolver.resolve('../nitro/plugin'))
+    addServerPlugin(resolver.resolve(isNitroV3 ? '../nitro/v3/plugin' : '../nitro/plugin'))
     addServerPlugin(resolver.resolve('../runtime/server/public-config'))
     // @ts-expect-error nitro:init hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:init', (nitro: Nitro) => {
