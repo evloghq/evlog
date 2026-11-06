@@ -245,6 +245,29 @@ describe('evlog/elysia', () => {
     expect(ran).toBe(true)
   })
 
+  it('reports log.fork() work that fails on excluded routes', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const app = new Elysia()
+        .use(evlog({ exclude: ['/_internal/**'] }))
+        .get('/_internal/probe', async ({ log }) => {
+          await log.fork('probe', () => {
+            useLogger().set({ probe: true })
+          })
+          return { ok: true }
+        })
+
+      const response = await request(app, '/_internal/probe')
+      expect(response.status).toBe(200)
+      expect(consoleError).toHaveBeenCalledWith(
+        '[evlog] log.fork() work "probe" failed:',
+        expect.objectContaining({ message: expect.stringContaining('[evlog] useLogger()') }),
+      )
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
   describe('drain / enrich / keep', () => {
     it('calls drain with emitted event (shared helpers)', async () => {
       const { drain } = createPipelineSpies()
