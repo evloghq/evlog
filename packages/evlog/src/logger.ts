@@ -894,7 +894,8 @@ export default _log
 const noopAudit = Object.assign(() => {}, { deny: () => {} }) as AuditMethod
 /**
  * @internal Accepts every call and emits nothing; reused wherever logging must not fail the caller.
- * `fork` still runs `fn`, because the work belongs to the caller, not to the log.
+ * `fork` still runs `fn`, because the work belongs to the caller, not to the log. With no wide
+ * event to record a failure, `fork` reports it on the console and resolves, as `log.fork()` never rejects.
  */
 export const noopLogger: ForkableLogger = {
   set() {},
@@ -911,8 +912,10 @@ export const noopLogger: ForkableLogger = {
   getContext() {
     return {}
   },
-  fork(_label, fn) {
-    return Promise.resolve().then(fn).then(() => {}, () => {})
+  fork(label, fn) {
+    return Promise.resolve().then(fn).then(() => {}, (err: unknown) => {
+      console.error(`[evlog] log.fork() work "${label}" failed:`, err)
+    })
   },
   audit: noopAudit,
 }
