@@ -103,7 +103,7 @@ describe('fs adapter', () => {
 
       await writeToFs(event, { dir: '.evlog/logs', pretty: false })
 
-      expect(mockedMkdir).toHaveBeenCalledWith('.evlog/logs', { recursive: true })
+      expect(mockedMkdir).toHaveBeenCalledWith('.evlog/logs', { recursive: true, mode: 0o700 })
       expect(mockedAppendFile).toHaveBeenCalledTimes(1)
 
       const [filePath] = defined(mockedAppendFile.mock.calls[0], 'appendFile call')
@@ -162,7 +162,7 @@ describe('fs adapter', () => {
     it('uses custom directory', async () => {
       await writeBatchToFs([createTestEvent()], { dir: '/var/log/app', pretty: false })
 
-      expect(mockedMkdir).toHaveBeenCalledWith('/var/log/app', { recursive: true })
+      expect(mockedMkdir).toHaveBeenCalledWith('/var/log/app', { recursive: true, mode: 0o700 })
       const [filePath] = defined(mockedAppendFile.mock.calls[0], 'appendFile call')
       expect(filePath).toBe(join('/var/log/app', '2026-03-14.jsonl'))
     })

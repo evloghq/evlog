@@ -131,7 +131,7 @@ export async function writeToFs(event: WideEvent, config: FsConfig): Promise<voi
 export async function writeBatchToFs(events: WideEvent[], config: FsConfig): Promise<void> {
   if (events.length === 0) return
 
-  await mkdir(config.dir, { recursive: true })
+  await mkdir(config.dir, { recursive: true, mode: 0o700 })
   await ensureGitignore(config.dir)
 
   const filePath = await resolveFilePath(config.dir, config.maxSizePerFile)
@@ -139,7 +139,7 @@ export async function writeBatchToFs(events: WideEvent[], config: FsConfig): Pro
     .map(e => config.pretty ? JSON.stringify(e, null, 2) : JSON.stringify(e))
     .join('\n') }\n`
 
-  await appendFile(filePath, lines, 'utf-8')
+  await appendFile(filePath, lines, { encoding: 'utf-8', mode: 0o600 })
 
   if (config.maxFiles) {
     await cleanupOldFiles(config.dir, config.maxFiles)
@@ -166,6 +166,11 @@ export async function writeBatchToFs(events: WideEvent[], config: FsConfig): Pro
  * ```
  *
  * @remarks
+ * On macOS and Linux, the directories it creates are `0700` and each log file
+ * is `0600`, so only the account running the process can read them. A
+ * directory or file that already exists keeps its mode. On Windows, Node
+ * applies only the write bit, so access follows the folder's inherited ACL.
+ *
  * A write that fails with `EROFS`, `EACCES` or `EPERM` marks the configured
  * directory unavailable and disables the drain for the rest of the process,
  * after warning once. Attaching it on a host without a writable directory is
