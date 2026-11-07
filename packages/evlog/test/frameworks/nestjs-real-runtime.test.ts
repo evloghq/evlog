@@ -154,8 +154,13 @@ class FastifyTestController {
 
   @Get('/api/web-vitals')
   webVitals(@Req() request: FastifyRequest) {
-    request.log.set({ metric: 'LCP' })
+    request.evlog.set({ metric: 'LCP' })
     return { ok: true }
+  }
+
+  @Get('/api/same-logger')
+  sameLogger(@Req() request: FastifyRequest) {
+    return { same: Object.is(request.log, request.evlog) }
   }
 
 }
@@ -163,7 +168,7 @@ class FastifyTestController {
 class TagGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
-    context.switchToHttp().getRequest<FastifyRequest>().log.set({ guard: 'tag' })
+    context.switchToHttp().getRequest<FastifyRequest>().evlog.set({ guard: 'tag' })
     return true
   }
 
@@ -204,7 +209,7 @@ describe('evlog/nestjs (real NestJS runtime, Fastify platform)', () => {
     vi.restoreAllMocks()
   })
 
-  it('exposes the evlog logger on FastifyRequest.log in controllers', async () => {
+  it('exposes the evlog logger on FastifyRequest.evlog in controllers', async () => {
     const { drain } = createPipelineSpies()
     app = await bootFastifyApp(EvlogModule.forRoot({ drain }))
 
@@ -220,7 +225,23 @@ describe('evlog/nestjs (real NestJS runtime, Fastify platform)', () => {
     expect(event.status).toBe(200)
   })
 
-  it('exposes the evlog logger on FastifyRequest.log to global guards', async () => {
+  it('keeps the same logger on FastifyRequest.log, for code written before FastifyRequest.evlog', async () => {
+    app = await bootFastifyApp(EvlogModule.forRoot())
+
+    const res = await app.inject({ method: 'GET', url: '/api/same-logger' })
+    expect(res.json()).toEqual({ same: true })
+  })
+
+  it('gives excluded routes a FastifyRequest.evlog that does nothing', async () => {
+    const { drain } = createPipelineSpies()
+    app = await bootFastifyApp(EvlogModule.forRoot({ drain, exclude: ['/api/web-vitals'] }))
+
+    const res = await app.inject({ method: 'GET', url: '/api/web-vitals' })
+    expect(res.statusCode).toBe(200)
+    expect(drain).not.toHaveBeenCalled()
+  })
+
+  it('exposes the evlog logger on FastifyRequest.evlog to global guards', async () => {
     const { drain } = createPipelineSpies()
     app = await bootFastifyApp(EvlogModule.forRoot({ drain }), a => a.useGlobalGuards(new TagGuard()))
 
@@ -235,7 +256,7 @@ describe('evlog/nestjs (real NestJS runtime, Fastify platform)', () => {
     expect(event.metric).toBe('LCP')
   })
 
-  it('exposes the evlog logger on FastifyRequest.log with forRootAsync()', async () => {
+  it('exposes the evlog logger on FastifyRequest.evlog with forRootAsync()', async () => {
     const { drain } = createPipelineSpies()
     app = await bootFastifyApp(EvlogModule.forRootAsync({ useFactory: () => ({ drain }) }))
 

@@ -39,7 +39,7 @@ app.get('/', async (_request, reply) => {
 })
 
 app.get('/health', async (request) => {
-  request.log.set({ route: 'health' })
+  request.evlog.set({ route: 'health' })
   return { ok: true }
 })
 
