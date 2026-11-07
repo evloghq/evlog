@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { approvalSummary, distTag, plan, stageIdFrom, waitForApproval } from './lib.mjs'
+import { approvalSummary, distTag, missingDependencies, plan, stagedTagOf, stageIdFrom, waitForApproval, workspaceDependencies } from './lib.mjs'
 
-const evlog = { name: 'evlog', version: '2.35.0', dir: 'packages/evlog' }
-const cli = { name: '@evlog/cli', version: '0.12.0', dir: 'packages/cli' }
-const signals = { name: '@evlog/signals', version: '0.2.2', dir: 'packages/signals' }
+const evlog = { name: 'evlog', version: '2.35.0', dir: 'packages/evlog', workspaceDependencies: [] }
+const telemetry = { name: '@evlog/telemetry', version: '0.4.0', dir: 'packages/telemetry', workspaceDependencies: [] }
+const cli = { name: '@evlog/cli', version: '0.12.0', dir: 'packages/cli', workspaceDependencies: ['@evlog/telemetry'] }
+const signals = { name: '@evlog/signals', version: '0.2.2', dir: 'packages/signals', workspaceDependencies: [] }
 
 describe('distTag', () => {
   const pre = { mode: 'pre', tag: 'beta' }
@@ -24,30 +25,34 @@ describe('distTag', () => {
 })
 
 describe('plan', () => {
-  it('stages a version that changed in the push', () => {
+  const none = new Set()
+
+  it('stages a version missing from npm that no run staged', () => {
     const result = plan([evlog, signals], {
       published: new Set(['@evlog/signals@0.2.2']),
       tagged: new Set(['@evlog/signals@0.2.2']),
-      previousVersions: new Map([['evlog', '2.34.0'], ['@evlog/signals', '0.2.2']]),
+      staged: none,
+      manual: false,
     })
     expect(result).toEqual({ release: [], stage: [evlog], waiting: [] })
   })
 
-  it('stages a package that did not exist before the push', () => {
-    const result = plan([cli], { published: new Set(), tagged: new Set(), previousVersions: new Map([['@evlog/cli', undefined]]) })
-    expect(result.stage).toEqual([cli])
+  it('stages a version a later push sees unstaged, after the run that bumped it failed before staging', () => {
+    const result = plan([evlog], { published: none, tagged: none, staged: none, manual: false })
+    expect(result.stage).toEqual([evlog])
   })
 
   it('waits on a version an earlier run staged, instead of staging it again', () => {
-    const result = plan([evlog], { published: new Set(), tagged: new Set(), previousVersions: new Map([['evlog', '2.35.0']]) })
+    const result = plan([evlog], { published: none, tagged: none, staged: new Set(['evlog@2.35.0']), manual: false })
     expect(result).toEqual({ release: [], stage: [], waiting: [evlog] })
   })
 
-  it('stages every version missing from npm when started by hand', () => {
+  it('stages every version missing from npm when started by hand, a staged one included', () => {
     const result = plan([evlog, signals], {
       published: new Set(['@evlog/signals@0.2.2']),
       tagged: new Set(['@evlog/signals@0.2.2']),
-      previousVersions: null,
+      staged: new Set(['evlog@2.35.0']),
+      manual: true,
     })
     expect(result.stage).toEqual([evlog])
   })
@@ -56,9 +61,46 @@ describe('plan', () => {
     const result = plan([evlog, signals], {
       published: new Set(['evlog@2.35.0', '@evlog/signals@0.2.2']),
       tagged: new Set(['@evlog/signals@0.2.2']),
-      previousVersions: new Map([['evlog', '2.35.0'], ['@evlog/signals', '0.2.2']]),
+      staged: new Set(['evlog@2.35.0']),
+      manual: false,
     })
     expect(result).toEqual({ release: [evlog], stage: [], waiting: [] })
+  })
+})
+
+describe('stagedTagOf', () => {
+  it('names the tag after the version, under staged/', () => {
+    expect(stagedTagOf(cli)).toBe('staged/@evlog/cli@0.12.0')
+  })
+})
+
+describe('workspaceDependencies', () => {
+  it('lists the packages pinned with a workspace: range, across dependency kinds', () => {
+    expect(workspaceDependencies({
+      dependencies: { '@evlog/telemetry': 'workspace:*', 'citty': '^0.2.0' },
+      peerDependencies: { evlog: 'workspace:^' },
+      optionalDependencies: { '@evlog/signals': 'workspace:~' },
+    })).toEqual(['@evlog/telemetry', '@evlog/signals', 'evlog'])
+  })
+
+  it('is empty for a manifest without dependencies', () => {
+    expect(workspaceDependencies({})).toEqual([])
+  })
+})
+
+describe('missingDependencies', () => {
+  const packages = [evlog, telemetry, cli]
+
+  it('names a pinned workspace version that is not on npm', () => {
+    expect(missingDependencies(cli, packages, new Set(['evlog@2.35.0']))).toEqual([telemetry])
+  })
+
+  it('is empty once the pinned version is on npm', () => {
+    expect(missingDependencies(cli, packages, new Set(['@evlog/telemetry@0.4.0']))).toEqual([])
+  })
+
+  it('ignores workspace packages the package does not pin', () => {
+    expect(missingDependencies(evlog, packages, new Set())).toEqual([])
   })
 })
 
@@ -75,6 +117,7 @@ describe('stageIdFrom', () => {
 
 describe('waitForApproval', () => {
   const noWait = async () => {}
+  const nothingUnblocked = () => []
 
   it('reports each version on the poll that first sees it on npm', async () => {
     let poll = 0
@@ -82,10 +125,34 @@ describe('waitForApproval', () => {
     const pending = await waitForApproval([evlog, cli], {
       isLive: async pkg => pkg === evlog || poll >= 2,
       onApproved: pkg => seen.push([pkg.name, poll]),
+      stageUnblocked: nothingUnblocked,
       sleep: async () => { poll += 1 },
       deadline: Number.POSITIVE_INFINITY,
     })
     expect(seen).toEqual([['evlog', 1], ['@evlog/cli', 2]])
+    expect(pending).toEqual([])
+  })
+
+  it('waits for a version staged once the poll found its dependency on npm', async () => {
+    let poll = 0
+    const seen = []
+    const live = new Set()
+    let held = [cli]
+    const pending = await waitForApproval([telemetry], {
+      isLive: async pkg => live.has(pkg.name) || (pkg === telemetry && poll >= 1) || (pkg === cli && poll >= 3),
+      onApproved: (pkg) => {
+        seen.push([pkg.name, poll])
+        live.add(pkg.name)
+      },
+      stageUnblocked: () => {
+        const ready = held.filter(() => live.has('@evlog/telemetry'))
+        held = held.filter(pkg => !ready.includes(pkg))
+        return ready
+      },
+      sleep: async () => { poll += 1 },
+      deadline: Number.POSITIVE_INFINITY,
+    })
+    expect(seen).toEqual([['@evlog/telemetry', 1], ['@evlog/cli', 3]])
     expect(pending).toEqual([])
   })
 
@@ -97,6 +164,7 @@ describe('waitForApproval', () => {
         return true
       },
       onApproved: pkg => approved.push(pkg),
+      stageUnblocked: nothingUnblocked,
       sleep: noWait,
       deadline: Number.POSITIVE_INFINITY,
     })
@@ -109,6 +177,7 @@ describe('waitForApproval', () => {
     const pending = await waitForApproval([evlog], {
       isLive: async () => false,
       onApproved: () => { throw new Error('nothing is approved') },
+      stageUnblocked: nothingUnblocked,
       sleep: async () => { clock += 1 },
       deadline: 3,
       now: () => clock,
@@ -123,6 +192,7 @@ describe('approvalSummary', () => {
     const summary = approvalSummary({
       staged: [{ ...evlog, tag: 'latest', stageId: 'abc' }],
       waiting: [],
+      blocked: [],
       branch: 'main',
       windowMinutes: 30,
     })
@@ -135,14 +205,27 @@ describe('approvalSummary', () => {
   })
 
   it('lists the versions an earlier run staged', () => {
-    const summary = approvalSummary({ staged: [], waiting: [cli], branch: 'v3', windowMinutes: 30 })
+    const summary = approvalSummary({ staged: [], waiting: [cli], blocked: [], branch: 'v3', windowMinutes: 30 })
     expect(summary).toContain('### Waiting for approval')
     expect(summary).toContain('- `@evlog/cli@0.12.0`')
     expect(summary).toContain('`gh workflow run release.yml --ref v3`')
     expect(summary).not.toContain('Staged on npm')
   })
 
+  it('lists each held version with the versions it pins', () => {
+    const summary = approvalSummary({
+      staged: [{ ...telemetry, tag: 'latest', stageId: 'def' }],
+      waiting: [],
+      blocked: [{ pkg: cli, missing: [telemetry] }],
+      branch: 'main',
+      windowMinutes: 30,
+    })
+    expect(summary).toContain('### Held until a dependency is on npm')
+    expect(summary).toContain('- `@evlog/cli@0.12.0` pins `@evlog/telemetry@0.4.0`')
+    expect(summary).toContain('as soon as the versions it pins are on npm')
+  })
+
   it('is empty when there is nothing to approve', () => {
-    expect(approvalSummary({ staged: [], waiting: [], branch: 'main', windowMinutes: 30 })).toBe('')
+    expect(approvalSummary({ staged: [], waiting: [], blocked: [], branch: 'main', windowMinutes: 30 })).toBe('')
   })
 })
