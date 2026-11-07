@@ -171,22 +171,17 @@ describe('evlog/hono', () => {
     assertHttpEventEmitted(drain, { path: '/api/fail', level: 'error', status: 500 })
   })
 
-  it('skips routes not matching include patterns', async () => {
+  it('gives routes not matching include patterns a logger that does nothing', async () => {
     const app = new Hono<EvlogVariables>()
     app.use(evlog({ include: ['/api/**'] }))
-
-    let logValue: unknown = 'untouched'
     app.get('/health', (c) => {
-      try {
-        logValue = c.get('log') 
-      } catch {
-        logValue = undefined 
-      }
-      return c.json({ ok: true })
+      c.get('log').set({ probe: true })
+      return c.json({ context: c.get('log').getContext() })
     })
 
-    await app.request('/health')
-    expect(logValue).toBeUndefined()
+    const res = await app.request('/health')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ context: {} })
   })
 
   it('logs routes matching include patterns', async () => {
@@ -216,22 +211,52 @@ describe('evlog/hono', () => {
     assertHttpEventEmitted(drain, { path: '/api/checkout', method: 'POST' })
   })
 
-  it('excludes routes matching exclude patterns', async () => {
+  it('gives routes matching exclude patterns a logger that does nothing', async () => {
+    const app = new Hono<EvlogVariables>()
+    app.use(evlog({ exclude: ['/_internal/**'] }))
+    app.get('/_internal/probe', (c) => {
+      c.get('log').set({ probe: true })
+      return c.json({ context: c.get('log').getContext() })
+    })
+
+    const res = await app.request('/_internal/probe')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ context: {} })
+  })
+
+  it('runs log.fork() work on excluded routes', async () => {
     const app = new Hono<EvlogVariables>()
     app.use(evlog({ exclude: ['/_internal/**'] }))
 
-    let logValue: unknown = 'untouched'
-    app.get('/_internal/probe', (c) => {
-      try {
-        logValue = c.get('log') 
-      } catch {
-        logValue = undefined 
-      }
+    let ran = false
+    app.get('/_internal/probe', async (c) => {
+      await c.get('log').fork('probe', () => {
+        ran = true
+      })
       return c.json({ ok: true })
     })
 
-    await app.request('/_internal/probe')
-    expect(logValue).toBeUndefined()
+    const res = await app.request('/_internal/probe')
+    expect(res.status).toBe(200)
+    expect(ran).toBe(true)
+  })
+
+  it('keeps the documented onError handler working with enabled: false', async () => {
+    initLogger({ enabled: false })
+    const app = new Hono<EvlogVariables>()
+    app.use(evlog())
+    app.get('/orders', (c) => {
+      c.get('log').set({ user: { id: 'u_1' } })
+      throw new Error('Payment failed')
+    })
+    app.onError((error, c) => {
+      c.get('log').error(error)
+      return c.json({ message: error.message }, 500)
+    })
+
+    const res = await app.request('/orders')
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ message: 'Payment failed' })
   })
 
   describe('waitUntil', () => {
