@@ -200,14 +200,16 @@ describe('evlog/sveltekit', () => {
     expect(body.data.orderId).toBe('ord_1')
   })
 
-  it('skips routes not matching include patterns', async () => {
-    const handle = evlog({ include: ['/api/**'] })
+  it('gives routes not matching include patterns a logger that does nothing', async () => {
+    const { drain } = createPipelineSpies()
+    const handle = evlog({ include: ['/api/**'], drain })
     const event = createMockEvent('GET', '/health')
     const resolve = createMockResolve()
 
     await handle({ event, resolve })
 
-    expect(event.locals.log).toBeUndefined()
+    expect(event.locals.log).toEqual(expect.objectContaining({ set: expect.any(Function), fork: expect.any(Function) }))
+    expect(drain).not.toHaveBeenCalled()
   })
 
   it('logs routes matching include patterns', async () => {
@@ -234,14 +236,16 @@ describe('evlog/sveltekit', () => {
     assertHttpEventEmitted(drain, { path: '/api/checkout', method: 'POST' })
   })
 
-  it('excludes routes matching exclude patterns', async () => {
-    const handle = evlog({ exclude: ['/_internal/**'] })
+  it('gives routes matching exclude patterns a logger that does nothing', async () => {
+    const { drain } = createPipelineSpies()
+    const handle = evlog({ exclude: ['/_internal/**'], drain })
     const event = createMockEvent('GET', '/_internal/probe')
     const resolve = createMockResolve()
 
     await handle({ event, resolve })
 
-    expect(event.locals.log).toBeUndefined()
+    expect(event.locals.log).toEqual(expect.objectContaining({ set: expect.any(Function), fork: expect.any(Function) }))
+    expect(drain).not.toHaveBeenCalled()
   })
 
   describe('drain / enrich / keep', () => {
