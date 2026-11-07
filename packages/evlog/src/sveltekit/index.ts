@@ -156,6 +156,7 @@ export function evlog(options: EvlogSvelteKitOptions = {}): SvelteKitHandle {
     const { logger, finish, finishResponse, skipped, runWith } = integration.start(event, options)
 
     if (skipped) {
+      event.locals.log = logger
       return await resolve(event)
     }
 

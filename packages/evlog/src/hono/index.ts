@@ -100,6 +100,7 @@ export function evlog(options: EvlogHonoOptions = {}): MiddlewareHandler {
   return async (c, next) => {
     const { skipped, logger, finish, finishResponse, runWith } = integration.start(c, options)
     if (skipped) {
+      c.set('log', logger)
       await next()
       return
     }

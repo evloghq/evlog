@@ -66,9 +66,10 @@ export function evlog(options: EvlogReactRouterOptions = {}) {
     ctx: ReactRouterContext,
     next: () => Promise<Response>,
   ): Promise<Response> => {
-    const { finish, finishResponse, skipped, runWith } = integration.start(ctx, options)
+    const { logger, finish, finishResponse, skipped, runWith } = integration.start(ctx, options)
 
     if (skipped) {
+      ctx.context.set(loggerContext, logger)
       return next()
     }
 
