@@ -146,3 +146,9 @@ Applies to: every quick start under `apps/docs/content/`.
 Flagged: nothing. The `fault` signal's options were `user`, `us`, `upstream`.
 Actual: a choice option becomes a value in `GROUP BY signals.fault.value`, and `us` reads wrong there. Renamed to `client`, `app`, `upstream`. Name options as they will read in a query, not as they read in the question.
 Applies to: every signal example on docs, README and playground surfaces.
+
+## 2026-11-07 · U-15 · Map is the command, Observability Score is the headline
+
+Flagged: nothing. The frozen-word pass renamed the "Observability Score" headline and guide title to "Observability Map", and turned "scores every entry point on the context it will hand you" into "maps every entry point on the context".
+Actual: the maintainer kept "Observability Score". Map names the command, score is the number and the verb for rating an entry point. In observability, "map" reads as a service map, and "maps ... on the context" does not parse.
+Applies to: the landing, `apps/docs/content/3.cli/`, the package README, and every surface that describes `evlog map`.

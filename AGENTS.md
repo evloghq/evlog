@@ -61,7 +61,7 @@ These are the one-word product names for the v3 docs, README, landing and conten
 - **Events**: wide events, sampling, redaction.
 - **Errors**: structured errors and error catalogs.
 - **Drains**: where events and errors are sent (`createAxiomDrain`, the `evlog:drain` hook). A drain is not an "adapter"; "adapter" stays for framework adapters in `evlog map` and for platform adapters such as Astro or NestJS.
-- **Map**: the `evlog map` CLI and its GitHub Action. `evlog map` is the CLI name, not `evlog score` or `evlog scoring`. The number it prints is still called the score.
+- **Map**: the `evlog map` CLI and its GitHub Action. `evlog map` is the CLI name, not `evlog score` or `evlog scoring`. "Score" stays for the number it prints and for rating an entry point ("scores every entry point"). "Observability Score" is the headline for what it measures, on the landing and the guide.
 - **Signals**: who is responsible for a failure (`@evlog/signals`, `defineSignal`).
 - **Audit**: who did what, on which resource, signed.
 - **Skills**: the agent skills, matching the `skills/` folder. "Agents" is retired as a product word.

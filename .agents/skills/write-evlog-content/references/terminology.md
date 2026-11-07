@@ -17,7 +17,7 @@ Rule id: `U-15`. The scanner raises a candidate from `scripts/content-lint/lib/c
 
 ## Product words
 
-The one-word product names are frozen in `AGENTS.md` (section "Product words"): Events, Errors, Drains, Map, Signals, Audit, Skills, Telemetry. Use them as written in docs, README, landing and content. `Drains` replaces "adapter" for a destination; "adapter" stays for framework adapters in `evlog map` and for platform adapters. `evlog map` is the CLI name, and "score" or "scoring" is not the product name for it.
+The one-word product names are frozen in `AGENTS.md` (section "Product words"): Events, Errors, Drains, Map, Signals, Audit, Skills, Telemetry. Use them as written in docs, README, landing and content. `Drains` replaces "adapter" for a destination; "adapter" stays for framework adapters in `evlog map` and for platform adapters. `evlog map` is the CLI name, and "score" or "scoring" is not the product name for it. "Score" stays for the number and for rating an entry point, and "Observability Score" stays the headline for what the map measures: do not swap them for "map".
 
 ## The twin
 

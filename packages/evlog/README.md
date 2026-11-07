@@ -547,7 +547,7 @@ FIX FIRST
 
 | Command | What it does |
 |---------|-------------|
-| `evlog map` | Map every entry point and list the three worth fixing first |
+| `evlog map` | Score every entry point and list the three worth fixing first |
 | `evlog map <route-or-file>` | Explain one entry point in full, with the shape it could take |
 | `evlog map --all` | Every entry point as a check matrix |
 | `evlog map --min-score <n>` | Exit 1 below the threshold — a CI gate |
