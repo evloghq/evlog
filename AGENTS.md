@@ -36,7 +36,7 @@ packages/evlog/            Main package
   src/vite/                Vite plugin (evlog/vite)
   src/shared/              Toolkit — exposed as evlog/toolkit (NOT evlog/shared)
   src/ai/                  AI SDK integration (evlog/ai)
-  src/adapters/            Drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, fs, memory)
+  src/adapters/            Drains (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, fs, memory)
   src/enrichers/           Built-in enrichers (UserAgent, Geo, RequestSize, TraceContext)
   src/runtime/             Runtime code (client/, server/, utils/)
   src/<framework>/         One dir per framework integration (hono/, next/, sveltekit/, nestjs/, express/, fastify/, elysia/, orpc/, react-router/, workers/, eve/, better-auth/)
@@ -53,6 +53,19 @@ scripts/                   Repo tooling (run-app, cli-sandbox, release-notes, co
 .agents/skills/            Internal skills for creating adapters, enrichers, and framework integrations, and for writing content — each carries `metadata: internal: true` in its frontmatter so the skills CLI skips them for public installs
 skills/                     Published skills (analyze-logs, build-audit-logs, review-logging-patterns) — served by the docs site via `/.well-known/skills/` and discovered by `npx skills add evloghq/evlog`
 ```
+
+## Product words
+
+These are the one-word product names for the v3 docs, README, landing and content. They are frozen: rename one here before using a new word in content.
+
+- **Events**: wide events, sampling, redaction.
+- **Errors**: structured errors and error catalogs.
+- **Drains**: where events and errors are sent (`createAxiomDrain`, the `evlog:drain` hook). A drain is not an "adapter"; "adapter" stays for framework adapters in `evlog map` and for platform adapters such as Astro or NestJS.
+- **Map**: the `evlog map` CLI and its GitHub Action. `evlog map` is the CLI name, not `evlog score` or `evlog scoring`. The number it prints is still called the score.
+- **Signals**: who is responsible for a failure (`@evlog/signals`, `defineSignal`).
+- **Audit**: who did what, on which resource, signed.
+- **Skills**: the agent skills, matching the `skills/` folder. "Agents" is retired as a product word.
+- **Telemetry**: the telemetry package.
 
 ## Conventions
 

@@ -26,7 +26,7 @@ references/
     landing.md      0.landing.md and other marketing surfaces
     machine.md      skills and AGENTS.md, the surfaces an agent acts on
   ai-tells.md     the tell corpus, each tell with its legitimate twin
-  terminology.md  the names evlog gave its own parts (U-15)
+  terminology.md  the names evlog gave its own parts (U-15) and the frozen product words
   landscape/      what pino, winston, consola, LogTape, LogLayer, and OpenTelemetry actually do (U-12)
   surfaces/       what each surface owes its reader
     docs.md  blog.md  landing.md  readme.md  skill.md  agents.md  changeset.md

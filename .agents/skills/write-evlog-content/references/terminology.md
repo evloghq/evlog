@@ -15,6 +15,10 @@ Rule id: `U-15`. The scanner raises a candidate from `scripts/content-lint/lib/c
 | **evlog/toolkit** | evlog/shared | `evlog/shared` is not an entry point. `T-15`, always critical. |
 | **evlog/http** | evlog/browser | Deprecated entry point. `T-15`. |
 
+## Product words
+
+The one-word product names are frozen in `AGENTS.md` (section "Product words"): Events, Errors, Drains, Map, Signals, Audit, Skills, Telemetry. Use them as written in docs, README, landing and content. `Drains` replaces "adapter" for a destination; "adapter" stays for framework adapters in `evlog map` and for platform adapters. `evlog map` is the CLI name, and "score" or "scoring" is not the product name for it.
+
 ## The twin
 
 A sentence describing another tool uses that tool's vocabulary, and has to. "pino writes through a transport that runs in a worker thread" is correct and the scanner drops it: the check skips any sentence naming an alternative.
