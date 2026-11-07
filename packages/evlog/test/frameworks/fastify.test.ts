@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import Fastify from 'fastify'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import Fastify, { type FastifyRequest } from 'fastify'
+import type { ForkableLogger } from '../../src/audit'
 import { initLogger } from '../../src/logger'
 import type { RequestLogger } from '../../src/types'
 import { evlog, useLogger } from '../../src/fastify/index'
@@ -53,18 +54,53 @@ describe('evlog/fastify', () => {
     vi.restoreAllMocks()
   })
 
-  it('creates a logger accessible via request.log', async () => {
+  it('attaches the request logger to request.evlog', async () => {
+    const { drain } = createPipelineSpies()
+    const app = Fastify({ logger: false })
+    await app.register(evlog, { drain })
+    app.get('/api/orders', (request) => {
+      request.evlog.set({ order: { id: 'ord_1' } })
+      return { ok: true }
+    })
+
+    const res = await app.inject({ method: 'GET', url: '/api/orders' })
+    expect(res.statusCode).toBe(200)
+    await waitForDrainCalls(drain)
+    expect(findEventViaDrain(drain, e => e.path === '/api/orders')?.order).toEqual({ id: 'ord_1' })
+  })
+
+  it('types request.evlog as the forkable request logger', () => {
+    expectTypeOf<FastifyRequest['evlog']>().toEqualTypeOf<ForkableLogger>()
+  })
+
+  it('keeps the same logger on request.log, for code written before request.evlog', async () => {
     const app = Fastify({ logger: false })
     await app.register(evlog)
 
-    let hasLogger = false
+    let isSame = false
     app.get('/api/test', (request) => {
-      hasLogger = request.log !== undefined && typeof request.log.set === 'function'
+      isSame = Object.is(request.log, request.evlog)
       return { ok: true }
     })
 
     await app.inject({ method: 'GET', url: '/api/test' })
-    expect(hasLogger).toBe(true)
+    expect(isSame).toBe(true)
+  })
+
+  it('runs request.evlog.fork() work in its own wide event', async () => {
+    const { drain } = createPipelineSpies()
+    const app = Fastify({ logger: false })
+    await app.register(evlog, { drain })
+    app.post('/api/orders', async (request) => {
+      await request.evlog.fork('fulfill', () => {
+        useLogger().set({ step: 'shipped' })
+      })
+      return { ok: true }
+    })
+
+    await app.inject({ method: 'POST', url: '/api/orders' })
+    await waitForDrainCalls(drain, 2)
+    expect(findEventViaDrain(drain, e => e.operation === 'fulfill')?.step).toBe('shipped')
   })
 
   it('accumulates context set by route handler', async () => {
@@ -110,7 +146,7 @@ describe('evlog/fastify', () => {
 
     let isEvlogLogger = false
     app.get('/health', (request) => {
-      isEvlogLogger = typeof request.log?.set === 'function'
+      isEvlogLogger = 'set' in request.log
       return { ok: true }
     })
 
@@ -151,12 +187,27 @@ describe('evlog/fastify', () => {
 
     let isEvlogLogger = false
     app.get('/_internal/probe', (request) => {
-      isEvlogLogger = typeof request.log?.set === 'function'
+      isEvlogLogger = 'set' in request.log
       return { ok: true }
     })
 
     await app.inject({ method: 'GET', url: '/_internal/probe' })
     expect(isEvlogLogger).toBe(false)
+  })
+
+  it('gives routes matching exclude patterns a request.evlog that does nothing', async () => {
+    const { drain } = createPipelineSpies()
+    const app = Fastify({ logger: false })
+    await app.register(evlog, { exclude: ['/_internal/**'], drain })
+    app.get('/_internal/probe', (request) => {
+      request.evlog.set({ probe: true })
+      return { context: request.evlog.getContext() }
+    })
+
+    const res = await app.inject({ method: 'GET', url: '/_internal/probe' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ context: {} })
+    expect(drain).not.toHaveBeenCalled()
   })
 
   describe('drain / enrich / keep', () => {
@@ -329,13 +380,13 @@ describe('evlog/fastify', () => {
       expect(event).toBeDefined()
     })
 
-    it('returns the same logger as request.log', async () => {
+    it('returns the same logger as request.evlog', async () => {
       const app = Fastify({ logger: false })
       await app.register(evlog)
 
       let isSame = false
       app.get('/api/test', (request) => {
-        isSame = useLogger() === defined(request.log, 'request.log in handler')
+        isSame = useLogger() === request.evlog
         return { ok: true }
       })
 
