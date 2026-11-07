@@ -21,6 +21,20 @@ One row per drain adapter that talks to a third-party API. The row names the aut
 
 First in line, when several rows tie on `Aligned to`: `sentry.ts`, `datadog.ts`, `posthog.ts`, `otlp.ts`. These are the providers most evlog users drain to, and the ones whose products offer the most beyond storing a log line. Every other tie goes by table order.
 
+## Per-request limits enforced
+
+Each adapter splits a batch with `chunkSerialized` (`packages/evlog/src/shared/chunk.ts`) so every request stays under the provider's documented caps. A run that finds a cap changed upstream updates the constant and this table in the same PR.
+
+| Adapter | Entries per request | Bytes per request | Source |
+| --- | --- | --- | --- |
+| `datadog.ts` | 1000 | 5 MB uncompressed | `@datadog/datadog-api-client` 1.64.0, `LogsApi.js`, `submitLog` doc comment |
+| `sentry.ts` (logs) | 100 | 1 MiB per log item payload | Relay `max_log_size` item limit; Sentry log protocol for the count |
+| `axiom.ts` | 10,000 | none documented for `/ingest` | https://axiom.co/docs/reference/limits |
+| `better-stack.ts` | none | 10 MiB | https://betterstack.com/docs/logs/ingesting-data/http/logs/ |
+| `posthog.ts` (`mode: 'events'`) | none | under 20 MB | https://posthog.com/docs/api/capture |
+
+`loki.ts`, `clickhouse.ts`, `otlp.ts`, `hyperdx.ts`, `sazabi.ts`, and PostHog logs mode (OTLP) have no cap enforced yet: their limits depend on the server or collector configuration, not on a single documented value.
+
 ## What a comparison covers
 
 Read both sides for the same request and record each difference as a mismatch with the upstream line as evidence:

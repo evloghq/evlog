@@ -2,8 +2,9 @@ import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { applyDeprecatedAlias, formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import { warnDeprecatedEnvVar } from '../shared/deprecate'
+import { chunkSerialized } from '../shared/chunk'
 import type { HttpDrainRequest } from '../shared/drain'
-import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { trimTrailingSlashes } from '../utils'
 
 export interface BetterStackConfig {
@@ -65,7 +66,7 @@ export function toBetterStackEvent(event: WideEvent): Record<string, unknown> {
  */
 export function createBetterStackDrain(overrides?: Partial<BetterStackConfig>) {
   warnDeprecatedEnvVar('better-stack', ['NUXT_BETTER_STACK_SOURCE_TOKEN', 'BETTER_STACK_SOURCE_TOKEN'], 'BETTER_STACK_API_KEY')
-  return defineHttpDrain<BetterStackConfig>({
+  return defineDrain<BetterStackConfig>({
     name: 'better-stack',
     resolve: async () => {
       const resolved = await resolveAdapterConfig<BetterStackConfig>('betterStack', BETTER_STACK_FIELDS, overrides)
@@ -76,23 +77,24 @@ export function createBetterStackDrain(overrides?: Partial<BetterStackConfig>) {
       }
       return config
     },
-    label: 'Better Stack',
-    encode: encodeBetterStackRequest,
+    send: sendBatchToBetterStack,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToBetterStack(events, { ...config, retries: config.retries ?? 0 }),
   })
 }
 
-/**
- * Encode a batch of wide events into the Better Stack ingest request. Shared by
- * {@link createBetterStackDrain} and {@link sendBatchToBetterStack}.
- */
-function encodeBetterStackRequest(events: WideEvent[], config: BetterStackConfig): HttpDrainRequest {
+/** Better Stack accepts at most 10 MiB per request: larger batches are split. */
+const BETTER_STACK_MAX_REQUEST_BYTES = 10 * 1024 * 1024
+
+/** Encode serialized Better Stack events into one ingest request. */
+function encodeBetterStackRequest(entries: string[], config: BetterStackConfig): HttpDrainRequest {
   return {
     url: trimTrailingSlashes(config.endpoint ?? 'https://in.logs.betterstack.com'),
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey ?? config.sourceToken}`,
     },
-    body: JSON.stringify(events.map(toBetterStackEvent)),
+    body: `[${entries.join(',')}]`,
   }
 }
 
@@ -104,14 +106,14 @@ export async function sendToBetterStack(event: WideEvent, config: BetterStackCon
 }
 
 /**
- * Send a batch of events to Better Stack.
+ * Send a batch of events to Better Stack, split into requests of at most 10 MiB.
  */
 export async function sendBatchToBetterStack(events: WideEvent[], config: BetterStackConfig): Promise<void> {
   if (!(config.apiKey ?? config.sourceToken)) throw new Error('[evlog/better-stack] Missing apiKey')
-  await sendEncodedDrainRequest(encodeBetterStackRequest(events, config), {
-    label: 'Better Stack',
-    source: 'better-stack',
-    timeout: config.timeout,
-    retries: config.retries,
-  })
+  const options = { label: 'Better Stack', source: 'better-stack', timeout: config.timeout, retries: config.retries }
+  const entries = events.map(event => JSON.stringify(toBetterStackEvent(event)))
+  const chunks = entries.length > 0 ? chunkSerialized(entries, Infinity, BETTER_STACK_MAX_REQUEST_BYTES - 2) : [entries]
+  for (const chunk of chunks) {
+    await sendEncodedDrainRequest(encodeBetterStackRequest(chunk, config), options)
+  }
 }

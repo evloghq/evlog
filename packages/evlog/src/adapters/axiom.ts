@@ -3,7 +3,7 @@ import type { ConfigField } from '../shared/config'
 import { applyDeprecatedAlias, formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import { warnDeprecatedEnvVar } from '../shared/deprecate'
 import type { HttpDrainRequest } from '../shared/drain'
-import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { trimTrailingSlashes } from '../utils'
 
 interface BaseAxiomConfig {
@@ -92,7 +92,7 @@ function applyApiKeyAlias(config: Partial<ResolvedAxiomConfig>): Partial<Resolve
  */
 export function createAxiomDrain(overrides?: Partial<AxiomConfig>) {
   warnDeprecatedEnvVar('axiom', ['NUXT_AXIOM_TOKEN', 'AXIOM_TOKEN'], 'AXIOM_API_KEY')
-  return defineHttpDrain<AxiomConfig>({
+  return defineDrain<AxiomConfig>({
     name: 'axiom',
     resolve: async () => {
       const resolved = await resolveAdapterConfig<ResolvedAxiomConfig>(
@@ -111,11 +111,14 @@ export function createAxiomDrain(overrides?: Partial<AxiomConfig>) {
       }
       return config as AxiomConfig
     },
-    label: 'Axiom',
-    encode: encodeAxiomRequest,
-    onResponse: logIngestWarnings,
+    send: sendBatchToAxiom,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToAxiom(events, { ...config, retries: config.retries ?? 0 }),
   })
 }
+
+/** Axiom ingests at most 10,000 events per batch: larger batches are split. */
+const AXIOM_MAX_EVENTS_PER_REQUEST = 10_000
 
 /**
  * Encode a batch of wide events into the Axiom ingest request. Shared by
@@ -139,19 +142,18 @@ export async function sendToAxiom(event: WideEvent, config: AxiomConfig): Promis
 }
 
 /**
- * Send a batch of events to Axiom.
+ * Send a batch of events to Axiom, one request per 10,000 events.
  */
 export async function sendBatchToAxiom(events: WideEvent[], config: AxiomConfig): Promise<void> {
   if (!(config.apiKey ?? config.token)) {
     throw new Error('[evlog/axiom] Missing apiKey')
   }
-  await sendEncodedDrainRequest(encodeAxiomRequest(events, config), {
-    label: 'Axiom',
-    source: 'axiom',
-    timeout: config.timeout,
-    retries: config.retries,
-    onResponse: logIngestWarnings,
-  })
+  const options = { label: 'Axiom', source: 'axiom', timeout: config.timeout, retries: config.retries, onResponse: logIngestWarnings }
+  let start = 0
+  do {
+    await sendEncodedDrainRequest(encodeAxiomRequest(events.slice(start, start + AXIOM_MAX_EVENTS_PER_REQUEST), config), options)
+    start += AXIOM_MAX_EVENTS_PER_REQUEST
+  } while (start < events.length)
 }
 
 interface AxiomIngestResponse {

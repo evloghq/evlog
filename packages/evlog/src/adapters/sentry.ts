@@ -1,6 +1,7 @@
 import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
+import { chunkSerialized } from '../shared/chunk'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { parseStackFrames } from '../shared/pretty-error'
@@ -323,15 +324,18 @@ export function toSentryErrorEvent(event: WideEvent, config: SentryConfig): Sent
   }
 }
 
+const SENTRY_LOG_ITEM_PREFIX = '{"items":['
+const SENTRY_LOG_ITEM_SUFFIX = ']}'
+
 /**
- * Build the Sentry Envelope body for a list of logs.
+ * Build the Sentry Envelope body for a list of serialized logs.
  *
  * Envelope format (line-delimited):
  * - Line 1: Envelope headers (dsn, sdk, sent_at)
  * - Line 2: Item header (type: log, item_count, content_type)
  * - Line 3: Item payload ({"items": [...]})
  */
-function buildEnvelopeBody(logs: SentryLog[], dsn: string): string {
+function buildEnvelopeBody(logs: string[], dsn: string): string {
   const envelopeHeader = JSON.stringify({
     dsn,
     sdk: SENTRY_SDK,
@@ -344,7 +348,7 @@ function buildEnvelopeBody(logs: SentryLog[], dsn: string): string {
     content_type: 'application/vnd.sentry.items.log+json',
   })
 
-  const itemPayload = JSON.stringify({ items: logs })
+  const itemPayload = `${SENTRY_LOG_ITEM_PREFIX}${logs.join(',')}${SENTRY_LOG_ITEM_SUFFIX}`
 
   return `${envelopeHeader}\n${itemHeader}\n${itemPayload}\n`
 }
@@ -401,17 +405,17 @@ function getSentryEnvelopeRequest(config: SentryConfig, body: string): HttpDrain
   }
 }
 
-/**
- * Encode a batch of wide events into the Sentry envelope request carrying
- * their structured logs.
- */
-function encodeSentryRequest(events: WideEvent[], config: SentryConfig): HttpDrainRequest {
-  const logs = events.map(event => toSentryLog(event, config))
+/** Encode serialized structured logs into one Sentry envelope request. */
+function encodeSentryRequest(logs: string[], config: SentryConfig): HttpDrainRequest {
   return getSentryEnvelopeRequest(config, buildEnvelopeBody(logs, config.dsn))
 }
 
-/** Sentry's log protocol caps a log envelope at 100 items: larger batches are split into several envelopes. */
+/**
+ * Sentry caps a log envelope at 100 logs, and Relay rejects a log item whose
+ * payload exceeds 1 MiB: larger batches are split into several envelopes.
+ */
 const SENTRY_MAX_LOGS_PER_ENVELOPE = 100
+const SENTRY_MAX_LOG_ITEM_BYTES = 1024 * 1024
 
 /** An envelope holds at most one error event, so each issue gets its own request. */
 function encodeSentryErrorEventRequest(event: SentryErrorEvent, config: SentryConfig): HttpDrainRequest {
@@ -452,8 +456,12 @@ export async function sendBatchToSentry(events: WideEvent[], config: SentryConfi
   if (events.length === 0) return
   const traced = events.map(withTraceId)
   const options = { label: 'Sentry', source: 'sentry', timeout: config.timeout, retries: config.retries }
+  const maxLogBytes = SENTRY_MAX_LOG_ITEM_BYTES - SENTRY_LOG_ITEM_PREFIX.length - SENTRY_LOG_ITEM_SUFFIX.length
   for (let start = 0; start < traced.length; start += SENTRY_MAX_LOGS_PER_ENVELOPE) {
-    await sendEncodedDrainRequest(encodeSentryRequest(traced.slice(start, start + SENTRY_MAX_LOGS_PER_ENVELOPE), config), options)
+    const logs = traced.slice(start, start + SENTRY_MAX_LOGS_PER_ENVELOPE).map(event => JSON.stringify(toSentryLog(event, config)))
+    for (const chunk of chunkSerialized(logs, SENTRY_MAX_LOGS_PER_ENVELOPE, maxLogBytes)) {
+      await sendEncodedDrainRequest(encodeSentryRequest(chunk, config), options)
+    }
   }
   if (!config.issues) return
 
