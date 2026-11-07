@@ -3,9 +3,8 @@ import { defineHook, type HookContext, type HookDefinition } from 'eve/hooks'
 import {
   defineInstrumentation,
   type InstrumentationDefinition,
+  type InstrumentationEvents,
   type InstrumentationSetupContext,
-  type InstrumentationStepStartedEventInput,
-  type InstrumentationStepStartedEventResult,
 } from 'eve/instrumentation'
 import type { AuditableLogger } from '../audit'
 import type { AIToolExecution, AIEventData, ModelCost } from '../ai/index'
@@ -28,7 +27,8 @@ const DEFAULT_MAX_SESSIONS = 256
 const CANCELLED_STATUS = 499
 
 /**
- * How much of the user message from `message.received` reaches the wide event.
+ * How much of the user message reaches the wide event, from `delivery.consumed`
+ * (`message.received` before eve 0.84).
  *
  * - `omit` — no message content at all (default)
  * - `preview` — text truncated to `messagePreviewLength`, attachments reduced
@@ -88,8 +88,9 @@ export interface EvlogEveOptions extends Omit<EvlogConfig, 'extends' | 'map' | '
    */
   maxSessions?: number
   /**
-   * Emit one extra wide event per session on `session.completed` /
-   * `session.failed`, rolling up every turn of that session. Default `false`.
+   * Emit one extra wide event per session when it ends (`session.ended`, or
+   * `session.completed` / `session.failed` before eve 0.84), rolling up every
+   * turn of that session. Default `false`.
    */
   sessionEvent?: boolean
   /**
@@ -115,7 +116,8 @@ export interface EvlogEveOptions extends Omit<EvlogConfig, 'extends' | 'map' | '
    * Subscribe to the `subagent.*` lifecycle events emitted by older eve
    * versions and add them to the parent turn. Default `true`. Disable this
    * when the event source has no hook session context. Subagent calls
-   * requested through `actions.requested` are recorded either way.
+   * requested through `call.requested` (`actions.requested` before eve 0.84)
+   * are recorded either way.
    */
   subagentEvents?: boolean
 }
@@ -144,6 +146,14 @@ interface PendingAction {
 interface EveApprovalPending {
   toolName: string
   callId: string
+}
+
+/** A v27 request for a person's input, kept open until its `interaction.settled`. */
+interface OpenInteraction {
+  kind: string
+  /** The tool an approval is for, or the connection a sign-in is for. */
+  name: string
+  startedAt: number
 }
 
 interface SessionRollup {
@@ -414,7 +424,7 @@ function resolveMessageMode(options: EvlogEveOptions): EveMessageMode {
 function summarizeMessageParts(parts: readonly unknown[]): Array<Record<string, unknown>> {
   return parts.map((part) => {
     const record = part as Record<string, unknown>
-    const summary: Record<string, unknown> = { type: record.type }
+    const summary: Record<string, unknown> = { type: record.type ?? record.kind }
     if (typeof record.mediaType === 'string') summary.mediaType = record.mediaType
     return summary
   })
@@ -551,6 +561,7 @@ interface EveGlobalState {
   sessionRollups: Map<string, SessionRollup>
   sessionRuntimes: Map<string, EveRuntimeInfo>
   sessionAuthorizationStarts: Map<string, Map<string, number>>
+  sessionInteractions: Map<string, Map<string, OpenInteraction>>
   detachedWarned: Set<string>
   maxSessions: number
   initialized: boolean
@@ -573,6 +584,7 @@ function getEveGlobalState(): EveGlobalState {
       sessionRollups: new Map(),
       sessionRuntimes: new Map(),
       sessionAuthorizationStarts: new Map(),
+      sessionInteractions: new Map(),
       detachedWarned: new Set(),
       maxSessions: DEFAULT_MAX_SESSIONS,
       initialized: false,
@@ -626,6 +638,25 @@ function sessionAuthorizationStarts(): Map<string, Map<string, number>> {
   return getEveGlobalState().sessionAuthorizationStarts
 }
 
+function sessionInteractions(): Map<string, Map<string, OpenInteraction>> {
+  return getEveGlobalState().sessionInteractions
+}
+
+function openInteraction(sessionId: string, interactionId: string, interaction: OpenInteraction): void {
+  touchSession(sessionId)
+  const open = sessionInteractions().get(sessionId) ?? new Map<string, OpenInteraction>()
+  open.set(interactionId, interaction)
+  sessionInteractions().set(sessionId, open)
+}
+
+function closeInteraction(sessionId: string, interactionId: string): OpenInteraction | undefined {
+  const open = sessionInteractions().get(sessionId)
+  const interaction = open?.get(interactionId)
+  open?.delete(interactionId)
+  if (open?.size === 0) sessionInteractions().delete(sessionId)
+  return interaction
+}
+
 function freshRollup(): SessionRollup {
   return {
     turnCount: 0,
@@ -659,6 +690,7 @@ function clearSessionState(sessionId: string): void {
   sessionTurnIds().delete(sessionId)
   sessionRuntimes().delete(sessionId)
   sessionAuthorizationStarts().delete(sessionId)
+  sessionInteractions().delete(sessionId)
 }
 
 function evictStaleSessions(): void {
@@ -1153,12 +1185,188 @@ function getTurnState(sessionId: string, turnId: string): TurnState | undefined 
   return turnStates().get(turnKey(sessionId, turnId))
 }
 
+/** v27 payloads mostly leave the turn out: the event's `scope` names it. */
+function turnStateFor(
+  sessionId: string,
+  event: { readonly scope?: { readonly turnId?: string } },
+  turnId = event.scope?.turnId,
+): TurnState | undefined {
+  const id = turnId ?? activeTurnBySession().get(sessionId)
+  return id ? getTurnState(sessionId, id) : undefined
+}
+
+/** A model run that rewrites the context (compaction) is not a step of the turn. */
+function isContextChange(event: { readonly scope?: { readonly changeId?: string } }): boolean {
+  return event.scope?.changeId !== undefined
+}
+
+/** Token usage as eve reports it: on v26 `step.completed`, on v27 `usage.recorded`. */
+interface EveUsage {
+  readonly inputTokens?: number
+  readonly outputTokens?: number
+  readonly cacheReadTokens?: number
+  readonly cacheWriteTokens?: number
+  readonly costUsd?: number
+}
+
+/** An error as eve reports it: v26 carries `details`, v27 `hint`. */
+interface EveErrorInfo {
+  readonly code: string
+  readonly message: string
+  readonly details?: unknown
+  readonly hint?: string
+}
+
+function addUsage(acc: TurnAccumulator, usage: EveUsage): void {
+  acc.inputTokens += usage.inputTokens ?? 0
+  acc.outputTokens += usage.outputTokens ?? 0
+  acc.cacheReadTokens += usage.cacheReadTokens ?? 0
+  acc.cacheWriteTokens += usage.cacheWriteTokens ?? 0
+  acc.costUsd += usage.costUsd ?? 0
+  if (usage.inputTokens !== undefined) attributeToolInputTokens(acc, usage.inputTokens)
+}
+
+function failureRecord(info: EveErrorInfo): Record<string, unknown> {
+  return {
+    code: info.code,
+    message: info.message,
+    ...(info.details ? { details: info.details } : {}),
+    ...(info.hint ? { hint: info.hint } : {}),
+  }
+}
+
+function errorFrom(info: EveErrorInfo | undefined, fallback: string): Error {
+  const error = new Error(info?.message ?? fallback)
+  if (info) error.name = info.code
+  return error
+}
+
+/** How much of a message reaches the wide event: {@link EvlogEveOptions.message} and its preview length. */
+interface MessageSettings {
+  mode: EveMessageMode
+  previewLength: number
+}
+
+function recordReceivedMessage(state: TurnState, message: string, parts: readonly unknown[], settings: MessageSettings): void {
+  const full = settings.mode === 'full'
+  state.logger.set({
+    message: {
+      received: full ? message : truncateMessage(message, settings.previewLength),
+      ...(parts.length > 0
+        ? { parts: full ? parts.map(part => ({ ...(part as Record<string, unknown>) })) : summarizeMessageParts(parts) }
+        : {}),
+    },
+  })
+}
+
+function recordResponse(acc: TurnAccumulator, message: string, settings: MessageSettings): void {
+  acc.responseChars += message.length
+  if (settings.mode === 'omit') return
+  acc.response = settings.mode === 'full' ? message : truncateMessage(message, settings.previewLength)
+}
+
+async function finishSettledTurn(sessionId: string, turnId: string, outcome: string, error?: EveErrorInfo): Promise<void> {
+  const state = getTurnState(sessionId, turnId)
+  if (outcome === 'cancelled') {
+    state?.logger.set({ eve: { cancelled: true } })
+    await finishTurn(sessionId, turnId, { status: CANCELLED_STATUS })
+    return
+  }
+  if (outcome === 'failed') {
+    if (error) state?.logger.set({ eve: { failure: failureRecord(error) } })
+    await finishTurn(sessionId, turnId, { error: errorFrom(error, 'eve turn failed'), status: 500 })
+    return
+  }
+  await finishTurn(sessionId, turnId, { status: 200 })
+}
+
+async function endSession(
+  ctx: HookContext,
+  options: EvlogEveOptions,
+  failed: boolean,
+  failure?: EveErrorInfo,
+): Promise<void> {
+  const sessionId = ctx.session.id
+  try {
+    const outcome = failed ? { error: errorFrom(failure, 'eve session failed'), status: 500 } : { status: 200 }
+    await finishOpenTurns(sessionId, outcome, failure
+      ? (state) => {
+        state.logger.set({ eve: { failure: failureRecord(failure) } })
+      }
+      : undefined)
+    if (options.sessionEvent) {
+      await emitSessionEvent(sessionId, options, ctx, outcome)
+    }
+  } catch (err) {
+    console.error('[evlog] eve hook handler failed:', err)
+  } finally {
+    clearSessionState(sessionId)
+  }
+}
+
+/**
+ * The v26 session events eve emitted before 0.84. eve's typings describe only v27,
+ * so these list the fields the v26 handlers read.
+ */
+interface V26Event<TData> {
+  readonly data: TData
+}
+type V26Handler<TData = Record<string, never>> = (event: V26Event<TData>, ctx: HookContext) => void | Promise<void>
+interface V26Turn {
+  readonly turnId: string
+}
+type V26Action =
+  | { readonly kind: 'tool-call', readonly callId: string, readonly toolName: string }
+  | { readonly kind: 'subagent-call', readonly callId: string, readonly subagentName: string, readonly name: string }
+  | { readonly kind: 'remote-agent-call', readonly callId: string, readonly remoteAgentName: string, readonly name: string }
+
+interface V26Events {
+  'message.received': V26Handler<V26Turn & { readonly message: string, readonly parts?: readonly unknown[] }>
+  'step.started': V26Handler<V26Turn & { readonly modelId?: string }>
+  'step.completed': V26Handler<V26Turn & { readonly finishReason?: string, readonly usage?: EveUsage }>
+  'step.failed': V26Handler<V26Turn & { readonly code: string, readonly message: string, readonly stepIndex: number }>
+  'authorization.required': V26Handler<V26Turn & { readonly name: string }>
+  'authorization.completed': V26Handler<V26Turn & { readonly name: string, readonly outcome: string, readonly reason?: string }>
+  'compaction.requested': V26Handler<V26Turn & { readonly modelId: string, readonly usageInputTokens: number | null }>
+  'compaction.completed': V26Handler<V26Turn>
+  'context.cleared': V26Handler<V26Turn>
+  'reasoning.completed': V26Handler<V26Turn & { readonly reasoning: string }>
+  'message.completed': V26Handler<V26Turn & { readonly message: string | null }>
+  'result.completed': V26Handler<V26Turn & { readonly result: unknown }>
+  'actions.requested': V26Handler<V26Turn & { readonly actions: readonly V26Action[] }>
+  'input.requested': V26Handler<V26Turn & { readonly requests: readonly { readonly action: { readonly toolName: string, readonly callId: string } }[] }>
+  'action.result': V26Handler<V26Turn & {
+    readonly status: string
+    readonly result: { readonly kind?: string, readonly isError?: boolean }
+    readonly error?: { readonly message: string }
+  }>
+  'turn.completed': V26Handler<V26Turn>
+  'turn.cancelled': V26Handler<V26Turn>
+  'turn.failed': V26Handler<V26Turn & EveErrorInfo>
+  'session.completed': V26Handler
+  'session.failed': V26Handler<EveErrorInfo>
+}
+
+interface V26SubagentEvents {
+  'subagent.called': V26Handler<V26Turn & {
+    readonly callId: string
+    readonly name: string
+    readonly toolName?: string
+    readonly childSessionId?: string
+  }>
+  'subagent.started': V26Handler<{ readonly callId: string }>
+  'subagent.completed': V26Handler<{ readonly callId: string, readonly subagentName: string, readonly output?: string }>
+}
+
 /**
  * Create an eve stream hook that emits one evlog wide event per agent turn.
  *
  * Export the result as the default export of `agent/hooks/evlog.ts`. eve
  * auto-discovers hook files; evlog maps turn lifecycle events to a wide event
  * with AI usage, tool executions, and your drain/enrich/keep pipeline.
+ *
+ * Handles the v27 session events of eve 0.84 and later (`turn.settled`,
+ * `usage.recorded`, `call.settled`...) and the v26 events of earlier versions.
  *
  * Complements eve Agent Runs and OpenTelemetry — it does not replace them.
  *
@@ -1190,16 +1398,24 @@ export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {
     warnDeprecated('eve:redactMessage', '[evlog/eve] redactMessage is deprecated and removed in v3. Use message: \'omit\' (was true) or \'preview\' (was false).')
   }
   const messageMode = resolveMessageMode(options)
-  const previewLength = options.messagePreviewLength ?? DEFAULT_MESSAGE_PREVIEW_LENGTH
+  const messageSettings: MessageSettings = {
+    mode: messageMode,
+    previewLength: options.messagePreviewLength ?? DEFAULT_MESSAGE_PREVIEW_LENGTH,
+  }
 
   const hook = defineHook({
     events: {
       'session.started'(event, ctx) {
         runSafe(() => {
           ensureInit(options)
-          const { runtime, invocation } = event.data
+          // v26 also reported the model and, for a subagent session, the invocation.
+          const { runtime, invocation, parent } = event.data as typeof event.data & {
+            invocation?: { name?: string }
+            runtime?: { modelId?: string }
+          }
           if (!runtime && !invocation) return
           touchSession(ctx.session.id)
+          const subagent = invocation?.name ?? (parent ? runtime?.agentName : undefined)
           sessionRuntimes().set(ctx.session.id, {
             ...(runtime?.eveVersion ? { version: runtime.eveVersion } : {}),
             ...(runtime?.agentId ? { agentId: runtime.agentId } : {}),
@@ -1207,7 +1423,7 @@ export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {
             ...(runtime?.build?.gitSha ? { gitSha: runtime.build.gitSha } : {}),
             ...(runtime?.build?.gitBranch ? { gitBranch: runtime.build.gitBranch } : {}),
             ...(runtime?.build?.deployedAt ? { deployedAt: runtime.build.deployedAt } : {}),
-            ...(invocation?.name ? { subagent: invocation.name } : {}),
+            ...(subagent ? { subagent } : {}),
           })
         })
       },
@@ -1216,425 +1432,589 @@ export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {
         try {
           ensureInit(options)
           const state = getOrCreateTurnState(ctx.session.id, event.data.turnId, options, ctx)
-          state?.logger.set({
-            eve: { turnSequence: event.data.sequence },
-          })
+          // Only v26 numbers the turns.
+          const { sequence } = event.data as typeof event.data & { sequence?: number }
+          if (sequence !== undefined) state?.logger.set({ eve: { turnSequence: sequence } })
           if (state) bindTurnLogger(state.logger)
         } catch (err) {
           console.error('[evlog] eve hook handler failed:', err)
         }
       },
 
-      'message.received'(event, ctx) {
+      'delivery.consumed'(event, ctx) {
         runSafe(() => {
           if (messageMode === 'omit') return
           const state = getTurnState(ctx.session.id, event.data.turnId)
           if (!state) return
-          const { message, parts } = event.data
-          const full = messageMode === 'full'
-          state.logger.set({
-            message: {
-              received: full ? message : truncateMessage(message, previewLength),
-              ...(parts?.length
-                ? { parts: full ? parts.map(p => ({ ...p })) : summarizeMessageParts(parts) }
-                : {}),
-            },
-          })
+          const { parts } = event.data
+          const text = parts.flatMap(part => part.kind === 'text' ? [part.text] : []).join('\n')
+          recordReceivedMessage(state, text, parts.filter(part => part.kind !== 'text'), messageSettings)
         })
       },
 
-      'step.started'(event, ctx) {
+      'model.started'(event, ctx) {
         runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
+          if (isContextChange(event)) return
+          const state = turnStateFor(ctx.session.id, event)
           if (!state) return
           state.accumulator.stepStartedAt = Date.now()
-          // Newer eve reports the model per step; the eve typings evlog builds against predate it.
-          const { modelId } = event.data as typeof event.data & { modelId?: string }
-          if (modelId) state.accumulator.stepModel = modelId
+          state.accumulator.stepModel = event.data.modelId
         })
       },
 
-      'step.completed'(event, ctx) {
+      'model.retried'(event, ctx) {
         runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          const acc = state.accumulator
-          acc.steps += 1
-          acc.calls += 1
-          acc.finishReason = event.data.finishReason
-          const { usage } = event.data
-          if (usage) {
-            acc.inputTokens += usage.inputTokens ?? 0
-            acc.outputTokens += usage.outputTokens ?? 0
-            acc.cacheReadTokens += usage.cacheReadTokens ?? 0
-            acc.cacheWriteTokens += usage.cacheWriteTokens ?? 0
-            acc.costUsd += usage.costUsd ?? 0
-            if (usage.inputTokens !== undefined) {
-              attributeToolInputTokens(acc, usage.inputTokens)
-            }
+          if (isContextChange(event)) return
+          const acc = turnStateFor(ctx.session.id, event)?.accumulator
+          if (!acc) return
+          acc.stepFailures.push({ code: event.data.error.code, message: event.data.error.message, stepIndex: acc.steps })
+        })
+      },
+
+      'model.settled'(event, ctx) {
+        runSafe(() => {
+          if (isContextChange(event)) return
+          const acc = turnStateFor(ctx.session.id, event)?.accumulator
+          if (!acc) return
+          const { outcome, finishReason, error } = event.data
+          if (outcome === 'completed') {
+            acc.steps += 1
+            acc.calls += 1
+            if (finishReason) acc.finishReason = finishReason
+          } else if (outcome === 'failed' && error) {
+            acc.stepFailures.push({ code: error.code, message: error.message, stepIndex: acc.steps })
           }
         })
       },
 
-      'step.failed'(event, ctx) {
+      'usage.recorded'(event, ctx) {
         runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          state.accumulator.stepFailures.push({
-            code: event.data.code,
-            message: event.data.message,
-            stepIndex: event.data.stepIndex,
-          })
+          const { owner, kind, usage } = event.data
+          // Only the turn's own model runs count, as v26 step usage did: a delegated
+          // call reports its child session's usage.
+          if (kind !== 'model' || (owner && !('runId' in owner)) || isContextChange(event)) return
+          const acc = turnStateFor(ctx.session.id, event)?.accumulator
+          if (acc) addUsage(acc, usage)
         })
       },
 
-      'authorization.required'(event, ctx) {
+      'call.requested'(event, ctx) {
         runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          const starts = sessionAuthorizationStarts().get(ctx.session.id) ?? new Map<string, number>()
-          starts.set(event.data.name, Date.now())
-          sessionAuthorizationStarts().set(ctx.session.id, starts)
-          state.accumulator.authorizations.push({ name: event.data.name })
-        })
-      },
-
-      'authorization.completed'(event, ctx) {
-        runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          const starts = sessionAuthorizationStarts().get(ctx.session.id)
-          const startedAt = starts?.get(event.data.name)
-          starts?.delete(event.data.name)
-          if (starts?.size === 0) sessionAuthorizationStarts().delete(ctx.session.id)
-
-          const record: EveAuthorizationRecord = {
-            name: event.data.name,
-            outcome: event.data.outcome,
-            ...(event.data.reason ? { reason: event.data.reason } : {}),
-            ...(startedAt !== undefined ? { durationMs: Math.max(0, Date.now() - startedAt) } : {}),
-          }
-          // The `required` event may belong to an earlier turn: eve parks the
-          // session across the sign-in, so only same-turn records are updated.
-          const pending = state.accumulator.authorizations.find(
-            a => a.name === event.data.name && !a.outcome,
-          )
-          if (pending) Object.assign(pending, record)
-          else state.accumulator.authorizations.push(record)
-        })
-      },
-
-      'compaction.requested'(event, ctx) {
-        runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          const acc = state.accumulator
-          acc.compactionsRequested += 1
-          acc.lastStepInputTokens = undefined
-          acc.pendingToolAttribution = []
-          // Keep the first trigger of the turn: `inputTokensAtTrigger` reports
-          // how full the context was when compaction first kicked in.
-          if (acc.compactionModel === undefined) {
-            acc.compactionModel = event.data.modelId
-            if (event.data.usageInputTokens !== null) {
-              acc.compactionInputTokens = event.data.usageInputTokens
-            }
-          }
-        })
-      },
-
-      'compaction.completed'(event, ctx) {
-        runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          state.accumulator.compactions += 1
-        })
-      },
-
-      'context.cleared'(event, ctx) {
-        runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          state.accumulator.contextCleared = true
-          state.accumulator.lastStepInputTokens = undefined
-          state.accumulator.pendingToolAttribution = []
-        })
-      },
-
-      'reasoning.completed'(event, ctx) {
-        runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          state.accumulator.reasoningBlocks += 1
-          state.accumulator.reasoningChars += event.data.reasoning.length
-        })
-      },
-
-      'message.completed'(event, ctx) {
-        runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state || event.data.message === null) return
-          const acc = state.accumulator
-          acc.responseChars += event.data.message.length
-          if (messageMode === 'omit') return
-          acc.response = messageMode === 'full'
-            ? event.data.message
-            : truncateMessage(event.data.message, previewLength)
-        })
-      },
-
-      'result.completed'(event, ctx) {
-        runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          state.accumulator.result = event.data.result
-        })
-      },
-
-      'actions.requested'(event, ctx) {
-        runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
+          const state = turnStateFor(ctx.session.id, event)
           if (!state) return
           bindTurnLogger(state.logger)
+          const { callId, capability } = event.data
           const startedAt = Date.now()
-          for (const action of event.data.actions) {
-            if (action.kind === 'tool-call') {
-              trackPendingAction(ctx.session.id, event.data.turnId, {
-                callId: action.callId,
-                toolName: action.toolName,
-                startedAt,
-              })
-            } else if (action.kind === 'subagent-call' || action.kind === 'remote-agent-call') {
-              const remote = action.kind === 'remote-agent-call'
-              const name = remote ? action.remoteAgentName : action.subagentName
-              trackPendingAction(ctx.session.id, event.data.turnId, {
-                callId: action.callId,
-                toolName: name,
-                startedAt,
-              })
-              recordSubagentCall(state.accumulator, {
-                callId: action.callId,
-                name,
-                toolName: action.name,
-                ...(remote ? { remote: true } : {}),
-                status: 'called',
-                startedAt,
-              })
-            }
-          }
-        })
-      },
-
-      'input.requested'(event, ctx) {
-        runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          state.accumulator.pausedForInput = true
-          const pending = event.data.requests.map(req => ({
-            toolName: req.action.toolName,
-            callId: req.action.callId,
-          }))
-          storeSessionApprovals(ctx.session.id, pending)
-          const [first] = pending
-          if (first) {
-            state.logger.set({
-              approval: { status: 'pending', tool: first.toolName },
+          trackPendingAction(ctx.session.id, state.turnId, { callId, toolName: capability.name, startedAt })
+          if (capability.kind === 'agent') {
+            recordSubagentCall(state.accumulator, {
+              callId,
+              name: capability.name,
+              ...(capability.remote ? { remote: true } : {}),
+              status: 'called',
+              startedAt,
             })
           }
         })
       },
 
-      'action.result'(event, ctx) {
+      'call.started'(event, ctx) {
         runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
+          // Execution starts here, after any approval the call waited for.
+          const pending = sessionPendingActions().get(ctx.session.id)?.get(event.data.callId)
+          if (pending) pending.startedAt = Date.now()
+        })
+      },
+
+      'call.settled'(event, ctx) {
+        runSafe(() => {
+          const state = turnStateFor(ctx.session.id, event)
           if (!state) return
-          const callId = extractCallId(event.data.result)
+          const { callId, outcome, error, output } = event.data
           const sessionPending = getSessionPendingActions(state.sessionId)
-          const turnPending = callId ? sessionPending.get(callId) : undefined
-
-          const { status } = event.data
-          const rejected = status === 'rejected'
-          const success = status === 'completed'
-          const toolName = turnPending?.toolName ?? extractToolName(event.data.result)
+          const toolName = sessionPending.get(callId)?.toolName ?? 'unknown'
           const durationMs = resolveToolDurationMs(state, callId)
+          sessionPending.delete(callId)
 
-          if (callId) sessionPending.delete(callId)
+          const execution: AIToolExecution = { name: toolName, durationMs, success: outcome === 'completed' }
+          if (outcome === 'rejected') execution.error = 'rejected'
+          else if (outcome !== 'completed') execution.error = error?.message ?? outcome
 
-          const execution: AIToolExecution = {
-            name: toolName,
-            durationMs,
-            success,
-          }
-          if (rejected) {
-            execution.error = 'rejected'
-            state.accumulator.pausedForInput = false
-            consumeSessionApproval(state.sessionId, toolName, callId)
-            state.logger.set({
-              approval: { status: 'rejected', tool: toolName },
-            })
-          } else if (success) {
-            const approval = consumeSessionApproval(state.sessionId, toolName, callId)
-            if (approval) {
-              state.accumulator.pausedForInput = false
-              state.logger.set({
-                approval: { status: 'approved', tool: approval.toolName },
-              })
-            }
-          } else if (event.data.error) {
-            execution.error = event.data.error.message
-          }
-          const subagent = callId
-            ? state.accumulator.subagents.find(s => s.callId === callId)
-            : undefined
+          const subagent = state.accumulator.subagents.find(s => s.callId === callId)
           if (subagent) {
-            const { result } = event.data
-            const failed = !success || (result.kind === 'subagent-result' && result.isError === true)
-            subagent.status = failed ? 'failed' : 'completed'
+            subagent.status = outcome === 'completed' ? 'completed' : 'failed'
             subagent.durationMs = durationMs
+            if (typeof output === 'string') subagent.output = output
             if (execution.error) subagent.error = execution.error
           }
           state.accumulator.toolExecutions.push(execution)
-          if (!rejected) state.accumulator.pendingToolAttribution.push(execution)
+          if (outcome !== 'rejected') state.accumulator.pendingToolAttribution.push(execution)
         })
       },
 
-      'subagent.called'(event, ctx) {
+      'child.opened'(event, ctx) {
         runSafe(() => {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          if (!state) return
-          recordSubagentCall(state.accumulator, {
-            callId: event.data.callId,
-            name: event.data.name,
-            toolName: event.data.toolName,
-            childSessionId: event.data.childSessionId,
-            status: 'called',
-            startedAt: Date.now(),
-          })
-        })
-      },
-
-      'subagent.started'(event, ctx) {
-        runSafe(() => {
-          const turnId = activeTurnBySession().get(ctx.session.id)
-          if (!turnId) return
-          const state = getTurnState(ctx.session.id, turnId)
-          const existing = state?.accumulator.subagents.find(s => s.callId === event.data.callId)
-          if (existing) existing.status = 'started'
-        })
-      },
-
-      'subagent.completed'(event, ctx) {
-        runSafe(() => {
-          const sessionId = ctx.session.id
-          const turnId = activeTurnBySession().get(sessionId)
-          if (!turnId) return
-          const state = getTurnState(sessionId, turnId)
-          if (!state) return
-          const existing = state.accumulator.subagents.find(s => s.callId === event.data.callId)
+          const { owner, sessionId: childSessionId, name } = event.data
+          if (!('callId' in owner)) return
+          const acc = turnStateFor(ctx.session.id, event)?.accumulator
+          if (!acc) return
+          const existing = acc.subagents.find(s => s.callId === owner.callId)
           if (existing) {
-            existing.status = 'completed'
-            existing.output = event.data.output
-            if (existing.startedAt !== undefined) {
-              existing.durationMs = Math.max(0, Date.now() - existing.startedAt)
-            }
+            existing.childSessionId = childSessionId
+            existing.status = 'started'
           } else {
-            state.accumulator.subagents.push({
-              callId: event.data.callId,
-              name: event.data.subagentName,
-              status: 'completed',
-              output: event.data.output,
-            })
+            recordSubagentCall(acc, { callId: owner.callId, name, childSessionId, status: 'started', startedAt: Date.now() })
           }
         })
       },
 
-      async 'turn.completed'(event, ctx) {
-        try {
-          await finishTurn(ctx.session.id, event.data.turnId, { status: 200 })
-        } catch (err) {
-          console.error('[evlog] eve hook handler failed:', err)
-        }
-      },
-
-      async 'turn.cancelled'(event, ctx) {
-        try {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          state?.logger.set({ eve: { cancelled: true } })
-          await finishTurn(ctx.session.id, event.data.turnId, { status: CANCELLED_STATUS })
-        } catch (err) {
-          console.error('[evlog] eve hook handler failed:', err)
-        }
-      },
-
-      async 'session.completed'(_event, ctx) {
-        try {
-          await finishOpenTurns(ctx.session.id, { status: 200 })
-          if (options.sessionEvent) {
-            await emitSessionEvent(ctx.session.id, options, ctx, { status: 200 })
+      'interaction.opened'(event, ctx) {
+        runSafe(() => {
+          const state = turnStateFor(ctx.session.id, event)
+          if (!state) return
+          const { interactionId, subject, request } = event.data
+          const acc = state.accumulator
+          if (request.kind === 'sign-in') {
+            const name = request.signIn?.name ?? request.title ?? request.prompt
+            acc.authorizations.push({ name })
+            openInteraction(ctx.session.id, interactionId, { kind: 'sign-in', name, startedAt: Date.now() })
+            return
           }
-        } catch (err) {
-          console.error('[evlog] eve hook handler failed:', err)
-        } finally {
-          clearSessionState(ctx.session.id)
-        }
-      },
-
-      async 'session.failed'(event, ctx) {
-        try {
-          const error = new Error(event.data.message)
-          error.name = event.data.code
-          await finishOpenTurns(ctx.session.id, { error, status: 500 }, (state) => {
-            state.logger.set({
-              eve: {
-                failure: {
-                  code: event.data.code,
-                  message: event.data.message,
-                  ...(event.data.details ? { details: event.data.details } : {}),
-                },
-              },
-            })
-          })
-          if (options.sessionEvent) {
-            await emitSessionEvent(ctx.session.id, options, ctx, { error, status: 500 })
+          acc.pausedForInput = true
+          if (request.kind !== 'approval' || !('callId' in subject)) {
+            openInteraction(ctx.session.id, interactionId, { kind: request.kind, name: request.kind, startedAt: Date.now() })
+            return
           }
+          const tool = getSessionPendingActions(ctx.session.id).get(subject.callId)?.toolName ?? 'unknown'
+          openInteraction(ctx.session.id, interactionId, { kind: 'approval', name: tool, startedAt: Date.now() })
+          state.logger.set({ approval: { status: 'pending', tool } })
+        })
+      },
+
+      'interaction.settled'(event, ctx) {
+        runSafe(() => {
+          const open = closeInteraction(ctx.session.id, event.data.interactionId)
+          if (!open) return
+          const state = turnStateFor(ctx.session.id, event)
+          if (!state) return
+          const { outcome, reason } = event.data
+          const acc = state.accumulator
+          if (open.kind === 'sign-in') {
+            const record: EveAuthorizationRecord = {
+              name: open.name,
+              outcome,
+              ...(reason ? { reason } : {}),
+              durationMs: Math.max(0, Date.now() - open.startedAt),
+            }
+            const pending = acc.authorizations.find(a => a.name === open.name && !a.outcome)
+            if (pending) Object.assign(pending, record)
+            else acc.authorizations.push(record)
+            return
+          }
+          acc.pausedForInput = false
+          if (open.kind !== 'approval') return
+          const status = outcome === 'accepted' ? 'approved' : outcome === 'declined' ? 'rejected' : outcome
+          state.logger.set({ approval: { status, tool: open.name } })
+        })
+      },
+
+      'content.completed'(event, ctx) {
+        runSafe(() => {
+          const acc = turnStateFor(ctx.session.id, event)?.accumulator
+          if (!acc) return
+          const { kind, phase, value } = event.data
+          if (kind === 'reasoning') {
+            acc.reasoningBlocks += 1
+            if (typeof value === 'string') acc.reasoningChars += value.length
+          } else if (kind === 'result') {
+            acc.result = value
+          } else if (kind === 'text' && phase === 'reply' && typeof value === 'string') {
+            recordResponse(acc, value, messageSettings)
+          }
+        })
+      },
+
+      'context.started'(event, ctx) {
+        runSafe(() => {
+          const acc = turnStateFor(ctx.session.id, event, event.data.turnId ?? event.scope?.turnId)?.accumulator
+          if (!acc) return
+          acc.lastStepInputTokens = undefined
+          acc.pendingToolAttribution = []
+          if (event.data.kind === 'clear') {
+            acc.contextCleared = true
+            return
+          }
+          if (event.data.kind !== 'compaction') return
+          acc.compactionsRequested += 1
+          // `inputTokensAtTrigger` reports how full the context was when compaction first kicked in.
+          if (acc.compactionsRequested === 1 && event.data.trigger) {
+            acc.compactionInputTokens = event.data.trigger.inputTokens
+          }
+        })
+      },
+
+      'context.settled'(event, ctx) {
+        runSafe(() => {
+          if (event.data.kind !== 'compaction' || event.data.outcome !== 'completed') return
+          const acc = turnStateFor(ctx.session.id, event)?.accumulator
+          if (acc) acc.compactions += 1
+        })
+      },
+
+      async 'turn.settled'(event, ctx) {
+        try {
+          const { turnId, outcome, error } = event.data
+          await finishSettledTurn(ctx.session.id, turnId, outcome, error)
         } catch (err) {
           console.error('[evlog] eve hook handler failed:', err)
-        } finally {
-          clearSessionState(ctx.session.id)
         }
       },
 
-      async 'turn.failed'(event, ctx) {
-        try {
-          const state = getTurnState(ctx.session.id, event.data.turnId)
-          state?.logger.set({
-            eve: {
-              failure: {
-                code: event.data.code,
-                message: event.data.message,
-                ...(event.data.details ? { details: event.data.details } : {}),
-              },
-            },
-          })
-          const error = new Error(event.data.message)
-          error.name = event.data.code
-          await finishTurn(ctx.session.id, event.data.turnId, { error, status: 500 })
-        } catch (err) {
-          console.error('[evlog] eve hook handler failed:', err)
-        }
+      async 'session.ended'(event, ctx) {
+        await endSession(ctx, options, event.data.outcome === 'failed', event.data.error)
       },
     },
   })
 
-  if (options.subagentEvents === false) {
-    const events = { ...hook.events }
-    delete events['subagent.called']
-    delete events['subagent.started']
-    delete events['subagent.completed']
-    return { ...hook, events }
+  const v26Events: V26Events = {
+    'message.received'(event, ctx) {
+      runSafe(() => {
+        if (messageMode === 'omit') return
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        recordReceivedMessage(state, event.data.message, event.data.parts ?? [], messageSettings)
+      })
+    },
+
+    'step.started'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        state.accumulator.stepStartedAt = Date.now()
+        if (event.data.modelId) state.accumulator.stepModel = event.data.modelId
+      })
+    },
+
+    'step.completed'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        const acc = state.accumulator
+        acc.steps += 1
+        acc.calls += 1
+        acc.finishReason = event.data.finishReason
+        if (event.data.usage) addUsage(acc, event.data.usage)
+      })
+    },
+
+    'step.failed'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        state.accumulator.stepFailures.push({
+          code: event.data.code,
+          message: event.data.message,
+          stepIndex: event.data.stepIndex,
+        })
+      })
+    },
+
+    'authorization.required'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        const starts = sessionAuthorizationStarts().get(ctx.session.id) ?? new Map<string, number>()
+        starts.set(event.data.name, Date.now())
+        sessionAuthorizationStarts().set(ctx.session.id, starts)
+        state.accumulator.authorizations.push({ name: event.data.name })
+      })
+    },
+
+    'authorization.completed'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        const starts = sessionAuthorizationStarts().get(ctx.session.id)
+        const startedAt = starts?.get(event.data.name)
+        starts?.delete(event.data.name)
+        if (starts?.size === 0) sessionAuthorizationStarts().delete(ctx.session.id)
+
+        const record: EveAuthorizationRecord = {
+          name: event.data.name,
+          outcome: event.data.outcome,
+          ...(event.data.reason ? { reason: event.data.reason } : {}),
+          ...(startedAt !== undefined ? { durationMs: Math.max(0, Date.now() - startedAt) } : {}),
+        }
+        // The `required` event may belong to an earlier turn: eve parks the
+        // session across the sign-in, so only same-turn records are updated.
+        const pending = state.accumulator.authorizations.find(
+          a => a.name === event.data.name && !a.outcome,
+        )
+        if (pending) Object.assign(pending, record)
+        else state.accumulator.authorizations.push(record)
+      })
+    },
+
+    'compaction.requested'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        const acc = state.accumulator
+        acc.compactionsRequested += 1
+        acc.lastStepInputTokens = undefined
+        acc.pendingToolAttribution = []
+        // Keep the first trigger of the turn: `inputTokensAtTrigger` reports
+        // how full the context was when compaction first kicked in.
+        if (acc.compactionModel === undefined) {
+          acc.compactionModel = event.data.modelId
+          if (event.data.usageInputTokens !== null) {
+            acc.compactionInputTokens = event.data.usageInputTokens
+          }
+        }
+      })
+    },
+
+    'compaction.completed'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        state.accumulator.compactions += 1
+      })
+    },
+
+    'context.cleared'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        state.accumulator.contextCleared = true
+        state.accumulator.lastStepInputTokens = undefined
+        state.accumulator.pendingToolAttribution = []
+      })
+    },
+
+    'reasoning.completed'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        state.accumulator.reasoningBlocks += 1
+        state.accumulator.reasoningChars += event.data.reasoning.length
+      })
+    },
+
+    'message.completed'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state || event.data.message === null) return
+        recordResponse(state.accumulator, event.data.message, messageSettings)
+      })
+    },
+
+    'result.completed'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        state.accumulator.result = event.data.result
+      })
+    },
+
+    'actions.requested'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        bindTurnLogger(state.logger)
+        const startedAt = Date.now()
+        for (const action of event.data.actions) {
+          if (action.kind === 'tool-call') {
+            trackPendingAction(ctx.session.id, event.data.turnId, {
+              callId: action.callId,
+              toolName: action.toolName,
+              startedAt,
+            })
+          } else if (action.kind === 'subagent-call' || action.kind === 'remote-agent-call') {
+            const remote = action.kind === 'remote-agent-call'
+            const name = remote ? action.remoteAgentName : action.subagentName
+            trackPendingAction(ctx.session.id, event.data.turnId, {
+              callId: action.callId,
+              toolName: name,
+              startedAt,
+            })
+            recordSubagentCall(state.accumulator, {
+              callId: action.callId,
+              name,
+              toolName: action.name,
+              ...(remote ? { remote: true } : {}),
+              status: 'called',
+              startedAt,
+            })
+          }
+        }
+      })
+    },
+
+    'input.requested'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        state.accumulator.pausedForInput = true
+        const pending = event.data.requests.map(req => ({
+          toolName: req.action.toolName,
+          callId: req.action.callId,
+        }))
+        storeSessionApprovals(ctx.session.id, pending)
+        const [first] = pending
+        if (first) {
+          state.logger.set({
+            approval: { status: 'pending', tool: first.toolName },
+          })
+        }
+      })
+    },
+
+    'action.result'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        const callId = extractCallId(event.data.result)
+        const sessionPending = getSessionPendingActions(state.sessionId)
+        const turnPending = callId ? sessionPending.get(callId) : undefined
+
+        const { status } = event.data
+        const rejected = status === 'rejected'
+        const success = status === 'completed'
+        const toolName = turnPending?.toolName ?? extractToolName(event.data.result)
+        const durationMs = resolveToolDurationMs(state, callId)
+
+        if (callId) sessionPending.delete(callId)
+
+        const execution: AIToolExecution = {
+          name: toolName,
+          durationMs,
+          success,
+        }
+        if (rejected) {
+          execution.error = 'rejected'
+          state.accumulator.pausedForInput = false
+          consumeSessionApproval(state.sessionId, toolName, callId)
+          state.logger.set({
+            approval: { status: 'rejected', tool: toolName },
+          })
+        } else if (success) {
+          const approval = consumeSessionApproval(state.sessionId, toolName, callId)
+          if (approval) {
+            state.accumulator.pausedForInput = false
+            state.logger.set({
+              approval: { status: 'approved', tool: approval.toolName },
+            })
+          }
+        } else if (event.data.error) {
+          execution.error = event.data.error.message
+        }
+        const subagent = callId
+          ? state.accumulator.subagents.find(s => s.callId === callId)
+          : undefined
+        if (subagent) {
+          const { result } = event.data
+          const failed = !success || (result.kind === 'subagent-result' && result.isError === true)
+          subagent.status = failed ? 'failed' : 'completed'
+          subagent.durationMs = durationMs
+          if (execution.error) subagent.error = execution.error
+        }
+        state.accumulator.toolExecutions.push(execution)
+        if (!rejected) state.accumulator.pendingToolAttribution.push(execution)
+      })
+    },
+
+    async 'turn.completed'(event, ctx) {
+      try {
+        await finishSettledTurn(ctx.session.id, event.data.turnId, 'completed')
+      } catch (err) {
+        console.error('[evlog] eve hook handler failed:', err)
+      }
+    },
+
+    async 'turn.cancelled'(event, ctx) {
+      try {
+        await finishSettledTurn(ctx.session.id, event.data.turnId, 'cancelled')
+      } catch (err) {
+        console.error('[evlog] eve hook handler failed:', err)
+      }
+    },
+
+    async 'turn.failed'(event, ctx) {
+      try {
+        await finishSettledTurn(ctx.session.id, event.data.turnId, 'failed', event.data)
+      } catch (err) {
+        console.error('[evlog] eve hook handler failed:', err)
+      }
+    },
+
+    async 'session.completed'(_event, ctx) {
+      await endSession(ctx, options, false)
+    },
+
+    async 'session.failed'(event, ctx) {
+      await endSession(ctx, options, true, event.data)
+    },
   }
 
-  return hook
+  const v26SubagentEvents: V26SubagentEvents = {
+    'subagent.called'(event, ctx) {
+      runSafe(() => {
+        const state = getTurnState(ctx.session.id, event.data.turnId)
+        if (!state) return
+        recordSubagentCall(state.accumulator, {
+          callId: event.data.callId,
+          name: event.data.name,
+          toolName: event.data.toolName,
+          childSessionId: event.data.childSessionId,
+          status: 'called',
+          startedAt: Date.now(),
+        })
+      })
+    },
+
+    'subagent.started'(event, ctx) {
+      runSafe(() => {
+        const turnId = activeTurnBySession().get(ctx.session.id)
+        if (!turnId) return
+        const state = getTurnState(ctx.session.id, turnId)
+        const existing = state?.accumulator.subagents.find(s => s.callId === event.data.callId)
+        if (existing) existing.status = 'started'
+      })
+    },
+
+    'subagent.completed'(event, ctx) {
+      runSafe(() => {
+        const sessionId = ctx.session.id
+        const turnId = activeTurnBySession().get(sessionId)
+        if (!turnId) return
+        const state = getTurnState(sessionId, turnId)
+        if (!state) return
+        const existing = state.accumulator.subagents.find(s => s.callId === event.data.callId)
+        if (existing) {
+          existing.status = 'completed'
+          existing.output = event.data.output
+          if (existing.startedAt !== undefined) {
+            existing.durationMs = Math.max(0, Date.now() - existing.startedAt)
+          }
+        } else {
+          state.accumulator.subagents.push({
+            callId: event.data.callId,
+            name: event.data.subagentName,
+            status: 'completed',
+            output: event.data.output,
+          })
+        }
+      })
+    },
+  }
+
+  const events = {
+    ...hook.events,
+    ...v26Events,
+    ...(options.subagentEvents === false ? {} : v26SubagentEvents),
+  }
+  return { ...hook, events }
 }
 
 /** Options for {@link defineEvlogInstrumentation}. */
@@ -1655,14 +2035,30 @@ export interface EvlogEveInstrumentationOptions {
   setup?: (context: InstrumentationSetupContext) => void
 }
 
+/** The fields {@link evlogRuntimeContext} reads from eve's model-attempt input, on every eve version. */
+interface EveModelAttemptInput {
+  readonly session: { readonly id: string }
+  readonly turn?: { readonly id: string }
+}
+
 /**
  * Per-model-call attributes linking an AI SDK span back to the evlog wide event
  * for the same turn, ready to spread into your own runtime context.
  *
- * Use this when the agent already has an `agent/instrumentation.ts` — from
- * `eve add instrumentation/...` or written by hand. Every observability
- * integration writes that one file, so evlog contributes attributes to yours
- * rather than asking you to nest it inside a wrapper:
+ * On eve 0.84 and later, pass it as the `runtimeContext` of an OTel integration
+ * in `agent/instrumentation/`:
+ *
+ * @example
+ * ```ts
+ * // agent/instrumentation/evlog.ts
+ * import { otelIntegration } from 'eve/instrumentation/otel'
+ * import { evlogRuntimeContext } from 'evlog/eve'
+ *
+ * export default otelIntegration({ runtimeContext: evlogRuntimeContext })
+ * ```
+ *
+ * Before 0.84, spread it into the `step.started` result of your own
+ * `agent/instrumentation.ts`, or use {@link defineEvlogInstrumentation}:
  *
  * @example
  * ```ts
@@ -1688,12 +2084,10 @@ export interface EvlogEveInstrumentationOptions {
  * ```
  *
  * Returns `undefined` outside a tracked turn — spreading that adds nothing,
- * which is the point. {@link defineEvlogInstrumentation} is the shortcut for an
- * agent with no other instrumentation to compose with.
+ * which is the point.
  */
-export function evlogRuntimeContext(
-  input: InstrumentationStepStartedEventInput,
-): Record<string, string> | undefined {
+export function evlogRuntimeContext(input: EveModelAttemptInput): Record<string, string> | undefined {
+  if (!input.turn) return undefined
   const state = getTurnState(input.session.id, input.turn.id)
   if (!state) return undefined
 
@@ -1703,16 +2097,22 @@ export function evlogRuntimeContext(
   }
 }
 
+/** The input of `step.started`, the instrumentation event of eve before 0.84. */
+interface V26StepStartedInput {
+  readonly session: { readonly id: string }
+  readonly turn: { readonly id: string }
+}
+
 function buildInstrumentationContext(
-  input: InstrumentationStepStartedEventInput,
-): InstrumentationStepStartedEventResult | undefined {
+  input: V26StepStartedInput,
+): { runtimeContext: Record<string, string> } | undefined {
   const runtimeContext = evlogRuntimeContext(input)
   return runtimeContext ? { runtimeContext } : undefined
 }
 
 /**
  * Create an eve instrumentation definition that stamps evlog's turn identity
- * onto the AI SDK telemetry spans.
+ * onto the AI SDK telemetry spans, for eve before 0.84.
  *
  * Export the result as the default export of `agent/instrumentation.ts`. Every
  * model-call span — and its children — then carries `evlog.request_id`, the
@@ -1734,16 +2134,16 @@ function buildInstrumentationContext(
  * })
  * ```
  *
- * This is the shortcut for an agent whose instrumentation is evlog's alone. It
- * owns the file's `events` slot, so once another integration needs it — PostHog
- * links spans to the initiating user there — drop the wrapper and spread
- * {@link evlogRuntimeContext} into your own `defineInstrumentation` instead.
+ * eve 0.84 and later no longer emit `step.started`: the runtime context comes
+ * from an OTel integration instead, see {@link evlogRuntimeContext}.
  *
  * @deprecated Removed in evlog v3. Use the `evlog()` lifecycle provider.
  */
 export function defineEvlogInstrumentation(
   options: EvlogEveInstrumentationOptions = {},
 ): InstrumentationDefinition {
+  // eve's typings describe v27 events only; this provider serves the eve versions that emit `step.started`.
+  const events = { 'step.started': buildInstrumentationContext } as unknown as InstrumentationEvents
   return defineInstrumentation({
     ...(options.functionId !== undefined ? { functionId: options.functionId } : {}),
     ...(options.recordInputs !== undefined ? { recordInputs: options.recordInputs } : {}),
@@ -1752,9 +2152,7 @@ export function defineEvlogInstrumentation(
       ? { traceChannelRequests: options.traceChannelRequests }
       : {}),
     ...(options.setup !== undefined ? { setup: options.setup } : {}),
-    events: {
-      'step.started': buildInstrumentationContext,
-    },
+    events,
   })
 }
 
@@ -1776,6 +2174,7 @@ export function resetEvlogEveForTests(): void {
   sessionRollups().clear()
   sessionRuntimes().clear()
   sessionAuthorizationStarts().clear()
+  sessionInteractions().clear()
   setEveInitialized(false)
   delete (globalThis as typeof globalThis & { [EVE_GLOBAL_STATE]?: EveGlobalState })[EVE_GLOBAL_STATE]
 }
