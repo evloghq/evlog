@@ -22,6 +22,7 @@
     "error-status-field",
     "evlog-upgrade-scaffold",
     "faster-set-and-redaction",
+    "fs-owner-only",
     "hyperdx-sazabi-otlp-options",
     "iban-before-card",
     "linear-stack-frames",
