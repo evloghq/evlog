@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vites
 import type { HookContext, HookDefinition, HookEventMap, HookEventType, StreamEventHook } from 'eve/hooks'
 import type { InstrumentationModelStartedInput } from 'eve/instrumentation'
 import { initLogger } from '../src/logger'
+import type { WideEvent } from '../src/types'
 import { defineEvlogHook, evlogRuntimeContext, resetEvlogEveForTests } from '../src/eve/index'
 import { createPipelineSpies, findEventViaDrain, waitForDrainCalls } from './helpers/framework'
 import { defined } from './helpers/defined'
@@ -20,16 +21,21 @@ function hookContext(overrides: Partial<HookContext> = {}): HookContext {
 }
 
 /** Calls the hook's handler for `type` the way eve does: the event, its turn in `scope`, and the hook context. */
-async function fire<K extends HookEventType>(
+async function fire<TKey extends HookEventType>(
   hook: HookDefinition,
-  type: K,
-  data: HookEventMap[K]['data'],
+  type: TKey,
+  data: HookEventMap[TKey]['data'],
   options: { turnId?: string, ctx?: HookContext } = {},
 ): Promise<void> {
-  const handler = defined(hook.events?.[type] as StreamEventHook<HookEventMap[K], K> | undefined, `handler for ${type}`)
+  const handler = defined(hook.events?.[type] as StreamEventHook<HookEventMap[TKey], TKey> | undefined, `handler for ${type}`)
   const turnId = options.turnId ?? TURN_ID
-  const event = { type, data, scope: { turnId } } as HookEventMap[K]
-  await handler(event, (options.ctx ?? hookContext()) as HookContext<K>)
+  const event = { type, data, scope: { turnId } } as HookEventMap[TKey]
+  await handler(event, (options.ctx ?? hookContext()) as HookContext<TKey>)
+}
+
+/** One object field of a wide event (`eve`, `ai`), for assertions on its keys. */
+function field(event: WideEvent | undefined, key: string): Record<string, unknown> | undefined {
+  return event?.[key] as Record<string, unknown> | undefined
 }
 
 const usage = { inputTokens: 100, outputTokens: 50, cacheReadTokens: 10, cacheWriteTokens: 0 }
@@ -124,7 +130,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await waitForDrainCalls(drain)
     const event = findEventViaDrain(drain, () => true)
     expect(event).toMatchObject({ level: 'error', status: 500 })
-    expect(event?.eve?.failure).toEqual({ code: 'MODEL_ERROR', message: 'provider unavailable' })
+    expect(field(event, 'eve')?.failure).toEqual({ code: 'MODEL_ERROR', message: 'provider unavailable' })
   })
 
   it('emits a cancelled turn as a non-error wide event', async () => {
@@ -168,7 +174,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await settleTurn(hook)
 
     await waitForDrainCalls(drain)
-    const tools = findEventViaDrain(drain, () => true)?.ai?.tools
+    const tools = field(findEventViaDrain(drain, () => true), 'ai')?.tools
     expect(tools).toEqual([
       { name: 'search', durationMs: expect.any(Number), success: true },
       { name: 'fetch_page', durationMs: expect.any(Number), success: false, error: 'page timed out' },
@@ -193,7 +199,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await waitForDrainCalls(drain)
     const event = findEventViaDrain(drain, () => true)
     expect(event?.approval).toEqual({ status: 'approved', tool: 'deploy' })
-    expect(event?.eve?.phase).toBeUndefined()
+    expect(field(event, 'eve')?.phase).toBeUndefined()
   })
 
   it('records an approval a person declined', async () => {
@@ -214,8 +220,8 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await waitForDrainCalls(drain)
     const event = findEventViaDrain(drain, () => true)
     expect(event?.approval).toEqual({ status: 'rejected', tool: 'deploy' })
-    expect(event?.ai?.tools).toEqual([{ name: 'deploy', durationMs: expect.any(Number), success: false, error: 'rejected' }])
-    expect(event?.eve?.phase).toBe('rejected')
+    expect(field(event, 'ai')?.tools).toEqual([{ name: 'deploy', durationMs: expect.any(Number), success: false, error: 'rejected' }])
+    expect(field(event, 'eve')?.phase).toBe('rejected')
   })
 
   it('marks a turn that ended while an approval was open', async () => {
@@ -234,7 +240,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await waitForDrainCalls(drain)
     const event = findEventViaDrain(drain, () => true)
     expect(event?.approval).toEqual({ status: 'pending', tool: 'deploy' })
-    expect(event?.eve?.phase).toBe('awaiting-approval')
+    expect(field(event, 'eve')?.phase).toBe('awaiting-approval')
   })
 
   it('records a connection sign-in and its outcome', async () => {
@@ -251,9 +257,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await settleTurn(hook)
 
     await waitForDrainCalls(drain)
-    expect(findEventViaDrain(drain, () => true)?.eve?.authorizations).toEqual([
-      { name: 'linear', outcome: 'declined', reason: 'user said no', durationMs: expect.any(Number) },
-    ])
+    expect(field(findEventViaDrain(drain, () => true), 'eve')?.authorizations).toEqual([{ name: 'linear', outcome: 'declined', reason: 'user said no', durationMs: expect.any(Number) },])
   })
 
   it('marks a turn awaiting a sign-in that never settled', async () => {
@@ -353,14 +357,16 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await settleTurn(hook)
 
     await waitForDrainCalls(drain)
-    expect(findEventViaDrain(drain, () => true)?.eve?.subagents).toEqual([{
-      callId: 'call_1',
-      name: 'researcher',
-      childSessionId: 'sess_child',
-      status: 'completed',
-      output: 'three sources found',
-      durationMs: expect.any(Number),
-    }])
+    expect(field(findEventViaDrain(drain, () => true), 'eve')?.subagents).toEqual([
+      {
+        callId: 'call_1',
+        name: 'researcher',
+        childSessionId: 'sess_child',
+        status: 'completed',
+        output: 'three sources found',
+        durationMs: expect.any(Number),
+      }
+    ])
   })
 
   it('records the runtime identity from session.started', async () => {
@@ -374,7 +380,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await settleTurn(hook)
 
     await waitForDrainCalls(drain)
-    expect(findEventViaDrain(drain, () => true)?.eve?.runtime).toEqual({
+    expect(field(findEventViaDrain(drain, () => true), 'eve')?.runtime).toEqual({
       version: '1.0.0-rc.6',
       agentId: 'agt_1',
       gitSha: 'abc123',
@@ -392,7 +398,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await waitForDrainCalls(drain)
     const event = findEventViaDrain(drain, () => true)
     expect(event).toMatchObject({ level: 'error', status: 500 })
-    expect(event?.eve?.failure).toEqual({ code: 'WORKFLOW_FAILED', message: 'step crashed' })
+    expect(field(event, 'eve')?.failure).toEqual({ code: 'WORKFLOW_FAILED', message: 'step crashed' })
   })
 
   it('emits the session wide event when the session ends and sessionEvent is on', async () => {
@@ -423,25 +429,19 @@ describe('evlogRuntimeContext on eve 0.84 and later', () => {
     resetEvlogEveForTests()
   })
 
-  function modelStartedInput(turn?: { id: string, sequence: number }): InstrumentationModelStartedInput {
-    return {
-      channel: { kind: 'http' },
-      modelInput: { messages: [] },
-      session: { id: SESSION_ID, auth: { current: null, initiator: null } },
-      run: { id: RUN_ID, attempt: 1 },
-      ...(turn ? { turn } : {}),
-    } as InstrumentationModelStartedInput
+  function modelStartedInput(turn?: { id: string }): Parameters<typeof evlogRuntimeContext>[0] {
+    return { session: { id: SESSION_ID }, ...(turn ? { turn } : {}) }
   }
 
   it('accepts the input of an otelIntegration runtimeContext resolver', () => {
-    expectTypeOf(evlogRuntimeContext).toBeCallableWith(modelStartedInput())
+    expectTypeOf<InstrumentationModelStartedInput>().toExtend<Parameters<typeof evlogRuntimeContext>[0]>()
   })
 
   it('links the model attempt to the wide event of its turn', async () => {
     const hook = defineEvlogHook({})
     await startTurn(hook)
 
-    expect(evlogRuntimeContext(modelStartedInput({ id: TURN_ID, sequence: 0 }))).toEqual({
+    expect(evlogRuntimeContext(modelStartedInput({ id: TURN_ID }))).toEqual({
       'evlog.request_id': `${SESSION_ID}:${TURN_ID}`,
       'evlog.session_id': SESSION_ID,
     })
