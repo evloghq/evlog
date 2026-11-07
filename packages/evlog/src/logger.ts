@@ -1,4 +1,4 @@
-import type { AuditableLogger, AuditInput, AuditMethod } from './audit'
+import type { AuditableLogger, AuditInput, AuditMethod, ForkableLogger } from './audit'
 import type { DrainContext, EnvironmentContext, FieldContext, Log, LogLevel, LoggerConfig, RequestLogEntry, RequestLogger, RequestLoggerOptions, TailSamplingContext, WideEvent } from './types'
 import { buildAuditFields, consumeAuditForceKeep, finalizeAudit } from './audit'
 import { markGloballyRedacted, redactEvent, resolveRedactConfig } from './redact'
@@ -892,8 +892,12 @@ export { _log as log }
 export default _log
 
 const noopAudit = Object.assign(() => {}, { deny: () => {} }) as AuditMethod
-/** @internal Accepts every call and emits nothing; reused wherever logging must not fail the caller. */
-export const noopLogger: AuditableLogger = {
+/**
+ * @internal Accepts every call and emits nothing; reused wherever logging must not fail the caller.
+ * `fork` still runs `fn`, because the work belongs to the caller, not to the log. With no wide
+ * event to record a failure, `fork` reports it on the console and resolves, as `log.fork()` never rejects.
+ */
+export const noopLogger: ForkableLogger = {
   set() {},
   setLevel() {},
   error() {},
@@ -907,6 +911,11 @@ export const noopLogger: AuditableLogger = {
   },
   getContext() {
     return {}
+  },
+  fork(label, fn) {
+    return Promise.resolve().then(fn).then(() => {}, (err: unknown) => {
+      console.error(`[evlog] log.fork() work "${label}" failed:`, err)
+    })
   },
   audit: noopAudit,
 }

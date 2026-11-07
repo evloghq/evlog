@@ -3,7 +3,7 @@ import type { Request } from 'express'
 import type { DynamicModule, MiddlewareConsumer, NestModule, Provider } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify'
-import type { AuditableLogger } from '../audit'
+import type { ForkableLogger } from '../audit'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
 import { bindNodeResponseLifecycle } from '../shared/nodeResponse'
@@ -29,20 +29,20 @@ export interface EvlogModuleAsyncOptions {
 
 declare module 'http' {
   interface IncomingMessage {
-    log?: AuditableLogger
+    log?: ForkableLogger
   }
 }
 
 declare module 'express-serve-static-core' {
   interface Request {
-    log?: AuditableLogger
+    log?: ForkableLogger
   }
 }
 
 declare module 'fastify' {
   interface FastifyRequest {
-    // @ts-expect-error intentionally overrides Fastify's built-in pino logger with evlog's AuditableLogger
-    log: AuditableLogger
+    // @ts-expect-error intentionally overrides Fastify's built-in pino logger with evlog's ForkableLogger
+    log: ForkableLogger
   }
 }
 

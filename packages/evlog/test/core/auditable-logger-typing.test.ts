@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest'
-import type { AuditableLogger } from '../../src/audit'
+import type { AuditableLogger, ForkableLogger } from '../../src/audit'
 import type { EvlogVariables } from '../../src/hono'
 import { useLogger as useExpressLogger } from '../../src/express'
 import { useLogger as useNextLogger } from '../../src/next/storage'
@@ -7,14 +7,14 @@ import type { EvlogOrpcContext } from '../../src/orpc'
 import { createRequestLogger } from '../../src/logger'
 
 describe('AuditableLogger framework typing (#389)', () => {
-  it('types Hono context log with required audit', () => {
+  it('types Hono context log with required audit and fork', () => {
     type HonoLog = EvlogVariables['Variables']['log']
-    expectTypeOf<HonoLog>().toEqualTypeOf<AuditableLogger>()
+    expectTypeOf<HonoLog>().toEqualTypeOf<ForkableLogger>()
   })
 
-  it('types oRPC context log with required audit', () => {
+  it('types oRPC context log with required audit and fork', () => {
     type OrpcLog = EvlogOrpcContext['log']
-    expectTypeOf<OrpcLog>().toEqualTypeOf<AuditableLogger>()
+    expectTypeOf<OrpcLog>().toEqualTypeOf<ForkableLogger>()
   })
 
   it('types useLogger() return values with required audit', () => {

@@ -229,6 +229,65 @@ describe('evlog/elysia', () => {
     expect(drain).not.toHaveBeenCalled()
   })
 
+  it('runs log.fork() work on excluded routes', async () => {
+    let ran = false
+    const app = new Elysia()
+      .use(evlog({ exclude: ['/_internal/**'] }))
+      .get('/_internal/probe', async ({ log }) => {
+        await log.fork('probe', () => {
+          ran = true
+        })
+        return { ok: true }
+      })
+
+    const response = await request(app, '/_internal/probe')
+    expect(response.status).toBe(200)
+    expect(ran).toBe(true)
+  })
+
+  it('registers unawaited log.fork() work with waitUntil on excluded routes', async () => {
+    const waitUntil = vi.fn<(promise: Promise<unknown>) => void>()
+    let finished = false
+    const app = new Elysia()
+      .use(evlog({ exclude: ['/_internal/**'], waitUntil }))
+      .get('/_internal/probe', ({ log }) => {
+        void log.fork('probe', async () => {
+          await delay()
+          finished = true
+        })
+        return { ok: true }
+      })
+
+    const response = await request(app, '/_internal/probe')
+    expect(response.status).toBe(200)
+    expect(waitUntil).toHaveBeenCalledOnce()
+    await waitUntil.mock.calls[0]![0]
+    expect(finished).toBe(true)
+  })
+
+  it('reports log.fork() work that fails on excluded routes', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const app = new Elysia()
+        .use(evlog({ exclude: ['/_internal/**'] }))
+        .get('/_internal/probe', async ({ log }) => {
+          await log.fork('probe', () => {
+            useLogger().set({ probe: true })
+          })
+          return { ok: true }
+        })
+
+      const response = await request(app, '/_internal/probe')
+      expect(response.status).toBe(200)
+      expect(consoleError).toHaveBeenCalledWith(
+        '[evlog] log.fork() work "probe" failed:',
+        expect.objectContaining({ message: expect.stringContaining('[evlog] useLogger()') }),
+      )
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
   describe('drain / enrich / keep', () => {
     it('calls drain with emitted event (shared helpers)', async () => {
       const { drain } = createPipelineSpies()

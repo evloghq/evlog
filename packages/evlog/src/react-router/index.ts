@@ -1,5 +1,5 @@
 import { createContext } from 'react-router'
-import type { AuditableLogger } from '../audit'
+import type { ForkableLogger } from '../audit'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
 import { createLoggerStorage } from '../shared/storage'
@@ -23,7 +23,7 @@ const { storage, useLogger } = createLoggerStorage(
  * }
  * ```
  */
-export const loggerContext = createContext<AuditableLogger>()
+export const loggerContext = createContext<ForkableLogger>()
 
 export type EvlogReactRouterOptions = BaseEvlogOptions
 

@@ -1,5 +1,5 @@
 import type { DrainContext, EnrichContext, RedactConfig, RequestLogger, RouteConfig, TailSamplingContext, WideEvent } from '../types'
-import type { AuditableLogger } from '../audit'
+import type { AuditableLogger, ForkableLogger } from '../audit'
 import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, markWideEventDrainStarted, noopLogger, outputWideEvent, shouldKeep } from '../logger'
 import { isGloballyRedacted, redactEvent, resolveRedactConfig } from '../redact'
 import { elapsedMs } from '../utils'
@@ -93,6 +93,20 @@ const noopResult: MiddlewareLoggerResult = {
   finish: () => Promise.resolve(null),
   finishResponse: (response) => Promise.resolve(response),
   skipped: true,
+}
+
+/**
+ * Result for a request evlog does not log. `log.fork()` work still runs, so with `waitUntil`
+ * it is registered there, as on a logged request. The shared `noopLogger` stays unchanged.
+ */
+function skippedResult(waitUntil: MiddlewareLoggerOptions['waitUntil']): MiddlewareLoggerResult {
+  if (!waitUntil) return noopResult
+  const fork: ForkableLogger['fork'] = (label, fn) => {
+    const lifetime = noopLogger.fork(label, fn)
+    waitUntil(lifetime)
+    return lifetime
+  }
+  return { ...noopResult, logger: { ...noopLogger, fork } }
 }
 
 // Memoizes the merged runner per local plugins array (stable across requests
@@ -224,12 +238,12 @@ export async function runEnrichAndDrain(
  * If `skipped` is `true`, the route was filtered out — bypass logging.
  */
 export function createMiddlewareLogger(options: MiddlewareLoggerOptions): MiddlewareLoggerResult {
-  if (!isEnabled()) return noopResult
+  if (!isEnabled()) return skippedResult(options.waitUntil)
 
   const { method, path, requestId, include, exclude, routes, keep } = options
 
   if (!shouldLog(path, include, exclude)) {
-    return noopResult
+    return skippedResult(options.waitUntil)
   }
 
   const resolvedRequestId = requestId || crypto.randomUUID()

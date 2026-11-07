@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express'
-import type { AuditableLogger } from '../audit'
+import type { ForkableLogger } from '../audit'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
 import { bindNodeResponseLifecycle } from '../shared/nodeResponse'
@@ -16,7 +16,7 @@ export { useLogger }
 
 declare module 'express-serve-static-core' {
   interface Request {
-    log?: AuditableLogger
+    log?: ForkableLogger
   }
 }
 

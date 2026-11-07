@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyRequest } from 'fastify'
-import type { AuditableLogger } from '../audit'
+import type { ForkableLogger } from '../audit'
 import { registerDiskPrettyErrorSnippetReader } from '../shared/register-disk-snippet'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
@@ -18,8 +18,8 @@ export { useLogger }
 
 declare module 'fastify' {
   interface FastifyRequest {
-    // @ts-expect-error intentionally overrides Fastify's built-in pino logger with evlog's AuditableLogger
-    log: AuditableLogger
+    // @ts-expect-error intentionally overrides Fastify's built-in pino logger with evlog's ForkableLogger
+    log: ForkableLogger
   }
 }
 
