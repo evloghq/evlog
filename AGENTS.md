@@ -19,9 +19,10 @@ pnpm cli:sandbox                   # disposable per-framework apps under .sandbo
 pnpm content:lint [path]           # rank the written corpus by content findings (see scripts/content-lint/README.md)
 pnpm content:lint:test             # the scanner's own tests, including its two calibration fixtures
 pnpm release-notes:test            # tests for scripts/release-notes, which rewrites GitHub release bodies and pins Latest to evlog
+pnpm stage-release:test            # tests for scripts/stage-release, which stages each new version on npm for a maintainer to approve
 ```
 
-Publishing is automated: changesets + `.github/workflows/release.yml`. Never run `pnpm release` or `changeset publish` manually. CI publishes with npm Trusted Publishing, so a new package needs GitHub Actions (`evloghq/evlog`, `release.yml`) added as its Trusted Publisher on npmjs.com before the first release that includes it; without it npm answers `E404` on the publish.
+Publishing is automated: changesets + `.github/workflows/release.yml`. Never run `pnpm release` or `changeset publish` manually. CI stages each new version on npm with Trusted Publishing (`scripts/stage-release/index.mjs`), and the version goes live once a maintainer approves it with 2FA (`npm stage approve <id>` or npmjs.com). The release job waits 30 minutes for that, then tags the version and creates its GitHub release; for a later approval, run `gh workflow run release.yml --ref <branch>`. A new package needs GitHub Actions (`evloghq/evlog`, `release.yml`, environment `npm-publish`, stage publish only) added as its Trusted Publisher on npmjs.com before the first release that includes it; without it npm answers `E404`.
 
 > Use `corepack enable` once so the `packageManager` field in `package.json` pins the right pnpm version automatically.
 >

@@ -34,6 +34,7 @@
     "content:lint": "node scripts/content-lint/index.mjs",
     "content:lint:test": "vitest run --root scripts/content-lint",
     "release-notes:test": "vitest run --root scripts/release-notes",
+    "stage-release:test": "vitest run --root scripts/stage-release",
     "cli:sandbox": "node scripts/cli-sandbox.mjs",
     "test:coverage": "pnpm --filter evlog run test:coverage",
     "test:coverage:open": "pnpm --filter evlog run test:coverage && open packages/evlog/coverage/index.html",
@@ -45,7 +46,7 @@
     "automd": "npx automd --config .github/automd.json",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "turbo run build --filter='./packages/*' && changeset publish"
+    "release": "turbo run build --filter='./packages/*' && node scripts/stage-release/index.mjs"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^4.0.35",
