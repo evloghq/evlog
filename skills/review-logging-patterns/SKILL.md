@@ -603,12 +603,12 @@ const app = Fastify({ logger: false })
 await app.register(evlog)
 
 app.get('/api/users', async (request) => {
-  request.log.set({ users: { count: 42 } })
+  request.evlog.set({ users: { count: 42 } })
   return { users: [] }
 })
 ```
 
-`request.log` is the evlog wide-event logger (shadows Fastify's built-in pino logger on the request). Fastify's pino logger remains accessible via `fastify.log`.
+`request.evlog` is the evlog wide-event logger. TypeScript keeps Fastify's own logger type on `request.log`, so `request.log.set()` does not type-check: use `request.evlog` or `useLogger()`. Fastify's pino logger remains accessible via `fastify.log`.
 
 Use `useLogger()` to access the logger from anywhere in the call stack without passing `request`:
 

@@ -18,8 +18,12 @@ export { useLogger }
 
 declare module 'fastify' {
   interface FastifyRequest {
-    // @ts-expect-error intentionally overrides Fastify's built-in pino logger with evlog's ForkableLogger
-    log: ForkableLogger
+    /**
+     * The evlog request logger, the same one `useLogger()` returns. On a request
+     * evlog does not log (`include` / `exclude`, `enabled: false`), it accepts
+     * every call and emits nothing.
+     */
+    evlog: ForkableLogger
   }
 }
 
@@ -36,7 +40,8 @@ const integration = defineFrameworkIntegration<FastifyRequest>({
     requestId: typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : undefined,
   }),
   attachLogger: (req, logger) => {
-    // @ts-expect-error evlog replaces Fastify's built-in pino logger with RequestLogger
+    req.evlog = logger
+    // @ts-expect-error `request.log` keeps Fastify's logger type; it holds the evlog logger for code written before `request.evlog`
     req.log = logger
   },
   storage,
@@ -47,8 +52,10 @@ const evlogPlugin: FastifyPluginCallback<EvlogFastifyOptions> = (fastify, option
   const requestState = new WeakMap<object, RequestState>()
 
   fastify.addHook('onRequest', (request, _reply, next) => {
-    const { finish, skipped, runWith } = integration.start(request, options)
+    const { logger, finish, skipped, runWith } = integration.start(request, options)
     if (skipped) {
+      // A request evlog does not log gets the no-op logger, which has `fork`.
+      request.evlog = logger as ForkableLogger
       next()
       return
     }
@@ -68,7 +75,7 @@ const evlogPlugin: FastifyPluginCallback<EvlogFastifyOptions> = (fastify, option
     if (!state || emitted.has(request)) return
     emitted.add(request)
     const err = error instanceof Error ? error : new Error(String(error))
-    request.log.error(err)
+    request.evlog.error(err)
     await state.finish({ error: err })
   })
 
