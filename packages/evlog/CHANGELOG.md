@@ -1,5 +1,33 @@
 # evlog
 
+## 2.36.0
+
+### Minor Changes
+
+- [#1020](https://github.com/evloghq/evlog/pull/1020) [`a3385c7`](https://github.com/evloghq/evlog/commit/a3385c73a1243ae4284d2ff5fca41da9e67b8704) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog/fastify` attaches the request logger to `request.evlog`, typed as `ForkableLogger`, so `request.evlog.set()`, `.fork()` and `.audit()` type-check. Fastify types `request.log` as its own logger, and a module augmentation cannot change the type of an existing property: `request.log.set()` failed with TS2339 even though it worked at runtime, and with `skipLibCheck: false` the published declarations reported TS2717. `request.log` still holds the evlog logger at runtime, so existing code keeps working. On a route that `include` or `exclude` filters out, or with `enabled: false`, `request.evlog` accepts every call and emits nothing. On `@nestjs/platform-fastify`, `evlog/nestjs` sets `request.evlog` the same way.
+
+### Patch Changes
+
+- [#1005](https://github.com/evloghq/evlog/pull/1005) [`b1a2570`](https://github.com/evloghq/evlog/commit/b1a25706ed2d9ec1a251c3da957f316710ee4afd) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Split adapter batches at each provider's documented per-request limits. A batch above a limit was sent as one request and rejected (usually `413`), and the pipeline dropped it. It is now sent as several requests that each fit:
+
+  - Datadog: 1000 entries and 5 MB uncompressed per request (the byte cap is new).
+  - Sentry: 100 logs and 1 MiB of log payload per envelope (the byte cap is new).
+  - Axiom: 10,000 events per request.
+  - Better Stack: 10 MiB per request.
+  - PostHog `mode: 'events'`: request bodies under 20 MB on `/batch/`.
+
+  Batches within the limits send the same single request as before. Retry behavior is unchanged: the drain path keeps its default retries and the pipeline path sends one attempt unless `retries` is set. A single event larger than the limit is still sent on its own, so the provider decides what to do with it.
+
+- [#1019](https://github.com/evloghq/evlog/pull/1019) [`2159dcf`](https://github.com/evloghq/evlog/commit/2159dcf190490be6e5448559fdbc40d545bd2f2a) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `defineEvlogHook()` from `evlog/eve` now reads the v27 session events of eve 0.84 and later, eve 1.0 included. Before, it only listened for the v26 names, so on those versions a turn never ended: no wide event was emitted, and the turn stayed in memory until `maxSessions` evicted its session. A turn now ends on `turn.settled` and a session on `session.ended`. Token usage comes from `usage.recorded`, tool calls from `call.requested` and `call.settled`, approvals and sign-ins from `interaction.opened` and `interaction.settled`, and the user message from `delivery.consumed`. The v26 events of eve 0.30 to 0.83 keep working.
+
+  eve 0.84 moved AI SDK runtime context from the `step.started` instrumentation event to OTel integrations, so `defineEvlogInstrumentation()` only applies before 0.84. On 0.84 and later, add `agent/instrumentation/evlog.ts` exporting `otelIntegration({ runtimeContext: evlogRuntimeContext })`, with `otelIntegration` from `eve/instrumentation/otel`. `evlogRuntimeContext` accepts that input, and returns nothing for a model attempt outside a turn instead of throwing.
+
+- [#1011](https://github.com/evloghq/evlog/pull/1011) [`6ab90fd`](https://github.com/evloghq/evlog/commit/6ab90fd2a824e1ac2234d6266bc50699e3728b48) Thanks [@adelrodriguez](https://github.com/adelrodriguez)! - Type `log.fork()` as always present on the request logger that an integration attaches: `c.get('log')` on Hono, `req.log` on Express and NestJS, `log` in Elysia handlers, `context.get(loggerContext)` on React Router and `context.log` on oRPC. Before, `fork` was optional there, so `c.get('log').fork(...)` failed a strict type check and needed `fork!` or `fork?.`. The new `ForkableLogger` type from `evlog` describes this logger, for example in SvelteKit's `App.Locals`. `useLogger()` still returns `AuditableLogger` with an optional `fork`, because inside `log.fork()` work it returns the forked logger, which has no `fork`.
+
+- [#1011](https://github.com/evloghq/evlog/pull/1011) [`6ab90fd`](https://github.com/evloghq/evlog/commit/6ab90fd2a824e1ac2234d6266bc50699e3728b48) Thanks [@adelrodriguez](https://github.com/adelrodriguez)! - `log.fork(label, fn)` now runs `fn` on a request that evlog does not log. Before, on an Elysia route that `exclude` or `include` filters out, or with `enabled: false`, `log` had no `fork`, so `log.fork!(...)` threw `log.fork is not a function` and the route answered 500. The work runs and emits no event. With `waitUntil`, evlog registers the work there, as it does on a logged request. If the work throws, evlog reports the error with `console.error` and `log.fork()` still resolves.
+
+- [#1015](https://github.com/evloghq/evlog/pull/1015) [`64bac43`](https://github.com/evloghq/evlog/commit/64bac43b0d5153b41ef01fa56304937643b8f70f) Thanks [@HugoRCD](https://github.com/HugoRCD)! - On Hono, React Router and SvelteKit, a request that evlog does not log now gets a logger that accepts every call and emits nothing, on `c.get('log')`, `context.get(loggerContext)` and `event.locals.log`. This covers a route that `include` or `exclude` filters out, and every route after `initLogger({ enabled: false })`. Before, nothing was attached: `c.get('log').set(...)` threw a `TypeError`, the documented Hono `onError` handler threw as well so the request got no response, and `context.get(loggerContext)` threw in React Router loaders. `log.fork()` still runs its work on these requests. `useLogger()` still throws on them.
+
 ## 2.35.1
 
 ### Patch Changes
