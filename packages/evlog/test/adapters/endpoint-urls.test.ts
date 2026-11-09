@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, it } from 'vitest'
 import { resolveClickHouseUrl } from '../../src/adapters/clickhouse'
 import { resolveDatadogIntakeUrl } from '../../src/adapters/datadog'
 import { resolveLokiPushUrl } from '../../src/adapters/loki'
 import { toSazabiOTLPEndpoint } from '../../src/adapters/sazabi'
-import { fastestRunMs } from '../helpers/timers'
+import { expectLinearTime } from '../helpers/timers'
 
 describe('drain endpoint URLs', () => {
   it('trim trailing slashes in linear time', () => {
@@ -16,7 +16,7 @@ describe('drain endpoint URLs', () => {
       ['sazabi', toSazabiOTLPEndpoint],
     ]
     for (const [name, resolve] of resolvers) {
-      expect(fastestRunMs(() => resolve(endpoint)), name).toBeLessThan(100)
+      expectLinearTime(resolve, endpoint, name)
     }
   })
 })

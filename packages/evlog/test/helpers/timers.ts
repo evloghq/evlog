@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { expect, vi } from 'vitest'
 
 /**
  * Run `fn` with `vi.useFakeTimers()` enabled and restore real timers
@@ -26,13 +26,11 @@ export async function withFakeTimers<T>(fn: () => T | Promise<T>): Promise<T> {
 
 /**
  * Milliseconds taken by the fastest of `runs` calls of `fn`, after one untimed
- * warm-up call. Linear-time bounds assert on this: a loaded machine can pause
- * any single call, but an input that triggers super-linear work is slow on every run.
+ * warm-up call. A loaded machine can pause any single call; super-linear work
+ * is slow on every run.
  *
- * @example
- * ```ts
- * expect(fastestRunMs(() => redactEvent({ input }, config))).toBeLessThan(100)
- * ```
+ * Linear-time tests should call {@link expectLinearTime}, which compares two
+ * input sizes, not an absolute millisecond cap.
  */
 export function fastestRunMs(fn: () => unknown, runs = 3): number {
   fn()
@@ -43,6 +41,34 @@ export function fastestRunMs(fn: () => unknown, runs = 3): number {
     fastest = Math.min(fastest, performance.now() - start)
   }
   return fastest
+}
+
+/** Longer input is this many times the prefix. Linear work is ~this times slower; quadratic is ~this squared. */
+const SIZE_RATIO = 8
+/** Max allowed (long ms / short ms) at {@link SIZE_RATIO}. Linear at 8x size is ~8; quadratic is ~64. */
+const MAX_TIME_RATIO = 24
+/** Hang / ReDoS backstop on the long input. Linear work of a ~64k string stays well under this; a quadratic scan does not. */
+const LINEAR_TIME_BUDGET_MS = 2_000
+
+/**
+ * Assert `fn` stays linear in `input.length`. Times an 8x-shorter prefix and
+ * the full string via {@link fastestRunMs}. The longer run may be at most 24x
+ * the shorter; a 2 s cap on the long run catches a hang that is already slow
+ * on the prefix.
+ *
+ * @example
+ * ```ts
+ * expectLinearTime(value => redactEvent({ input: value }, config), input)
+ * ```
+ */
+export function expectLinearTime(fn: (input: string) => unknown, input: string, label?: string): void {
+  const short = input.slice(0, Math.max(1, Math.floor(input.length / SIZE_RATIO)))
+  const shortMs = fastestRunMs(() => fn(short))
+  const longMs = fastestRunMs(() => fn(input))
+  const detail = `${longMs.toFixed(1)}ms / ${shortMs.toFixed(1)}ms`
+  const named = label ? `${label} (${detail})` : detail
+  expect(longMs, named).toBeLessThan(LINEAR_TIME_BUDGET_MS)
+  expect(longMs / Math.max(shortMs, 0.05), named).toBeLessThan(MAX_TIME_RATIO)
 }
 
 /**
