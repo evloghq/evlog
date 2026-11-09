@@ -22,11 +22,11 @@ describe('expectLinearTime', () => {
     }, 'a'.repeat(32_768))
   })
 
-  it('accepts linear work whose short run is below timer noise', () => {
+  it('accepts linear work whose single call is below one millisecond', () => {
     let now = 0
     vi.spyOn(performance, 'now').mockImplementation(() => now)
     expectLinearTime((input) => {
-      now += input.length > 4_096 ? 2 : 0.01
+      now += input.length / 100_000
     }, 'x'.repeat(8_192))
   })
 
@@ -38,6 +38,16 @@ describe('expectLinearTime', () => {
         now += (input.length * input.length) / 50_000
       }, 'x'.repeat(8_192), 'quadratic')
     }).toThrow(/quadratic/)
+  })
+
+  it('rejects quadratic work whose short run is below one millisecond', () => {
+    let now = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => now)
+    expect(() => {
+      expectLinearTime((input) => {
+        now += (input.length * input.length) / 5_000_000
+      }, 'x'.repeat(8_192), 'quadratic-small')
+    }).toThrow(/quadratic-small/)
   })
 
   it('rejects work that is already slow on every input size', () => {

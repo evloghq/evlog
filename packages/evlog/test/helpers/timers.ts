@@ -48,18 +48,45 @@ const SIZE_RATIO = 8
 /** Max allowed (long ms / short ms) at {@link SIZE_RATIO}. Linear at 8x size is ~8; quadratic is ~64. */
 const MAX_TIME_RATIO = 24
 /**
- * Below this, a short run is dominated by timer resolution and scheduler noise,
- * so the ratio is not meaningful. Used as the denominator floor.
+ * Each timed sample repeats the call until at least this much time has elapsed,
+ * then divides by the number of calls. A single sub-millisecond call is mostly
+ * timer resolution; averaging over this window keeps the ratio honest without
+ * flooring the short run, which would let a quadratic workload slip under the ratio.
  */
-const MIN_MEASURABLE_MS = 1
+const MIN_SAMPLE_MS = 1
+/** Safety valve for a clock that does not advance: stop repeating after this many calls. */
+const MAX_SAMPLE_CALLS = 100_000
 /** Hang / ReDoS backstop on the long input. Linear work of a ~64k string stays well under this; a quadratic scan does not. */
 const LINEAR_TIME_BUDGET_MS = 2_000
 
+/** Average ms per call, repeating `fn` until {@link MIN_SAMPLE_MS} has elapsed. */
+function perCallMs(fn: () => unknown): number {
+  const start = performance.now()
+  let calls = 0
+  let elapsed = 0
+  do {
+    fn()
+    calls++
+    elapsed = performance.now() - start
+  } while (elapsed < MIN_SAMPLE_MS && calls < MAX_SAMPLE_CALLS)
+  return elapsed / calls
+}
+
+/** Fastest of `runs` {@link perCallMs} samples, after one untimed warm-up call. */
+function fastestPerCallMs(fn: () => unknown, runs = 3): number {
+  fn()
+  let fastest = Infinity
+  for (let i = 0; i < runs; i++) {
+    fastest = Math.min(fastest, perCallMs(fn))
+  }
+  return fastest
+}
+
 /**
  * Assert `fn` stays linear in `input.length`. Times an 8x-shorter prefix and
- * the full string via {@link fastestRunMs}. The longer run may be at most 24x
- * the shorter; a 2 s cap on the long run catches a hang that is already slow
- * on the prefix.
+ * the full string, each as the fastest per-call average. The longer run may be
+ * at most 24x the shorter; a 2 s cap on the long run catches a hang that is
+ * already slow on the prefix.
  *
  * @example
  * ```ts
@@ -68,12 +95,12 @@ const LINEAR_TIME_BUDGET_MS = 2_000
  */
 export function expectLinearTime(fn: (input: string) => unknown, input: string, label?: string): void {
   const short = input.slice(0, Math.max(1, Math.floor(input.length / SIZE_RATIO)))
-  const shortMs = fastestRunMs(() => fn(short))
-  const longMs = fastestRunMs(() => fn(input))
+  const shortMs = fastestPerCallMs(() => fn(short))
+  const longMs = fastestPerCallMs(() => fn(input))
   const detail = `${longMs.toFixed(1)}ms / ${shortMs.toFixed(1)}ms`
   const named = label ? `${label} (${detail})` : detail
   expect(longMs, named).toBeLessThan(LINEAR_TIME_BUDGET_MS)
-  expect(longMs / Math.max(shortMs, MIN_MEASURABLE_MS), named).toBeLessThan(MAX_TIME_RATIO)
+  expect(longMs / shortMs, named).toBeLessThan(MAX_TIME_RATIO)
 }
 
 /**
