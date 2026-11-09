@@ -22,6 +22,14 @@ describe('expectLinearTime', () => {
     }, 'a'.repeat(32_768))
   })
 
+  it('accepts linear work whose short run is below timer noise', () => {
+    let now = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => now)
+    expectLinearTime((input) => {
+      now += input.length > 4_096 ? 2 : 0.01
+    }, 'x'.repeat(8_192))
+  })
+
   it('rejects work whose time grows with the square of input length', () => {
     let now = 0
     vi.spyOn(performance, 'now').mockImplementation(() => now)

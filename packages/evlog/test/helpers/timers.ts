@@ -47,6 +47,11 @@ export function fastestRunMs(fn: () => unknown, runs = 3): number {
 const SIZE_RATIO = 8
 /** Max allowed (long ms / short ms) at {@link SIZE_RATIO}. Linear at 8x size is ~8; quadratic is ~64. */
 const MAX_TIME_RATIO = 24
+/**
+ * Below this, a short run is dominated by timer resolution and scheduler noise,
+ * so the ratio is not meaningful. Used as the denominator floor.
+ */
+const MIN_MEASURABLE_MS = 1
 /** Hang / ReDoS backstop on the long input. Linear work of a ~64k string stays well under this; a quadratic scan does not. */
 const LINEAR_TIME_BUDGET_MS = 2_000
 
@@ -68,7 +73,7 @@ export function expectLinearTime(fn: (input: string) => unknown, input: string, 
   const detail = `${longMs.toFixed(1)}ms / ${shortMs.toFixed(1)}ms`
   const named = label ? `${label} (${detail})` : detail
   expect(longMs, named).toBeLessThan(LINEAR_TIME_BUDGET_MS)
-  expect(longMs / Math.max(shortMs, 0.05), named).toBeLessThan(MAX_TIME_RATIO)
+  expect(longMs / Math.max(shortMs, MIN_MEASURABLE_MS), named).toBeLessThan(MAX_TIME_RATIO)
 }
 
 /**
