@@ -68,3 +68,6 @@ apps/telemetry/.data
 .sandbox/
 .vercel
 .env*
+
+# Amp orb portal metadata
+.amp/portals/*
