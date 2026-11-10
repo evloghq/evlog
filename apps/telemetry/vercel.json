@@ -1,4 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh evlog-telemetry"
+  "installCommand": "pnpm install --filter evlog-telemetry...",
+  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh evlog-telemetry",
+  "git": {
+    "deploymentEnabled": {
+      "changeset-release/**": false,
+      "renovate/**": false
+    }
+  }
 }

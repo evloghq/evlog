@@ -1,4 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh evlog-docs"
+  "installCommand": "pnpm install --filter evlog-docs...",
+  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh evlog-docs",
+  "git": {
+    "deploymentEnabled": {
+      "changeset-release/**": false,
+      "renovate/**": false
+    }
+  }
 }
