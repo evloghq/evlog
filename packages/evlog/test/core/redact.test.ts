@@ -959,3 +959,93 @@ describe('RegExp patterns across the config bridge', () => {
     expect(defined(resolved.patterns?.[0], 'patterns[0]')).toBeInstanceOf(RegExp)
   })
 })
+
+describe('redactEvent - built-in gates', () => {
+  const every = defined(
+    resolveRedactConfig({ builtins: ['bearer', 'apiKeys', 'privateKey', 'urlPassword', 'iban', 'creditCard', 'email', 'ipv4', 'phone', 'jwt'] }),
+    'redact config',
+  )
+
+  it.each([
+    ['bearer', 'Bearer abcdefgh', 'Bearer ***'],
+    ['bearer, mixed case and a tab', 'bEaReR\tabcdefgh', 'Bearer ***'],
+    ['apiKeys', 'xoxb-1234567890', 'xoxb-***'],
+    ['privateKey', '-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----***'],
+    ['urlPassword', 'a://:p@', 'a://:***@'],
+    ['iban', 'AA00BBBBCCCCDDDD', 'AA00****DDD'],
+    ['creditCard', '4111111111111111', '****1111'],
+    ['email', 'a@b.co', 'a***@***.co'],
+    ['ipv4', '1.1.1.1', '***.***.***.1'],
+    ['phone with a country code', '+1111111', '+111******11'],
+    ['phone with an area code', '(1)1111', '***11'],
+    ['jwt', 'eyJa.b.c', 'eyJ***.***'],
+  ])('masks the shortest %s match', (_name, input, masked) => {
+    expect(redactEvent({ value: input }, every).value).toBe(masked)
+  })
+
+  it('masks a match that only appears after an earlier built-in rewrote the string', () => {
+    const redacted = redactEvent({ value: 'Bearer abcdefgh12345678 from 203.0.113.42' }, every)
+    expect(redacted.value).toBe('Bearer *** from ***.***.***.42')
+  })
+
+  it('returns strings no built-in can match unchanged', () => {
+    const source = { method: 'GET', path: '/', duration: '1ms', timestamp: '2026-11-10T12:11:36.367Z', id: '0b0f7d4e-6c1b-4a8e-9d2f-3f6f1c2a9b77' }
+    expect(redactEvent(source, every)).toEqual(source)
+  })
+})
+
+describe('redactEvent - cloning', () => {
+  const emails = defined(resolveRedactConfig({ builtins: ['email'] }), 'redact config')
+
+  it('returns a copy that shares no object or array with a plain event', () => {
+    const source = { user: { email: 'alice@example.com', tags: ['a', 'b'] }, count: 1, missing: undefined, none: null }
+    const redacted = redactEvent(source, emails)
+
+    expect(redacted).toEqual({ user: { email: 'a***@***.com', tags: ['a', 'b'] }, count: 1, missing: undefined, none: null })
+    expect(redacted.user).not.toBe(source.user)
+    expect(redacted).toHaveProperty('missing')
+    expect(source.user.email).toBe('alice@example.com')
+  })
+
+  it('keeps one copy for an object referenced twice', () => {
+    const shared = { email: 'alice@example.com' }
+    const redacted = redactEvent({ actor: shared, target: shared }, emails)
+
+    expect(redacted.actor).toEqual({ email: 'a***@***.com' })
+    expect(redacted.actor).toBe(redacted.target)
+    expect(shared.email).toBe('alice@example.com')
+  })
+
+  it('keeps Date, Map and class instance values as structuredClone copies them', () => {
+    class Account {
+      email = 'alice@example.com'
+    }
+    const when = new Date(0)
+    const redacted = redactEvent({ when, lookup: new Map([['k', 1]]), account: new Account() }, emails)
+
+    expect(redacted.when).toEqual(when)
+    expect(redacted.when).not.toBe(when)
+    expect(redacted.lookup).toEqual(new Map([['k', 1]]))
+    expect(redacted.account).toEqual({ email: 'a***@***.com' })
+  })
+
+  it('keeps holes and named properties of arrays', () => {
+    const sparse = ['alice@example.com', , 'x']
+    const named: string[] & { note?: string } = ['alice@example.com']
+    named.note = 'kept'
+    const redacted = redactEvent({ sparse, named }, emails)
+
+    expect(redacted.sparse).toEqual(['a***@***.com', , 'x'])
+    expect(1 in defined(redacted.sparse, 'sparse')).toBe(false)
+    expect(redacted.named).toHaveProperty('note', 'kept')
+  })
+
+  it('keeps an own __proto__ key as a field', () => {
+    const source: Record<string, unknown> = JSON.parse('{"__proto__":{"email":"alice@example.com"},"email":"bob@example.com"}')
+    const redacted = redactEvent(source, emails)
+
+    expect(Object.getPrototypeOf(redacted)).toBe(Object.prototype)
+    expect(Object.getOwnPropertyDescriptor(redacted, '__proto__')?.value).toEqual({ email: 'a***@***.com' })
+    expect(redacted.email).toBe('b***@***.com')
+  })
+})
