@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Prepares an Amp orb: pinned Node and pnpm, workspace dependencies, generated types.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+step() {
+  local label="$1" start=$SECONDS
+  shift
+  echo "==> $label"
+  "$@"
+  echo "<== $label ($((SECONDS - start))s)"
+}
+
+bin_dir="$HOME/.local/bin"
+node_version="$(tr -d '[:space:]' < .node-version)"
+node_dir="$HOME/.local/share/node/v$node_version"
+
+install_node() {
+  if [ ! -x "$node_dir/bin/node" ]; then
+    local tarball="node-v$node_version-linux-x64.tar.xz" tmp="$node_dir.tmp"
+    rm -rf "$tmp" "$node_dir"
+    mkdir -p "$tmp/node"
+    curl -fsSL --retry 3 -o "$tmp/$tarball" "https://nodejs.org/dist/v$node_version/$tarball"
+    curl -fsSL --retry 3 "https://nodejs.org/dist/v$node_version/SHASUMS256.txt" \
+      | grep " $tarball\$" | (cd "$tmp" && sha256sum -c -)
+    tar -xJf "$tmp/$tarball" -C "$tmp/node" --strip-components=1
+    # A rename, so an interrupted run never leaves a partial install behind.
+    mv "$tmp/node" "$node_dir"
+    rm -rf "$tmp"
+  fi
+  # ~/.local/bin precedes the image's Node on the login PATH.
+  mkdir -p "$bin_dir"
+  ln -sf "$node_dir/bin/node" "$node_dir/bin/npm" "$node_dir/bin/npx" "$bin_dir/"
+}
+
+install_pnpm() {
+  "$node_dir/bin/corepack" enable --install-directory "$bin_dir" pnpm
+  pnpm --version
+}
+
+export PATH="$bin_dir:$PATH"
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+export CI=1
+export TURBO_TELEMETRY_DISABLED=1
+
+step "node $node_version" install_node
+step "pnpm (corepack)" install_pnpm
+step "pnpm install" pnpm install --frozen-lockfile
+step "dev:prepare" pnpm run dev:prepare
