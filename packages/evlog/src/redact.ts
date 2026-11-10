@@ -712,7 +712,8 @@ function applyMaskersToTree(obj: unknown, maskers: Masker[]): void {
     for (const key of redactableKeys(record)) {
       const val = record[key]
       if (typeof val === 'string') {
-        setRedacted(record, key, applyMaskers(val, maskers), key)
+        const masked = applyMaskers(val, maskers)
+        if (masked !== val) setRedacted(record, key, masked, key)
       } else if (typeof val === 'object') {
         applyMaskersToTree(val, maskers)
       }
