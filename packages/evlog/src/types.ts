@@ -213,7 +213,7 @@ export interface RedactConfig {
    */
   transform?: (event: WideEvent) => void
   /** @internal Resolved masker functions from built-in patterns. Not user-facing. */
-  _maskers?: Array<[RegExp, (match: string) => string]>
+  _maskers?: Array<[pattern: RegExp, mask: (match: string) => string, minLength: number, signals: number]>
   /** @internal Whether the `secrets` built-in is on, set by `resolveRedactConfig`. Not user-facing. */
   _secretKeys?: boolean
   /** @internal Precompiled matchers for `paths`, built once by `resolveRedactConfig`. Not user-facing. */
