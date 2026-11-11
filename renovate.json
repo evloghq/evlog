@@ -32,10 +32,9 @@
       "enabled": false
     },
     {
-      "description": "Keep the eve peer floor where it is: a new eve release must not raise the minimum evlog accepts",
+      "description": "Keep evlog's peer floors where they are: a new release must not raise the minimum evlog accepts, and a new major is added to the range in the same PR that moves the tests onto it",
       "matchFileNames": ["packages/evlog/package.json"],
       "matchDepTypes": ["peerDependencies"],
-      "matchPackageNames": ["eve"],
       "rangeStrategy": "widen"
     }
   ],
