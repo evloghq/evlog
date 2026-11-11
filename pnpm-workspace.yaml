@@ -53,7 +53,7 @@ overrides:
   # Same purpose, but these cross the major (or 0.x minor) their dependents
   # declare: re-check them when those dependents are bumped.
   fontless>esbuild: ^0.28.1
-  '@esbuild-kit/core-utils>esbuild': ^0.25.0
+  '@esbuild-kit/core-utils>esbuild': ^0.28.2
   '@sveltejs/kit@2': ^3.1.1
   katex@<0.18.2: ^0.18.2
   '@vercel/nft>glob': ^14.0.2
@@ -98,3 +98,5 @@ minimumReleaseAgeExclude:
   - workflow
   # Renovate security update: @sveltejs/kit@3.0.0
   - "@sveltejs/kit@3.0.0"
+  # Renovate security update: esbuild@0.28.2
+  - esbuild@0.28.2
