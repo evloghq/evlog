@@ -1,6 +1,6 @@
 import { definePlugin } from 'nitro'
+import { initLogger } from '../../../../src/logger'
 import type { WideEvent } from '../../../../src/types'
-import { initLogger } from 'evlog'
 
 export const globalDrainEvents: WideEvent[] = []
 
