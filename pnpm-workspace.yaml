@@ -61,6 +61,7 @@ overrides:
   '@typescript-eslint/typescript-estree>minimatch': ^11.0.1
   readdir-glob>minimatch: ^11.0.1
   '@stryker-mutator/core>minimatch': ^11.0.1
+  zod@3: ^4.6.6
 
 minimumReleaseAge: 2880
 
