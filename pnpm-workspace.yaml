@@ -41,6 +41,26 @@ overrides:
   # declare a permissive `^2.0.5 || ^3.0.0` peer range that lets pnpm resolve
   # a stale v2, breaking Nuxt's `legacyPlugins` import at build time.
   '@unhead/vue': ^3.4.3
+  # Security fixes for transitive deps whose parents pin a vulnerable version
+  # exactly. Each one stays within the pinned major; drop it once the parent
+  # ships the fix.
+  vinxi>h3: ^1.15.11
+  eve>undici: ^8.12.3
+  '@vercel/cli-config>zod': ^4.6.6
+  '@agent-browser/eve>zod': ^4.6.6
+  satori>fflate: ^0.7.5
+  typed-rest-client>qs: ^6.16.1
+  # Same purpose, but these cross the major (or 0.x minor) their dependents
+  # declare: re-check them when those dependents are bumped.
+  fontless>esbuild: ^0.28.1
+  '@esbuild-kit/core-utils>esbuild': ^0.25.0
+  '@sveltejs/kit@2': ^3.1.1
+  katex@<0.18.2: ^0.18.2
+  '@vercel/nft>glob': ^14.0.2
+  '@nuxt/content>minimatch': ^11.0.1
+  '@typescript-eslint/typescript-estree>minimatch': ^11.0.1
+  readdir-glob>minimatch: ^11.0.1
+  '@stryker-mutator/core>minimatch': ^11.0.1
 
 minimumReleaseAge: 2880
 

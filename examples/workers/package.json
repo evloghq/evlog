@@ -10,6 +10,6 @@
     "evlog": "workspace:*"
   },
   "devDependencies": {
-    "wrangler": "^3.101.0"
+    "wrangler": "^4.158.0"
   }
 }
