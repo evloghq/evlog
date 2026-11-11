@@ -8,16 +8,17 @@
     "build": "nuxt build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@comark/nuxt": "^0.9.0",
+    "@comark/nuxt": "^0.9.1",
     "@nuxt/content": "^3.16.2",
     "@nuxt/fonts": "0.14.0",
     "@nuxt/icon": "^2.6.2",
     "@nuxt/ui": "^4.12.0",
     "@nuxtjs/color-mode": "^4.1.0",
-    "@nuxtjs/mdc": "^0.23.2",
+    "@nuxtjs/mdc": "^0.23.3",
     "@nuxtjs/sitemap": "^8.6.2",
     "@vercel/analytics": "^2.0.1",
     "better-sqlite3": "^12.11.1",

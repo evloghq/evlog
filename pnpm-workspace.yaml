@@ -45,6 +45,9 @@ overrides:
 minimumReleaseAge: 2880
 
 minimumReleaseAgeExclude:
+  - '@comark/nuxt@0.9.1'
+  - '@comark/vue@0.9.1'
+  - comark@0.9.1
   # Nuxt
   - '@nuxt/*'
   - '@nuxtjs/*'
