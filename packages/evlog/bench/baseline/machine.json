@@ -1,12 +1,12 @@
 {
-  "recordedAt": "2026-10-16T18:27:55Z",
-  "source": "7dec75821ad794fd73bf5cd614ff0e1b7b6e3c98",
+  "recordedAt": "2026-11-11T17:29:17Z",
+  "source": "7407ea938ebdc93ac230657c2f7bb829d3c32aa9",
   "runner": "sandbox VM, not the GitHub Actions runner used by CI",
-  "node": "v24.21.0",
+  "node": "v24.22.2",
   "cpu": "Intel(R) Xeon(R) Processor @ 2.50GHz",
   "vcpu": 4,
-  "os": "Ubuntu 26.04.1 LTS, Linux 6.18.49 x86_64",
-  "memTotalKiB": 8605868,
-  "vitest": "4.1.11",
+  "os": "Debian GNU/Linux 12 (bookworm), Linux 6.18.56 x86_64",
+  "memTotalKiB": 8605792,
+  "vitest": "4.1.12",
   "command": "pnpm run bench (vitest bench bench/core/)"
 }
