@@ -431,7 +431,7 @@
     "dev:prepare": "tsdown",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "bench": "vitest bench bench/core/ && cp bench/results.json bench/baseline/bench.json && tsx bench/scripts/report.ts",
+    "bench": "vitest bench bench/core/ && cp bench/results.json bench/baseline/bench.json && tsx bench/scripts/machine.ts && tsx bench/scripts/report.ts",
     "bench:compare": "vitest bench bench/comparison/ && cp bench/results.json bench/baseline/comparison.json && tsx bench/scripts/report.ts",
     "bench:report": "tsx bench/scripts/report.ts",
     "bench:events": "tsx bench/scripts/event-count.ts",

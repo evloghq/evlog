@@ -1,163 +1,238 @@
 {
   "entries": [
     {
-      "entry": "framework/nitro",
-      "raw": 20843,
-      "gzip": 7482
+      "entry": "evlog/nuxt",
+      "raw": 206524,
+      "gzip": 59604
     },
     {
-      "entry": "framework/next",
-      "raw": 15038,
-      "gzip": 5332
+      "entry": "evlog/eve",
+      "raw": 201993,
+      "gzip": 57032
     },
     {
-      "entry": "framework/ai",
-      "raw": 17348,
-      "gzip": 4781
+      "entry": "evlog/vite",
+      "raw": 194294,
+      "gzip": 55927
     },
     {
-      "entry": "adapter/fs",
-      "raw": 10211,
-      "gzip": 3427
+      "entry": "evlog/toolkit",
+      "raw": 174858,
+      "gzip": 52386
     },
     {
-      "entry": "adapter/datadog",
-      "raw": 6370,
-      "gzip": 2542
+      "entry": "evlog/nitro/v3",
+      "raw": 173679,
+      "gzip": 51919
     },
     {
-      "entry": "adapter/sentry",
-      "raw": 6557,
-      "gzip": 2462
+      "entry": "evlog/sveltekit",
+      "raw": 166506,
+      "gzip": 49418
     },
     {
-      "entry": "framework/vite",
-      "raw": 7432,
-      "gzip": 2454
+      "entry": "evlog/nitro",
+      "raw": 163743,
+      "gzip": 48958
     },
     {
-      "entry": "adapter/memory",
-      "raw": 6277,
-      "gzip": 2418
+      "entry": "evlog",
+      "raw": 162167,
+      "gzip": 48385
     },
     {
-      "entry": "core (index)",
-      "raw": 6357,
-      "gzip": 2202
+      "entry": "evlog/effect",
+      "raw": 157176,
+      "gzip": 47034
     },
     {
-      "entry": "adapter/otlp",
-      "raw": 6047,
-      "gzip": 2191
+      "entry": "evlog/orpc",
+      "raw": 155429,
+      "gzip": 46906
     },
     {
-      "entry": "enrichers",
-      "raw": 6391,
-      "gzip": 2040
+      "entry": "evlog/next",
+      "raw": 152776,
+      "gzip": 46189
     },
     {
-      "entry": "framework/sveltekit",
-      "raw": 6486,
-      "gzip": 2011
+      "entry": "evlog/elysia",
+      "raw": 147149,
+      "gzip": 44395
     },
     {
-      "entry": "utils",
-      "raw": 4327,
-      "gzip": 1823
+      "entry": "evlog/nestjs",
+      "raw": 147194,
+      "gzip": 44384
     },
     {
-      "entry": "error",
-      "raw": 3937,
-      "gzip": 1607
+      "entry": "evlog/workers",
+      "raw": 146095,
+      "gzip": 43619
     },
     {
-      "entry": "adapter/axiom",
-      "raw": 4010,
-      "gzip": 1539
+      "entry": "evlog/fastify",
+      "raw": 144828,
+      "gzip": 43538
     },
     {
-      "entry": "adapter/posthog",
-      "raw": 4497,
-      "gzip": 1506
+      "entry": "evlog/hono",
+      "raw": 143376,
+      "gzip": 43461
     },
     {
-      "entry": "framework/elysia",
-      "raw": 3655,
-      "gzip": 1440
+      "entry": "evlog/express",
+      "raw": 144364,
+      "gzip": 43440
     },
     {
-      "entry": "pipeline",
-      "raw": 4265,
-      "gzip": 1385
+      "entry": "evlog/react-router",
+      "raw": 143362,
+      "gzip": 43125
     },
     {
-      "entry": "workers",
-      "raw": 3226,
-      "gzip": 1337
+      "entry": "evlog/sentry",
+      "raw": 61739,
+      "gzip": 19612
     },
     {
-      "entry": "framework/nestjs",
-      "raw": 3073,
-      "gzip": 1289
+      "entry": "evlog/posthog",
+      "raw": 62069,
+      "gzip": 18953
     },
     {
-      "entry": "adapter/better-stack",
-      "raw": 3294,
-      "gzip": 1288
+      "entry": "evlog/hyperdx",
+      "raw": 55920,
+      "gzip": 17367
     },
     {
-      "entry": "http",
-      "raw": 2978,
-      "gzip": 1272
+      "entry": "evlog/sazabi",
+      "raw": 55788,
+      "gzip": 17358
     },
     {
-      "entry": "adapter/hyperdx",
-      "raw": 2930,
-      "gzip": 1206
+      "entry": "evlog/otlp",
+      "raw": 53011,
+      "gzip": 16798
     },
     {
-      "entry": "framework/fastify",
-      "raw": 2460,
-      "gzip": 1102
+      "entry": "evlog/datadog",
+      "raw": 48960,
+      "gzip": 15995
     },
     {
-      "entry": "toolkit",
-      "raw": 2221,
-      "gzip": 782
+      "entry": "evlog/fs",
+      "raw": 48640,
+      "gzip": 15829
     },
     {
-      "entry": "framework/express",
-      "raw": 1427,
-      "gzip": 737
+      "entry": "evlog/next/stream",
+      "raw": 45624,
+      "gzip": 14742
     },
     {
-      "entry": "framework/hono",
-      "raw": 1146,
-      "gzip": 613
+      "entry": "evlog/loki",
+      "raw": 41822,
+      "gzip": 13999
     },
     {
-      "entry": "browser",
-      "raw": 650,
-      "gzip": 289
+      "entry": "evlog/clickhouse",
+      "raw": 42200,
+      "gzip": 13942
     },
     {
-      "entry": "logger",
-      "raw": 481,
-      "gzip": 254
+      "entry": "evlog/memory",
+      "raw": 41679,
+      "gzip": 13786
     },
     {
-      "entry": "client",
-      "raw": 192,
-      "gzip": 128
+      "entry": "evlog/axiom",
+      "raw": 40810,
+      "gzip": 13446
     },
     {
-      "entry": "types",
-      "raw": 11,
-      "gzip": 31
+      "entry": "evlog/better-stack",
+      "raw": 40394,
+      "gzip": 13316
+    },
+    {
+      "entry": "evlog/browser",
+      "raw": 28946,
+      "gzip": 9901
+    },
+    {
+      "entry": "evlog/next/instrumentation/create",
+      "raw": 29033,
+      "gzip": 9560
+    },
+    {
+      "entry": "evlog/enrichers",
+      "raw": 26000,
+      "gzip": 8778
+    },
+    {
+      "entry": "evlog/catalog",
+      "raw": 22627,
+      "gzip": 7885
+    },
+    {
+      "entry": "evlog/next/client",
+      "raw": 21773,
+      "gzip": 7651
+    },
+    {
+      "entry": "evlog/client",
+      "raw": 20830,
+      "gzip": 7332
+    },
+    {
+      "entry": "evlog/http",
+      "raw": 19542,
+      "gzip": 7114
+    },
+    {
+      "entry": "evlog/toolkit/storage",
+      "raw": 19102,
+      "gzip": 7010
+    },
+    {
+      "entry": "evlog/better-auth",
+      "raw": 17244,
+      "gzip": 6252
+    },
+    {
+      "entry": "evlog/ai",
+      "raw": 21446,
+      "gzip": 5656
+    },
+    {
+      "entry": "evlog/stream",
+      "raw": 14225,
+      "gzip": 5071
+    },
+    {
+      "entry": "evlog/pipeline",
+      "raw": 5934,
+      "gzip": 2003
+    },
+    {
+      "entry": "evlog/otlp/protobuf",
+      "raw": 4606,
+      "gzip": 1524
+    },
+    {
+      "entry": "evlog/diagnostics",
+      "raw": 2994,
+      "gzip": 1235
+    },
+    {
+      "entry": "evlog/next/instrumentation",
+      "raw": 1468,
+      "gzip": 611
     }
   ],
   "total": {
-    "raw": 164137,
-    "gzip": 58970
+    "raw": 3819939,
+    "gzip": 1162446
   }
 }

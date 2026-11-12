@@ -22,6 +22,7 @@ interface BenchmarkEntry {
   p995: number
   p999: number
   rme: number
+  sampleCount: number
 }
 
 interface BenchGroup {
@@ -55,6 +56,15 @@ interface BundledEntry {
   raw: number
   gzip: number
   modules: number
+}
+
+interface MachineInfo {
+  recordedAt: string
+  runner: string
+  node: string
+  cpu: string
+  vcpu: number
+  os: string
 }
 
 interface BundledSizeReport {
@@ -98,9 +108,15 @@ function stripPrefix(fullName: string): string {
 
 // --- Report generators ---
 
-function renderCoreBenchmarks(report: BenchReport): string {
+function renderCoreBenchmarks(report: BenchReport, machine: MachineInfo | null): string {
   const lines: string[] = []
   lines.push('## Core benchmarks')
+  lines.push('')
+  if (machine) {
+    lines.push(`> Recorded ${machine.recordedAt.split('T')[0]} (${machine.runner}): Node ${machine.node}, ${machine.cpu} (${machine.vcpu} vCPU), ${machine.os}.`)
+    lines.push('>')
+  }
+  lines.push('> These numbers only compare with a run on the same machine. Another machine, including a GitHub Actions runner, gives different numbers for the same code. The CI `bench` job benchmarks the base branch and the pull request on one runner and compares those two runs, not this baseline.')
   lines.push('')
 
   for (const file of report.files) {
@@ -115,7 +131,7 @@ function renderCoreBenchmarks(report: BenchReport): string {
 
       const sorted = [...group.benchmarks].sort((a, b) => b.hz - a.hz)
       for (const b of sorted) {
-        lines.push(`| ${b.name} | **${formatHz(b.hz)}** | ${formatNs(b.mean)} | ${formatNs(b.p99)} | ${Math.floor(b.hz).toLocaleString()} |`)
+        lines.push(`| ${b.name} | **${formatHz(b.hz)}** | ${formatNs(b.mean)} | ${formatNs(b.p99)} | ${b.sampleCount.toLocaleString()} |`)
       }
 
       lines.push('')
@@ -163,6 +179,9 @@ function renderBundleSize(report: SizeReport): string {
   const lines: string[] = []
   lines.push('## Bundle size')
   lines.push('')
+  lines.push('> One row per `package.json#exports` subpath: its dist file plus every dist chunk it statically imports, unminified, gzipped together. Dependencies are not included. The total adds up the rows, so a chunk shared by several entries is counted once per entry.')
+  lines.push('> See `bench/scripts/size.ts` for methodology.')
+  lines.push('')
   lines.push('| Entry | Raw | Gzip |')
   lines.push('|-------|----:|-----:|')
 
@@ -203,6 +222,7 @@ const bench = await loadJSON<BenchReport>(`${BASE}bench.json`)
 const comparison = await loadJSON<BenchReport>(`${BASE}comparison.json`)
 const size = await loadJSON<SizeReport>(`${BASE}size.json`)
 const bundledSize = await loadJSON<BundledSizeReport>(`${BASE}bundled-size.json`)
+const machine = await loadJSON<MachineInfo>(`${BASE}machine.json`)
 
 const sections: string[] = []
 
@@ -224,7 +244,7 @@ if (comparison) {
 }
 
 if (bench) {
-  sections.push(renderCoreBenchmarks(bench))
+  sections.push(renderCoreBenchmarks(bench, machine))
 }
 
 const output = sections.join('\n')

@@ -85,19 +85,17 @@ function formatBytesDelta(base: number, curr: number): string {
 }
 
 function getPerfIndicator(delta: number): string {
-  if (delta <= -REGRESSION_THRESHOLD) return '🔴'
-  if (delta <= -3) return '🟡'
-  if (delta >= REGRESSION_THRESHOLD) return '🟢'
-  if (delta >= 3) return '🟢'
-  return '⚪'
+  if (delta <= -REGRESSION_THRESHOLD) return 'regression'
+  if (delta <= -3) return 'warning'
+  if (delta >= 3) return 'improvement'
+  return 'unchanged'
 }
 
 function getSizeIndicator(delta: number): string {
-  if (delta >= SIZE_THRESHOLD) return '🔴'
-  if (delta >= 2) return '🟡'
-  if (delta <= -SIZE_THRESHOLD) return '🟢'
-  if (delta <= -2) return '🟢'
-  return '⚪'
+  if (delta >= SIZE_THRESHOLD) return 'larger'
+  if (delta >= 2) return 'warning'
+  if (delta <= -2) return 'smaller'
+  return 'unchanged'
 }
 
 // --- Bench comparison ---
@@ -108,7 +106,7 @@ function hasBaselineData(report: BenchReport): boolean {
 
 function renderFirstRunBenchmarks(current: BenchReport): string {
   const lines: string[] = []
-  lines.push('### Performance (first run — no baseline to compare)')
+  lines.push('### Performance (first run, no baseline to compare)')
   lines.push('')
   lines.push('| Benchmark | ops/sec | Mean | p99 |')
   lines.push('|-----------|--------:|-----:|----:|')
@@ -181,7 +179,7 @@ function compareBenchmarks(baseline: BenchReport, current: BenchReport): { markd
   const lines: string[] = []
   lines.push('### Performance')
   lines.push('')
-  lines.push(`> Threshold: **${REGRESSION_THRESHOLD}%** · 🔴 regression · 🟡 warning · 🟢 improvement · ⚪ unchanged`)
+  lines.push(`> Threshold: **${REGRESSION_THRESHOLD}%**`)
   lines.push('')
   lines.push('| Status | Benchmark | Base (ops/sec) | Current (ops/sec) | Change | p99 base | p99 current |')
   lines.push('|--------|-----------|---------------:|------------------:|-------:|---------:|------------:|')
@@ -196,7 +194,7 @@ function compareBenchmarks(baseline: BenchReport, current: BenchReport): { markd
   lines.push('')
 
   const regressions = rows.filter(r => r.delta <= -REGRESSION_THRESHOLD)
-  const improvements = rows.filter(r => r.delta >= REGRESSION_THRESHOLD)
+  const improvements = rows.filter(r => r.delta >= 3)
   const warnings = rows.filter(r => r.delta <= -3 && r.delta > -REGRESSION_THRESHOLD)
 
   lines.push('<details>')
@@ -204,7 +202,7 @@ function compareBenchmarks(baseline: BenchReport, current: BenchReport): { markd
   lines.push('')
   lines.push(`- **${regressions.length}** regressions (>${REGRESSION_THRESHOLD}% slower)`)
   lines.push(`- **${warnings.length}** warnings (3-${REGRESSION_THRESHOLD}% slower)`)
-  lines.push(`- **${improvements.length}** improvements (>${REGRESSION_THRESHOLD}% faster)`)
+  lines.push(`- **${improvements.length}** improvements (>3% faster)`)
   lines.push(`- **${rows.length - regressions.length - improvements.length - warnings.length}** unchanged`)
   lines.push('')
   lines.push('</details>')
@@ -226,7 +224,7 @@ function hasBaselineSizeData(report: SizeReport): boolean {
 
 function renderFirstRunSizes(current: SizeReport): string {
   const lines: string[] = []
-  lines.push('### Bundle size (first run — no baseline to compare)')
+  lines.push('### Bundle size (first run, no baseline to compare)')
   lines.push('')
   lines.push('| Entry | Raw | Gzip |')
   lines.push('|-------|----:|-----:|')
@@ -273,7 +271,7 @@ function compareSizes(baseline: SizeReport, current: SizeReport): string {
       baseRaw,
       currRaw: curr.raw,
       delta,
-      indicator: isNew ? '🆕' : getSizeIndicator(delta),
+      indicator: isNew ? 'new' : getSizeIndicator(delta),
     })
   }
 
@@ -291,13 +289,13 @@ function compareSizes(baseline: SizeReport, current: SizeReport): string {
   const lines: string[] = []
   lines.push('### Bundle size')
   lines.push('')
-  lines.push(`> Threshold: **${SIZE_THRESHOLD}%** · 🔴 larger · 🟡 warning · 🟢 smaller · ⚪ unchanged · 🆕 new`)
+  lines.push(`> Threshold: **${SIZE_THRESHOLD}%**`)
   lines.push('')
   lines.push('| Status | Entry | Base (gzip) | Current (gzip) | Change | Raw delta |')
   lines.push('|--------|-------|------------:|---------------:|-------:|----------:|')
 
   for (const row of rows) {
-    const baseCol = row.isNew ? '—' : formatBytes(row.baseGzip)
+    const baseCol = row.isNew ? '-' : formatBytes(row.baseGzip)
     const changeCol = row.isNew ? 'new' : formatDelta(row.delta)
     const rawDeltaCol = row.isNew ? `+${formatBytes(row.currRaw)}` : formatBytesDelta(row.baseRaw, row.currRaw)
     lines.push(
