@@ -513,6 +513,25 @@ describe('withEvlog', () => {
     expect(drainMock).toHaveBeenCalledTimes(1)
   })
 
+  it('forwards requestMinLevel to drop events below the floor', async () => {
+    const drainMock = vi.fn()
+    const withEvlog = createWithEvlog({
+      pretty: false,
+      requestMinLevel: 'warn',
+      sampling: { keep: [{ duration: 0 }] },
+      drain: drainMock,
+    })
+
+    await withEvlog((_: Request) => new Response('ok'))(new Request('http://localhost/api/info'))
+    expect(drainMock).not.toHaveBeenCalled()
+
+    const failing = withEvlog((_: Request) => {
+      throw new Error('Server error')
+    })
+    await expect(failing(new Request('http://localhost/api/error'))).rejects.toThrow('Server error')
+    expect(drainMock).toHaveBeenCalledTimes(1)
+  })
+
   it('filters sensitive headers from drain context', async () => {
     const drainMock = vi.fn()
     const withEvlog = createWithEvlog({ pretty: false, drain: drainMock })
