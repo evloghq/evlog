@@ -101,6 +101,7 @@ describe('createInstrumentation', () => {
       silent: true,
       drain: drainMock,
       sampling: { rates: { info: 50 } },
+      requestMinLevel: 'warn',
       stringify: false,
       redact: { paths: ['error.message', 'error.cause'] },
     })
@@ -116,6 +117,7 @@ describe('createInstrumentation', () => {
     await config.drain({ event: { message: 'test' } })
     expect(drainMock).toHaveBeenCalledTimes(1)
     expect(config.sampling).toEqual({ rates: { info: 50 } })
+    expect(config.requestMinLevel).toBe('warn')
     expect(config.stringify).toBe(false)
     expect(config.redact).toEqual({ paths: ['error.message', 'error.cause'] })
   })

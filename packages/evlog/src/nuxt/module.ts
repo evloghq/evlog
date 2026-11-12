@@ -158,7 +158,7 @@ export interface ModuleOptions {
 
   /**
    * Minimum severity for server request wide events, applied before sampling
-   * and `keep`. `error` and `fatal` events are always emitted.
+   * and `keep`. `error` and `fatal` events are never dropped by this floor.
    */
   requestMinLevel?: LoggerConfig['requestMinLevel']
 

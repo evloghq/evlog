@@ -76,7 +76,7 @@ export interface NitroModuleOptions {
 
   /**
    * Minimum severity for request wide events, applied before sampling and
-   * `keep`. `error` and `fatal` events are always emitted.
+   * `keep`. `error` and `fatal` events are never dropped by this floor.
    */
   requestMinLevel?: LoggerConfig['requestMinLevel']
 

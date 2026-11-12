@@ -417,7 +417,8 @@ export interface LoggerConfig {
    * Minimum severity for request wide events (`createLogger().emit()`, framework
    * middleware). Events below it are dropped before head sampling, and a
    * `sampling.keep` rule or `keep` callback cannot bring them back. `error`
-   * and `fatal` events, and audit events, are always emitted.
+   * and `fatal` events, and audit events, are never dropped by this floor
+   * (error and fatal events still go through `sampling`).
    * Independent of `minLevel`, which governs the global `log` API.
    * @default undefined (every level)
    */
