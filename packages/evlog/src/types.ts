@@ -1099,6 +1099,12 @@ export interface RequestLoggerOptions {
   path?: string
   requestId?: string
   /**
+   * Name of the unit of work, stored as `operation` on the wide event.
+   * Lets a task, queue worker or cron job name itself at creation time, the
+   * same field `log.fork()` sets on its child.
+   */
+  operation?: string
+  /**
    * Registers async drain work with the host runtime so it can finish after the
    * HTTP response is returned. Required on **Cloudflare Workers** (and similar
    * edge runtimes): without this, `initLogger({ drain })` + `log.emit()` may
