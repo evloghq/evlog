@@ -65,7 +65,8 @@ function parseEvlogError(error: { message: string, data?: unknown }): ParsedErro
  * Accepts what each layer actually hands you: an {@link EvlogError} thrown
  * server-side, an ofetch `FetchError` whose `data` is the parsed response body,
  * that body on its own, an h3 error holding its payload on `data`, or any other
- * `Error`. `raw` always carries the input back for debugging.
+ * `Error`, whose own `why` / `fix` / `link` are kept when the payload has none.
+ * `raw` always carries the input back for debugging.
  *
  * `data` is the payload the server chose to expose, from `createError({ data })`
  * merged with the guidance fields. It is read from the body's nested `data` when
@@ -90,24 +91,30 @@ export function parseError(error: unknown): ParsedError {
     // A response body nests the payload under its own `data`. A flat body, or an
     // h3 error holding the payload directly, carries it among its own fields.
     const payload = pickRecord(data?.data) ?? payloadFromBody(pickRecord(data))
+    // An Error subclass may carry the guidance itself and an unrelated `data`.
+    const own = error as Record<string, unknown>
 
     return {
       message: data?.statusText || data?.statusMessage || data?.message || fetchMessage || 'An error occurred',
       status: data?.status || data?.statusCode || fetchStatus || fetchStatusCode || 500,
       code: pickCode(payload) ?? pickCode(data) ?? pickCode(error),
-      why: pickString(payload, 'why'),
-      fix: pickString(payload, 'fix'),
-      link: pickString(payload, 'link'),
+      why: pickString(payload, 'why') ?? pickString(own, 'why'),
+      fix: pickString(payload, 'fix') ?? pickString(own, 'fix'),
+      link: pickString(payload, 'link') ?? pickString(own, 'link'),
       data: payload,
       raw: error,
     }
   }
 
   if (error instanceof Error) {
+    const own = error as unknown as Record<string, unknown>
     return {
       message: error.message,
       status: extractErrorStatus(error),
       code: pickCode(error),
+      why: pickString(own, 'why'),
+      fix: pickString(own, 'fix'),
+      link: pickString(own, 'link'),
       raw: error,
     }
   }
