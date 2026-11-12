@@ -497,6 +497,19 @@ describe('parseError', () => {
 
       expect(parsed.status).toBe(500)
     })
+
+    it('keeps the guidance an Error carries as its own properties', () => {
+      const error = Object.assign(new Error('w'), { why: 'w', fix: 'f', link: 'https://docs.example.com', code: 'X' })
+
+      expect(parseError(error)).toMatchObject({ message: 'w', code: 'X', why: 'w', fix: 'f', link: 'https://docs.example.com' })
+      expect(parseError(Object.assign(error, { data: undefined }))).toMatchObject({ message: 'w', code: 'X', why: 'w', fix: 'f', link: 'https://docs.example.com' })
+    })
+
+    it('prefers the guidance in the payload over the error\'s own', () => {
+      const error = Object.assign(new Error('Boom'), { fix: 'own', data: { fix: 'payload' } })
+
+      expect(parseError(error).fix).toBe('payload')
+    })
   })
 
   describe('data payload', () => {
