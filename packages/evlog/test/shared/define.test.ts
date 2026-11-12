@@ -90,6 +90,10 @@ describe('defineEvlog extends', () => {
     expect(logger.env).toEqual({ service: 'shop', environment: 'production' })
   })
 
+  it('carries requestMinLevel through toLoggerConfig', () => {
+    expect(toLoggerConfig(defineEvlog({ requestMinLevel: 'warn' })).requestMinLevel).toBe('warn')
+  })
+
   it('refuses a parent that already extends another config', () => {
     const base = defineEvlog({ service: 'base' })
     const preset = defineEvlog({ extends: base, minLevel: 'warn' })

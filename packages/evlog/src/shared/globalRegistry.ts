@@ -47,6 +47,8 @@ export interface EvlogGlobalConfig {
   silent: boolean
   /** Minimum level for the global `log` API only (`ownsEvent === false`). */
   minLevel: LogLevel
+  /** Severity floor for request wide events (`ownsEvent === true`); unset keeps every level. */
+  requestMinLevel?: Exclude<LogLevel, 'error' | 'fatal'>
   locked: boolean
   initialized: boolean
   /** Set after the first production emit without `initLogger()` warned about it. */
