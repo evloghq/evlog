@@ -168,6 +168,7 @@ export function initLogger(config: LoggerConfig = {}): void {
   state.redact = resolveRedactConfig(config.redact ?? !isDev())
   state.silent = config.silent ?? false
   state.minLevel = config.minLevel ?? 'debug'
+  state.requestMinLevel = config.requestMinLevel
   state.pluginRunner = config.plugins?.length
     ? createPluginRunner(config.plugins)
     : getEmptyPluginRunner()
@@ -1133,8 +1134,14 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const durationMs = overrides?._durationMs ?? elapsedMs(startTime)
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
-      let forceKeep = false
       const auditForceKeep = consumeAuditForceKeep(context)
+      if (!auditForceKeep && state.requestMinLevel && !isLevelEnabled(level, state.requestMinLevel)) {
+        emitted = true
+        pendingWideEvent = null
+        return null
+      }
+
+      let forceKeep = false
       if (overrides?._forceKeep) {
         forceKeep = true
       } else if (auditForceKeep) {

@@ -408,11 +408,20 @@ export interface LoggerConfig {
   sampling?: SamplingConfig
   /**
    * Minimum severity for the global `log` API (tagged and object form).
-   * Does not apply to `createLogger().emit()` / request wide events (use `sampling` for volume).
+   * Does not apply to `createLogger().emit()` / request wide events (use `requestMinLevel` for a floor, `sampling` for volume).
    * Order: trace < debug < info < warn < error < fatal.
    * @default 'debug' (all levels)
    */
   minLevel?: LogLevel
+  /**
+   * Minimum severity for request wide events (`createLogger().emit()`, framework
+   * middleware). Events below it are dropped before head sampling, and a
+   * `sampling.keep` rule or `keep` callback cannot bring them back. `error`
+   * and `fatal` events, and audit events, are always emitted.
+   * Independent of `minLevel`, which governs the global `log` API.
+   * @default undefined (every level)
+   */
+  requestMinLevel?: Exclude<LogLevel, 'error' | 'fatal'>
   /**
    * When pretty is disabled, emit JSON strings (default) or raw objects.
    * Set to false for environments like Cloudflare Workers that expect objects.

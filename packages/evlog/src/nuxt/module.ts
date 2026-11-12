@@ -12,7 +12,7 @@ import {
 } from '@nuxt/kit'
 import type { NuxtModule, VitePlugin } from '@nuxt/schema'
 import type { Nitro, NitroConfig } from 'nitropack'
-import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from '../types'
+import type { EnvironmentContext, LoggerConfig, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from '../types'
 import type { DevTerminalInput } from '../shared/dev-terminal'
 import { prependNitroErrorHandler, serializeBundledEvlogConfig } from '../nitro'
 import { getNitroVersionSafe } from '../shared/nitroVersion'
@@ -155,6 +155,12 @@ export interface ModuleOptions {
    * @default 'debug'
    */
   minLevel?: LogLevel
+
+  /**
+   * Minimum severity for server request wide events, applied before sampling
+   * and `keep`. `error` and `fatal` events are always emitted.
+   */
+  requestMinLevel?: LoggerConfig['requestMinLevel']
 
   /**
    * Transport configuration for sending client logs to the server.

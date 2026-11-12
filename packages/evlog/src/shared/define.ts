@@ -87,6 +87,8 @@ export interface EvlogConfig extends BaseEvlogOptions {
   stringify?: boolean
   /** Minimum severity for the global `log` API. */
   minLevel?: LoggerConfig['minLevel']
+  /** Minimum severity for request wide events, applied before sampling. */
+  requestMinLevel?: LoggerConfig['requestMinLevel']
   /** `evlog map` settings. */
   map?: EvlogMapConfig
   /** `evlog logs` settings. */
@@ -173,6 +175,7 @@ export function toLoggerConfig(config: EvlogConfig): LoggerConfig {
   if (config.dev !== undefined) out.dev = config.dev
   if (config.sampling !== undefined) out.sampling = config.sampling
   if (config.minLevel !== undefined) out.minLevel = config.minLevel
+  if (config.requestMinLevel !== undefined) out.requestMinLevel = config.requestMinLevel
   if (config.stringify !== undefined) out.stringify = config.stringify
   if (config.silent !== undefined) out.silent = config.silent
   if (config.redact !== undefined) out.redact = config.redact
