@@ -298,7 +298,8 @@ export const builtinPatterns = {
   },
   /** Credit card numbers → ****1111 (PCI DSS: last 4 allowed) */
   creditCard: {
-    pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
+    // A hyphen joining hex on either side means the digits are UUID groups, not a card.
+    pattern: /(?<![\dA-Fa-f]-)\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b(?!-[\dA-Fa-f])/g,
     mask: (m: string) => `****${m.replace(/[\s-]/g, '').slice(-4)}`,
   },
   /** Email addresses → a***@***.com */

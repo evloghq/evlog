@@ -358,6 +358,20 @@ describe('built-in smart masking', () => {
     expect(event.safe).toBe('no card here')
   })
 
+  it('leaves the digit groups of a UUID unmasked', () => {
+    const source = {
+      path: '/api/orders/00000000-0000-4000-8000-000000000000',
+      requestId: '00000000-1111-2222-3333-444444444444',
+      message: 'Card 4111 1111 1111 1111 on order 00000000-1111-2222-3333-444444444444',
+    }
+    const event = redactEvent(source, defined(resolveRedactConfig({ builtins: ['creditCard'] }), 'redact config'))
+    expect(event).toEqual({
+      path: '/api/orders/00000000-0000-4000-8000-000000000000',
+      requestId: '00000000-1111-2222-3333-444444444444',
+      message: 'Card ****1111 on order 00000000-1111-2222-3333-444444444444',
+    })
+  })
+
   it('masks email addresses keeping first char and TLD', () => {
     let event: Record<string, unknown> = {
       a: 'alice@example.com',
