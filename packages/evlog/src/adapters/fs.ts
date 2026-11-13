@@ -112,11 +112,7 @@ function parseLogFilename(filename: string): { date: string; index: number } {
 
 async function cleanupOldFiles(dir: string, maxFiles: number): Promise<void> {
   const files = await readdir(dir)
-  const jsonlFiles = files.filter(f => f.endsWith('.jsonl')).sort((a, b) => {
-    const pa = parseLogFilename(a)
-    const pb = parseLogFilename(b)
-    return pa.date.localeCompare(pb.date) || pa.index - pb.index
-  })
+  const jsonlFiles = files.filter(f => f.endsWith('.jsonl')).sort(compareLogFiles)
 
   if (jsonlFiles.length <= maxFiles) return
 

@@ -92,7 +92,7 @@ export function createSazabiDrain(overrides?: Partial<SazabiConfig>) {
       }
       return config as SazabiConfig
     },
-    send: (events, config) => sendBatchToOTLP(events, toSazabiOTLPConfig(config)),
+    send: sendBatchToSazabi,
   })
 }
 

@@ -89,7 +89,7 @@ export function createHyperDXDrain(overrides?: Partial<HyperDXConfig>) {
       }
       return config as HyperDXConfig
     },
-    send: (events, config) => sendBatchToOTLP(events, toHyperDXOTLPConfig(config)),
+    send: sendBatchToHyperDX,
   })
 }
 
