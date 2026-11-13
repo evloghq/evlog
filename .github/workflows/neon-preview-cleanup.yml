@@ -1,16 +1,20 @@
-name: delete neon preview branch
+name: neon preview branches
 
 # Vercel's Neon integration creates preview/<git-branch> on evi-db for every
-# preview deployment and only drops it with the deployment, months later.
+# preview deployment and only drops it with the deployment. Deleting on PR
+# close is not enough: while the Vercel preview still exists (last 20 are
+# kept), the integration recreates the Neon branch a few minutes later.
 
 on:
   pull_request:
     types: [closed]
+  schedule:
+    - cron: '17 8 * * *'
   workflow_dispatch:
     inputs:
       branch:
-        description: Git branch whose Neon preview branch should be deleted
-        required: true
+        description: Git branch whose Neon preview branch should be deleted. Leave empty to sweep stale preview/* branches.
+        required: false
         type: string
 
 permissions: {}
@@ -20,7 +24,9 @@ env:
 
 jobs:
   cleanup:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    if: >
+      (github.event_name == 'workflow_dispatch' && inputs.branch != '')
+      || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
@@ -59,3 +65,98 @@ jobs:
 
           curl -sf -X DELETE -H "$auth" "$api/$id" > /dev/null
           echo "Deleted $name ($id)"
+
+  sweep:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.branch == '')
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Delete stale Neon preview branches
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          : "${NEON_API_KEY:?NEON_API_KEY secret is not set}"
+
+          api="https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches"
+          auth="Authorization: Bearer $NEON_API_KEY"
+
+          neon='[]'
+          cursor=""
+          while :; do
+            set -- --data-urlencode "limit=100"
+            if [ -n "$cursor" ]; then
+              set -- "$@" --data-urlencode "cursor=$cursor"
+            fi
+            page=$(curl -sf -H "$auth" --get "$@" "$api")
+            neon=$(jq -c --argjson page "$page" '. + ($page.branches // [])' <<< "$neon")
+            cursor=$(jq -r '.pagination.next // empty' <<< "$page")
+            if [ -z "$cursor" ]; then
+              break
+            fi
+          done
+
+          git_branches=$(gh api --paginate "repos/$REPO/branches?per_page=100" --jq '.[].name')
+          open_heads=$(gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --jq '.[].head.ref')
+
+          in_list() {
+            local needle="$1"
+            local haystack="$2"
+            [ -n "$haystack" ] && grep -Fxq -- "$needle" <<< "$haystack"
+          }
+
+          has_merged_pr() {
+            local ref="$1"
+            local json
+            json=$(gh api --method GET "repos/$REPO/pulls" \
+              -f "head=${OWNER}:${ref}" \
+              -f state=closed \
+              -f per_page=20)
+            [ "$(jq '[.[] | select(.merged_at != null)] | length' <<< "$json")" != 0 ]
+          }
+
+          deleted=0
+          while IFS= read -r row; do
+            [ -z "$row" ] && continue
+            name=$(jq -r '.name' <<< "$row")
+            id=$(jq -r '.id' <<< "$row")
+            ref="${name#preview/}"
+
+            if in_list "$ref" "$open_heads"; then
+              echo "Keep $name ($id): open PR"
+              continue
+            fi
+
+            if in_list "$ref" "$git_branches"; then
+              if has_merged_pr "$ref"; then
+                reason="git branch exists, PR merged"
+              else
+                echo "Keep $name ($id): git branch exists"
+                continue
+              fi
+            else
+              reason="git branch gone"
+            fi
+
+            if curl -sf -X DELETE -H "$auth" "$api/$id" > /dev/null; then
+              echo "Deleted $name ($id): $reason"
+              deleted=$((deleted + 1))
+            else
+              echo "Failed to delete $name ($id)"
+            fi
+          done < <(jq -c '
+            .[]
+            | select(.name | startswith("preview/"))
+            | select(.name != "preview/main")
+            | select(.primary != true)
+            | select(.default != true)
+            | select(.protected != true)
+          ' <<< "$neon")
+
+          echo "Deleted $deleted stale preview branch(es)"
