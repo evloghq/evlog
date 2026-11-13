@@ -25,6 +25,17 @@ export interface LivePoller {
 }
 
 /**
+ * Whether this cursor probe should refetch payloads.
+ *
+ * The first probe always refreshes so an event that landed between the
+ * initial render and the first tick is not swallowed. After that, only a
+ * moved token refetches.
+ */
+export function cursorRequiresRefresh(lastId: number | null, latestId: number): boolean {
+  return lastId === null || lastId !== latestId
+}
+
+/**
  * Schedules `refresh` with exponential backoff, and stops entirely once the
  * user has gone idle so an open tab does not hold a scale-to-zero database
  * awake. `refresh` should return `true` when the data it probed actually

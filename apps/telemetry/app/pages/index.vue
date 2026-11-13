@@ -360,7 +360,7 @@ const CURSOR_POLL_MS = 10_000
 const CURSOR_POLL_MAX_MS = 180_000
 const IDLE_MS = 300_000
 
-/** `null` until the first tick has established a baseline to compare against. */
+/** `null` until a probe has successfully refreshed payloads against a cursor. */
 let lastCursorId: number | null = null
 
 // `useFetch`'s `refresh()` resolves even on a failed request (the error lands
@@ -370,10 +370,7 @@ let lastCursorId: number | null = null
 const { active: liveActive, lastError: liveError, toggle: toggleLive } = useLiveRefresh(
   async () => {
     const cursor = await $fetch<RunsCursor>('/api/telemetry/cursor')
-    const changed = lastCursorId !== null && cursor.latestId !== lastCursorId
-    lastCursorId = cursor.latestId
-
-    if (!changed) return false
+    if (!cursorRequiresRefresh(lastCursorId, cursor.latestId)) return false
 
     const pending: Promise<unknown>[] = [
       refreshFeed(),
@@ -387,6 +384,9 @@ const { active: liveActive, lastError: liveError, toggle: toggleLive } = useLive
     await Promise.all(pending)
     const error = statsError.value ?? runsError.value ?? feedError.value
     if (error) throw error
+    // Commit only after the payloads succeed. A failed stats refresh must
+    // retry on the next tick, not look like an unchanged cursor.
+    lastCursorId = cursor.latestId
     return true
   },
   { intervalMs: CURSOR_POLL_MS, maxIntervalMs: CURSOR_POLL_MAX_MS, idleMs: IDLE_MS, suspended: detailOpen },

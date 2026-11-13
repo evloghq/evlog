@@ -1,9 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLivePoller } from '../app/utils/live-poller'
+import { createLivePoller, cursorRequiresRefresh } from '../app/utils/live-poller'
 
 const INTERVAL = 10_000
 const MAX = 80_000
 const IDLE = 300_000
+
+describe('cursorRequiresRefresh', () => {
+  it('refreshes on the first probe so events that landed before the baseline are not swallowed', () => {
+    expect(cursorRequiresRefresh(null, 4)).toBe(true)
+  })
+
+  it('skips payloads while the cursor is unchanged', () => {
+    expect(cursorRequiresRefresh(4, 4)).toBe(false)
+  })
+
+  it('refreshes once the cursor moves', () => {
+    expect(cursorRequiresRefresh(4, 5)).toBe(true)
+  })
+
+  it('keeps requiring a refresh until the baseline is committed after success', () => {
+    let last: number | null = null
+    expect(cursorRequiresRefresh(last, 4)).toBe(true)
+    expect(cursorRequiresRefresh(last, 4)).toBe(true)
+    last = 4
+    expect(cursorRequiresRefresh(last, 4)).toBe(false)
+  })
+})
 
 describe('createLivePoller', () => {
   beforeEach(() => {
