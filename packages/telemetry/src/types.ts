@@ -99,9 +99,9 @@ export interface TelemetryOptions<
   /** Hard cap (ms) for {@link TelemetryHandle.flush}. Default: 500. */
   flushTimeoutMs?: number
   /**
-   * Minimum time between successful HTTP flushes from {@link TelemetryHandle.run}.
-   * `run()` still writes every event to disk; it POSTs only when this window has
-   * elapsed (or the outbox has reached {@link TelemetryOptions.flushThreshold}).
+   * Idle time after a successful flush before {@link TelemetryHandle.run} POSTs again.
+   * `run()` still writes every event to disk; it POSTs when this window has
+   * elapsed, or sooner when the outbox has reached {@link TelemetryOptions.flushThreshold}.
    * {@link TelemetryHandle.flush} sends immediately.
    * Default: 15 minutes (60 minutes when `std-env` reports CI).
    * Override with `EVLOG_TELEMETRY_FLUSH_INTERVAL_MS` (`0` POSTs on every run).
