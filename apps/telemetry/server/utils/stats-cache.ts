@@ -14,12 +14,15 @@ import { sourceToken } from '../../shared/utils/sources'
  * (`max(id)`), which costs a fraction of a millisecond to read. Practically:
  * an idle dashboard never recomputes, a busy one recomputes at most once per
  * `MIN_AGE_MS`, and a sliding window is never served staler than `MAX_AGE_MS`.
+ *
+ * `MAX_AGE_MS` is 5 minutes so a quiet dashboard (and MCP agents asking the
+ * same numbers) do not wake a scale-to-zero compute just to slide the window.
  */
 
 /** Below this age a cached entry is always reused, even if new events landed. */
 const MIN_AGE_MS = 5_000
-/** Above this age an entry is always recomputed — the range is a *sliding* window. */
-const MAX_AGE_MS = 60_000
+/** Above this age an entry is always recomputed. The range is a sliding window. */
+const MAX_AGE_MS = 5 * 60_000
 /**
  * `tool`/`environment` come from user-controlled query params, so the key
  * space is unbounded — cap it and evict the oldest entry rather than letting

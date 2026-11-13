@@ -343,30 +343,25 @@ const series = computed(() => ({
 
 // Live refresh, in two tiers.
 //
-// Every tick polls `/api/telemetry/cursor` — two indexed `max()` lookups, a
-// fraction of a millisecond — and only refetches the real payloads when that
-// token moved. The old behaviour re-ran all three fetches every 5s no matter
-// what, and the stats fetch alone is ~14 aggregate queries over the whole
-// selected window (~800ms of database CPU on a 30-day range). An idle
-// dashboard now costs essentially nothing, which is what buys the headroom to
-// poll *more* often: 3s instead of 5s, so new runs surface noticeably faster.
+// Every tick polls `/api/telemetry/cursor` (two indexed `max()` lookups) and
+// only refetches stats/feed/runs when that token moved. The stats fetch is
+// ~14 aggregate queries over the whole selected window, so an unchanged
+// cursor must not recompute it: a sliding window a few minutes stale is
+// cheaper than pinning Neon compute awake.
+//
+// Cadence starts at 10s, doubles while the cursor is unchanged (capped at
+// 3 min), pauses while the tab is hidden, and stops after 5 min of no
+// pointer/key/scroll/focus activity so a forgotten tab lets the database
+// scale to zero. Interaction or focus resets the cadence and resumes.
 //
 // Paused while the run detail slideover is open so a manually sorted page
 // never shifts mid-read.
-const CURSOR_POLL_MS = 3000
-/** Refresh stats even without new events — the range is a sliding window. */
-const STATS_HEARTBEAT_MS = 60_000
+const CURSOR_POLL_MS = 10_000
+const CURSOR_POLL_MAX_MS = 180_000
+const IDLE_MS = 300_000
 
 /** `null` until the first tick has established a baseline to compare against. */
 let lastCursorId: number | null = null
-let lastStatsAt = Date.now()
-
-// Covers the refreshes this tick doesn't drive (filter/range changes go
-// through `useFetch`'s own `watch`), so the heartbeat measures staleness
-// rather than time since the last poll.
-watch(stats, () => {
-  lastStatsAt = Date.now()
-})
 
 // `useFetch`'s `refresh()` resolves even on a failed request (the error lands
 // in its `.error` ref instead of rejecting), so re-throw here for
@@ -378,22 +373,23 @@ const { active: liveActive, lastError: liveError, toggle: toggleLive } = useLive
     const changed = lastCursorId !== null && cursor.latestId !== lastCursorId
     lastCursorId = cursor.latestId
 
-    const pending: Promise<unknown>[] = []
-    if (changed) {
-      pending.push(refreshFeed())
-      // Both are tab-scoped — refreshing a tab nobody is looking at would pay
-      // for its queries and throw the result away.
-      if (explorerActive.value) pending.push(refreshRuns())
-      if (adoptionActive.value) pending.push(refreshAdoption())
-    }
-    if (changed || Date.now() - lastStatsAt >= STATS_HEARTBEAT_MS) pending.push(refreshStats())
-    if (pending.length === 0) return
+    if (!changed) return false
+
+    const pending: Promise<unknown>[] = [
+      refreshFeed(),
+      refreshStats(),
+    ]
+    // Both are tab-scoped: refreshing a tab nobody is looking at would pay
+    // for its queries and throw the result away.
+    if (explorerActive.value) pending.push(refreshRuns())
+    if (adoptionActive.value) pending.push(refreshAdoption())
 
     await Promise.all(pending)
     const error = statsError.value ?? runsError.value ?? feedError.value
     if (error) throw error
+    return true
   },
-  { intervalMs: CURSOR_POLL_MS, suspended: detailOpen },
+  { intervalMs: CURSOR_POLL_MS, maxIntervalMs: CURSOR_POLL_MAX_MS, idleMs: IDLE_MS, suspended: detailOpen },
 )
 
 async function onLogout() {

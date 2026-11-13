@@ -1,8 +1,14 @@
+import { createLivePoller, type LivePoller } from '../utils/live-poller'
+
 export interface UseLiveRefreshOptions {
-  /** Polling cadence in ms. Default: 5000. */
+  /** Base polling cadence in ms. Default: 10_000. */
   intervalMs?: number
+  /** Cap for exponential backoff while the cursor is unchanged. Default: 180_000. */
+  maxIntervalMs?: number
+  /** Stop polling after this much silence from the user. Default: 300_000. */
+  idleMs?: number
   /**
-   * Extra suspension signal — when `true` the poll is skipped (e.g. while the
+   * Extra suspension signal: when `true` the poll is skipped (e.g. while the
    * run-detail slideover is open, so a manually sorted page doesn't shift
    * under the reader).
    */
@@ -12,10 +18,10 @@ export interface UseLiveRefreshOptions {
 export interface UseLiveRefreshReturn {
   /** User-facing toggle — `false` after pressing pause. */
   enabled: Ref<boolean>
-  /** Whether a poll actually fires right now (enabled + tab visible + not suspended). */
+  /** Whether a poll is allowed right now (enabled + tab visible + not suspended). Idle is a poller concern, not a pause. */
   active: ComputedRef<boolean>
   /**
-   * The most recent tick's failure, if any — `null` once a later tick
+   * The most recent tick's failure, if any, or `null` once a later tick
    * succeeds. `refresh` itself decides what counts as a failure: Nuxt's
    * `useFetch`/`useAsyncData` `refresh()` resolves even on a failed request
    * (the error lands in its `.error` ref instead), so callers polling those
@@ -27,53 +33,84 @@ export interface UseLiveRefreshReturn {
 }
 
 /**
- * Polls `refresh` on a fixed cadence to keep the dashboard alive.
+ * Polls `refresh` to keep the dashboard alive without pinning a scale-to-zero
+ * database awake.
  *
- * Quiet by design: skips ticks while the tab is hidden (no wasted queries,
- * no burst on return), while the previous refresh is still in flight, and
- * while `suspended` is set. Client-only — the interval starts on mount.
+ * Skips ticks while the tab is hidden, while the previous refresh is still in
+ * flight, while `suspended` is set, and after `idleMs` of no user activity.
+ * An unchanged cursor doubles the cadence up to `maxIntervalMs`; a change
+ * resets it. Client-only: the timer starts on mount.
+ *
+ * `refresh` should return `true` when the probed data changed.
  */
-export function useLiveRefresh(refresh: () => Promise<unknown> | unknown, options: UseLiveRefreshOptions = {}): UseLiveRefreshReturn {
-  const intervalMs = options.intervalMs ?? 5000
+export function useLiveRefresh(refresh: () => Promise<boolean | void> | boolean | void, options: UseLiveRefreshOptions = {}): UseLiveRefreshReturn {
+  const intervalMs = options.intervalMs ?? 10_000
+  const maxIntervalMs = options.maxIntervalMs ?? 180_000
+  const idleMs = options.idleMs ?? 300_000
   const enabled = ref(true)
   const visible = ref(true)
-  const inFlight = ref(false)
   const lastError = ref<unknown>(null)
 
   const active = computed(() => enabled.value && visible.value && !(options.suspended?.value ?? false))
 
-  function toggle() {
-    enabled.value = !enabled.value
+  let poller: LivePoller | undefined
+
+  function sync() {
+    if (!poller) return
+    enabled.value = poller.enabled
+    visible.value = poller.visible
+    lastError.value = poller.lastError
   }
 
-  async function tick() {
-    if (!active.value || inFlight.value) return
-    inFlight.value = true
-    try {
-      await refresh()
-      lastError.value = null
-    } catch (error) {
-      lastError.value = error
-    } finally {
-      inFlight.value = false
-    }
+  function toggle() {
+    poller?.toggle()
+    sync()
   }
 
   function onVisibilityChange() {
-    visible.value = document.visibilityState === 'visible'
+    poller?.setVisible(document.visibilityState === 'visible')
+    sync()
   }
 
-  let timer: ReturnType<typeof setInterval> | undefined
+  function onActivity() {
+    poller?.bumpActivity()
+    sync()
+  }
 
   onMounted(() => {
-    visible.value = document.visibilityState === 'visible'
+    poller = createLivePoller(refresh, {
+      intervalMs,
+      maxIntervalMs,
+      idleMs,
+      onSettle(error) {
+        lastError.value = error
+      },
+    })
+    poller.setVisible(document.visibilityState === 'visible')
+    poller.setSuspended(options.suspended?.value ?? false)
+    poller.start()
+    sync()
+
     document.addEventListener('visibilitychange', onVisibilityChange)
-    timer = setInterval(tick, intervalMs)
+    window.addEventListener('pointerdown', onActivity, { passive: true })
+    window.addEventListener('keydown', onActivity)
+    window.addEventListener('scroll', onActivity, { passive: true, capture: true })
+    window.addEventListener('focus', onActivity)
   })
 
   onBeforeUnmount(() => {
     document.removeEventListener('visibilitychange', onVisibilityChange)
-    if (timer) clearInterval(timer)
+    window.removeEventListener('pointerdown', onActivity)
+    window.removeEventListener('keydown', onActivity)
+    window.removeEventListener('scroll', onActivity, true)
+    window.removeEventListener('focus', onActivity)
+    poller?.stop()
+    poller = undefined
+  })
+
+  watch(() => options.suspended?.value, (value) => {
+    poller?.setSuspended(value ?? false)
+    sync()
   })
 
   return { enabled, active, lastError, toggle }
