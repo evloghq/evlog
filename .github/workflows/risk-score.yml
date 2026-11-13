@@ -1,0 +1,49 @@
+name: Risk score
+
+# Publishes a Linear riskScore for every pull request, bound to its head SHA.
+# The rules live in scripts/risk-score/lib.mjs; Linear displays the score, it
+# does not compute it.
+#
+# pull_request_target so fork PRs get a token that can comment. That token is
+# privileged, so the job only checks out the base branch's scripts/risk-score
+# and reads the PR through the API: the PR's own code never runs here.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+
+permissions: {}
+
+# A newer push supersedes the score for an older head SHA.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  risk-score:
+    name: Publish risk score
+    # Only a title edit can change the score; body edits are not worth a run.
+    if: github.event.action != 'edited' || github.event.changes.title.from != null
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write # creates and updates the sticky comment
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: scripts/risk-score
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { publishRiskScore } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/risk-score/index.mjs`)
+            await publishRiskScore({ github, context, core })

@@ -19,6 +19,7 @@ pnpm cli:sandbox                   # disposable per-framework apps under .sandbo
 pnpm content:lint [path]           # rank the written corpus by content findings (see scripts/content-lint/README.md)
 pnpm content:lint:test             # the scanner's own tests, including its two calibration fixtures
 pnpm release-notes:test            # tests for scripts/release-notes, which rewrites GitHub release bodies and pins Latest to evlog
+pnpm risk-score:test               # tests for scripts/risk-score, the rules behind the Linear risk score comment on each PR
 ```
 
 Publishing is automated: changesets + `.github/workflows/release.yml`. Never run `pnpm release` or `changeset publish` manually. CI publishes with npm Trusted Publishing, so a new package needs GitHub Actions (`evloghq/evlog`, `release.yml`) added as its Trusted Publisher on npmjs.com before the first release that includes it; without it npm answers `E404` on the publish.
@@ -49,7 +50,7 @@ apps/playground/           Main dev environment (`pnpm dev`)
 apps/docs/                 Docus documentation site — has its own AGENTS.md
 apps/*                     Framework playgrounds (next, nitro, nitro-v2, nuxthub, lab, telemetry, ...) — `pnpm playground` to pick one
 examples/                  ~20 runnable examples, one per framework, plus the community-*-skeleton dirs used by the create-adapter/enricher/framework skills
-scripts/                   Repo tooling (run-app, cli-sandbox, release-notes, content-lint)
+scripts/                   Repo tooling (run-app, cli-sandbox, release-notes, risk-score, content-lint)
 .agents/skills/            Internal skills for creating adapters, enrichers, and framework integrations, and for writing content — each carries `metadata: internal: true` in its frontmatter so the skills CLI skips them for public installs
 skills/                     Published skills (analyze-logs, build-audit-logs, review-logging-patterns) — served by the docs site via `/.well-known/skills/` and discovered by `npx skills add evloghq/evlog`
 ```
