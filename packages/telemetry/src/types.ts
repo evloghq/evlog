@@ -98,6 +98,21 @@ export interface TelemetryOptions<
   collect?: CollectConfig<TFlags, TFields>
   /** Hard cap (ms) for {@link TelemetryHandle.flush}. Default: 500. */
   flushTimeoutMs?: number
+  /**
+   * Minimum time between successful HTTP flushes from {@link TelemetryHandle.run}.
+   * `run()` still writes every event to disk; it POSTs only when this window has
+   * elapsed (or the outbox has reached {@link TelemetryOptions.flushThreshold}).
+   * {@link TelemetryHandle.flush} sends immediately.
+   * Default: 15 minutes (60 minutes when `std-env` reports CI).
+   * Override with `EVLOG_TELEMETRY_FLUSH_INTERVAL_MS` (`0` POSTs on every run).
+   */
+  flushIntervalMs?: number
+  /**
+   * Outbox size that forces a flush from {@link TelemetryHandle.run} even inside
+   * the coalescing window. Default: 20. Capped at 50 (ingest `maxBatchSize`).
+   * Override with `EVLOG_TELEMETRY_FLUSH_THRESHOLD`.
+   */
+  flushThreshold?: number
   /** Max outbox file size in bytes before oldest events are dropped. Default: 1 MiB. */
   maxBufferBytes?: number
   /** Max age (ms) for buffered events. Default: 30 days. */
@@ -148,7 +163,7 @@ export interface TelemetryHandle<
       systemCustom?: Record<string, string>
     },
   ) => Promise<T>
-  /** Flush buffered events within the hard cap. Never throws. */
+  /** Flush buffered events now, ignoring the coalescing window. Never throws. */
   flush: () => Promise<void>
   /** Whether telemetry is active (consent granted). */
   enabled: boolean

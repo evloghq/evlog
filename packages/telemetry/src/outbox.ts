@@ -54,6 +54,7 @@ function sleep(ms: number): Promise<void> {
 export class TelemetryOutbox {
   private readonly dir: string
   private readonly outboxPath: string
+  private readonly lastFlushPath: string
   private readonly lockPath: string
   private readonly maxBytes: number
   private readonly maxAgeMs: number
@@ -63,6 +64,7 @@ export class TelemetryOutbox {
   constructor(opts: OutboxOptions) {
     this.dir = getTelemetryDir(opts.toolName)
     this.outboxPath = join(this.dir, 'outbox.ndjson')
+    this.lastFlushPath = join(this.dir, 'last-flush')
     this.lockPath = join(this.dir, 'outbox.lock')
     this.maxBytes = opts.maxBufferBytes ?? DEFAULT_MAX_BYTES
     this.maxAgeMs = opts.maxEventAgeMs ?? DEFAULT_MAX_AGE_MS
@@ -85,27 +87,34 @@ export class TelemetryOutbox {
 
   /** Read all valid events in order. Corrupt lines skipped. */
   async readAll(): Promise<RunEvent[]> {
-    let raw: string
-    try {
-      raw = await readFile(this.outboxPath, 'utf-8')
-    } catch {
-      return []
-    }
+    return (await this.parseStored()).map(s => s.event)
+  }
 
-    const events: RunEvent[] = []
-    const now = Date.now()
-    for (const line of raw.split('\n')) {
-      if (!line.trim()) continue
-      try {
-        const stored = JSON.parse(line) as StoredEvent
-        if (stored?.event?.event !== 'run') continue
-        if (now - stored.storedAt > this.maxAgeMs) continue
-        events.push(stored.event)
-      } catch {
-        // skip corrupt
-      }
+  /** Count and oldest `storedAt` of valid events. */
+  async inspect(): Promise<{ count: number, oldestStoredAt?: number }> {
+    const stored = await this.parseStored()
+    return { count: stored.length, oldestStoredAt: stored[0]?.storedAt }
+  }
+
+  /** Epoch ms of the last successful flush, if any. */
+  async readLastFlushAt(): Promise<number | undefined> {
+    try {
+      const n = Number((await readFile(this.lastFlushPath, 'utf-8')).trim())
+      if (!Number.isFinite(n) || n <= 0) return undefined
+      return n
+    } catch {
+      return undefined
     }
-    return events
+  }
+
+  /** Persist a successful flush timestamp. Never throws. */
+  async markFlushed(at = Date.now()): Promise<void> {
+    try {
+      await mkdir(this.dir, { recursive: true })
+      await writeFile(this.lastFlushPath, String(at), 'utf-8')
+    } catch {
+      // never harm the host
+    }
   }
 
   /** Remove delivered events by rewriting the outbox. */
@@ -150,10 +159,35 @@ export class TelemetryOutbox {
     try {
       await this.withLock(async () => {
         await unlink(this.outboxPath).catch(() => {})
+        await unlink(this.lastFlushPath).catch(() => {})
       })
     } catch {
       // absent is fine
     }
+  }
+
+  private async parseStored(): Promise<StoredEvent[]> {
+    let raw: string
+    try {
+      raw = await readFile(this.outboxPath, 'utf-8')
+    } catch {
+      return []
+    }
+
+    const stored: StoredEvent[] = []
+    const now = Date.now()
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue
+      try {
+        const item = JSON.parse(line) as StoredEvent
+        if (item?.event?.event !== 'run') continue
+        if (now - item.storedAt > this.maxAgeMs) continue
+        stored.push(item)
+      } catch {
+        // skip corrupt
+      }
+    }
+    return stored
   }
 
   private async enforceBoundsInLock(): Promise<void> {
