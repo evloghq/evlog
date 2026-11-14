@@ -43,7 +43,7 @@ export function fastestRunMs(fn: () => unknown, runs = 3): number {
   return fastest
 }
 
-/** Longer input is this many times the prefix. Linear work is ~this times slower; quadratic is ~this squared. */
+/** The long input is built at this scale, the short one at 1. Linear work is ~this times slower; quadratic is ~this squared. */
 const SIZE_RATIO = 8
 /** Max allowed (long ms / short ms) at {@link SIZE_RATIO}. Linear at 8x size is ~8; quadratic is ~64. */
 const MAX_TIME_RATIO = 24
@@ -83,20 +83,22 @@ function fastestPerCallMs(fn: () => unknown, runs = 3): number {
 }
 
 /**
- * Assert `fn` stays linear in `input.length`. Times an 8x-shorter prefix and
- * the full string, each as the fastest per-call average. The longer run may be
- * at most 24x the shorter; a 2 s cap on the long run catches a hang that is
- * already slow on the prefix.
+ * Assert `fn` stays linear in input length. `build(n)` returns the adversarial
+ * input at scale `n`; both sizes must have the same shape, which a prefix of
+ * the long input does not guarantee. Times `build(1)` and `build(8)`, each as
+ * the fastest per-call average. The longer run may be at most 24x the shorter;
+ * a 2 s cap on the long run catches a hang that is already slow at scale 1.
  *
  * @example
  * ```ts
- * expectLinearTime(value => redactEvent({ input: value }, config), input)
+ * expectLinearTime(value => redactEvent({ input: value }, config), n => 'ghp_'.repeat(2_048 * n))
  * ```
  */
-export function expectLinearTime(fn: (input: string) => unknown, input: string, label?: string): void {
-  const short = input.slice(0, Math.max(1, Math.floor(input.length / SIZE_RATIO)))
+export function expectLinearTime(fn: (input: string) => unknown, build: (n: number) => string, label?: string): void {
+  const short = build(1)
+  const long = build(SIZE_RATIO)
   const shortMs = fastestPerCallMs(() => fn(short))
-  const longMs = fastestPerCallMs(() => fn(input))
+  const longMs = fastestPerCallMs(() => fn(long))
   const detail = `${longMs.toFixed(1)}ms / ${shortMs.toFixed(1)}ms`
   const named = label ? `${label} (${detail})` : detail
   expect(longMs, named).toBeLessThan(LINEAR_TIME_BUDGET_MS)

@@ -101,12 +101,12 @@ describe('parseStackFrames', () => {
 
   it('parses attacker-shaped frame lines in linear time', () => {
     const lines = [
-      `at a${' ('.repeat(32_768)}`,
-      `at async a${' ('.repeat(32_768)}`,
-      `at a (${'1:'.repeat(32_768)})`,
+      (n: number) => `at a${' ('.repeat(4_096 * n)}`,
+      (n: number) => `at async a${' ('.repeat(4_096 * n)}`,
+      (n: number) => `at a (${'1:'.repeat(4_096 * n)})`,
     ]
     for (const line of lines) {
-      expectLinearTime(frame => parseStackFrames(`Error: invalid value\n    ${frame}`), line, line.slice(0, 16))
+      expectLinearTime(frame => parseStackFrames(`Error: invalid value\n    ${frame}`), line, line(1).slice(0, 16))
     }
   })
 

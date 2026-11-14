@@ -483,17 +483,17 @@ describe('built-in smart masking', () => {
   it('masks long attacker-controlled strings in linear time', () => {
     const config = defined(resolveRedactConfig(true), 'redact config')
     const inputs = [
-      'A'.repeat(65_536),
-      `a@${'a.'.repeat(32_768)}`,
-      'eyJ-'.repeat(16_384),
-      'eyJ.'.repeat(16_384),
-      `${'x'.repeat(64)}@${`${'a'.repeat(63)}.`.repeat(1_024)}`,
-      `${'a'.repeat(32_768)}@${'a.'.repeat(16_384)}`,
-      '1.2.3-'.repeat(10_923),
-      `eyJa.${'-eyJ.'.repeat(13_107)}`,
+      (n: number) => 'A'.repeat(8_192 * n),
+      (n: number) => `a@${'a.'.repeat(4_096 * n)}`,
+      (n: number) => 'eyJ-'.repeat(2_048 * n),
+      (n: number) => 'eyJ.'.repeat(2_048 * n),
+      (n: number) => `${'x'.repeat(64)}@${`${'a'.repeat(63)}.`.repeat(128 * n)}`,
+      (n: number) => `${'a'.repeat(4_096 * n)}@${'a.'.repeat(2_048 * n)}`,
+      (n: number) => '1.2.3-'.repeat(1_366 * n),
+      (n: number) => `eyJa.${'-eyJ.'.repeat(1_638 * n)}`,
     ]
     for (const input of inputs) {
-      expectLinearTime(value => redactEvent({ input: value }, config), input, input.slice(0, 16))
+      expectLinearTime(value => redactEvent({ input: value }, config), input, input(1).slice(0, 16))
     }
   })
 
@@ -656,25 +656,25 @@ describe('credentials detected by value', () => {
 
   it('masks tokens in linear time on long attacker-controlled input', () => {
     const inputs = [
-      'ghp_'.repeat(13_107),
-      'github_pat_'.repeat(5_958),
-      'AKIA'.repeat(16_384),
-      'sk-ant-'.repeat(9_362),
-      'xoxb-1-'.repeat(9_362),
-      '-----BEGIN PRIVATE KEY-----'.repeat(2_340),
-      '-----BEGIN PRIVATE KEY-----\n'.repeat(2_200),
-      'a://a:'.repeat(10_923),
-      'a://:'.repeat(13_107),
-      `a://${'a:'.repeat(16_384)}`,
-      `${'a'.repeat(32)}://${'a'.repeat(256)}:${'a'.repeat(65_000)}`,
-      `${'a.'.repeat(16)}a://u:${'a'.repeat(65_000)}`,
-      `a://u:${'?'.repeat(65_000)}`,
-      `a://u:a${'@?'.repeat(32_000)}`,
-      `a://u:a${'@a'.repeat(32_000)}/`,
-      `a://u:${'1?'.repeat(32_000)}`,
+      (n: number) => 'ghp_'.repeat(1_638 * n),
+      (n: number) => 'github_pat_'.repeat(745 * n),
+      (n: number) => 'AKIA'.repeat(2_048 * n),
+      (n: number) => 'sk-ant-'.repeat(1_170 * n),
+      (n: number) => 'xoxb-1-'.repeat(1_170 * n),
+      (n: number) => '-----BEGIN PRIVATE KEY-----'.repeat(292 * n),
+      (n: number) => '-----BEGIN PRIVATE KEY-----\n'.repeat(275 * n),
+      (n: number) => 'a://a:'.repeat(1_366 * n),
+      (n: number) => 'a://:'.repeat(1_638 * n),
+      (n: number) => `a://${'a:'.repeat(2_048 * n)}`,
+      (n: number) => `${'a'.repeat(32)}://${'a'.repeat(256)}:${'a'.repeat(8_125 * n)}`,
+      (n: number) => `${'a.'.repeat(16)}a://u:${'a'.repeat(8_125 * n)}`,
+      (n: number) => `a://u:${'?'.repeat(8_125 * n)}`,
+      (n: number) => `a://u:a${'@?'.repeat(4_000 * n)}`,
+      (n: number) => `a://u:a${'@a'.repeat(4_000 * n)}/`,
+      (n: number) => `a://u:${'1?'.repeat(4_000 * n)}`,
     ]
     for (const input of inputs) {
-      expectLinearTime(value => redactEvent({ input: value }, config), input, input.slice(0, 16))
+      expectLinearTime(value => redactEvent({ input: value }, config), input, input(1).slice(0, 16))
     }
   })
 })

@@ -7,7 +7,7 @@ import { expectLinearTime } from '../helpers/timers'
 
 describe('drain endpoint URLs', () => {
   it('trim trailing slashes in linear time', () => {
-    const endpoint = `https://in.example.com${'/'.repeat(32_768)}x`
+    const endpoint = (n: number) => `https://in.example.com${'/'.repeat(4_096 * n)}x`
     const resolvers: Array<[string, (url: string) => string]> = [
       ['clickhouse', url => resolveClickHouseUrl({ endpoint: url })],
       ['datadog intakeUrl', url => resolveDatadogIntakeUrl({ intakeUrl: url })],
