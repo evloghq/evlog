@@ -50,6 +50,18 @@ describe('createGitHubActionsTelemetry', () => {
     expect(events[0]?.custom).toEqual({ routes: 3, ghaAction: 'test-action', ghaEvent: 'push' })
   })
 
+  it('POSTs after each run without waiting for the coalescing window', async () => {
+    const handle = createGitHubActionsTelemetry({ name: TOOL, version: '1.0.0', flushIntervalMs: 60 * 60 * 1000 })
+    expect(await handle.run('map', () => 42)).toBe(42)
+    await expect(handle.run('fail', () => {
+      throw Object.assign(new Error('boom'), { code: 'MAP_FAILED' })
+    })).rejects.toThrow('boom')
+    expect(events.map(e => [e.command, e.outcome, e.errorCode])).toEqual([
+      ['map', 'success', undefined],
+      ['fail', 'error', 'MAP_FAILED'],
+    ])
+  })
+
   it('reflects consent changes through the enabled getter', async () => {
     const handle = createGitHubActionsTelemetry({ name: TOOL, version: '1.0.0' })
     await disableTelemetry(TOOL)

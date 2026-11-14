@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { isCI } from 'std-env'
 import { readPreferenceSync, resolveConsent, writePreference, purgeOutbox } from './consent'
 import {
   composeDrains,
@@ -10,6 +11,12 @@ import {
   type TelemetryDrain,
 } from './drain'
 import { buildEnvInfo, resolveMachineId } from './enrich'
+import {
+  MAX_FLUSH_BATCH,
+  resolveFlushIntervalMs,
+  resolveFlushThreshold,
+  shouldFlushOutbox,
+} from './flush-policy'
 import { computeRunIdempotencyKey } from './idempotency'
 import { TelemetryOutbox } from './outbox'
 import { sanitizeCustom, sanitizeFlags, sanitizeSystemCustom } from './sanitize'
@@ -83,7 +90,6 @@ class InternalTelemetry<
   async init(): Promise<void> {
     if (!this._enabled) return
     this.machineId = await resolveMachineId(this.options.name)
-    await this.flushBacklog()
   }
 
   async run<T>(
@@ -124,16 +130,21 @@ class InternalTelemetry<
         timestamp,
       })
       await this.record(event)
-      await this.flush()
+      if (await this.shouldFlush()) await this.deliver(false)
     }
   }
 
   async flush(): Promise<void> {
+    await this.deliver(true)
+  }
+
+  /** `drainAll` sends batch after batch until the outbox is empty; a `run()` sends one batch per command. */
+  private async deliver(drainAll: boolean): Promise<void> {
     if (!this._enabled) return
     const timeoutMs = this.options.flushTimeoutMs ?? 500
     try {
       await Promise.race([
-        this.flushBacklog(),
+        this.flushBacklog(drainAll),
         new Promise<void>(resolve => {
           const t = setTimeout(resolve, timeoutMs)
           ;(t as { unref?: () => void }).unref?.()
@@ -144,12 +155,27 @@ class InternalTelemetry<
     }
   }
 
-  private async flushBacklog(): Promise<void> {
+  private async shouldFlush(): Promise<boolean> {
+    const { count, oldestStoredAt } = await this.outbox.inspect()
+    const lastFlushAt = await this.outbox.readLastFlushAt()
+    return shouldFlushOutbox({
+      pending: count,
+      lastFlushAt,
+      oldestStoredAt,
+      now: Date.now(),
+      intervalMs: resolveFlushIntervalMs(this.options.flushIntervalMs, isCI),
+      threshold: resolveFlushThreshold(this.options.flushThreshold),
+    })
+  }
+
+  private async flushBacklog(drainAll: boolean): Promise<void> {
     const pending = await this.outbox.readAll()
-    if (pending.length === 0) return
-    const ok = await this.drain(pending)
-    if (ok) {
-      await this.outbox.removeDelivered(new Set(pending.map(e => e.idempotencyKey)))
+    for (let start = 0; start < pending.length; start += MAX_FLUSH_BATCH) {
+      const batch = pending.slice(start, start + MAX_FLUSH_BATCH)
+      if (!await this.drain(batch)) return
+      await this.outbox.removeDelivered(new Set(batch.map(e => e.idempotencyKey)))
+      await this.outbox.markFlushed()
+      if (!drainAll) return
     }
   }
 

@@ -23,7 +23,7 @@ Ship usage insight without shipping an analytics SDK: wrap your [citty](https://
 | --- | --- |
 | Per-command analytics boilerplate | `withTelemetry()` walks your citty tree — one event per `run` handler |
 | Leaking paths, tokens, or raw `argv` | Privacy by shape: booleans/numbers captured, strings presence-only unless allowlisted |
-| Short-lived CI runs losing data | Disk-buffered NDJSON outbox drains on the next invocation |
+| Short-lived CI runs losing data | Disk-buffered NDJSON outbox; `run()` POSTs after 15 minutes (60 in CI) or 20 queued events |
 | Disclosure drift | `generateDisclosure()` derives markdown + JSON from your runtime config |
 | Ingestion endpoint | `parseIngestBody()` validates POST bodies server-side — tool allowlist, envelope checks, custom key filter |
 | Telemetry breaking the host tool | Never throws, never blocks exit; `flush()` hard-capped at 500ms |

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { defineCommand, runCommand } from 'citty'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveConsent, purgeOutbox } from '../src/consent'
 import { FLAG_VALUE_SET, sanitizeFlags, sanitizeCustom, sanitizeSystemCustom } from '../src/sanitize'
 import { computeRunIdempotencyKey } from '../src/idempotency'
@@ -17,6 +17,15 @@ import {
   enableTelemetry,
   _resetActiveTelemetryForTests,
 } from '../src/create'
+import {
+  CI_FLUSH_INTERVAL_MS,
+  DEFAULT_FLUSH_INTERVAL_MS,
+  DEFAULT_FLUSH_THRESHOLD,
+  MAX_FLUSH_BATCH,
+  resolveFlushIntervalMs,
+  resolveFlushThreshold,
+  shouldFlushOutbox,
+} from '../src/flush-policy'
 
 const TOOL = 'evlog-test'
 
@@ -213,6 +222,83 @@ describe('telemetry outbox', () => {
     await outbox.append(exampleRunEvent({ idempotencyKey: 'aged-out' }))
     expect(await outbox.readAll()).toHaveLength(1)
   })
+
+  it('round-trips last-flush and clears it on purge', async () => {
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    expect(await outbox.readLastFlushAt()).toBeUndefined()
+    await outbox.markFlushed(1_700_000_000_000)
+    expect(await outbox.readLastFlushAt()).toBe(1_700_000_000_000)
+    await outbox.append(exampleRunEvent())
+    await purgeOutbox(TOOL)
+    expect(await outbox.readAll()).toHaveLength(0)
+    expect(await outbox.readLastFlushAt()).toBeUndefined()
+  })
+})
+
+describe('telemetry flush policy', () => {
+  it('defaults to 15 minutes, 60 minutes in CI', () => {
+    expect(resolveFlushIntervalMs(undefined, false, {})).toBe(DEFAULT_FLUSH_INTERVAL_MS)
+    expect(resolveFlushIntervalMs(undefined, true, {})).toBe(CI_FLUSH_INTERVAL_MS)
+  })
+
+  it('lets the env override the option and CI default', () => {
+    expect(resolveFlushIntervalMs(1_000, true, { EVLOG_TELEMETRY_FLUSH_INTERVAL_MS: '0' })).toBe(0)
+    expect(resolveFlushIntervalMs(undefined, false, { EVLOG_TELEMETRY_FLUSH_INTERVAL_MS: '120000' })).toBe(120_000)
+  })
+
+  it('caps the threshold at the ingest batch size', () => {
+    expect(resolveFlushThreshold(undefined, {})).toBe(DEFAULT_FLUSH_THRESHOLD)
+    expect(resolveFlushThreshold(3, {})).toBe(3)
+    expect(resolveFlushThreshold(99, {})).toBe(MAX_FLUSH_BATCH)
+    expect(resolveFlushThreshold(undefined, { EVLOG_TELEMETRY_FLUSH_THRESHOLD: '50' })).toBe(50)
+  })
+
+  it('does not flush when the window has not elapsed', () => {
+    expect(shouldFlushOutbox({
+      pending: 1,
+      lastFlushAt: 1_000,
+      now: 1_000 + DEFAULT_FLUSH_INTERVAL_MS - 1,
+      intervalMs: DEFAULT_FLUSH_INTERVAL_MS,
+      threshold: DEFAULT_FLUSH_THRESHOLD,
+    })).toBe(false)
+  })
+
+  it('flushes when the window has elapsed', () => {
+    expect(shouldFlushOutbox({
+      pending: 1,
+      lastFlushAt: 1_000,
+      now: 1_000 + DEFAULT_FLUSH_INTERVAL_MS,
+      intervalMs: DEFAULT_FLUSH_INTERVAL_MS,
+      threshold: DEFAULT_FLUSH_THRESHOLD,
+    })).toBe(true)
+  })
+
+  it('flushes when the outbox reaches the threshold', () => {
+    expect(shouldFlushOutbox({
+      pending: DEFAULT_FLUSH_THRESHOLD,
+      lastFlushAt: 1_000,
+      now: 1_001,
+      intervalMs: DEFAULT_FLUSH_INTERVAL_MS,
+      threshold: DEFAULT_FLUSH_THRESHOLD,
+    })).toBe(true)
+  })
+
+  it('uses the oldest stored event when nothing has flushed yet', () => {
+    expect(shouldFlushOutbox({
+      pending: 1,
+      oldestStoredAt: 1_000,
+      now: 1_000 + DEFAULT_FLUSH_INTERVAL_MS,
+      intervalMs: DEFAULT_FLUSH_INTERVAL_MS,
+      threshold: DEFAULT_FLUSH_THRESHOLD,
+    })).toBe(true)
+    expect(shouldFlushOutbox({
+      pending: 1,
+      oldestStoredAt: 1_000,
+      now: 1_001,
+      intervalMs: DEFAULT_FLUSH_INTERVAL_MS,
+      threshold: DEFAULT_FLUSH_THRESHOLD,
+    })).toBe(false)
+  })
 })
 
 describe('telemetry flush', () => {
@@ -273,6 +359,159 @@ describe('telemetry flush', () => {
     const events = await outbox.readAll()
     expect(events).toHaveLength(1)
     expect(events[0]?.command).toBe('again')
+  })
+})
+
+describe('telemetry flush coalescing', () => {
+  const endpoint = 'https://telemetry.test/ingest'
+  let base: string
+
+  function stubIngest(status = 204) {
+    const fetchSpy = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(new Response(null, { status })),
+    )
+    vi.stubGlobal('fetch', fetchSpy)
+    return fetchSpy
+  }
+
+  function postedBody(fetchSpy: ReturnType<typeof stubIngest>): { events: { command: string }[] } {
+    return JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body)) as { events: { command: string }[] }
+  }
+
+  function createHandle(overrides: Partial<Parameters<typeof createTelemetry>[0]> = {}) {
+    return createTelemetry({
+      name: TOOL,
+      version: '0.0.0',
+      endpoint,
+      flushIntervalMs: 60_000,
+      flushThreshold: 20,
+      ...overrides,
+    })
+  }
+
+  beforeEach(async () => {
+    base = await mkdtemp(join(tmpdir(), 'evlog-telemetry-'))
+    process.env.XDG_CONFIG_HOME = base
+    process.env.EVLOG_TELEMETRY = '1'
+    delete process.env.EVLOG_TELEMETRY_FLUSH_INTERVAL_MS
+    delete process.env.EVLOG_TELEMETRY_FLUSH_THRESHOLD
+    _resetActiveTelemetryForTests()
+  })
+
+  afterEach(async () => {
+    await rm(base, { recursive: true, force: true })
+    delete process.env.XDG_CONFIG_HOME
+    delete process.env.EVLOG_TELEMETRY
+    delete process.env.EVLOG_TELEMETRY_FLUSH_INTERVAL_MS
+    delete process.env.EVLOG_TELEMETRY_FLUSH_THRESHOLD
+    vi.unstubAllGlobals()
+    _resetActiveTelemetryForTests()
+  })
+
+  it('records without POSTing when the window has not elapsed', async () => {
+    const fetchSpy = stubIngest()
+    const instance = createHandle()
+    await instance.run('doctor', () => 'ok')
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(await new TelemetryOutbox({ toolName: TOOL }).readAll()).toHaveLength(1)
+  })
+
+  it('POSTs and updates last-flush when the window has elapsed', async () => {
+    const fetchSpy = stubIngest()
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    const seeded = Date.now() - 120_000
+    await outbox.markFlushed(seeded)
+    const instance = createHandle()
+    await instance.run('doctor', () => 'ok')
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(endpoint)
+    const flushedAt = await outbox.readLastFlushAt()
+    expect(flushedAt).toBeGreaterThan(seeded)
+    expect(await outbox.readAll()).toHaveLength(0)
+  })
+
+  it('POSTs when the outbox reaches the threshold', async () => {
+    const fetchSpy = stubIngest()
+    const instance = createHandle({ flushThreshold: 2 })
+    await instance.run('first', () => undefined)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    await instance.run('second', () => undefined)
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(postedBody(fetchSpy).events.map(e => e.command)).toEqual(['first', 'second'])
+    expect(await new TelemetryOutbox({ toolName: TOOL }).readAll()).toHaveLength(0)
+  })
+
+  it('keeps events on disk and leaves last-flush unchanged when the POST fails', async () => {
+    const fetchSpy = stubIngest(500)
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    const seeded = Date.now() - 120_000
+    await outbox.markFlushed(seeded)
+    const instance = createHandle()
+    await instance.run('doctor', () => 'ok')
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(await outbox.readAll()).toHaveLength(1)
+    expect(await outbox.readLastFlushAt()).toBe(seeded)
+  })
+
+  it('flush() POSTs even when the window has not elapsed', async () => {
+    const fetchSpy = stubIngest()
+    const instance = createHandle()
+    await instance.run('doctor', () => 'ok')
+    expect(fetchSpy).not.toHaveBeenCalled()
+    await instance.flush()
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(await new TelemetryOutbox({ toolName: TOOL }).readAll()).toHaveLength(0)
+  })
+
+  it('POSTs on every run when EVLOG_TELEMETRY_FLUSH_INTERVAL_MS is 0', async () => {
+    process.env.EVLOG_TELEMETRY_FLUSH_INTERVAL_MS = '0'
+    const fetchSpy = stubIngest()
+    const instance = createHandle()
+    await instance.run('doctor', () => 'ok')
+    expect(fetchSpy).toHaveBeenCalledOnce()
+  })
+
+  it('caps a flush POST at the ingest batch size', async () => {
+    const fetchSpy = stubIngest()
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    await outbox.markFlushed(Date.now() - 120_000)
+    await Promise.all(
+      Array.from({ length: MAX_FLUSH_BATCH }, (_, i) =>
+        outbox.append(exampleRunEvent({ idempotencyKey: `cap-${i}` })),
+      ),
+    )
+    const instance = createHandle()
+    await instance.run('extra', () => undefined)
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(postedBody(fetchSpy).events).toHaveLength(MAX_FLUSH_BATCH)
+    expect(await outbox.readAll()).toHaveLength(1)
+  })
+
+  it('flush() sends every batch until the outbox is empty', async () => {
+    const fetchSpy = stubIngest()
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    await Promise.all(
+      Array.from({ length: MAX_FLUSH_BATCH + 1 }, (_, i) =>
+        outbox.append(exampleRunEvent({ idempotencyKey: `drain-${i}` })),
+      ),
+    )
+    await createHandle().flush()
+    const sizes = fetchSpy.mock.calls.map(call => (JSON.parse(String(call[1]?.body)) as { events: unknown[] }).events.length)
+    expect(sizes).toEqual([MAX_FLUSH_BATCH, 1])
+    expect(await outbox.readAll()).toHaveLength(0)
+  })
+
+  it('flush() stops at the first failed batch and keeps the rest on disk', async () => {
+    const fetchSpy = stubIngest(503)
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    await Promise.all(
+      Array.from({ length: MAX_FLUSH_BATCH + 1 }, (_, i) =>
+        outbox.append(exampleRunEvent({ idempotencyKey: `fail-${i}` })),
+      ),
+    )
+    await createHandle().flush()
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(await outbox.readAll()).toHaveLength(MAX_FLUSH_BATCH + 1)
   })
 })
 
