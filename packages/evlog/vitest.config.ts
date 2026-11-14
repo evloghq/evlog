@@ -21,8 +21,16 @@ export default defineConfig({
   ],
   test: {
     hookTimeout: 30_000,
-    include: ['test/**/*.test.ts'],
     environment: 'node',
+    // The `hono` peer accepts Hono 4 and Hono 5, so the Hono suite runs once per major.
+    projects: [
+      { extends: true, test: { name: 'evlog', include: ['test/**/*.test.ts'] } },
+      {
+        extends: true,
+        resolve: { alias: { hono: 'hono-5' } },
+        test: { name: 'hono-5', include: ['test/frameworks/hono.test.ts'] },
+      },
+    ],
     // Flag tests slower than this for triage; lift the suite out of the
     // "everything is fast, no signal" zone. Custom reporter in
     // test/helpers/slowReporter.ts logs offenders > 500ms.

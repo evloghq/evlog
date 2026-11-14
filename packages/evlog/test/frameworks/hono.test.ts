@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { initLogger } from '../../src/logger'
 import { createError } from '../../src/error'
 import { parseError } from '../../src/runtime/utils/parseError'
@@ -16,6 +16,19 @@ import {
 import { defined, getDrainCallArg } from '../helpers/defined'
 import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
 import { createDeferredStream } from '../helpers/stream'
+
+/**
+ * Registers an error handler that works on both supported majors: Hono 4 calls it as
+ * `(error, c)`, Hono 5 as middleware `(c, next)` with the error on `c.error`. The cast
+ * bridges the Hono 5 shape, which the installed Hono 4 types do not describe.
+ */
+function onError(app: Hono<EvlogVariables>, respond: (error: Error, c: Context) => Response) {
+  app.onError((first, second) => {
+    if (first instanceof Error) return respond(first, second)
+    const c = first as unknown as Context
+    return respond(defined(c.error, 'Hono 5 c.error'), c)
+  })
+}
 
 describeStandardHttpMatrix({
   name: 'hono',
@@ -127,7 +140,7 @@ describe('evlog/hono', () => {
         data: { orderId: 'ord_1', retryable: true },
       })
     })
-    app.onError((error, c) => {
+    onError(app, (error, c) => {
       const parsed = parseError(error)
       return c.json({ message: parsed.message, ...parsed.data }, 402)
     })
@@ -164,12 +177,13 @@ describe('evlog/hono', () => {
     app.get('/api/fail', () => {
       throw createError({ message: 'Payment failed', status: 402 })
     })
-    app.onError((_error, c) => c.json({ error: 'handled' }, 500))
+    onError(app, (_error, c) => c.json({ error: 'handled' }, 503))
 
-    await app.request('/api/fail')
+    const response = await app.request('/api/fail')
     await waitForDrainCalls(drain)
 
-    assertHttpEventEmitted(drain, { path: '/api/fail', status: 500, level: 'error' })
+    expect(response.status).toBe(503)
+    assertHttpEventEmitted(drain, { path: '/api/fail', status: 503, level: 'error' })
   })
 
   it('logs error context set manually by route handler', async () => {
