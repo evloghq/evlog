@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { builtinPatterns, redactEvent, resolveRedactConfig } from '../../src/redact'
 import type { BuiltinPatternName } from '../../src/redact'
+import type { RedactConfig } from '../../src/types'
 import { createLogger, initLogger, log } from '../../src/logger'
 import { createPipelineSpies, waitForDrainCalls } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
@@ -510,19 +511,19 @@ describe('built-in smart masking', () => {
     expect(event.safe).toBe('no bearer here')
   })
 
-  it.each([
+  it.each<[string, true | RedactConfig]>([
     ['all built-ins', true],
     ['creditCard listed first', { builtins: ['creditCard', 'iban'] }],
     ['iban listed first', { builtins: ['iban', 'creditCard'] }],
-  ] as const)('masks a spaced IBAN whole when card masking is on too (%s)', (_label, input) => {
+  ])('masks a spaced IBAN whole when card masking is on too (%s)', (_label, input) => {
     const event = redactEvent({ iban: 'FR76 3000 6000 0112 3456 7890 189', card: '4111 1111 1111 1111' }, defined(resolveRedactConfig(input), 'redact config'))
     expect(event).toEqual({ iban: 'FR76****189', card: '****1111' })
   })
 
-  it.each([
+  it.each<[string, true | RedactConfig]>([
     ['all built-ins', true],
     ['iban listed first', { builtins: ['iban', 'creditCard', 'bearer'] }],
-  ] as const)('masks a Bearer token whole when it looks like an IBAN or a card (%s)', (_label, input) => {
+  ])('masks a Bearer token whole when it looks like an IBAN or a card (%s)', (_label, input) => {
     const event = redactEvent({ iban: 'Bearer FR76ABCD123456789012', card: 'Bearer 4111111111111111' }, defined(resolveRedactConfig(input), 'redact config'))
     expect(event).toEqual({ iban: 'Bearer ***', card: 'Bearer ***' })
   })
