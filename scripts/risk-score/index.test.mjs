@@ -5,7 +5,7 @@ import { COMMENT_MARKER } from './lib.mjs'
 const SHA = 'fedcba9876543210fedcba9876543210fedcba98'
 
 /** The slice of the Octokit client `actions/github-script` passes in. */
-function fakeGithub({ comments }) {
+function fakeGithub({ comments, heads = [SHA] }) {
   const listFiles = vi.fn()
   const listComments = vi.fn()
   const pages = new Map([
@@ -16,7 +16,8 @@ function fakeGithub({ comments }) {
     paginate: vi.fn(async method => pages.get(method)),
     rest: {
       pulls: {
-        get: vi.fn(async () => ({ data: { title: 'fix(loki): flush on shutdown', head: { sha: SHA } } })),
+        // Each call returns the next head in `heads`, then keeps the last one.
+        get: vi.fn(async () => ({ data: { title: 'fix(loki): flush on shutdown', base: { ref: 'main' }, head: { sha: heads.length > 1 ? heads.shift() : heads[0] } } })),
         listFiles,
       },
       issues: {
@@ -54,5 +55,13 @@ describe('publishRiskScore', () => {
 
     expect(github.rest.issues.createComment).not.toHaveBeenCalled()
     expect(github.rest.issues.updateComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 2 }))
+  })
+
+  it('publishes nothing when a push lands while the files are read', async () => {
+    const github = fakeGithub({ comments: [], heads: [SHA, '0123456789abcdef0123456789abcdef01234567'] })
+    await publishRiskScore({ github, context, core })
+
+    expect(github.rest.issues.createComment).not.toHaveBeenCalled()
+    expect(github.rest.issues.updateComment).not.toHaveBeenCalled()
   })
 })

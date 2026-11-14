@@ -89,6 +89,17 @@ describe('assessRisk', () => {
     expect(area(result, 'Compatibility').explanation).toContain('Removes or renames shipped modules: src/browser.ts')
   })
 
+  it('rates a module renamed out of shipped source by its original path', () => {
+    const result = assessRisk({
+      title: 'refactor: archive the redaction module',
+      files: [file('archive/redact.ts', { status: 'renamed', previous_filename: 'packages/evlog/src/redact.ts' })],
+    })
+    expect(result.level).toBe(3)
+    expect(area(result, 'Compatibility').explanation).toContain('Removes or renames shipped modules: src/redact.ts')
+    expect(area(result, 'Sensitive data exposure').explanation).toContain('src/redact.ts')
+    expect(area(result, 'Logging overhead').level).toBe(3)
+  })
+
   it('rates a major changeset Very high and a minor one High', () => {
     const changeset = bump => file('.changeset/x.md', { status: 'added', patch: `@@ -0,0 +1,3 @@\n+---\n+"evlog": ${bump}\n+---` })
     const test = file('packages/evlog/test/x.test.ts')

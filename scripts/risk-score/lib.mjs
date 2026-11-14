@@ -18,6 +18,8 @@ const LARGE_CHANGE = 500
 const isTest = path => /(^|\/)(test|tests|__tests__|__snapshots__)\//.test(path) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(path)
 const isShipped = path => /^packages\/[^/]+\/(src|bin)\//.test(path) && !isTest(path)
 const isChangeset = path => /^\.changeset\/(?!README\.md$)[^/]+\.md$/.test(path)
+// A rename counts under both paths, so moving a module out of a watched directory still matches.
+const pathsOf = file => file.previous_filename ? [file.filename, file.previous_filename] : [file.filename]
 
 /**
  * Path rules, one per signal. `level` is the area level the rule raises the
@@ -108,13 +110,13 @@ export function assessRisk({ title, files }) {
 
   for (const rule of RULES) {
     const test = typeof rule.match === 'function' ? rule.match : p => rule.match.test(p)
-    const hits = files.filter(f => test(f.filename))
+    const hits = files.flatMap(f => pathsOf(f).find(test) ?? [])
     // A broader rule adds nothing once a stricter rule already explained the same area.
     if (hits.length > 0 && !areas.get(rule.area).reasons.some(r => r.level >= rule.level))
-      raise(rule.area, rule.level, `${rule.reason}: ${listFiles(hits.map(f => f.filename))}`)
+      raise(rule.area, rule.level, `${rule.reason}: ${listFiles(hits)}`)
   }
 
-  const shipped = files.filter(f => isShipped(f.filename))
+  const shipped = files.filter(f => pathsOf(f).some(isShipped))
   const removed = shipped.filter(f => f.status === 'removed' || f.status === 'renamed')
   if (removed.length > 0)
     raise('compatibility', 3, `Removes or renames shipped modules: ${listFiles(removed.map(f => f.previous_filename ?? f.filename))}`)

@@ -26,6 +26,14 @@ export async function publishRiskScore({ github, context, core }) {
   const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number })
   const files = await github.paginate(github.rest.pulls.listFiles, { ...context.repo, pull_number, per_page: 100 })
 
+  // The file list follows the live pull request, not `pr.head.sha`. A push, title edit or base change while
+  // it was read starts its own run, which publishes the score for the new revision.
+  const { data: current } = await github.rest.pulls.get({ ...context.repo, pull_number })
+  if (current.head.sha !== pr.head.sha || current.base.ref !== pr.base.ref || current.title !== pr.title) {
+    core.info(`#${pull_number} changed while its files were read; leaving the score to the newer run`)
+    return
+  }
+
   const assessment = assessRisk({ title: pr.title, files })
   const body = renderComment({ sha: pr.head.sha, assessment })
 

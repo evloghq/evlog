@@ -19,16 +19,16 @@ on:
 
 permissions: {}
 
-# A newer push supersedes the score for an older head SHA.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   risk-score:
     name: Publish risk score
-    # Only a title edit can change the score; body edits are not worth a run.
-    if: github.event.action != 'edited' || github.event.changes.title.from != null
+    # Of all edits, only a title or base branch change can change the score.
+    if: github.event.action != 'edited' || github.event.changes.title.from != null || github.event.changes.base.ref.from != null
+    # A newer run supersedes the score for an older revision. Job-level, so a skipped
+    # body-only edit cannot cancel a run that publishes.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
