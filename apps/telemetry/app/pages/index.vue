@@ -102,7 +102,7 @@ const statsQuery = computed(() => ({
   source: source.value === ALL ? undefined : source.value,
 }))
 
-const statsAsync = useFetch<StatsResponse>(
+const statsAsync = useFetch<CursorStamped<StatsResponse>>(
   '/api/telemetry/stats',
   { query: statsQuery, watch: [statsQuery] },
 )
@@ -130,7 +130,7 @@ const runsAsync = useFetch<RunsResponse>(
   { query: runsQuery, watch: false, immediate: explorerActive.value },
 )
 
-const adoptionAsync = useFetch<AdoptionResponse>(
+const adoptionAsync = useFetch<CursorStamped<AdoptionResponse>>(
   '/api/telemetry/adoption',
   { query: statsQuery, watch: false, immediate: adoptionActive.value },
 )
@@ -384,9 +384,10 @@ const { active: liveActive, lastError: liveError, toggle: toggleLive } = useLive
     await Promise.all(pending)
     const error = statsError.value ?? runsError.value ?? feedError.value
     if (error) throw error
-    // Commit only after the payloads succeed. A failed stats refresh must
-    // retry on the next tick, not look like an unchanged cursor.
-    lastCursorId = cursor.latestId
+    // Commit only after the payloads succeed, and only as far as the memoized
+    // ones reflect: either gap must retry on the next tick, not look like an
+    // unchanged cursor.
+    lastCursorId = reflectedCursor(cursor.latestId, adoptionActive.value ? [stats.value, adoption.value] : [stats.value])
     return true
   },
   { intervalMs: CURSOR_POLL_MS, maxIntervalMs: CURSOR_POLL_MAX_MS, idleMs: IDLE_MS, suspended: detailOpen },

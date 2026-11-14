@@ -36,6 +36,24 @@ export function cursorRequiresRefresh(lastId: number | null, latestId: number): 
 }
 
 /**
+ * The cursor a successful refresh has caught up to, to commit as the new
+ * baseline. A memoized payload can predate `latestId`; committing the probed
+ * cursor then would hide that event until the next one lands. `null` (a
+ * payload is missing) keeps the next probe refreshing.
+ */
+export function reflectedCursor(
+  latestId: number,
+  payloads: ReadonlyArray<{ cursorId: number } | null | undefined>,
+): number | null {
+  let reflected = latestId
+  for (const payload of payloads) {
+    if (!payload) return null
+    reflected = Math.min(reflected, payload.cursorId)
+  }
+  return reflected
+}
+
+/**
  * Schedules `refresh` with exponential backoff, and stops entirely once the
  * user has gone idle so an open tab does not hold a scale-to-zero database
  * awake. `refresh` should return `true` when the data it probed actually

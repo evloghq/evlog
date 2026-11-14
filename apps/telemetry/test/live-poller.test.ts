@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLivePoller, cursorRequiresRefresh } from '../app/utils/live-poller'
+import { createLivePoller, cursorRequiresRefresh, reflectedCursor } from '../app/utils/live-poller'
 
 const INTERVAL = 10_000
 const MAX = 80_000
@@ -24,6 +24,28 @@ describe('cursorRequiresRefresh', () => {
     expect(cursorRequiresRefresh(last, 4)).toBe(true)
     last = 4
     expect(cursorRequiresRefresh(last, 4)).toBe(false)
+  })
+})
+
+describe('reflectedCursor', () => {
+  it('commits the probed cursor when every payload reflects it', () => {
+    expect(reflectedCursor(5, [{ cursorId: 5 }, { cursorId: 5 }])).toBe(5)
+  })
+
+  it('commits only as far as a memoized payload that predates the probe', () => {
+    const committed = reflectedCursor(5, [{ cursorId: 4 }])
+    expect(committed).toBe(4)
+    expect(cursorRequiresRefresh(committed, 5)).toBe(true)
+  })
+
+  it('does not run ahead of the probe when a payload saw a newer event', () => {
+    expect(reflectedCursor(5, [{ cursorId: 6 }])).toBe(5)
+  })
+
+  it('keeps the next probe refreshing when a payload is missing', () => {
+    const committed = reflectedCursor(5, [{ cursorId: 5 }, undefined])
+    expect(committed).toBeNull()
+    expect(cursorRequiresRefresh(committed, 5)).toBe(true)
   })
 })
 

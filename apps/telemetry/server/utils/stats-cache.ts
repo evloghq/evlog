@@ -34,7 +34,7 @@ interface CacheEntry<T> {
   computedAt: number
   cursorId: number
   /** Stored as a promise so concurrent misses share one computation. */
-  result: Promise<T>
+  result: Promise<CursorStamped<T>>
 }
 
 /**
@@ -65,7 +65,7 @@ function isFresh(entry: CacheEntry<unknown>, cursorId: number, now: number): boo
  * Nitro auto-import it resolves to is looked up at call time, which is also
  * what lets the unit tests stand one up on `globalThis`.
  */
-function createFilterCache<T>(compute: (filter: RunsFilter) => Promise<T>) {
+function createFilterCache<T extends object>(compute: (filter: RunsFilter) => Promise<T>) {
   const cache = new Map<string, CacheEntry<T>>()
   /**
    * Requests that have gotten as far as probing the cursor but not yet decided
@@ -73,9 +73,9 @@ function createFilterCache<T>(compute: (filter: RunsFilter) => Promise<T>) {
    * of simultaneous misses — an SSR render, a second tab, an MCP agent — would
    * each sail past the cache and start its own aggregation.
    */
-  const inFlight = new Map<string, Promise<T>>()
+  const inFlight = new Map<string, Promise<CursorStamped<T>>>()
 
-  async function resolve(key: string, filter: RunsFilter): Promise<T> {
+  async function resolve(key: string, filter: RunsFilter): Promise<CursorStamped<T>> {
     // The cheap probe that decides whether the expensive aggregation runs at all.
     const { latestId } = await getRunsCursor()
 
@@ -88,7 +88,7 @@ function createFilterCache<T>(compute: (filter: RunsFilter) => Promise<T>) {
     const entry: CacheEntry<T> = {
       computedAt: now,
       cursorId: latestId,
-      result: compute(filter),
+      result: compute(filter).then(value => ({ ...value, cursorId: latestId })),
     }
 
     // A rejected computation must not be remembered, or the filter stays broken
@@ -109,7 +109,7 @@ function createFilterCache<T>(compute: (filter: RunsFilter) => Promise<T>) {
     return entry.result
   }
 
-  function get(filter: RunsFilter): Promise<T> {
+  function get(filter: RunsFilter): Promise<CursorStamped<T>> {
     const key = cacheKey(filter)
     const existing = cache.get(key)
 
@@ -153,11 +153,11 @@ export function resetStatsCache(): void {
  * above. Use this for anything request-driven; call `getStatsForFilter`
  * directly only when a guaranteed-fresh read matters more than the cost.
  */
-export function getCachedStatsForFilter(filter: RunsFilter): Promise<StatsResponse> {
+export function getCachedStatsForFilter(filter: RunsFilter): Promise<CursorStamped<StatsResponse>> {
   return statsCache.get(filter)
 }
 
 /** {@link getAdoptionForFilter} behind the same memo. */
-export function getCachedAdoptionForFilter(filter: RunsFilter): Promise<AdoptionResponse> {
+export function getCachedAdoptionForFilter(filter: RunsFilter): Promise<CursorStamped<AdoptionResponse>> {
   return adoptionCache.get(filter)
 }
