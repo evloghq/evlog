@@ -187,4 +187,6 @@ export interface TelemetryHandle<
 export interface RunContext {
   custom: Record<string, boolean | number | string>
   collect?: CollectConfig
+  /** Set by {@link telemetry.fail}: the run failed without throwing. */
+  failure?: { code?: string }
 }

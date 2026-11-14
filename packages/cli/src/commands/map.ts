@@ -1,13 +1,12 @@
-import { EvlogError } from 'evlog'
 import type { CliContext } from '../core/context'
 import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
-import { defineEvlogCommand } from '../lib/command'
+import { defineEvlogCommand, failWith } from '../lib/command'
 import { loadCliConfig } from '../lib/config'
 import type { CliConfig } from '../lib/config'
 import { FRAMEWORK_IDS, isFramework } from '../lib/frameworks'
 import type { CliDebug } from '../lib/debug'
 import { createNoopCliDebug } from '../lib/debug'
-import { cliErrors, isUsageError } from '../lib/errors'
+import { cliErrors } from '../lib/errors'
 import { evlogReached, prettyPath, resolveEvlog, resolveProject } from '../lib/project'
 import type { ProjectInfo } from '../lib/project'
 import { checkBaselineVersion, compareToBaseline, hasRegressed, loadBaseline } from '../lib/map/baseline'
@@ -348,20 +347,10 @@ export default defineEvlogCommand('map', {
       threshold = minScoreFlag ?? result.config?.map.minScore
       if (minScoreFlag === undefined && threshold !== undefined) thresholdFrom = 'map.minScore'
     } catch (error) {
-      if (error instanceof EvlogError) {
-        log.finding({ code: error.code ?? 'cli.MAP_FAILED', why: error.why, fix: error.fix, link: error.link }, { status: 'fail' })
-        ui.done({
-          jsonMode: args.json || args.format === 'json',
-          json: { error: { code: error.code, message: error.message, why: error.why, fix: error.fix } },
-          human: error.fix ? `${error.message}\n→ ${error.fix}` : error.message,
-        })
-        /* A flag that cannot be read, or a baseline whose rule set does not
-           match, is a usage error rather than a check failure: the app did not
-           get worse, the run could not be carried out as asked. */
-        ui.exit(isUsageError(error) ? EXIT_USAGE : EXIT_FAIL)
-        return
-      }
-      throw error
+      /* Usage error or failed check, the exit code is `failWith`'s to pick: the
+         app did not get worse when a flag or a baseline could not be read. */
+      failWith(error, { args: { json: args.json || args.format === 'json' }, log, ui })
+      return
     }
 
     const view: MapView = format === 'github' ? format : entry ? 'inspect' : args.all ? 'all' : 'summary'

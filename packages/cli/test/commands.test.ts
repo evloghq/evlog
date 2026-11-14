@@ -1,6 +1,12 @@
-import { runCommand } from 'citty'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { withTelemetry } from '@evlog/telemetry'
+import { defineCommand, runCommand } from 'citty'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import doctor from '../src/commands/doctor'
+import logs from '../src/commands/logs'
+import map from '../src/commands/map'
 import { subCommands } from '../src/commands/index'
 import { COMMON_ARGS } from '../src/lib/command'
 import { checkFlags } from '../src/lib/flags'
@@ -41,6 +47,58 @@ describe('telemetry status', () => {
     expect(out).toContain('- `initFramework`: `nuxt`')
     expect(out).toContain('- `mapGrade`: `excellent`')
     expect(out).toContain('- `logsView`: ')
+  })
+})
+
+describe('telemetry outcome', () => {
+  const FIXTURE = join(import.meta.dirname, 'map/fixtures/hono-basic')
+  let home: string
+
+  beforeEach(async () => {
+    home = await mkdtemp(join(tmpdir(), 'evlog-cli-outcome-'))
+    vi.stubEnv('XDG_CONFIG_HOME', home)
+    vi.stubEnv('EVLOG_TELEMETRY', '1')
+    vi.stubEnv('EVLOG_TELEMETRY_DEBUG', '1')
+    vi.stubEnv('DO_NOT_TRACK', '')
+  })
+
+  afterEach(async () => {
+    vi.unstubAllEnvs()
+    await rm(home, { recursive: true, force: true })
+  })
+
+  /** The event a run would send, read from the debug print: nothing leaves the process. */
+  async function eventOf(rawArgs: string[]): Promise<{ command: string, outcome: string, errorCode?: string }> {
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const tree = withTelemetry(
+      defineCommand({ meta: { name: 'evlog' }, subCommands: { doctor, logs, map } }),
+      { name: 'evlog-cli-test', version: '0.0.0' },
+    )
+
+    await runCommand(tree, { rawArgs })
+
+    const line = stderr.mock.calls.map(([chunk]) => String(chunk)).find(chunk => chunk.startsWith('[@evlog/telemetry] '))
+    return JSON.parse(line!.slice('[@evlog/telemetry] '.length))
+  }
+
+  it.each([
+    { name: 'a flag the command does not declare', args: ['doctor', '--bogus'], code: 'cli.UNKNOWN_FLAG' },
+    { name: 'a map threshold that cannot be read', args: ['map', '--cwd', FIXTURE, '--no-write', '--min-score', 'abc'], code: 'cli.MAP_INVALID_MIN_SCORE' },
+    { name: 'logs with nothing to read', args: ['logs', '--dir', 'no-such-dir'], code: 'cli.LOGS_NO_SINK' },
+  ])('reports $name as an error with its code', async ({ args, code }) => {
+    const event = await eventOf(args)
+
+    expect(event).toMatchObject({ command: args[0], outcome: 'error', errorCode: code })
+    expect(process.exitCode).toBeGreaterThan(0)
+  })
+
+  it('keeps a gate that failed as a successful run', async () => {
+    const event = await eventOf(['map', '--cwd', FIXTURE, '--no-write', '--no-header', '--min-score', '100'])
+
+    expect(event.outcome).toBe('success')
+    expect(event.errorCode).toBeUndefined()
+    expect(process.exitCode).toBe(1)
   })
 })
 

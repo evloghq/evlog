@@ -19,6 +19,7 @@ import type {
   CollectFlags,
   CustomFields,
   FlagDefinitions,
+  RunContext,
   RunEvent,
   RunOutcome,
   TelemetryCliError,
@@ -102,15 +103,20 @@ class InternalTelemetry<
     await this.maybeShowNotice()
     const started = Date.now()
     const timestamp = new Date().toISOString()
-    const ctx = {
-      custom: sanitizeSystemCustom(opts?.systemCustom) as Record<string, boolean | number | string>,
+    const ctx: RunContext = {
+      custom: sanitizeSystemCustom(opts?.systemCustom),
       collect: this.options.collect,
     }
     let outcome: RunOutcome = 'success'
     let errorCode: string | undefined
 
     try {
-      return await runWithContext(ctx, async () => await fn())
+      const result = await runWithContext(ctx, async () => await fn())
+      if (ctx.failure) {
+        outcome = 'error'
+        errorCode = ctx.failure.code
+      }
+      return result
     } catch (err) {
       outcome = 'error'
       if (isCliError(err)) errorCode = err.code
@@ -265,6 +271,27 @@ export const telemetry = {
       ctx.custom,
       ctx.collect,
     )
+  },
+  /**
+   * Mark the active run as failed when the command handled the failure itself:
+   * it printed the error and set an exit code instead of throwing. The event
+   * is sent with `outcome: 'error'` and `code` as its `errorCode`. An error
+   * thrown later in the run still wins. No-op outside a `run()` scope.
+   *
+   * @example
+   * ```ts
+   * try {
+   *   await sync()
+   * } catch (error) {
+   *   console.error(error.message)
+   *   telemetry.fail(error.code)
+   *   process.exitCode = 1
+   * }
+   * ```
+   */
+  fail(code?: string): void {
+    const ctx = getRunContext()
+    if (ctx) ctx.failure = { code }
   },
 }
 
