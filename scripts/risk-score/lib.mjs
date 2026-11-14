@@ -71,14 +71,16 @@ function listFiles(paths) {
 /**
  * The bump types declared in a changeset patch's frontmatter, e.g.
  * `'evlog': minor`. Context lines are read too, so a changeset edited after it
- * was added still counts. Only the first hunk can hold the frontmatter, and when
- * it starts below line 1 its first `---` is the closing fence.
+ * was added still counts. Only the first hunk can hold the frontmatter. When it
+ * starts below line 1 its first `---` is the closing fence; when it opens the
+ * frontmatter and never closes it, every line after the opening fence is frontmatter.
  */
 export function changesetBumps(patch) {
   const [hunk] = (patch ?? '').split(/\n(?=@@ )/)
   const lines = hunk.split('\n').filter(l => /^[+ ]/.test(l)).map(l => l.slice(1))
   const start = /^@@ -\S+ \+1[,\s]/.test(hunk) ? lines.findIndex(l => l.trim() === '---') : -1
-  const end = lines.findIndex((l, i) => i > start && l.trim() === '---')
+  const closing = lines.findIndex((l, i) => i > start && l.trim() === '---')
+  const end = closing === -1 && start === 0 ? lines.length : closing
   const bumps = new Set()
   if (end === -1) return bumps
   for (const line of lines.slice(start + 1, end)) {
