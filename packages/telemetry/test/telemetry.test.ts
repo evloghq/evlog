@@ -486,6 +486,33 @@ describe('telemetry flush coalescing', () => {
     expect(postedBody(fetchSpy).events).toHaveLength(MAX_FLUSH_BATCH)
     expect(await outbox.readAll()).toHaveLength(1)
   })
+
+  it('flush() sends every batch until the outbox is empty', async () => {
+    const fetchSpy = stubIngest()
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    await Promise.all(
+      Array.from({ length: MAX_FLUSH_BATCH + 1 }, (_, i) =>
+        outbox.append(exampleRunEvent({ idempotencyKey: `drain-${i}` })),
+      ),
+    )
+    await createHandle().flush()
+    const sizes = fetchSpy.mock.calls.map(call => (JSON.parse(String(call[1]?.body)) as { events: unknown[] }).events.length)
+    expect(sizes).toEqual([MAX_FLUSH_BATCH, 1])
+    expect(await outbox.readAll()).toHaveLength(0)
+  })
+
+  it('flush() stops at the first failed batch and keeps the rest on disk', async () => {
+    const fetchSpy = stubIngest(503)
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    await Promise.all(
+      Array.from({ length: MAX_FLUSH_BATCH + 1 }, (_, i) =>
+        outbox.append(exampleRunEvent({ idempotencyKey: `fail-${i}` })),
+      ),
+    )
+    await createHandle().flush()
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(await outbox.readAll()).toHaveLength(MAX_FLUSH_BATCH + 1)
+  })
 })
 
 describe('telemetry notice', () => {

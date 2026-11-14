@@ -130,16 +130,21 @@ class InternalTelemetry<
         timestamp,
       })
       await this.record(event)
-      if (await this.shouldFlush()) await this.flush()
+      if (await this.shouldFlush()) await this.deliver(false)
     }
   }
 
   async flush(): Promise<void> {
+    await this.deliver(true)
+  }
+
+  /** `drainAll` sends batch after batch until the outbox is empty; a `run()` sends one batch per command. */
+  private async deliver(drainAll: boolean): Promise<void> {
     if (!this._enabled) return
     const timeoutMs = this.options.flushTimeoutMs ?? 500
     try {
       await Promise.race([
-        this.flushBacklog(),
+        this.flushBacklog(drainAll),
         new Promise<void>(resolve => {
           const t = setTimeout(resolve, timeoutMs)
           ;(t as { unref?: () => void }).unref?.()
@@ -163,14 +168,14 @@ class InternalTelemetry<
     })
   }
 
-  private async flushBacklog(): Promise<void> {
+  private async flushBacklog(drainAll: boolean): Promise<void> {
     const pending = await this.outbox.readAll()
-    if (pending.length === 0) return
-    const batch = pending.slice(0, MAX_FLUSH_BATCH)
-    const ok = await this.drain(batch)
-    if (ok) {
+    for (let start = 0; start < pending.length; start += MAX_FLUSH_BATCH) {
+      const batch = pending.slice(start, start + MAX_FLUSH_BATCH)
+      if (!await this.drain(batch)) return
       await this.outbox.removeDelivered(new Set(batch.map(e => e.idempotencyKey)))
       await this.outbox.markFlushed()
+      if (!drainAll) return
     }
   }
 
