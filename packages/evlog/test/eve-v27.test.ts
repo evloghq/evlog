@@ -4,6 +4,8 @@ import type { InstrumentationModelStartedInput } from 'eve/instrumentation'
 import { initLogger } from '../src/logger'
 import type { WideEvent } from '../src/types'
 import { defineEvlogHook, evlogRuntimeContext, resetEvlogEveForTests } from '../src/eve/index'
+// eve's own list of the v26 keys its hook resolver rejects; not a public export.
+import { removedEventKeyMessage } from '../node_modules/eve/dist/src/public/definitions/removed-event-keys.js'
 import { createPipelineSpies, findEventViaDrain, waitForDrainCalls } from './helpers/framework'
 import { defined } from './helpers/defined'
 
@@ -80,6 +82,11 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
 
   afterEach(() => {
     resetEvlogEveForTests()
+  })
+
+  it('registers no v26 event key, which eve refuses to load from 0.84 on', () => {
+    const keys = Object.keys(defineEvlogHook().events ?? {})
+    expect(keys.flatMap(key => removedEventKeyMessage(key) ?? [])).toEqual([])
   })
 
   it('emits one wide event when the turn settles', async () => {
