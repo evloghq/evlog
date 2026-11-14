@@ -34,6 +34,7 @@
     "content:lint": "node scripts/content-lint/index.mjs",
     "content:lint:test": "vitest run --root scripts/content-lint",
     "release-notes:test": "vitest run --root scripts/release-notes",
+    "risk-score:test": "vitest run --root scripts/risk-score",
     "cli:sandbox": "node scripts/cli-sandbox.mjs",
     "test:coverage": "pnpm --filter evlog run test:coverage",
     "test:coverage:open": "pnpm --filter evlog run test:coverage && open packages/evlog/coverage/index.html",
