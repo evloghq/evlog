@@ -1,5 +1,5 @@
 import { registerDiskPrettyErrorSnippetReader } from '../shared/register-disk-snippet'
-import type { DrainContext, EnvironmentContext, LogLevel, Log, RedactConfig, SamplingConfig } from '../types'
+import type { DrainContext, EnvironmentContext, LoggerConfig, LogLevel, Log, RedactConfig, SamplingConfig } from '../types'
 import type {
   NextInstrumentationErrorContext,
   NextInstrumentationRequest,
@@ -54,6 +54,8 @@ export interface InstrumentationOptions {
   sampling?: SamplingConfig
   /** Minimum severity for the global `log` API. @default 'debug' */
   minLevel?: LogLevel
+  /** Minimum severity for request wide events. `error` and `fatal` are never dropped by this floor. */
+  requestMinLevel?: LoggerConfig['requestMinLevel']
   /** When pretty is disabled, emit JSON strings or raw objects. @default true */
   stringify?: boolean
   /** Drain callback called with every emitted event. */
@@ -254,6 +256,7 @@ export function createInstrumentation(options: InstrumentationOptions = {}): Ins
         silent: options.silent,
         sampling: options.sampling,
         minLevel: options.minLevel,
+        requestMinLevel: options.requestMinLevel,
         stringify: options.stringify,
         drain: options.drain ? createLifecycleSafeDrain(options.drain, after) : undefined,
         redact: options.redact,

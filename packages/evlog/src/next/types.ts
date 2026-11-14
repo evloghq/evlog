@@ -1,4 +1,4 @@
-import type { EnvironmentContext, LogLevel, SamplingConfig } from '../types'
+import type { EnvironmentContext, LoggerConfig, LogLevel, SamplingConfig } from '../types'
 import type { BaseEvlogOptions } from '../shared/middleware'
 
 export interface NextEvlogOptions extends BaseEvlogOptions {
@@ -35,6 +35,14 @@ export interface NextEvlogOptions extends BaseEvlogOptions {
    * @default 'debug'
    */
   minLevel?: LogLevel
+
+  /**
+   * Minimum severity for request wide events, applied before sampling and
+   * `keep`. `error` and `fatal` events are never dropped by this floor.
+   * Ignored when `createInstrumentation()` has already locked the logger; pass
+   * it to `createInstrumentation()` in that setup.
+   */
+  requestMinLevel?: LoggerConfig['requestMinLevel']
 
   /**
    * When pretty is disabled, emit JSON strings (default) or raw objects.

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createError as h3CreateError } from 'h3'
+import { audit } from '../../src/audit'
 import { EvlogError, createError } from '../../src/error'
 import { createLogger, createRequestLogger, getEnvironment, initLogger, isEnabled, log } from '../../src/logger'
 import { withFakeTimers } from '../helpers/timers'
@@ -467,6 +468,79 @@ describe('minLevel', () => {
     expect(infoSpy).not.toHaveBeenCalled()
   })
 })
+describe('requestMinLevel', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('drops request wide events below the floor and keeps the rest', () => {
+    initLogger({ pretty: false, requestMinLevel: 'warn' })
+
+    expect(createRequestLogger({ path: '/info' }).emit()).toBeNull()
+
+    const warnLogger = createRequestLogger({ path: '/warn' })
+    warnLogger.warn('slow upstream')
+    expect(defined(warnLogger.emit()).level).toBe('warn')
+  })
+
+  it('always emits error and fatal events', () => {
+    initLogger({ pretty: false, requestMinLevel: 'warn' })
+
+    const errorLogger = createRequestLogger({ path: '/error' })
+    errorLogger.error(new Error('boom'))
+    expect(defined(errorLogger.emit()).level).toBe('error')
+
+    const fatalLogger = createRequestLogger({ path: '/fatal' })
+    fatalLogger.fatal(new Error('down'))
+    expect(defined(fatalLogger.emit()).level).toBe('fatal')
+  })
+
+  it('runs before sampling.keep, so a keep rule does not rescue an event below the floor', () => {
+    initLogger({ pretty: false, requestMinLevel: 'warn', sampling: { keep: [{ duration: 0 }] } })
+
+    const logger = createRequestLogger({ path: '/slow' })
+    expect(logger.emit({ _durationMs: 5000 })).toBeNull()
+  })
+
+  it('runs before a tail-sampling force keep from middleware', () => {
+    initLogger({ pretty: false, requestMinLevel: 'warn' })
+
+    expect(createRequestLogger({ path: '/kept' }).emit({ _forceKeep: true })).toBeNull()
+  })
+
+  it('still emits audit events below the floor', () => {
+    initLogger({ pretty: false, requestMinLevel: 'warn' })
+
+    const event = defined(audit({
+      action: 'invoice.refund',
+      actor: { type: 'user', id: 'u1' },
+      target: { type: 'invoice', id: 'inv_1' },
+      outcome: 'success',
+    }))
+    expect(event.level).toBe('info')
+  })
+
+  it('does not apply to the global log API', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, requestMinLevel: 'warn', drain })
+
+    log.info({ action: 'checkout' })
+    expect(drain).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps every level when unset', () => {
+    initLogger({ pretty: false })
+
+    expect(defined(createRequestLogger({ path: '/info' }).emit()).level).toBe('info')
+  })
+})
+
 describe('createLogger', () => {
   let infoSpy: ReturnType<typeof vi.spyOn>
 
