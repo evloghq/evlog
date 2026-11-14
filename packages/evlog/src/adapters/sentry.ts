@@ -205,10 +205,7 @@ function getFirstStringValue(event: WideEvent, keys: string[]): string | undefin
   return undefined
 }
 
-function toAttributeValue(value: unknown): SentryAttributeValue | undefined {
-  if (value === null || value === undefined) {
-    return undefined
-  }
+function toAttributeValue(value: unknown): SentryAttributeValue {
   if (typeof value === 'string') {
     return { value, type: 'string' }
   }
@@ -254,10 +251,7 @@ export function toSentryLog(event: WideEvent, config: SentryConfig): SentryLog {
   for (const [key, value] of Object.entries(rest)) {
     if (key === 'traceId' || key === 'spanId') continue
     if (value === undefined || value === null) continue
-    const attr = toAttributeValue(value)
-    if (attr) {
-      attributes[key] = attr
-    }
+    attributes[key] = toAttributeValue(value)
   }
 
   attributes['sentry.sdk.name'] = { value: SENTRY_SDK.name, type: 'string' }

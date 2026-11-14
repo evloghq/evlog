@@ -239,9 +239,7 @@ export function createPostHogDrain(overrides?: Partial<PostHogConfig>) {
       }
       return config as PostHogConfig
     },
-    send: async (events, config) => {
-      await sendBatchToPostHog(events, config)
-    },
+    send: sendBatchToPostHog,
   })
 }
 

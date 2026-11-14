@@ -230,11 +230,6 @@ export interface TailFsLogsOptions extends ReadFsLogsOptions {
   signal?: AbortSignal
 }
 
-interface ParsedFilename {
-  date: string
-  index: number
-}
-
 function isLogFilename(filename: string): boolean {
   return /^\d{4}-\d{2}-\d{2}(\.\d+)?\.jsonl$/.test(filename)
 }
