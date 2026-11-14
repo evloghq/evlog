@@ -40,12 +40,8 @@ const LINEAR_ISSUE_BRANCHES = `## Linear issue branches
 When the session context carries a \`<linear_context>\` block with an \`issue_identifier\` (for example \`EVL-127\`), prefix feature branch names with it so Linear's GitHub integration links the branch to the issue: \`EVL-127/fix-...\`. The identifier is for branch naming only; commit subjects and PR text keep the repo conventions. Without the block, name branches as usual.`
 
 /** Only the GitHub channel checks the triggering ref out into `/workspace` itself. */
-export default defineDynamic({
-  events: {
-    'turn.started': (_event, ctx) => {
-      const home = repositorySlug(homeRepository())
-      const workspace = channelName(ctx.channel.kind) === 'github' ? checkedOut(home) : noThreadCheckout(home)
-      return defineInstructions({ content: `${workspace}\n\n${LINEAR_ISSUE_BRANCHES}` })
-    },
-  },
+export default defineDynamic(ctx => {
+  const home = repositorySlug(homeRepository())
+  const workspace = channelName(ctx.channel.kind) === 'github' ? checkedOut(home) : noThreadCheckout(home)
+  return defineInstructions({ content: `${workspace}\n\n${LINEAR_ISSUE_BRANCHES}` })
 })

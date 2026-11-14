@@ -236,17 +236,13 @@ export async function captureFrame(
   return { path, how: probe.how }
 }
 
-/**
- * agent-browser still expects the pre-0.64 eve session shape, an `id` beside
- * `run`; it only uses the id to name the browser session, so any stable
- * string stands in.
- */
-export function browserSandbox(sandbox: Pick<SandboxSession, 'run'>, id: string): EveSandboxSession {
-  return { id, run: options => sandbox.run(options) }
+/** agent-browser passes `abortSignal`; eve's sandbox calls it `signal`. */
+export function browserSandbox(sandbox: Pick<SandboxSession, 'run'>): EveSandboxSession {
+  return { run: ({ command, abortSignal }) => sandbox.run({ command, signal: abortSignal }) }
 }
 
-export function browserContext(sandbox: Pick<SandboxSession, 'run'>, id: string): EveToolContext {
-  const session = browserSandbox(sandbox, id)
+export function browserContext(sandbox: Pick<SandboxSession, 'run'>): EveToolContext {
+  const session = browserSandbox(sandbox)
   return { getSandbox: () => Promise.resolve(session) }
 }
 

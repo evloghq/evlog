@@ -1,11 +1,11 @@
 import { useLogger } from 'evlog/eve'
-import type { DynamicResolveContext } from 'eve/tools'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { eviErrors, refusal, type ToolRefusal } from '../lib/errors'
 import { repositoryToken } from '../lib/github/credentials'
 import { isValidRefName, pushBrokerPolicy, validatePushBranch } from '../lib/github/push'
 import { cloneUrl, homeRepository, parseRepository, type Repository, repositorySlug } from '../lib/repo'
+import { isVercelEnvironment } from '../lib/sandbox-backend'
 import { canAccessAdminTools } from '../lib/trust'
 import { checkoutDir, installCommand, REPO_DIR, runOutput } from '../lib/workspace'
 import { environment } from '../sandbox'
@@ -18,13 +18,16 @@ function notSlug(input: string) {
   return refusal(eviErrors.INPUT_REFUSED({ message: `"${input}" is not an owner/repo slug.` }))
 }
 
+function needsFirewall(tool: string) {
+  return refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool, message: `${tool} needs the Vercel Sandbox firewall to broker the GitHub token, and this sandbox is local Docker. Run it on a deployment.` }))
+}
+
 function notInstalled(repository: Repository) {
   return refusal(eviErrors.GITHUB_NOT_INSTALLED({ owner: repository.owner, repository: repositorySlug(repository) }))
 }
 
-// Executes stay inline in the resolver (docs/notes.md).
 // Maintainer and schedule-app turns ship code; nothing else reaches git over the network.
-const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
+export default defineDynamic((ctx) => {
   if (!canAccessAdminTools(ctx.session.auth.current)) return null
   const home = repositorySlug(homeRepository())
   return {
@@ -43,6 +46,11 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
           return refusal(eviErrors.INPUT_REFUSED({ message: `"${input.ref}" is not a valid ref.` }))
         }
         const slug = repositorySlug(repository)
+        if (!isVercelEnvironment(environment)) {
+          const refused = needsFirewall('git__checkout')
+          log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code } } })
+          return refused
+        }
         const token = await repositoryToken(repository)
         if (token === null) {
           const refused = notInstalled(repository)
@@ -127,6 +135,7 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
           if (parsed === null) return refuse(notSlug(input.repository))
           repository = parsed
         }
+        if (!isVercelEnvironment(environment)) return refuse(needsFirewall('git__push'))
         const token = await repositoryToken(repository)
         if (token === null) return refuse(notInstalled(repository))
         const dir = checkoutDir(repository)
@@ -153,10 +162,4 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
       },
     }),
   }
-}
-
-export default defineDynamic({
-  events: {
-    'turn.started': resolveGitTools,
-  },
 })

@@ -8,7 +8,7 @@ export default defineEval({
   async test(t) {
     const turn = await t.send('You just rewrote the sampling section of a docs page in apps/docs on a branch. What goes in the PR body to show that change?')
     t.succeeded()
-    t.loadedSkill('before-after')
+    t.calledSkill('before-after')
     t.judge('names a before-after capture (the capture__before_after tool or the before-after skill flow) as part of the PR body').atLeast(0.5)
   },
 })

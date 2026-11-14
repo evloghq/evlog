@@ -15,7 +15,7 @@ This is a hypothetical writing task unrelated to evlog. Do not retrieve anything
 
     t.succeeded()
     t.check(
-      turn.message ?? '',
+      turn.reply ?? '',
       satisfies(reply => LINEAR_ELI5.test(String(reply)), 'reply ends with a Linear ELI5 section'),
     )
   },

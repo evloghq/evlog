@@ -1,4 +1,4 @@
-import { isDisabledToolSentinel } from 'eve/tools'
+import { disableTool } from 'eve/tools'
 import { describe, expect, it } from 'vitest'
 import reviewSandbox from '../review-sandbox'
 import architectureAgent from '../../subagents/architecture_reviewer/agent'
@@ -40,7 +40,7 @@ describe.each(specialists)('%s simplification specialist', (_name, agent, sandbo
   })
 
   it('has no shell or file-write tool', () => {
-    expect(isDisabledToolSentinel(shell)).toBe(true)
-    expect(isDisabledToolSentinel(write)).toBe(true)
+    expect(shell).toEqual(disableTool())
+    expect(write).toEqual(disableTool())
   })
 })

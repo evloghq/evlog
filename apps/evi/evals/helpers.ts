@@ -6,14 +6,15 @@ import type { EveEvalContext } from 'eve/evals'
  * `t.calledTool` pins a single tool, which over-specifies whenever several are
  * legitimate — a source question is equally well served by `searchCode` or by
  * `getFileContent`, and an eval that insists on one of them fails on a correct
- * run. Tool calls arrive as `tool-call` actions inside `actions.requested`.
+ * run. Each tool call arrives as its own `call.requested`.
  */
 export function calledAnyTool(t: EveEvalContext, label: string, names: readonly string[]) {
   const wanted = new Set(names)
   return t.eventsSatisfy(label, events =>
     events.some(event =>
-      event.type === 'actions.requested'
-      && event.data.actions.some(action => action.kind === 'tool-call' && wanted.has(action.toolName)),
+      event.type === 'call.requested'
+      && event.data.capability.kind === 'tool'
+      && wanted.has(event.data.capability.name),
     ),
   )
 }
