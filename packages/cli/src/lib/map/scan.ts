@@ -21,11 +21,12 @@ import type {
   ScanContext,
   ScanResult,
 } from './types'
-import { relativeFromRoot, routeId } from './utils'
+import { relativeFromRoot, routeIds } from './utils'
 
 interface AnalyseInput {
   ctx: ScanContext
   raw: RawRouteEntry
+  id: string
   project: ProjectFacts
   capabilities: FrameworkCapabilities
 }
@@ -37,7 +38,7 @@ interface AnalyseInput {
  * Sensitivity has to come before the rules because `audit` is gated on it.
  */
 function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: string[] } {
-  const { ctx, raw, project, capabilities } = input
+  const { ctx, raw, id, project, capabilities } = input
   const parsed = (ctx.parse ?? parseFile)(join(ctx.projectRoot, raw.file))
   const facts = parsed
     ? buildFileFacts(parsed, {
@@ -47,10 +48,6 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
       requestLoggerMember: capabilities.requestLoggerMember,
     })
     : null
-
-  if (parsed && parsed.errors.length > 0 && ctx.verbose) {
-    console.warn(`Parse warnings in ${raw.file}: ${parsed.errors.join(', ')}`)
-  }
 
   const sensitivity = facts
     ? classifySensitivity(raw, facts)
@@ -67,7 +64,7 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
   return {
     route: {
       ...raw,
-      id: routeId(raw),
+      id,
       checks,
       suggestions,
       sensitivity,
@@ -81,7 +78,20 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
 export async function scan(input: ScanContext): Promise<ScanResult> {
   /* One parser for the whole run: the adapter and the analysis below read the
      same files, and Next emits one entry per exported method. */
-  let ctx: ScanContext = { ...input, parse: input.parse ?? createParseCache() }
+  const read = input.parse ?? createParseCache()
+  /* A file with a syntax error has no program to read routes or facts from.
+     Handing it on as parsed would score whatever is left of it, so it goes on
+     as unparsable and is reported. */
+  const broken = new Map<string, string[]>()
+  let ctx: ScanContext = {
+    ...input,
+    parse: (file) => {
+      const parsed = read(file)
+      if (!parsed || parsed.errors.length === 0) return parsed
+      broken.set(relativeFromRoot(input.projectRoot, file), parsed.errors)
+      return null
+    },
+  }
   const definition = getFramework(ctx.framework)
   const adapter = await definition.map()
   const capabilities: FrameworkCapabilities = {
@@ -98,12 +108,36 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
      own under pnpm, and the rules would tell it to adopt evlog. */
   if (!ctx.hasEvlog && project.evlogPackages.size > 0) ctx = { ...ctx, hasEvlog: true }
 
-  const extracted = await adapter.extractRoutes(ctx)
+  const found = await adapter.extractRoutes(ctx)
+  /* A file the adapter could not parse and listed nothing for declares routes
+     nobody can name. One failing entry point stands in for them, so a score
+     never rises because a file broke. */
+  const listed = new Set(found.map(route => route.file))
+  const extracted = [
+    ...found,
+    ...[...broken.keys()].filter(file => !listed.has(file)).map((file): RawRouteEntry => ({
+      framework: ctx.framework,
+      kind: 'api',
+      method: null,
+      path: '*',
+      file,
+      handler: null,
+    })),
+  ]
+  const ids = routeIds(extracted)
   const ignored = new Set(ctx.ignore?.length ? glob(ctx.ignore, ctx.projectRoot).map(file => relativeFromRoot(ctx.projectRoot, file)) : [])
-  const rawRoutes = extracted.filter(route => !ignored.has(route.file))
-  const analysed = rawRoutes.map(raw => analyseRoute({ ctx, raw, project, capabilities }))
+  const analysed = extracted
+    .map((raw, index) => ({ raw, id: ids[index]! }))
+    .filter(({ raw }) => !ignored.has(raw.file))
+    .map(({ raw, id }) => analyseRoute({ ctx, raw, id, project, capabilities }))
   const routes = analysed.map(entry => entry.route)
-  const warnings = analysed.flatMap(entry => entry.warnings)
+  const unparsed = [...broken]
+    .filter(([file]) => !ignored.has(file))
+    .map(([file, errors]) => ({ file, errors }))
+  const warnings = [
+    ...unparsed.map(({ file, errors }) => `${file} failed to parse: ${ctx.verbose ? errors.join(', ') : errors[0]}`),
+    ...analysed.flatMap(entry => entry.warnings),
+  ]
   const suggestions = hoistProjectSuggestions(routes)
 
   const globalScore = scoreGlobal(routes)
@@ -132,7 +166,8 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
     project,
     suggestions,
     warnings,
-    ignored: extracted.length - rawRoutes.length,
+    unparsed,
+    ignored: extracted.length - routes.length,
   }
 }
 

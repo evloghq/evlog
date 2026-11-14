@@ -6,7 +6,7 @@ import { getFramework } from '../../src/lib/frameworks'
 import { detectFramework } from '../../src/lib/map/detect'
 import { scan } from '../../src/lib/map/scan'
 import type { ScanContext, ScanResult } from '../../src/lib/map/types'
-import { extractMethodFromFilename, relativeFromRoot, segmentsToPath } from '../../src/lib/map/utils'
+import { extractMethodFromFilename, relativeFromRoot, routeId, segmentsToPath } from '../../src/lib/map/utils'
 import { mapForSnapshot } from '../../src/lib/map/write'
 import { resolveProject } from '../../src/lib/project'
 
@@ -322,5 +322,111 @@ describe('a workspace package that wraps evlog', () => {
   it('treats evlog as installed when the package can reach it', () => {
     const health = result.map.routes.find(r => r.path === '/api/health')
     expect(health?.checks['wide-event']?.message).toMatch(/dark event/)
+  })
+})
+
+describe('entry points a scan must not lose', () => {
+  const roots: string[] = []
+
+  async function project(files: Record<string, string>): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), 'evlog-cli-scan-'))
+    roots.push(root)
+    for (const [path, source] of Object.entries(files)) {
+      const file = join(root, path)
+      await mkdir(dirname(file), { recursive: true })
+      await writeFile(file, source, 'utf8')
+    }
+    return root
+  }
+
+  afterAll(async () => {
+    await Promise.all(roots.map(root => rm(root, { recursive: true, force: true })))
+  })
+
+  const EXPRESS = {
+    'package.json': JSON.stringify({ name: 'shop', dependencies: { express: '^5.0.0', evlog: '^2.0.0' } }),
+    'src/app.ts': [
+      'import express from \'express\'',
+      'import { evlog } from \'evlog/express\'',
+      'const app = express()',
+      'app.use(evlog())',
+      'app.get(\'/ok\', (req, res) => { req.log.set({ ok: true }); res.json({}) })',
+    ].join('\n'),
+  }
+  const DARK = [
+    'import { Router } from \'express\'',
+    'export const dark = Router()',
+    'dark.get(\'/a\', (req, res) => { res.json(1) })',
+    'dark.post(\'/b\', (req, res) => { res.json(1) })',
+  ].join('\n')
+
+  it('keeps a code-first file that stops parsing as a failing entry point', async () => {
+    const clean = await scan(await ctx(await project({ ...EXPRESS, 'src/dark.ts': DARK }), 'express'))
+    const broken = await scan(await ctx(await project({ ...EXPRESS, 'src/dark.ts': `${DARK}\nconst x = = 1\n` }), 'express'))
+
+    const entry = broken.map.routes.find(route => route.file === 'src/dark.ts')
+    expect(entry?.checks['wide-event']).toMatchObject({ status: 'fail', message: 'file failed to parse' })
+    expect(broken.map.score).toBeLessThanOrEqual(clean.map.score)
+    expect(broken.warnings).toEqual(['src/dark.ts failed to parse: Unexpected token'])
+  })
+
+  it('fails a file-based handler that stops parsing, whatever it logged before', async () => {
+    const handler = 'export default defineEventHandler((event) => {\n  useLogger(event).set({ order: { id: 1 } })\n  return {}\n})\n'
+    const result = await scan(await ctx(await project({
+      'package.json': JSON.stringify({ name: 'shop', dependencies: { nuxt: '^4.0.0', evlog: '^2.0.0' } }),
+      'server/api/orders.get.ts': `${handler}const x = = 1\n`,
+    }), 'nuxt'))
+
+    expect(result.map.routes).toHaveLength(1)
+    expect(result.map.routes[0]!.checks['wide-event']).toMatchObject({ status: 'fail', message: 'file failed to parse' })
+    expect(result.warnings).toEqual(['server/api/orders.get.ts failed to parse: Unexpected token'])
+  })
+
+  it('keeps a server action module that stops parsing', async () => {
+    const result = await scan(await ctx(await project({
+      'package.json': JSON.stringify({ name: 'shop', dependencies: { next: '^16.0.0' } }),
+      'app/page.tsx': 'export default function Page() { return <main /> }\n',
+      'app/actions.ts': '\'use server\'\nexport async function createOrder() {}\nconst x = = 1\n',
+    }), 'next'))
+
+    expect(result.map.routes.map(route => route.file).sort()).toEqual(['app/actions.ts', 'app/page.tsx'])
+  })
+
+  it('leaves a file in map.ignore out even when it does not parse', async () => {
+    const root = await project({ ...EXPRESS, 'src/dark.ts': `${DARK}\nconst x = = 1\n` })
+    const result = await scan({ ...await ctx(root, 'express'), ignore: ['src/dark.ts'] })
+
+    expect(result.map.routes.map(route => route.file)).toEqual(['src/app.ts'])
+    expect(result.warnings).toEqual([])
+  })
+
+  it('scans handlers in directories named build, dist and coverage', async () => {
+    const handler = 'export default defineEventHandler(() => ({}))\n'
+    const result = await scan(await ctx(await project({
+      'package.json': JSON.stringify({ name: 'shop', dependencies: { nuxt: '^4.0.0' } }),
+      'server/api/build/index.get.ts': handler,
+      'server/api/dist/index.get.ts': handler,
+      'server/api/coverage/index.get.ts': handler,
+    }), 'nuxt'))
+
+    expect(result.map.routes.map(route => route.path).sort()).toEqual(['/api/build', '/api/coverage', '/api/dist'])
+  })
+
+  it('gives two entry points with the same method and path their own ids', async () => {
+    const router = (name: string, body: string): string => [
+      'import { Router } from \'express\'',
+      `export const ${name} = Router()`,
+      `${name}.get('/', (req, res) => { ${body} })`,
+    ].join('\n')
+    const result = await scan(await ctx(await project({
+      ...EXPRESS,
+      'src/routes/orders.ts': router('orders', 'req.log.set({ orders: 1 }); res.json([])'),
+      'src/routes/users.ts': `${router('users', 'res.json([])')}\nusers.get('/', (req, res) => { res.json([]) })`,
+    }), 'express'))
+
+    const ids = result.map.routes.map(route => route.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    /* An entry point nothing collides with keeps the id older maps recorded. */
+    expect(result.map.routes.find(route => route.path === '/ok')!.id).toBe(routeId({ framework: 'express', kind: 'api', method: 'GET', path: '/ok' }))
   })
 })

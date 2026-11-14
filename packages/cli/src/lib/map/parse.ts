@@ -84,6 +84,8 @@ export function createParseCache(): ParseFn {
   }
 }
 
+const JAVASCRIPT = new Set(['js', 'jsx', 'mjs', 'cjs'])
+
 /**
  * Parse source that is already in memory.
  *
@@ -103,7 +105,9 @@ export function parseSource(filePath: string, source: string): ParseResult | nul
 
   const result = parseSync(filePath, code, {
     sourceType: 'module',
-    lang: ext === 'tsx' || ext === 'jsx' ? 'tsx' : 'ts',
+    /* JavaScript is read with JSX on: as TypeScript, the `<main>` of a `.js`
+       page is a type assertion that never closes. */
+    lang: ext === 'tsx' ? 'tsx' : ext && JAVASCRIPT.has(ext) ? 'jsx' : 'ts',
   })
 
   return {

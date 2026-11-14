@@ -410,8 +410,82 @@ describe('map command', () => {
 
     await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--no-write', '--min-score', value] })
 
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
     expect(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain('MAP_INVALID_MIN_SCORE')
+  })
+
+  it.each([
+    { name: 'an empty --min-score', args: ['--min-score', ''], code: 'cli.MAP_INVALID_MIN_SCORE' },
+    { name: '--min-score with no value', args: ['--min-score'], code: 'cli.FLAG_NEEDS_VALUE' },
+    { name: '--min-score followed by another flag', args: ['--min-score', '--all'], code: 'cli.FLAG_NEEDS_VALUE' },
+    { name: 'a mistyped --min-score', args: ['--min-scor', '100'], code: 'cli.UNKNOWN_FLAG' },
+    { name: 'an unknown --framework', args: ['--framework', 'rails'], code: 'cli.MAP_INVALID_FRAMEWORK' },
+    { name: 'an unknown --format', args: ['--format', 'xml'], code: 'cli.MAP_INVALID_FORMAT' },
+  ])('stops on $name with a usage error instead of running ungated', async ({ args, code }) => {
+    const cwd = join(FIXTURES, 'nuxt-basic')
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--no-write', ...args] })
+
+    const payload = JSON.parse(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')) as { error?: { code: string } }
+    expect(payload.error?.code).toBe(code)
+    expect(process.exitCode).toBe(2)
+  })
+
+  it('applies both gates when a bare --baseline comes before --min-score', async () => {
+    const cwd = await copyFixture('nuxt-basic')
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header'] })
+    stdout.mockClear()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--no-write', '--baseline', '--min-score', '100'] })
+
+    const payload = JSON.parse(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')) as { error?: unknown, baseline?: { regressions: unknown[] } }
+    expect(payload.error).toBeUndefined()
+    expect(payload.baseline?.regressions).toEqual([])
+    expect(process.exitCode).toBe(1)
+  })
+
+  it.each([
+    { gate: '--min-score', args: ['--min-score', '0'] },
+    { gate: '--baseline', args: ['--baseline'] },
+  ])('fails $gate when a file stops parsing, and leaves the map alone', async ({ args }) => {
+    const cwd = await copyFixture('hono-basic')
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header'] })
+    const committed = await readFile(join(cwd, 'evlog.map.json'), 'utf8')
+    await writeFile(join(cwd, 'src/health.ts'), 'const x = = 1\n')
+    stdout.mockClear()
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header', ...args] })
+
+    const payload = JSON.parse(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')) as { error?: { code: string, message: string } }
+    expect(payload.error).toMatchObject({ code: 'cli.MAP_PARSE_FAILED', message: 'src/health.ts failed to parse: Unexpected token' })
+    expect(process.exitCode).toBe(1)
+    expect(await readFile(join(cwd, 'evlog.map.json'), 'utf8')).toBe(committed)
+  })
+
+  it('reports an error as JSON under --format json too', async () => {
+    const cwd = join(FIXTURES, 'nuxt-basic')
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--format', 'json', '--no-header', '--no-write', '--min-score', 'abc'] })
+
+    expect(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain('MAP_INVALID_MIN_SCORE')
+  })
+
+  it('exits 2 when the entry point to inspect does not exist', async () => {
+    const cwd = join(FIXTURES, 'nuxt-basic')
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--no-header', '--no-write', '/api/nope'] })
+
+    expect(stderr.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain('No entry point matches /api/nope')
+    expect(process.exitCode).toBe(2)
   })
 
   it('rejects --min-score before it scans anything, so a bad gate costs nothing', async () => {
@@ -538,7 +612,7 @@ describe('map --format', () => {
     await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--limit', value, '--no-header', '--no-write'] })
 
     expect(JSON.parse(out.join('')).error.code).toBe('cli.MAP_INVALID_LIMIT')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 
   it('github: paths are rebased on GITHUB_WORKSPACE when the project is a package inside it', async () => {
@@ -568,6 +642,6 @@ describe('map --format', () => {
     await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--format', 'github', '--no-header', '--no-write'] })
 
     expect(JSON.parse(out.join('')).error.code).toBe('cli.MAP_FORMAT_CONFLICT')
-    expect(process.exitCode).toBe(1)
+    expect(process.exitCode).toBe(2)
   })
 })
