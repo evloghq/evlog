@@ -1,4 +1,5 @@
 import type { ArgsDef, CommandDef, CommandContext, CommandMeta, ParsedArgs, Resolvable } from 'citty'
+import { telemetry } from '@evlog/telemetry'
 import { defineCommand, parseArgs } from 'citty'
 import { EvlogError } from 'evlog'
 import { createContext } from '../core/context'
@@ -129,9 +130,10 @@ export function defineEvlogCommand<T extends ArgsDef = {}>(
  * Render a catalog error and exit 1, or 2 for a usage error; rethrow anything
  * unexpected.
  *
- * Shared because every command that writes needs the same three things from a
- * failure — the finding on the debug event, the `why` / `fix` for the reader,
- * and a non-zero exit — and three copies of that would drift.
+ * Shared because every command that writes needs the same things from a
+ * failure — the finding on the debug event, the error code on the telemetry
+ * event, the `why` / `fix` for the reader, and a non-zero exit — and three
+ * copies of that would drift.
  */
 export function failWith(
   error: unknown,
@@ -142,6 +144,7 @@ export function failWith(
     { code: error.code ?? 'cli.COMMAND_FAILED', why: error.why, fix: error.fix, link: error.link },
     { status: 'fail' },
   )
+  telemetry.fail(error.code)
   io.ui.done({
     jsonMode: io.args.json,
     json: { error: { code: error.code, message: error.message, why: error.why, fix: error.fix } },

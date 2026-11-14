@@ -10,8 +10,9 @@ export const DEFAULT_ALLOWED_TOOLS = ['evlog-cli', 'evlog-action']
  * namespace rule would accept a key nobody here has looked at.
  *
  * `init*` comes from `initTelemetryFieldNames()` in `@evlog/cli`
- * (`src/lib/init/telemetry.ts`), `map*` from `mapTelemetryFieldNames()`, and
- * the `doctor` group from `doctorTelemetryFieldNames()`. Growing the CLI's
+ * (`src/lib/init/telemetry.ts`), `map*` from `mapTelemetryFieldNames()`,
+ * `logs*` from `logsTelemetryFieldNames()`, and the `doctor` group from
+ * `doctorTelemetryFieldNames()`. Growing the CLI's
  * catalog or its rule registry adds names there, and a name missing here is
  * dropped silently — so regenerate this list when destinations, extras,
  * enrichers or map rules change.
@@ -96,6 +97,13 @@ export const DEFAULT_ALLOWED_CUSTOM_KEYS: Record<string, string[]> = {
     'agentsDryRun',
     'agentsInteractive',
     'agentsCancelled',
+    // evlog logs — how the reader is used, never what it read
+    'logsView',
+    'logsFollow',
+    'logsEvents',
+    'logsWhere',
+    'logsSources',
+    'logsUrl',
     // evlog map — how projects actually score, and which rules fire or get waived
     'mapFramework',
     'mapFrameworkForced',

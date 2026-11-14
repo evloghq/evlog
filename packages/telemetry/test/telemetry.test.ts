@@ -373,6 +373,44 @@ describe('telemetry flush', () => {
     expect(events[0]?.custom).toEqual({ checksFailed: 2, ok: true })
   })
 
+  it('records a failure the command handled itself, with its code', async () => {
+    const instance = createTelemetry({ name: TOOL, version: '0.0.0' })
+
+    await expect(instance.run('logs', () => {
+      telemetry.fail('cli.LOGS_NO_SINK')
+      return 'handled'
+    })).resolves.toBe('handled')
+
+    const [event] = await new TelemetryOutbox({ toolName: TOOL }).readAll()
+    expect(event).toMatchObject({ command: 'logs', outcome: 'error', errorCode: 'cli.LOGS_NO_SINK' })
+  })
+
+  it('records a handled failure without a code', async () => {
+    const instance = createTelemetry({ name: TOOL, version: '0.0.0' })
+
+    await instance.run('sync', () => telemetry.fail())
+
+    const [event] = await new TelemetryOutbox({ toolName: TOOL }).readAll()
+    expect(event!.outcome).toBe('error')
+    expect(event!.errorCode).toBeUndefined()
+  })
+
+  it('reports the error that was thrown over a failure reported before it', async () => {
+    const instance = createTelemetry({ name: TOOL, version: '0.0.0' })
+
+    await expect(instance.run('sync', () => {
+      telemetry.fail('cli.FIRST')
+      throw Object.assign(new Error('boom'), { code: 'cli.THROWN' })
+    })).rejects.toThrow('boom')
+
+    const [event] = await new TelemetryOutbox({ toolName: TOOL }).readAll()
+    expect(event).toMatchObject({ outcome: 'error', errorCode: 'cli.THROWN' })
+  })
+
+  it('ignores telemetry.fail() outside a run', () => {
+    expect(() => telemetry.fail('cli.NOWHERE')).not.toThrow()
+  })
+
   it('stops recording after disableTelemetry on the active instance', async () => {
     const instance = createTelemetry({ name: TOOL, version: '0.0.0' })
     await instance.run('before', () => undefined)
