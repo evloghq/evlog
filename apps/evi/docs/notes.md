@@ -13,9 +13,11 @@ How the eve runtime behaves under this agent: channels, tools, skills, models, s
 silently. `agent/lib/channel.ts` normalizes it; both the workspace instruction
 and the spend tags go through it.
 
-**The built-in tools are not counted by `eve info`.** It reports authored tools
-only, so `Tools 0` still means `bash`, `read_file`, `write_file`, `glob`, `grep`,
-`web_fetch`, `todo` and `load_skill` are all present.
+**`eve info` counts only static tools.** It lists eve's defaults (`bash`,
+`read_file`, `write_file`, `edit_file`, `web_fetch`, `web_search`, `agent`) and
+the static files in `agent/tools/`, but not the tools built with `defineDynamic`
+(`git`, `capture`, `blob`, `images`, `turbo`, `ai-gateway`, `set-vercel-env`),
+which resolve per turn. Skills load through `eve__skill`, which eve adds on its own.
 
 **Only the GitHub channel checks out the repository.** It happens before the
 first model call, at the triggering ref, incrementally across turns, and only on
@@ -72,27 +74,18 @@ DeepSeek V4 Flash advertises only `high` and `xhigh`. Setting `low` or `medium`
 is accepted without an error.
 
 **Session limits default to 40M input tokens and no output cap**, so nothing bounds the output one runaway session can generate. Evi keeps the 40M input cap and sets
-1M output. Output counts reasoning, and at each model step eve gives the
-children an even split of the parent's remaining window, so a 250k cap kept
-stopping a content pass that spent about 460k reasoning tokens across its
-reviewers: children got windows of about 14k and asked for approval in a
-thread nobody was watching. Approving grants a fresh window of the same size, so the
+1M output, both in `limits.sessionUsage`. Output counts reasoning, and a
+subagent checks its own usage against the root agent's caps while its usage
+also counts in the parent's, so a content pass that spends about 460k
+reasoning tokens across its reviewers stays under both. Before eve 1.0 each
+child got an even split of the parent's remaining window instead, and a 250k
+cap left reviewers with about 14k each, asking for approval in a thread
+nobody was watching. Approving grants a fresh window of the same size, so the
 cap sets the prompt cadence, not the total spend.
 
 **Eval runs leak sessions.** The mechanism, and what to change about it, is in [observability.md](./observability.md).
 
 **`sessionEvent` has never been observed firing.** Why, and how to confirm it, is in [observability.md](./observability.md).
-
-### Dynamic tools: executes stay inline
-
-eve's bundler transform registers a dynamic tool's `execute` as a durable step
-function only when the function sits inline in the resolver body. A tool map
-built by a factory (`return myTools()`) type-checks and works on a fresh
-session, then fails on any resumed session with `references step function
-"..." which is not registered`. An implicit arrow return (`() => ({ ... })`)
-defeats the transform the same way; the resolver needs a block body with an
-explicit `return`. Every `agent/tools/*.ts` dynamic file therefore defines
-its tools inline in a single block-bodied `turn.started` resolver.
 
 ## Schedules
 

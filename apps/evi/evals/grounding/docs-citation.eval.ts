@@ -8,7 +8,7 @@ export default defineEval({
     const turn = await t.send('How does tail sampling work in evlog?')
     t.succeeded()
     t.calledTool('docs__get-page')
-    t.check(turn.message, includes(/evlog\.dev\//))
+    t.check(turn.reply, includes(/evlog\.dev\//))
     t.judge('cites a documentation URL it retrieved rather than describing the feature generically').atLeast(0.6)
   },
 })

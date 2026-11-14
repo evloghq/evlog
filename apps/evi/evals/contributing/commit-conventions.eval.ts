@@ -10,7 +10,7 @@ export default defineEval({
   async test(t) {
     const turn = await t.send('Draft the commit subject for a fix to the Axiom drain adapter that stops it dropping the last batch on shutdown.')
     t.succeeded()
-    t.loadedSkill('contributing')
-    t.check(turn.message, includes(/\b(feat|fix|docs|refactor|test|perf|chore)(\([a-z][a-z-]*\))?: [a-z]/))
+    t.calledSkill('contributing')
+    t.check(turn.reply, includes(/\b(feat|fix|docs|refactor|test|perf|chore)(\([a-z][a-z-]*\))?: [a-z]/))
   },
 })

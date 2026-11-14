@@ -12,13 +12,18 @@ import { agentBrowserInstallOptions, workspaceBootstrapCommand } from './lib/wor
  */
 const BEFORE_AFTER_CLI = '@vercel/before-and-after@0.0.4'
 
-/** Package managers for repositories that are not the home one: the image ships pnpm and yarn, bun is separate, `nci` picks from the lockfile. */
-const PACKAGE_MANAGER_CLIS = ['@antfu/ni@30.6.0', 'bun@1.4.2']
+/**
+ * eve's image ships npm alone. corepack provides pnpm and yarn at the version
+ * each repository pins in `packageManager`, bun is separate, and `nci` picks
+ * from the lockfile.
+ */
+const PACKAGE_MANAGER_CLIS = ['corepack@0.36.0', '@antfu/ni@30.6.0', 'bun@1.4.2']
 
 const HOME = homeRepository()
 
 async function prepareSandbox(sandbox: SandboxSession) {
   await sandbox.run({ command: `npm install -g ${[BEFORE_AFTER_CLI, ...PACKAGE_MANAGER_CLIS].join(' ')}` })
+  await sandbox.run({ command: 'corepack enable' })
   await sandbox.run({ command: `git clone --depth 50 ${cloneUrl(HOME)} repo` })
   // Frozen: a cold install in a fresh clone otherwise re-resolves the whole
   // graph, and any <48h transitive release then fails the template build on
@@ -34,7 +39,7 @@ async function prepareSandbox(sandbox: SandboxSession) {
   // Commits authored in the sandbox belong to the bot, on every channel.
   await sandbox.run({ command: 'git config --global user.name "evlogai[bot]" && git config --global user.email "evlogai[bot]@users.noreply.github.com"' })
   const { stdout: architecture } = await sandbox.run({ command: 'uname -m' })
-  await installAgentBrowser(browserSandbox(sandbox, 'template'), agentBrowserInstallOptions(architecture))
+  await installAgentBrowser(browserSandbox(sandbox), agentBrowserInstallOptions(architecture))
 }
 
 /**

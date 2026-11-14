@@ -1,5 +1,6 @@
 import { connectPhotonCredentials } from '@vercel/connect/eve'
 import { photonIMessageChannel } from 'eve/channels/photon'
+import { interaction } from 'eve/events'
 import { failureLine, flattenInline } from '../lib/failure'
 import { MAINTAINER_PHONE } from '../lib/trust'
 
@@ -19,15 +20,26 @@ export default photonIMessageChannel({
     }
   },
   events: {
-    async 'input.requested'(event, channel) {
-      if (!channel.thread || event.requests.length === 0) return
+    // Replaces eve's prompt card with plain text: iMessage shows no buttons,
+    // so each option says what to reply. Sign-ins keep eve's own handling.
+    async committed(line, ctx) {
+      const { thread } = ctx.channel
+      if (!thread) return
 
-      const body = event.requests
-        .map((request) => {
+      const opened = line.facts.flatMap((fact) => {
+        if (fact.type !== 'interaction.opened') return []
+        const request = interaction(ctx.view, fact.data.interactionId)
+        return request && request.request.kind !== 'sign-in' ? [request] : []
+      })
+      if (opened.length === 0) return
+
+      const body = opened
+        .map(({ request, call }) => {
           const lines = [request.prompt]
 
-          if (request.kind === 'tool-approval') {
-            for (const [key, value] of Object.entries(request.action.input)) {
+          const input = call?.input
+          if (request.kind === 'approval' && input && typeof input === 'object' && !Array.isArray(input)) {
+            for (const [key, value] of Object.entries(input)) {
               if (value === null || value === '' || (Array.isArray(value) && value.length === 0)) continue
               lines.push(`${key}: ${flattenInline(value)}`)
             }
@@ -43,16 +55,16 @@ export default photonIMessageChannel({
         })
         .join('\n\n')
 
-      await channel.thread.post(body)
+      await thread.post(body)
     },
     // A terminal failure is always reported in the thread; a failed turn never ends silent.
-    async 'turn.failed'(event, channel) {
-      if (!channel.thread) return
-      await channel.thread.post(failureLine('That turn failed', 'Send the message again to retry.', event))
+    async 'turn.settled'(event, ctx) {
+      if (event.data.outcome !== 'failed' || !ctx.channel.thread) return
+      await ctx.channel.thread.post(failureLine('That turn failed', 'Send the message again to retry.', event.data.error ?? {}))
     },
-    async 'session.failed'(event, channel) {
-      if (!channel.thread) return
-      await channel.thread.post(failureLine('This session could not recover', 'Send a new message to start over.', event))
+    async 'session.ended'(event, ctx) {
+      if (event.data.outcome !== 'failed' || !ctx.channel.thread) return
+      await ctx.channel.thread.post(failureLine('This session could not recover', 'Send a new message to start over.', event.data.error ?? {}))
     },
   },
 })

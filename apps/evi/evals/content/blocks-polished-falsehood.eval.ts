@@ -9,7 +9,7 @@ export default defineEval({
     const turn = await t.send(reviewFixture('apps/evi/evals/content/fixtures/polished-false.md'))
     await expectReviewedSnapshot(t, turn.session, 'apps/evi/evals/content/fixtures/polished-false.md')
     t.succeeded()
-    t.calledSubagent('content_review')
+    t.calledAgent('content_review')
     expectNoSubagent(t, 'content_rewrite')
     t.notCalledTool('write_file')
     expectVerdictIn(t, turn.session, ['blocked'])

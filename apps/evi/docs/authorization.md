@@ -19,9 +19,9 @@ omitted writes, `closeIssue` and `createPullRequestReview`, fall back to the
 SDK's `always()` default. On Slack or the web that is a real control.
 On GitHub it is not, for three compounding reasons:
 
-1. **There is no approval card.** Per eve's GitHub channel docs, an
-   `input.requested` event "is posted as a comment prompt, and the user's reply
-   comment maps back to the pending input request." It is a comment.
+1. **There is no approval card.** Per eve's GitHub channel docs, "an approval
+   or question posts as a comment. The user answers it with a reply comment."
+   It is a comment.
 2. **Whoever replies first answers it.** The binding mechanism exists upstream:
    eve captures the requester's auth on the pending request and exports
    `ApprovalResponsePolicy`, which decides whether the responder may settle the
@@ -80,7 +80,7 @@ return { auth: { ...auth, attributes: { ...auth.attributes, tier } } }
 ## Enforce with the approval predicate, used as a policy
 
 `requireApproval` accepts a per-tool predicate receiving
-`{ session, toolName, toolInput, approvedTools, callId }`. Two of its return
+`{ session, toolName, toolInput, callId }`. Two of its return
 values resolve without a human:
 
 - `'not-applicable'`: runs immediately, no prompt

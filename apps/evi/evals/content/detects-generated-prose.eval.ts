@@ -12,7 +12,7 @@ export default defineEval({
     const turn = await t.send(reviewFixture(GENERATED))
     await expectReviewedSnapshot(t, turn.session, GENERATED)
     t.succeeded()
-    t.calledSubagent('content_review')
+    t.calledAgent('content_review')
     t.notCalledTool('write_file')
     expectVerdictIn(t, turn.session, ['blocked'])
 
