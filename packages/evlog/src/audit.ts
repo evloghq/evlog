@@ -1,6 +1,6 @@
 import type { AuditActor, AuditFields, AuditPatchOp, AuditTarget, DrainContext, EnrichContext, FieldContext, RedactConfig, RequestLogger, WideEvent } from './types'
 import { createLogger } from './logger'
-import { compileRedactPathMatchers, redactValueByPaths } from './redact'
+import { compileRedactPathMatchers, escapePointerSegment, redactValueByPaths } from './redact'
 import { getHeader as getSharedHeader } from './shared/headers'
 import type { AuditInput } from './audit-action'
 
@@ -295,6 +295,33 @@ export interface WithAuditContext {
 }
 
 /**
+ * @internal Objects `auditDiff` walks key by key: plain objects, null-prototype
+ * objects and class instances. Built-ins such as `Date`, `Set`, `Map` and `RegExp`
+ * keep their state outside own keys, so they are compared whole instead.
+ */
+function isDiffableRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && Object.prototype.toString.call(value) === '[object Object]'
+}
+
+/**
+ * @internal Equality for the values `auditDiff` does not recurse into:
+ * `Date` by timestamp, `RegExp` by source and flags, `Set` and `Map` by content.
+ * Anything else is equal only when it is the same reference.
+ */
+function isSameNonPlainValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (a instanceof Date && b instanceof Date) return Object.is(a.getTime(), b.getTime())
+  if (a instanceof RegExp && b instanceof RegExp) return String(a) === String(b)
+  if (a instanceof Set && b instanceof Set) {
+    return a.size === b.size && [...a].every(v => b.has(v))
+  }
+  if (a instanceof Map && b instanceof Map) {
+    return a.size === b.size && [...a].every(([k, v]) => b.has(k) && isSameNonPlainValue(v, b.get(k)))
+  }
+  return false
+}
+
+/**
  * Compute a compact, redact-aware diff between two objects for the
  * `changes` field. Output is a JSON Patch-style array (RFC 6902 subset:
  * `add`, `remove`, `replace`) — small enough to ship over the wire.
@@ -331,27 +358,25 @@ export function auditDiff(
     if (a === b) return
 
     if (a === undefined && b !== undefined) {
-      patch.push({ op: 'add', path: path || '/', value: redactValue(b, path) })
+      patch.push({ op: 'add', path, value: redactValue(b, path) })
       return
     }
     if (a !== undefined && b === undefined) {
-      patch.push({ op: 'remove', path: path || '/' })
+      patch.push({ op: 'remove', path })
       return
     }
 
-    if (
-      a !== null && b !== null
-      && typeof a === 'object' && typeof b === 'object'
-      && !Array.isArray(a) && !Array.isArray(b)
-    ) {
-      const keys = new Set([...Object.keys(a as object), ...Object.keys(b as object)])
+    if (isDiffableRecord(a) && isDiffableRecord(b)) {
+      const keys = new Set([...Object.keys(a), ...Object.keys(b)])
       for (const key of keys) {
-        diff((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], `${path}/${key}`)
+        diff(a[key], b[key], `${path}/${escapePointerSegment(key)}`)
       }
       return
     }
 
-    patch.push({ op: 'replace', path: path || '/', value: redactValue(b, path) })
+    if (isSameNonPlainValue(a, b)) return
+
+    patch.push({ op: 'replace', path, value: redactValue(b, path) })
   }
 
   function redactValue(value: unknown, path: string): unknown {

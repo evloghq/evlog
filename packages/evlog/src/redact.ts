@@ -214,6 +214,15 @@ function setRedacted(record: Record<string, unknown>, key: string, value: unknow
   console.warn(`[evlog] redact could not rewrite read-only field "${path}" — value left as-is`)
 }
 
+/** Escape one JSON Pointer segment (RFC 6901): `~` becomes `~0`, `/` becomes `~1`. */
+export function escapePointerSegment(segment: string): string {
+  return segment.replace(/~/g, '~0').replace(/\//g, '~1')
+}
+
+function unescapePointerSegment(segment: string): string {
+  return segment.replace(/~1/g, '/').replace(/~0/g, '~')
+}
+
 /**
  * Return a copy of `value` with path-pattern matches replaced by `replacement`.
  * Used by audit diffs; does not mutate the input.
@@ -226,7 +235,7 @@ export function redactValueByPaths(
   replacement: RedactReplacement,
   pointerPath = '',
 ): unknown {
-  const segments = pointerPath.split('/').filter(Boolean)
+  const segments = pointerPath.split('/').slice(1).map(unescapePointerSegment)
   const dotPath = segments.join('.')
   const leafKey = segments.at(-1) ?? ''
 
@@ -245,7 +254,7 @@ export function redactValueByPaths(
 
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value)) {
-    const childPointer = pointerPath ? `${pointerPath}/${k}` : `/${k}`
+    const childPointer = `${pointerPath}/${escapePointerSegment(k)}`
     const childDot = dotPath ? `${dotPath}.${k}` : k
     out[k] = matchesRedactPath(childDot, k, matchers)
       ? resolveReplacement(replacement, v, { path: childDot, key: k })
