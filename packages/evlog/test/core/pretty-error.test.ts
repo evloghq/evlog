@@ -16,7 +16,7 @@ import {
 import { readCodeSnippetFromDisk } from '../../src/shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../../src/shared/enrich-error-stack.node'
 import { prependNitroErrorHandler } from '../../src/nitro'
-import { fastestRunMs } from '../helpers/timers'
+import { expectLinearTime } from '../helpers/timers'
 
 const SAMPLE_STACK = `Error: Payment processing failed
     at Object.handler (file:///Users/dev/project/server/api/test.get.ts:100:0)
@@ -101,12 +101,12 @@ describe('parseStackFrames', () => {
 
   it('parses attacker-shaped frame lines in linear time', () => {
     const lines = [
-      `at a${' ('.repeat(32_768)}`,
-      `at async a${' ('.repeat(32_768)}`,
-      `at a (${'1:'.repeat(32_768)})`,
+      (n: number) => `at a${' ('.repeat(4_096 * n)}`,
+      (n: number) => `at async a${' ('.repeat(4_096 * n)}`,
+      (n: number) => `at a (${'1:'.repeat(4_096 * n)})`,
     ]
     for (const line of lines) {
-      expect(fastestRunMs(() => parseStackFrames(`Error: invalid value\n    ${line}`)), line.slice(0, 16)).toBeLessThan(100)
+      expectLinearTime(frame => parseStackFrames(`Error: invalid value\n    ${frame}`), line, line(1).slice(0, 16))
     }
   })
 
