@@ -160,6 +160,10 @@ describe('changesetBumps', () => {
   it('reads context lines of an edited changeset', () => {
     expect([...changesetBumps('@@ -1,3 +1,3 @@\n ---\n "evlog": major\n ---')]).toEqual(['major'])
   })
+
+  it('reads an edited changeset whose hunk starts below the opening fence', () => {
+    expect([...changesetBumps('@@ -2,6 +2,6 @@\n \'evlog\': patch\n ---\n \n-old\n+new')]).toEqual(['patch'])
+  })
 })
 
 describe('validateRiskScore', () => {
