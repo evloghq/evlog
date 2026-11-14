@@ -1,5 +1,12 @@
 # @evlog/cli
 
+## 0.11.3
+
+### Patch Changes
+
+- Updated dependencies [[`777e3bb`](https://github.com/evloghq/evlog/commit/777e3bbfb9f9433ee539393d6bf0f37300ef8ff7)]:
+  - @evlog/telemetry@0.4.0
+
 ## 0.11.2
 
 ### Patch Changes
