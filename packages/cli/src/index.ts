@@ -4,9 +4,7 @@ import { subCommands } from './commands'
 import { COMMON_ARGS } from './lib/command'
 import { TELEMETRY_ENDPOINT, TOOL_NAME, VERSION } from './lib/constants'
 import { resolveCliEnvironment } from './lib/environment'
-import { INIT_TELEMETRY_FIELDS } from './lib/init/telemetry'
-import { LOGS_TELEMETRY_FIELDS } from './lib/logs/query'
-import { MAP_TELEMETRY_FIELDS } from './lib/map/telemetry-fields'
+import { TELEMETRY_COLLECT } from './lib/telemetry'
 
 /**
  * The evlog CLI command tree, telemetry-wrapped and ready for `runMain()`.
@@ -26,16 +24,12 @@ export const main = withTelemetry(
   }),
   {
     name: TOOL_NAME,
+    bin: 'evlog',
     version: VERSION,
     // Packaged installs report `production`; workspace builds report `development`.
     environment: resolveCliEnvironment(),
     endpoint: TELEMETRY_ENDPOINT,
-    /* Which setup options people actually pick and how projects actually score,
-       so the flow can lead with the options that get used and the grade bands
-       can be calibrated against reality. Values are ids from this CLI's own
-       catalog — the allowlist is what keeps a free-text answer from ever being
-       sent. */
-    collect: { fields: { ...INIT_TELEMETRY_FIELDS, ...LOGS_TELEMETRY_FIELDS, ...MAP_TELEMETRY_FIELDS } },
+    collect: TELEMETRY_COLLECT,
   },
 )
 

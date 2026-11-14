@@ -56,7 +56,7 @@ export interface RunEvent {
  * Structural on purpose — citty's `ArgsDef` satisfies it, and so does any other
  * parser's definition, without `@evlog/telemetry` taking a dependency on one.
  */
-export type FlagDefinitions = Record<string, { default?: unknown } | undefined>
+export type FlagDefinitions = Record<string, { type?: string, default?: unknown } | undefined>
 
 /** Allowlisted string flag values declared via `collect.flags`. */
 export type CollectFlags = Record<string, readonly string[]>
@@ -85,6 +85,12 @@ export interface TelemetryOptions<
 > {
   /** Telemetry tool name, e.g. `evlog-cli`. Used for config dir and disclosure. */
   name: string
+  /**
+   * The command people type to run the tool, when it is not `name`: `evlog`
+   * for the tool `evlog-cli`. The first-run notice prints it in
+   * `<bin> telemetry disable`.
+   */
+  bin?: string
   /** Tool version string. */
   version: string
   /**
@@ -158,7 +164,10 @@ export interface TelemetryHandle<
     fn: () => T | Promise<T>,
     opts?: {
       flags?: Record<string, unknown>
-      /** Declared args for `flags`, so defaults are not reported as choices. */
+      /**
+       * Declared args for `flags`. With them, only declared flags are
+       * recorded, and defaults are not reported as choices.
+       */
       args?: FlagDefinitions
       systemCustom?: Record<string, string>
     },
