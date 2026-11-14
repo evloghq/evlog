@@ -224,6 +224,34 @@ async function followUrl(url: string, shown: WideEvent[], inRange: (event: WideE
 }
 
 /**
+ * What `evlog logs` reports: how the reader was used, never what it read.
+ *
+ * The view is one of this CLI's own ids; the rest is counts and booleans. No
+ * event, field name, filter value, path or URL.
+ */
+function logsTelemetryFields(
+  result: Pick<LogsResult, 'matched' | 'sources'> & { query: Pick<LogsResult['query'], 'view' | 'where'> },
+  run: { follow: boolean, url: boolean },
+): Record<string, boolean | number | string> {
+  return {
+    logsView: result.query.view,
+    logsFollow: run.follow,
+    logsEvents: result.matched,
+    logsWhere: result.query.where.length,
+    logsSources: result.sources.length,
+    logsUrl: run.url,
+  }
+}
+
+/** Every field {@link logsTelemetryFields} can emit — used to keep the ingest allowlist in step. */
+export function logsTelemetryFieldNames(): string[] {
+  return Object.keys(logsTelemetryFields(
+    { query: { view: 'recent', where: [] }, matched: 0, sources: [] },
+    { follow: false, url: false },
+  ))
+}
+
+/**
  * `evlog logs` — the wide events the app wrote, from the terminal.
  * Logic lives in {@link runLogs}; this file owns the citty surface.
  */
@@ -264,6 +292,7 @@ export default defineEvlogCommand('logs', {
       })
     } catch (error) {
       if (error instanceof EvlogError) {
+        telemetry.fail(error.code)
         ui.done({
           jsonMode: args.json,
           json: { error: { code: error.code, message: error.message, why: error.why, fix: error.fix } },
@@ -278,14 +307,7 @@ export default defineEvlogCommand('logs', {
       process.off('SIGINT', stop)
     }
 
-    telemetry.set({
-      logsView: result.query.view,
-      logsFollow: args.follow === true,
-      logsEvents: result.matched,
-      logsWhere: result.query.where.length,
-      logsSources: result.sources.length,
-      logsUrl: args.url !== undefined,
-    } as unknown as Record<string, boolean | number>)
+    telemetry.set(logsTelemetryFields(result, { follow: args.follow === true, url: args.url !== undefined }) as unknown as Record<string, boolean | number>)
 
     /* While following, the one-shot part was already streamed line by line
        before the tail started, so the report is only for the one-shot run. */

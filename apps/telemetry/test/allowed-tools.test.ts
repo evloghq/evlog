@@ -79,6 +79,15 @@ describe('the evlog-cli allowlist against the CLI itself', () => {
     }
   })
 
+  it('accepts every field evlog logs can set', async () => {
+    const { logsTelemetryFieldNames } = await import('../../../packages/cli/src/commands/logs')
+    const allowed = new Set(DEFAULT_ALLOWED_CUSTOM_KEYS['evlog-cli'])
+
+    for (const name of logsTelemetryFieldNames()) {
+      expect(allowed.has(name), `${name} would be dropped by the ingest`).toBe(true)
+    }
+  })
+
   it('accepts every field evlog doctor can set', async () => {
     const { doctorTelemetryFieldNames } = await import('../../../packages/cli/src/commands/doctor')
     const allowed = new Set(DEFAULT_ALLOWED_CUSTOM_KEYS['evlog-cli'])

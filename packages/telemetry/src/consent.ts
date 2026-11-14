@@ -16,11 +16,25 @@ interface PreferenceFile {
   preference: TelemetryPreference
 }
 
-/** Resolve consent: `DO_NOT_TRACK` → `EVLOG_TELEMETRY` → persisted preference. */
+const ON = new Set(['1', 'true', 'yes', 'on'])
+const OFF = new Set(['0', 'false', 'no', 'off'])
+
+function readSwitch(value: string | undefined): boolean | undefined {
+  const normalized = value?.trim().toLowerCase()
+  if (normalized === undefined) return undefined
+  return ON.has(normalized) ? true : OFF.has(normalized) ? false : undefined
+}
+
+/**
+ * Resolve consent: `DO_NOT_TRACK` → `EVLOG_TELEMETRY` → persisted preference.
+ *
+ * Both variables read `1`, `true`, `yes` and `on` as set, and `0`, `false`,
+ * `no` and `off` as unset, in any case.
+ */
 export function resolveConsent(toolName: string): boolean {
-  if (process.env.DO_NOT_TRACK === '1') return false
-  if (process.env.EVLOG_TELEMETRY === '0') return false
-  if (process.env.EVLOG_TELEMETRY === '1') return true
+  if (readSwitch(process.env.DO_NOT_TRACK) === true) return false
+  const explicit = readSwitch(process.env.EVLOG_TELEMETRY)
+  if (explicit !== undefined) return explicit
 
   const pref = readPreferenceSync(toolName)
   if (pref === 'disabled') return false

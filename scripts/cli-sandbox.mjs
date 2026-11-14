@@ -281,7 +281,7 @@ check('map --all / map <entry>', (dir) => {
 check('map --min-score gates', (dir) => {
   expect(cli(dir, ['map', '--min-score', '100', '--no-write']).code === 1, '100 did not fail')
   expect(cli(dir, ['map', '--min-score', '0', '--no-write']).code === 0, '0 did not pass')
-  expect(cli(dir, ['map', '--min-score', 'abc', '--no-write']).code === 1, 'a bad threshold was accepted')
+  expect(cli(dir, ['map', '--min-score', 'abc', '--no-write']).code === 2, 'a bad threshold was accepted')
 })
 
 check('map --baseline catches a regression', (dir) => {
@@ -457,7 +457,7 @@ check('init offers nothing it cannot back up', (dir) => {
 
 check('init rejects an unknown drain', (dir) => {
   const result = cli(dir, ['init', '--yes', '--drain', 'axium'])
-  expect(result.code === 1, `exit code was ${result.code}`)
+  expect(result.code === 2, `exit code was ${result.code}`)
   expect(result.stderr.includes('Unknown --drain'), 'no explanation printed')
   expect(git(dir, 'status', '--porcelain').trim() === '', 'a rejected run still wrote files')
 })

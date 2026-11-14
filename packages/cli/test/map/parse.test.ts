@@ -11,4 +11,10 @@ describe('parseSource', () => {
       }
     }
   })
+
+  it('reads JSX in a .js file', () => {
+    const result = parseSource('app/page.js', 'export default function Page() { return <main>hi</main> }\n')
+    expect(result?.errors).toEqual([])
+    expect(result?.program.body).toHaveLength(1)
+  })
 })

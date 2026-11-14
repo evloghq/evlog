@@ -44,6 +44,7 @@ function scan(overrides: Partial<ScanResult> = {}): ScanResult {
     project: {} as ScanResult['project'],
     suggestions: [],
     warnings: [],
+    unparsed: [],
     ignored: 0,
     summary: { instrumented: 1, partial: 0, dark: 0, exempt: 0, suppressedChecks: 0 },
     ...overrides,

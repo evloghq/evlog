@@ -64,7 +64,7 @@ pnpm evlog map
 | `evlog map --baseline [ref]` | Exit 1 on a regression against the committed `evlog.map.json` (path, or `git:<ref>`) |
 | `evlog map --no-write` | Skip writing `evlog.map.json` to the project root |
 | `evlog map --format github` | GitHub Actions annotations on stdout; or use [`evloghq/action`](https://github.com/evloghq/action), which adds the base comparison, the job summary and a pull request comment |
-| `evlog map --verbose` | Show per-file parse warnings |
+| `evlog map --verbose` | Show every parser error for a file that fails to parse, not only the first |
 | `evlog map --cwd <dir>` | Scan another app in the workspace |
 | `evlog logs` | The last 50 wide events the fs drain wrote, oldest first |
 | `evlog logs errors` | The ones that failed: a `5xx`, an `error` or `fatal` level, or an `error` block |
@@ -99,7 +99,7 @@ Also `evlog-map-disable-line` for a trailing comment, and `evlog-map-disable` on
 | --- | --- |
 | `0` | All checks passed (warnings allowed) |
 | `1` | At least one check failed |
-| `2` | Usage error (unknown command or flags) |
+| `2` | Usage error (unknown command, unknown flag, a flag with no value or one that cannot be read) |
 
 ## `--json` output
 
@@ -131,6 +131,8 @@ Breaking either shape requires a `schemaVersion` bump. In `routes[]`, `checks` h
 ## Telemetry
 
 The CLI records **one anonymous wide event per command** via [`@evlog/telemetry`](https://npmjs.com/package/@evlog/telemetry) (tool name `evlog-cli`): command name, duration, outcome, sanitized flags. No arguments, paths, or file contents.
+
+`evlog logs` records which view ran, whether it followed or read a URL, and three counts (events matched, `--where` clauses, sources read). No event, filter value, path or URL.
 
 `evlog init` also records **which options you picked**: the framework, the destinations, the extras, the sampling preset, and counts (files written, manual steps left). Every value is an id from the CLI's own catalog, enforced by an allowlist, so a free-text answer can never be sent: your service name, your package name and anything read out of your source stay on your machine. Delivered to evlog's own dashboard (`apps/telemetry` in this repo); override with `EVLOG_TELEMETRY_ENDPOINT` to point at your own instance. Opt out anytime:
 

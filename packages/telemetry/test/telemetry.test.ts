@@ -26,6 +26,7 @@ import {
   resolveFlushThreshold,
   shouldFlushOutbox,
 } from '../src/flush-policy'
+import { closeServers, ingest } from './helpers/server'
 
 const TOOL = 'evlog-test'
 
@@ -55,6 +56,23 @@ describe('telemetry consent', () => {
   })
 
   it('honours EVLOG_TELEMETRY=1', () => {
+    process.env.EVLOG_TELEMETRY = '1'
+    expect(resolveConsent(TOOL)).toBe(true)
+  })
+
+  it.each(['true', 'TRUE', 'yes', 'on'])('reads DO_NOT_TRACK=%s as an opt-out', (value) => {
+    process.env.DO_NOT_TRACK = value
+    process.env.EVLOG_TELEMETRY = '1'
+    expect(resolveConsent(TOOL)).toBe(false)
+  })
+
+  it.each(['false', 'False', 'off', 'no'])('reads EVLOG_TELEMETRY=%s as an opt-out', (value) => {
+    process.env.EVLOG_TELEMETRY = value
+    expect(resolveConsent(TOOL)).toBe(false)
+  })
+
+  it.each(['0', 'false', ''])('does not read DO_NOT_TRACK=%s as an opt-out', (value) => {
+    process.env.DO_NOT_TRACK = value
     process.env.EVLOG_TELEMETRY = '1'
     expect(resolveConsent(TOOL)).toBe(true)
   })
@@ -104,6 +122,22 @@ describe('telemetry sanitize', () => {
   it('keeps a flag whose value differs from its declared default', () => {
     const flags = sanitizeFlags({ write: false }, { args: { write: { default: true } } })
     expect(flags).toEqual({ write: false })
+  })
+
+  it('drops a flag the command does not declare', () => {
+    const flags = sanitizeFlags(
+      { all: true, mySecretFlag: true, 'my-secret-flag': true },
+      { args: { all: { type: 'boolean' } } },
+    )
+    expect(flags).toEqual({ all: true })
+  })
+
+  it('drops a positional argument, whatever it holds', () => {
+    const flags = sanitizeFlags(
+      { entry: 'server/api/checkout.ts', all: true },
+      { args: { entry: { type: 'positional' }, all: { type: 'boolean' } } },
+    )
+    expect(flags).toEqual({ all: true })
   })
 
   it('drops undeclared string custom fields', () => {
@@ -339,6 +373,44 @@ describe('telemetry flush', () => {
     expect(events[0]?.custom).toEqual({ checksFailed: 2, ok: true })
   })
 
+  it('records a failure the command handled itself, with its code', async () => {
+    const instance = createTelemetry({ name: TOOL, version: '0.0.0' })
+
+    await expect(instance.run('logs', () => {
+      telemetry.fail('cli.LOGS_NO_SINK')
+      return 'handled'
+    })).resolves.toBe('handled')
+
+    const [event] = await new TelemetryOutbox({ toolName: TOOL }).readAll()
+    expect(event).toMatchObject({ command: 'logs', outcome: 'error', errorCode: 'cli.LOGS_NO_SINK' })
+  })
+
+  it('records a handled failure without a code', async () => {
+    const instance = createTelemetry({ name: TOOL, version: '0.0.0' })
+
+    await instance.run('sync', () => telemetry.fail())
+
+    const [event] = await new TelemetryOutbox({ toolName: TOOL }).readAll()
+    expect(event!.outcome).toBe('error')
+    expect(event!.errorCode).toBeUndefined()
+  })
+
+  it('reports the error that was thrown over a failure reported before it', async () => {
+    const instance = createTelemetry({ name: TOOL, version: '0.0.0' })
+
+    await expect(instance.run('sync', () => {
+      telemetry.fail('cli.FIRST')
+      throw Object.assign(new Error('boom'), { code: 'cli.THROWN' })
+    })).rejects.toThrow('boom')
+
+    const [event] = await new TelemetryOutbox({ toolName: TOOL }).readAll()
+    expect(event).toMatchObject({ outcome: 'error', errorCode: 'cli.THROWN' })
+  })
+
+  it('ignores telemetry.fail() outside a run', () => {
+    expect(() => telemetry.fail('cli.NOWHERE')).not.toThrow()
+  })
+
   it('stops recording after disableTelemetry on the active instance', async () => {
     const instance = createTelemetry({ name: TOOL, version: '0.0.0' })
     await instance.run('before', () => undefined)
@@ -347,6 +419,54 @@ describe('telemetry flush', () => {
     await instance.run('after', () => undefined)
     const outbox = new TelemetryOutbox({ toolName: TOOL })
     expect(await outbox.readAll()).toHaveLength(0)
+  })
+
+  it('sends nothing and queues nothing for the run that turns telemetry off', async () => {
+    const server = await ingest()
+    await new TelemetryOutbox({ toolName: TOOL }).append(exampleRunEvent({ idempotencyKey: 'queued' }))
+    const instance = createTelemetry({ name: TOOL, version: '0.0.0', endpoint: server.url, flushIntervalMs: 0 })
+
+    await instance.run('telemetry disable', () => disableTelemetry(TOOL))
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    expect(server.requests).toHaveLength(0)
+    expect(await new TelemetryOutbox({ toolName: TOOL }).readAll()).toEqual([])
+    await closeServers()
+  })
+
+  it('prints the payload under EVLOG_TELEMETRY_DEBUG=1 without sending or queueing it', async () => {
+    vi.stubEnv('EVLOG_TELEMETRY_DEBUG', '1')
+    const server = await ingest()
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const instance = createTelemetry({ name: TOOL, version: '0.0.0', endpoint: server.url })
+
+    await instance.run('doctor', () => undefined)
+    await instance.flush()
+
+    const printed = stderr.mock.calls.map(([chunk]) => String(chunk)).join('')
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+    expect(printed).toMatch(/^\[@evlog\/telemetry\] \{"event":"run","command":"doctor"/m)
+    expect(server.requests).toHaveLength(0)
+    expect(await new TelemetryOutbox({ toolName: TOOL }).readAll()).toEqual([])
+    await closeServers()
+  })
+
+  it('names the command people type in the first-run notice, not the tool name', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const tty = Object.getOwnPropertyDescriptor(process.stderr, 'isTTY')
+    Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true })
+    const instance = createTelemetry({ name: TOOL, bin: 'evt', version: '0.0.0' })
+
+    await instance.run('doctor', () => undefined)
+
+    const printed = stderr.mock.calls.map(([chunk]) => String(chunk)).join('')
+    vi.restoreAllMocks()
+    if (tty) Object.defineProperty(process.stderr, 'isTTY', tty)
+    else delete (process.stderr as { isTTY?: boolean }).isTTY
+    expect(printed).toContain('evt telemetry status')
+    expect(printed).toContain('evt telemetry disable')
+    expect(printed).not.toContain(`${TOOL} telemetry`)
   })
 
   it('resumes recording after enableTelemetry on the active instance', async () => {
@@ -363,19 +483,17 @@ describe('telemetry flush', () => {
 })
 
 describe('telemetry flush coalescing', () => {
-  const endpoint = 'https://telemetry.test/ingest'
+  let endpoint: string
   let base: string
 
-  function stubIngest(status = 204) {
-    const fetchSpy = vi.fn((_url: string, _init?: RequestInit) =>
-      Promise.resolve(new Response(null, { status })),
-    )
-    vi.stubGlobal('fetch', fetchSpy)
-    return fetchSpy
+  async function stubIngest(status = 204) {
+    const server = await ingest(status)
+    endpoint = server.url
+    return server
   }
 
-  function postedBody(fetchSpy: ReturnType<typeof stubIngest>): { events: { command: string }[] } {
-    return JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body)) as { events: { command: string }[] }
+  function postedBody(server: Awaited<ReturnType<typeof stubIngest>>): { events: { command: string }[] } {
+    return JSON.parse(server.bodies[0]!) as { events: { command: string }[] }
   }
 
   function createHandle(overrides: Partial<Parameters<typeof createTelemetry>[0]> = {}) {
@@ -404,75 +522,75 @@ describe('telemetry flush coalescing', () => {
     delete process.env.EVLOG_TELEMETRY
     delete process.env.EVLOG_TELEMETRY_FLUSH_INTERVAL_MS
     delete process.env.EVLOG_TELEMETRY_FLUSH_THRESHOLD
-    vi.unstubAllGlobals()
+    await closeServers()
     _resetActiveTelemetryForTests()
   })
 
   it('records without POSTing when the window has not elapsed', async () => {
-    const fetchSpy = stubIngest()
+    const server = await stubIngest()
     const instance = createHandle()
     await instance.run('doctor', () => 'ok')
-    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(server.requests).toHaveLength(0)
     expect(await new TelemetryOutbox({ toolName: TOOL }).readAll()).toHaveLength(1)
   })
 
   it('POSTs and updates last-flush when the window has elapsed', async () => {
-    const fetchSpy = stubIngest()
+    const server = await stubIngest()
     const outbox = new TelemetryOutbox({ toolName: TOOL })
     const seeded = Date.now() - 120_000
     await outbox.markFlushed(seeded)
     const instance = createHandle()
     await instance.run('doctor', () => 'ok')
-    expect(fetchSpy).toHaveBeenCalledOnce()
-    expect(fetchSpy.mock.calls[0]?.[0]).toBe(endpoint)
+    expect(server.requests).toHaveLength(1)
+    expect(server.requests[0]?.url).toBe('/ingest')
     const flushedAt = await outbox.readLastFlushAt()
     expect(flushedAt).toBeGreaterThan(seeded)
     expect(await outbox.readAll()).toHaveLength(0)
   })
 
   it('POSTs when the outbox reaches the threshold', async () => {
-    const fetchSpy = stubIngest()
+    const server = await stubIngest()
     const instance = createHandle({ flushThreshold: 2 })
     await instance.run('first', () => undefined)
-    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(server.requests).toHaveLength(0)
     await instance.run('second', () => undefined)
-    expect(fetchSpy).toHaveBeenCalledOnce()
-    expect(postedBody(fetchSpy).events.map(e => e.command)).toEqual(['first', 'second'])
+    expect(server.requests).toHaveLength(1)
+    expect(postedBody(server).events.map(e => e.command)).toEqual(['first', 'second'])
     expect(await new TelemetryOutbox({ toolName: TOOL }).readAll()).toHaveLength(0)
   })
 
   it('keeps events on disk and leaves last-flush unchanged when the POST fails', async () => {
-    const fetchSpy = stubIngest(500)
+    const server = await stubIngest(500)
     const outbox = new TelemetryOutbox({ toolName: TOOL })
     const seeded = Date.now() - 120_000
     await outbox.markFlushed(seeded)
     const instance = createHandle()
     await instance.run('doctor', () => 'ok')
-    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(server.requests).toHaveLength(1)
     expect(await outbox.readAll()).toHaveLength(1)
     expect(await outbox.readLastFlushAt()).toBe(seeded)
   })
 
   it('flush() POSTs even when the window has not elapsed', async () => {
-    const fetchSpy = stubIngest()
+    const server = await stubIngest()
     const instance = createHandle()
     await instance.run('doctor', () => 'ok')
-    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(server.requests).toHaveLength(0)
     await instance.flush()
-    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(server.requests).toHaveLength(1)
     expect(await new TelemetryOutbox({ toolName: TOOL }).readAll()).toHaveLength(0)
   })
 
   it('POSTs on every run when EVLOG_TELEMETRY_FLUSH_INTERVAL_MS is 0', async () => {
     process.env.EVLOG_TELEMETRY_FLUSH_INTERVAL_MS = '0'
-    const fetchSpy = stubIngest()
+    const server = await stubIngest()
     const instance = createHandle()
     await instance.run('doctor', () => 'ok')
-    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(server.requests).toHaveLength(1)
   })
 
   it('caps a flush POST at the ingest batch size', async () => {
-    const fetchSpy = stubIngest()
+    const server = await stubIngest()
     const outbox = new TelemetryOutbox({ toolName: TOOL })
     await outbox.markFlushed(Date.now() - 120_000)
     await Promise.all(
@@ -482,13 +600,13 @@ describe('telemetry flush coalescing', () => {
     )
     const instance = createHandle()
     await instance.run('extra', () => undefined)
-    expect(fetchSpy).toHaveBeenCalledOnce()
-    expect(postedBody(fetchSpy).events).toHaveLength(MAX_FLUSH_BATCH)
+    expect(server.requests).toHaveLength(1)
+    expect(postedBody(server).events).toHaveLength(MAX_FLUSH_BATCH)
     expect(await outbox.readAll()).toHaveLength(1)
   })
 
   it('flush() sends every batch until the outbox is empty', async () => {
-    const fetchSpy = stubIngest()
+    const server = await stubIngest()
     const outbox = new TelemetryOutbox({ toolName: TOOL })
     await Promise.all(
       Array.from({ length: MAX_FLUSH_BATCH + 1 }, (_, i) =>
@@ -496,13 +614,13 @@ describe('telemetry flush coalescing', () => {
       ),
     )
     await createHandle().flush()
-    const sizes = fetchSpy.mock.calls.map(call => (JSON.parse(String(call[1]?.body)) as { events: unknown[] }).events.length)
+    const sizes = server.bodies.map(body => (JSON.parse(body) as { events: unknown[] }).events.length)
     expect(sizes).toEqual([MAX_FLUSH_BATCH, 1])
     expect(await outbox.readAll()).toHaveLength(0)
   })
 
   it('flush() stops at the first failed batch and keeps the rest on disk', async () => {
-    const fetchSpy = stubIngest(503)
+    const server = await stubIngest(503)
     const outbox = new TelemetryOutbox({ toolName: TOOL })
     await Promise.all(
       Array.from({ length: MAX_FLUSH_BATCH + 1 }, (_, i) =>
@@ -510,7 +628,7 @@ describe('telemetry flush coalescing', () => {
       ),
     )
     await createHandle().flush()
-    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(server.requests).toHaveLength(1)
     expect(await outbox.readAll()).toHaveLength(MAX_FLUSH_BATCH + 1)
   })
 })
@@ -632,9 +750,14 @@ describe('citty flag capture', () => {
     expect(event.flags).toEqual({ write: false })
   })
 
-  it('leaves positional values out of the payload', async () => {
+  it('leaves a positional out of the payload', async () => {
     const event = await runWrapped(['server/api/checkout.ts'])
-    expect(event.flags).toEqual({ entry: FLAG_VALUE_SET })
+    expect(event.flags).toEqual({})
+  })
+
+  it('leaves a flag the command does not declare out of the payload', async () => {
+    const event = await runWrapped(['--all', '--my-secret-flag', 'hunter2'])
+    expect(event.flags).toEqual({ all: true })
   })
 
   it('wraps lazily loaded subcommands without loading the others', async () => {
