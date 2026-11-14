@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLivePoller, cursorRequiresRefresh, reflectedCursor } from '../app/utils/live-poller'
+import { createLivePoller, cursorRequiresRefresh, payloadsRequireRefresh, reflectedCursor } from '../app/utils/live-poller'
 
 const INTERVAL = 10_000
 const MAX = 80_000
@@ -24,6 +24,27 @@ describe('cursorRequiresRefresh', () => {
     expect(cursorRequiresRefresh(last, 4)).toBe(true)
     last = 4
     expect(cursorRequiresRefresh(last, 4)).toBe(false)
+  })
+})
+
+describe('payloadsRequireRefresh', () => {
+  const MAX_AGE = 300_000
+  const settled = { lastCursorId: 4, refreshedAt: 0, failed: false }
+
+  it('skips payloads while the cursor is unchanged and they are recent', () => {
+    expect(payloadsRequireRefresh(settled, 4, MAX_AGE - 1, MAX_AGE)).toBe(false)
+  })
+
+  it('refreshes once the cursor moves', () => {
+    expect(payloadsRequireRefresh(settled, 5, 0, MAX_AGE)).toBe(true)
+  })
+
+  it('retries a failed payload even though the cursor is unchanged', () => {
+    expect(payloadsRequireRefresh({ ...settled, failed: true }, 4, 0, MAX_AGE)).toBe(true)
+  })
+
+  it('refreshes payloads past the max age so old events slide out of the range', () => {
+    expect(payloadsRequireRefresh(settled, 4, MAX_AGE, MAX_AGE)).toBe(true)
   })
 })
 

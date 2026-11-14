@@ -35,6 +35,26 @@ export function cursorRequiresRefresh(lastId: number | null, latestId: number): 
   return lastId === null || lastId !== latestId
 }
 
+export interface PayloadState {
+  /** Cursor the payloads have caught up to, see {@link reflectedCursor}. */
+  lastCursorId: number | null
+  /** When the payloads were last refreshed. */
+  refreshedAt: number
+  /** A payload on screen holds a failed request, including one a filter change started. */
+  failed: boolean
+}
+
+/**
+ * Whether this probe should refetch payloads: the cursor moved, a payload on
+ * screen failed, or the payloads are older than `maxAgeMs`. The range is a
+ * sliding window, so events age out of it even when no new one lands.
+ */
+export function payloadsRequireRefresh(state: PayloadState, latestId: number, now: number, maxAgeMs: number): boolean {
+  return state.failed
+    || cursorRequiresRefresh(state.lastCursorId, latestId)
+    || now - state.refreshedAt >= maxAgeMs
+}
+
 /**
  * The cursor a successful refresh has caught up to, to commit as the new
  * baseline. A memoized payload can predate `latestId`; committing the probed
