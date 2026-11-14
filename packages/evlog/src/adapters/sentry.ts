@@ -193,6 +193,10 @@ function getUserId(event: WideEvent): string | undefined {
   return nonEmptyString(event.userId) ?? nonEmptyString(user.id)
 }
 
+function eventMessage(event: WideEvent): string {
+  return getFirstStringValue(event, ['message', 'action', 'path']) ?? 'evlog wide event'
+}
+
 function getFirstStringValue(event: WideEvent, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = event[key]
@@ -223,12 +227,9 @@ function toAttributeValue(value: unknown): SentryAttributeValue | undefined {
 export function toSentryLog(event: WideEvent, config: SentryConfig): SentryLog {
   const { timestamp, level, service, environment, version, ...rest } = event
 
-  const body = getFirstStringValue(event, ['message', 'action', 'path'])
-    ?? 'evlog wide event'
+  const body = eventMessage(event)
 
-  const traceId = (typeof event.traceId === 'string' && event.traceId.length > 0)
-    ? event.traceId
-    : createTraceId()
+  const traceId = nonEmptyString(event.traceId) ?? createTraceId()
 
   const attributes: Record<string, SentryAttributeValue> = {}
 
@@ -306,7 +307,7 @@ export function toSentryErrorEvent(event: WideEvent, config: SentryConfig): Sent
       values: [
         {
           type,
-          value: nonEmptyString(error.message) ?? getFirstStringValue(event, ['message', 'action', 'path']) ?? 'evlog wide event',
+          value: nonEmptyString(error.message) ?? eventMessage(event),
           ...(frames.length > 0 ? { stacktrace: { frames } } : {}),
         }
       ],
