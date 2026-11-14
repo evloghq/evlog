@@ -5,31 +5,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createGitHubActionsTelemetry } from '../src/github-actions'
 import { disableTelemetry, enableTelemetry, _resetActiveTelemetryForTests } from '../src/create'
 import type { RunEvent } from '../src/types'
+import { closeServers, ingest } from './helpers/server'
 
 const TOOL = 'github-actions-test'
 
 describe('createGitHubActionsTelemetry', () => {
   let directory: string
-  let events: RunEvent[]
+  let server: Awaited<ReturnType<typeof ingest>>
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'evlog-gha-test-'))
-    events = []
     vi.stubEnv('XDG_CONFIG_HOME', directory)
     vi.stubEnv('DO_NOT_TRACK', '0')
     vi.stubEnv('EVLOG_TELEMETRY', '1')
-    vi.stubEnv('EVLOG_TELEMETRY_ENDPOINT', 'https://telemetry.test/ingest')
+    server = await ingest()
+    vi.stubEnv('EVLOG_TELEMETRY_ENDPOINT', server.url)
     vi.stubEnv('GITHUB_ACTION', 'test-action')
     vi.stubEnv('GITHUB_EVENT_NAME', 'push')
-    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => {
-      events.push(...JSON.parse(String(init.body)).events)
-      return Promise.resolve(new Response(null, { status: 204 }))
-    }))
   })
+
+  function received(): RunEvent[] {
+    return server.bodies.flatMap(body => (JSON.parse(body) as { events: RunEvent[] }).events)
+  }
 
   afterEach(async () => {
     _resetActiveTelemetryForTests()
-    vi.unstubAllGlobals()
+    await closeServers()
     vi.unstubAllEnvs()
     await rm(directory, { recursive: true, force: true })
   })
@@ -46,8 +47,8 @@ describe('createGitHubActionsTelemetry', () => {
     })
     await handle.flush()
     expect(value).toBe(42)
-    expect(events).toHaveLength(1)
-    expect(events[0]?.custom).toEqual({ routes: 3, ghaAction: 'test-action', ghaEvent: 'push' })
+    expect(received()).toHaveLength(1)
+    expect(received()[0]?.custom).toEqual({ routes: 3, ghaAction: 'test-action', ghaEvent: 'push' })
   })
 
   it('POSTs after each run without waiting for the coalescing window', async () => {
@@ -56,7 +57,7 @@ describe('createGitHubActionsTelemetry', () => {
     await expect(handle.run('fail', () => {
       throw Object.assign(new Error('boom'), { code: 'MAP_FAILED' })
     })).rejects.toThrow('boom')
-    expect(events.map(e => [e.command, e.outcome, e.errorCode])).toEqual([
+    expect(received().map(e => [e.command, e.outcome, e.errorCode])).toEqual([
       ['map', 'success', undefined],
       ['fail', 'error', 'MAP_FAILED'],
     ])
@@ -76,6 +77,6 @@ describe('createGitHubActionsTelemetry', () => {
     expect(handle.enabled).toBe(false)
     expect(await handle.run('map', () => 42)).toBe(42)
     await handle.flush()
-    expect(fetch).not.toHaveBeenCalled()
+    expect(server.requests).toHaveLength(0)
   })
 })

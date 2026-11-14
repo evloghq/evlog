@@ -49,10 +49,10 @@ function actionRow(label: string, body: string, color: boolean): string {
  * First-run disclosure notice for interactive terminals.
  * Respects `NO_COLOR`; plain text when colors are disabled.
  */
-export function formatTelemetryNotice(toolName: string): string {
+export function formatTelemetryNotice(bin: string): string {
   const color = useColors()
-  const statusCmd = `${toolName} telemetry status`
-  const disableCmd = `${toolName} telemetry disable`
+  const statusCmd = `${bin} telemetry status`
+  const disableCmd = `${bin} telemetry disable`
 
   const brand = `${paint(c.dim, 'evlog', color)} ${paint(c.yellow + c.bold, 'telemetry', color)}`
   const headline = `${brand}${paint(c.dim, ' — anonymous usage enabled', color)}`

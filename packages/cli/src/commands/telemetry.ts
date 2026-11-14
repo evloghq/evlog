@@ -4,8 +4,9 @@ import { defineCommand } from 'citty'
 import { TOOL_NAME } from '../lib/constants'
 import { defineEvlogCommand } from '../lib/command'
 import type { EvlogCommandDef } from '../lib/command'
+import { TELEMETRY_COLLECT } from '../lib/telemetry'
 
-const tree = defineTelemetryCommands({ name: TOOL_NAME })
+const tree = defineTelemetryCommands({ name: TOOL_NAME, collect: TELEMETRY_COLLECT })
 
 /**
  * `evlog telemetry *` — `@evlog/telemetry` consent commands, each leaf wrapped

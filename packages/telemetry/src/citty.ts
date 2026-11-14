@@ -64,7 +64,7 @@ function wrapCommand(
         const name = commandPath.join(' ') || segment || 'run'
         return telemetry.run(name, () => command.run!(ctx), {
           flags: ctx.args as Record<string, unknown>,
-          args: resolvedArgs as FlagDefinitions | undefined,
+          args: (resolvedArgs ?? {}) as FlagDefinitions,
         })
       }
       : command.run,

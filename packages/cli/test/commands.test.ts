@@ -31,6 +31,19 @@ describe('command registry', () => {
   })
 })
 
+describe('telemetry status', () => {
+  it('lists the string values a run can send, from the allowlist the runs use', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    await runCommand(main, { rawArgs: ['telemetry', 'status', '--no-header'] })
+
+    const out = stderr.mock.calls.map(([chunk]) => String(chunk)).join('')
+    expect(out).toContain('- `initFramework`: `nuxt`')
+    expect(out).toContain('- `mapGrade`: `excellent`')
+    expect(out).toContain('- `logsView`: ')
+  })
+})
+
 describe('flags', () => {
   function capture(stream: 'stdout' | 'stderr'): () => string {
     const spy = vi.spyOn(process[stream], 'write').mockImplementation(() => true)
