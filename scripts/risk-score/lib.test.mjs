@@ -169,6 +169,11 @@ describe('changesetBumps', () => {
     const patch = '@@ -1,5 +1,5 @@\n ---\n-\'evlog\': patch\n+\'evlog\': major\n \'@evlog/cli\': patch\n \'@evlog/signals\': patch\n \'@evlog/telemetry\': patch'
     expect([...changesetBumps(patch)].sort()).toEqual(['major', 'patch'])
   })
+
+  it('reads an edited changeset whose first hunk shows neither fence', () => {
+    const patch = '@@ -3,7 +3,7 @@\n \'@evlog/cli\': patch\n \'@evlog/nuxthub\': patch\n \'@evlog/signals\': patch\n-\'@evlog/telemetry\': patch\n+\'@evlog/telemetry\': minor\n \'@evlog/eve\': patch\n \'@evlog/hono\': patch\n \'@evlog/next\': patch'
+    expect([...changesetBumps(patch)].sort()).toEqual(['minor', 'patch'])
+  })
 })
 
 describe('validateRiskScore', () => {
