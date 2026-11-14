@@ -4,7 +4,7 @@
 // (nitropack dev loads plugins outside the bundle via Worker threads).
 import { defineNitroPlugin } from 'nitropack/runtime/internal/plugin'
 import type { NitroApp } from 'nitropack/types'
-import { createRequestLogger, getGlobalPluginRunner, initLogger, isEnabled } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
@@ -88,6 +88,9 @@ export default defineNitroPlugin(async (nitroApp) => {
     minLevel: evlogConfig?.minLevel,
     stringify: evlogConfig?.stringify,
     redact,
+    // Nitro does not await plugins, so a plugin that ran before this one settled
+    // may already have set a drain; `initLogger` would clear it.
+    drain: getGlobalDrain(),
     plugins: evlogFileConfigPlugins(),
     _suppressDrainWarning: true,
   })

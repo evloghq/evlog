@@ -146,7 +146,7 @@ const state = globalConfig
  * second `initLogger()` without a `drain` clears the drain for every copy.
  * Integrations that initialize implicitly must therefore check
  * {@link isLoggerLocked} / {@link isLoggerInitialized} first, as `next/handler`
- * and `eve` do.
+ * and `eve` do, or pass {@link getGlobalDrain} through, as the Nitro plugins do.
  */
 export function initLogger(config: LoggerConfig = {}): void {
   state.enabled = config.enabled ?? true

@@ -82,4 +82,10 @@ describe.sequential('Nitro v2 app with an evlog.config.ts', () => {
       path: '/works',
     })
   }, 15_000)
+
+  it('keeps a drain another plugin set with initLogger during startup', async () => {
+    const res = await fetch(new URL('/global-drain', baseURL), { signal: AbortSignal.timeout(8_000) })
+
+    expect(await res.json()).toEqual({ tasks: ['cleanup'] })
+  }, 15_000)
 })

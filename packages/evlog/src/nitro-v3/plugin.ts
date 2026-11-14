@@ -2,7 +2,7 @@ import { definePlugin } from 'nitro'
 import type { CaptureError } from 'nitro/types'
 import type { HTTPEvent } from 'nitro/h3'
 import { parseURL } from 'ufo'
-import { createRequestLogger, getGlobalPluginRunner, initLogger, isEnabled, markWideEventDrainStarted, outputWideEvent } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled, markWideEventDrainStarted, outputWideEvent } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
@@ -221,6 +221,9 @@ export default definePlugin(async (nitroApp) => {
     minLevel: evlogConfig?.minLevel,
     stringify: evlogConfig?.stringify,
     redact,
+    // Nitro does not await plugins, so a plugin that ran before this one settled
+    // may already have set a drain; `initLogger` would clear it.
+    drain: getGlobalDrain(),
     plugins: evlogFileConfigPlugins(),
     _suppressDrainWarning: true,
   })
