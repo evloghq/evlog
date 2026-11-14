@@ -32,7 +32,7 @@ interface ModuleAxiomBaseConfig {
    * @deprecated Removed in evlog v3. Use `apiKey` instead.
    */
   token?: string
-  /** Organization ID (required for Personal Access Tokens) */
+  /** Organization ID, sent as `X-Axiom-Org-Id`. Not needed with an API token, the only token type Axiom documents for ingest. */
   orgId?: string
   /** Request timeout in milliseconds. Default: 5000 */
   timeout?: number
