@@ -1,5 +1,5 @@
 /** `GET /api/telemetry/adoption` — protected. Version rollout, machine growth, punchcard, and flag/field usage. */
-export default defineEventHandler(async (event): Promise<AdoptionResponse> => {
+export default defineEventHandler(async (event): Promise<CursorStamped<AdoptionResponse>> => {
   await requireDashboardSession(event)
   const log = useLogger(event)
 

@@ -14,8 +14,8 @@ export default defineNuxtConfig({
   evlog: {
     env: { service: 'evlog-telemetry' },
     include: ['/api/**'],
-    // The live-refresh probe fires every 3s per open tab and carries no
-    // information worth keeping — logging it would drown the events that matter.
+    // The live-refresh probe is the dashboard's heartbeat and carries no
+    // information worth keeping. Logging it would drown the events that matter.
     exclude: ['/api/telemetry/cursor'],
   },
 

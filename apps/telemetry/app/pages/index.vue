@@ -102,7 +102,7 @@ const statsQuery = computed(() => ({
   source: source.value === ALL ? undefined : source.value,
 }))
 
-const statsAsync = useFetch<StatsResponse>(
+const statsAsync = useFetch<CursorStamped<StatsResponse>>(
   '/api/telemetry/stats',
   { query: statsQuery, watch: [statsQuery] },
 )
@@ -130,7 +130,7 @@ const runsAsync = useFetch<RunsResponse>(
   { query: runsQuery, watch: false, immediate: explorerActive.value },
 )
 
-const adoptionAsync = useFetch<AdoptionResponse>(
+const adoptionAsync = useFetch<CursorStamped<AdoptionResponse>>(
   '/api/telemetry/adoption',
   { query: statsQuery, watch: false, immediate: adoptionActive.value },
 )
@@ -174,7 +174,7 @@ await Promise.all([statsAsync, runsAsync, feedAsync, adoptionAsync])
 const { data: stats, error: statsError, refresh: refreshStats } = statsAsync
 const { data: runsData, error: runsError, status: runsStatus, refresh: refreshRuns } = runsAsync
 const { data: feedData, error: feedError, refresh: refreshFeed } = feedAsync
-const { data: adoption, status: adoptionStatus, refresh: refreshAdoption } = adoptionAsync
+const { data: adoption, error: adoptionError, status: adoptionStatus, refresh: refreshAdoption } = adoptionAsync
 
 const runs = computed(() => runsData.value?.runs ?? [])
 const runsTotal = computed(() => runsData.value?.total ?? 0)
@@ -343,30 +343,44 @@ const series = computed(() => ({
 
 // Live refresh, in two tiers.
 //
-// Every tick polls `/api/telemetry/cursor` — two indexed `max()` lookups, a
-// fraction of a millisecond — and only refetches the real payloads when that
-// token moved. The old behaviour re-ran all three fetches every 5s no matter
-// what, and the stats fetch alone is ~14 aggregate queries over the whole
-// selected window (~800ms of database CPU on a 30-day range). An idle
-// dashboard now costs essentially nothing, which is what buys the headroom to
-// poll *more* often: 3s instead of 5s, so new runs surface noticeably faster.
+// Every tick polls `/api/telemetry/cursor` (two indexed `max()` lookups) and
+// only refetches stats/feed/runs when that token moved, when a payload on
+// screen failed, or when the payloads are older than the server's stats cache
+// window. The stats fetch is ~14 aggregate queries over the whole selected
+// window, so an unchanged cursor must not recompute it on every tick: a
+// sliding window a few minutes stale is cheaper than pinning Neon compute awake.
+//
+// Cadence starts at 10s, doubles while the cursor is unchanged (capped at
+// 3 min), pauses while the tab is hidden, and stops after 5 min of no
+// pointer/key/scroll/focus activity so a forgotten tab lets the database
+// scale to zero. Interaction or focus resets the cadence and resumes.
 //
 // Paused while the run detail slideover is open so a manually sorted page
 // never shifts mid-read.
-const CURSOR_POLL_MS = 3000
-/** Refresh stats even without new events — the range is a sliding window. */
-const STATS_HEARTBEAT_MS = 60_000
+const CURSOR_POLL_MS = 10_000
+const CURSOR_POLL_MAX_MS = 180_000
+const IDLE_MS = 300_000
+const PAYLOAD_MAX_AGE_MS = 300_000
 
-/** `null` until the first tick has established a baseline to compare against. */
+/** `null` until a probe has successfully refreshed payloads against a cursor. */
 let lastCursorId: number | null = null
-let lastStatsAt = Date.now()
+let payloadsRefreshedAt = Date.now()
 
-// Covers the refreshes this tick doesn't drive (filter/range changes go
-// through `useFetch`'s own `watch`), so the heartbeat measures staleness
-// rather than time since the last poll.
-watch(stats, () => {
-  lastStatsAt = Date.now()
-})
+/**
+ * The payloads on screen, each with the error ref its `refresh()` writes to.
+ * Runs and adoption are tab-scoped: refreshing a tab nobody is looking at
+ * would pay for its queries and throw the result away, and an error left on
+ * a hidden tab must not fail this one.
+ */
+function livePayloads() {
+  const payloads = [
+    { refresh: refreshFeed, error: feedError },
+    { refresh: refreshStats, error: statsError },
+  ]
+  if (explorerActive.value) payloads.push({ refresh: refreshRuns, error: runsError })
+  if (adoptionActive.value) payloads.push({ refresh: refreshAdoption, error: adoptionError })
+  return payloads
+}
 
 // `useFetch`'s `refresh()` resolves even on a failed request (the error lands
 // in its `.error` ref instead of rejecting), so re-throw here for
@@ -375,25 +389,26 @@ watch(stats, () => {
 const { active: liveActive, lastError: liveError, toggle: toggleLive } = useLiveRefresh(
   async () => {
     const cursor = await $fetch<RunsCursor>('/api/telemetry/cursor')
-    const changed = lastCursorId !== null && cursor.latestId !== lastCursorId
-    lastCursorId = cursor.latestId
-
-    const pending: Promise<unknown>[] = []
-    if (changed) {
-      pending.push(refreshFeed())
-      // Both are tab-scoped — refreshing a tab nobody is looking at would pay
-      // for its queries and throw the result away.
-      if (explorerActive.value) pending.push(refreshRuns())
-      if (adoptionActive.value) pending.push(refreshAdoption())
+    const payloads = livePayloads()
+    const state = {
+      lastCursorId,
+      refreshedAt: payloadsRefreshedAt,
+      failed: payloads.some(payload => payload.error.value),
     }
-    if (changed || Date.now() - lastStatsAt >= STATS_HEARTBEAT_MS) pending.push(refreshStats())
-    if (pending.length === 0) return
+    if (!payloadsRequireRefresh(state, cursor.latestId, Date.now(), PAYLOAD_MAX_AGE_MS)) return false
 
-    await Promise.all(pending)
-    const error = statsError.value ?? runsError.value ?? feedError.value
+    await Promise.all(payloads.map(payload => payload.refresh()))
+    const error = payloads.map(payload => payload.error.value).find(Boolean)
     if (error) throw error
+    // Commit only after the payloads succeed, and only as far as the memoized
+    // ones reflect: either gap must retry on the next tick, not look like an
+    // unchanged cursor.
+    lastCursorId = reflectedCursor(cursor.latestId, adoptionActive.value ? [stats.value, adoption.value] : [stats.value])
+    payloadsRefreshedAt = Date.now()
+    // Only a moved cursor is new activity; a retry or an age refresh keeps backing off.
+    return cursorRequiresRefresh(state.lastCursorId, cursor.latestId)
   },
-  { intervalMs: CURSOR_POLL_MS, suspended: detailOpen },
+  { intervalMs: CURSOR_POLL_MS, maxIntervalMs: CURSOR_POLL_MAX_MS, idleMs: IDLE_MS, suspended: detailOpen },
 )
 
 async function onLogout() {
