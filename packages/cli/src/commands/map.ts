@@ -7,7 +7,7 @@ import type { CliConfig } from '../lib/config'
 import { FRAMEWORK_IDS, isFramework } from '../lib/frameworks'
 import type { CliDebug } from '../lib/debug'
 import { createNoopCliDebug } from '../lib/debug'
-import { cliErrors } from '../lib/errors'
+import { cliErrors, isUsageError } from '../lib/errors'
 import { evlogReached, prettyPath, resolveEvlog, resolveProject } from '../lib/project'
 import type { ProjectInfo } from '../lib/project'
 import { checkBaselineVersion, compareToBaseline, hasRegressed, loadBaseline } from '../lib/map/baseline'
@@ -62,6 +62,8 @@ export async function runMap(
     noWrite?: boolean
     verbose?: boolean
     baseline?: string | true
+    /** The `--min-score` flag. With `map.minScore` or a baseline, it makes the run a gate. */
+    minScore?: number
     /** What to call the baseline in the report and the annotations, in place of how it was spelled. */
     baselineLabel?: string
   } = {},
@@ -131,6 +133,15 @@ export async function runMap(
     () => scan(scanCtx),
     r => ({ routes: r.map.routes.length, score: r.map.score, grade: r.grade }),
   )
+
+  /* Before the map is written: a gate that scored the rest of the tree would
+     pass on entry points it never saw, and the file it wrote would be the next
+     baseline. */
+  const gated = baselineMap !== null || (options.minScore ?? config?.map.minScore) !== undefined
+  const [unparsed] = scanResult.unparsed
+  if (gated && unparsed) {
+    throw cliErrors.MAP_PARSE_FAILED({ file: unparsed.file, error: unparsed.errors[0]!, more: scanResult.unparsed.length - 1 })
+  }
 
   const baseline = baselineMap
     ? compareToBaseline(baselineMap.map, scanResult.map, baselineMap.source)
@@ -233,13 +244,15 @@ function parseFrameworkArg(value: unknown): Framework | undefined {
  *
  * The whole string has to parse: `parseInt` reads `80oops` as 80 and `abc` as
  * nothing at all, and a threshold that quietly becomes `undefined` turns the
- * gate off — CI then reports success for a bar it never checked.
+ * gate off — CI then reports success for a bar it never checked. An empty
+ * value is the same trap: it is what an unset shell variable expands to, and
+ * `Number('')` is 0.
  */
 function parseMinScoreArg(value: unknown): number | undefined {
-  if (typeof value !== 'string' || value.length === 0) return undefined
-  const threshold = Number(value)
+  if (value === undefined) return undefined
+  const threshold = typeof value === 'string' && value.trim().length > 0 ? Number(value) : Number.NaN
   if (!Number.isInteger(threshold) || threshold < 0 || threshold > 100) {
-    throw cliErrors.MAP_INVALID_MIN_SCORE({ value })
+    throw cliErrors.MAP_INVALID_MIN_SCORE({ value: String(value) })
   }
   return threshold
 }
@@ -274,12 +287,10 @@ function parseLimitArg(value: unknown): number {
  * Read `--baseline`, which is a flag and an option at once.
  *
  * Bare (`--baseline`) means "the committed map, wherever it is"; with a value it
- * is a path or a `git:<ref>`. citty hands a bare string flag back as `true` or
- * as an empty string depending on how it was written, and both spellings mean
- * the same thing to a user.
+ * is a path or a `git:<ref>`. The command declares it `bare`, so a valueless
+ * `--baseline` arrives as an empty string.
  */
 function parseBaselineArg(value: unknown): string | true | undefined {
-  if (value === true) return true
   if (typeof value !== 'string') return undefined
   return value.length > 0 ? value : true
 }
@@ -290,6 +301,7 @@ function parseBaselineArg(value: unknown): string | true | undefined {
  */
 export default defineEvlogCommand('map', {
   meta: { name: 'map' },
+  bare: ['baseline'],
   args: {
     entry: { type: 'positional', required: false, description: 'Inspect one entry point by route or file path' },
     framework: { type: 'string', description: `Override framework detection (${FRAMEWORK_IDS.join(', ')})` },
@@ -304,7 +316,7 @@ export default defineEvlogCommand('map', {
     // directly would not work: citty's parser treats any `--no-x` flag as negating
     // `x`, not as setting `noX` (see `wantsHeader`'s `--no-header` argv fallback).
     write: { type: 'boolean', default: true, description: 'Write evlog.map.json (--no-write to skip)' },
-    verbose: { type: 'boolean', description: 'Show per-file parse warnings' },
+    verbose: { type: 'boolean', description: 'Show every parser error for a file that fails to parse, not only the first' },
     format: { type: 'string', description: 'Output: human (default), json, github (workflow annotations)' },
     limit: { type: 'string', description: `Most annotations --format github emits (default ${DEFAULT_LIMIT}, GitHub's cap)` },
   },
@@ -330,6 +342,7 @@ export default defineEvlogCommand('map', {
         noWrite: !args.write,
         verbose: args.verbose,
         baseline: parseBaselineArg(args.baseline),
+        minScore: minScoreFlag,
         baselineLabel: typeof args.baselineLabel === 'string' && args.baselineLabel.length > 0 ? args.baselineLabel : undefined,
       })
       threshold = minScoreFlag ?? result.config?.map.minScore
@@ -338,13 +351,14 @@ export default defineEvlogCommand('map', {
       if (error instanceof EvlogError) {
         log.finding({ code: error.code ?? 'cli.MAP_FAILED', why: error.why, fix: error.fix, link: error.link }, { status: 'fail' })
         ui.done({
-          jsonMode: args.json,
+          jsonMode: args.json || args.format === 'json',
           json: { error: { code: error.code, message: error.message, why: error.why, fix: error.fix } },
           human: error.fix ? `${error.message}\n→ ${error.fix}` : error.message,
         })
-        /* A baseline whose rule set does not match is a usage error, not a
-           check failure: the app did not get worse, the comparison is invalid. */
-        ui.exit(error.code === cliErrors.MAP_BASELINE_VERSION_MISMATCH.code ? EXIT_USAGE : EXIT_FAIL)
+        /* A flag that cannot be read, or a baseline whose rule set does not
+           match, is a usage error rather than a check failure: the app did not
+           get worse, the run could not be carried out as asked. */
+        ui.exit(isUsageError(error) ? EXIT_USAGE : EXIT_FAIL)
         return
       }
       throw error
@@ -382,6 +396,11 @@ export default defineEvlogCommand('map', {
         },
         human,
       })
+    }
+
+    if (entry && !findEntryPoint(result.scan, entry)) {
+      ui.exit(EXIT_USAGE)
+      return
     }
 
     if (threshold !== undefined && !passesMinScore(result.scan.grade, result.scan.map.score, threshold)) {

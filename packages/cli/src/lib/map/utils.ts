@@ -1,13 +1,46 @@
 import { createHash } from 'node:crypto'
 import { isAbsolute, relative, sep } from 'node:path'
-import type { Framework, RawRouteEntry } from './types'
+import type { RawRouteEntry } from './types'
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const
 
-/** Stable id for a route — hash of framework/kind/method/path (12 hex chars). */
-export function routeId(entry: Pick<RawRouteEntry, 'framework' | 'kind' | 'path' | 'method'>): string {
-  const key = `${entry.framework}:${entry.kind}:${entry.method ?? '*'}:${entry.path}`
+type RouteIdentity = Pick<RawRouteEntry, 'framework' | 'kind' | 'path' | 'method'>
+
+function routeKey(entry: RouteIdentity): string {
+  return `${entry.framework}:${entry.kind}:${entry.method ?? '*'}:${entry.path}`
+}
+
+function hashKey(key: string): string {
   return createHash('sha256').update(key).digest('hex').slice(0, 12)
+}
+
+/** Stable id for a route — hash of framework/kind/method/path (12 hex chars). */
+export function routeId(entry: RouteIdentity): string {
+  return hashKey(routeKey(entry))
+}
+
+/**
+ * One id per entry point, in the order given.
+ *
+ * {@link routeId} identifies an entry point until two of them share a method
+ * and a path: two routers that each declare `get('/')`, two middleware files,
+ * one server action name in two modules. Those carry their file in the id, and
+ * their position when one file declares the route twice, so a baseline never
+ * compares one entry point against another.
+ */
+export function routeIds(entries: readonly (RouteIdentity & Pick<RawRouteEntry, 'file'>)[]): string[] {
+  const sharing = new Map<string, number>()
+  for (const entry of entries) sharing.set(routeKey(entry), (sharing.get(routeKey(entry)) ?? 0) + 1)
+
+  const seen = new Map<string, number>()
+  return entries.map((entry) => {
+    const key = routeKey(entry)
+    if (sharing.get(key) === 1) return hashKey(key)
+    const inFile = `${key}:${entry.file}`
+    const position = seen.get(inFile) ?? 0
+    seen.set(inFile, position + 1)
+    return hashKey(position === 0 ? inFile : `${inFile}#${position}`)
+  })
 }
 
 /**

@@ -64,7 +64,7 @@ pnpm evlog map
 | `evlog map --baseline [ref]` | Exit 1 on a regression against the committed `evlog.map.json` (path, or `git:<ref>`) |
 | `evlog map --no-write` | Skip writing `evlog.map.json` to the project root |
 | `evlog map --format github` | GitHub Actions annotations on stdout; or use [`evloghq/action`](https://github.com/evloghq/action), which adds the base comparison, the job summary and a pull request comment |
-| `evlog map --verbose` | Show per-file parse warnings |
+| `evlog map --verbose` | Show every parser error for a file that fails to parse, not only the first |
 | `evlog map --cwd <dir>` | Scan another app in the workspace |
 | `evlog logs` | The last 50 wide events the fs drain wrote, oldest first |
 | `evlog logs errors` | The ones that failed: a `5xx`, an `error` or `fatal` level, or an `error` block |
@@ -99,7 +99,7 @@ Also `evlog-map-disable-line` for a trailing comment, and `evlog-map-disable` on
 | --- | --- |
 | `0` | All checks passed (warnings allowed) |
 | `1` | At least one check failed |
-| `2` | Usage error (unknown command or flags) |
+| `2` | Usage error (unknown command, unknown flag, a flag with no value or one that cannot be read) |
 
 ## `--json` output
 
