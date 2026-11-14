@@ -2009,12 +2009,26 @@ export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {
     },
   }
 
+  if (!acceptsV26Events()) return hook
   const events = {
     ...hook.events,
     ...v26Events,
     ...(options.subagentEvents === false ? {} : v26SubagentEvents),
   }
   return { ...hook, events }
+}
+
+/**
+ * eve 0.84 refuses hooks keyed on v26 events and, in the same release, began validating
+ * `defineHook()` input, so a throw on `null` identifies it.
+ */
+function acceptsV26Events(): boolean {
+  try {
+    defineHook(null as unknown as HookDefinition)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Options for {@link defineEvlogInstrumentation}. */

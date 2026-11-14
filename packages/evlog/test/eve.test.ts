@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HookContext, HookEventMap } from 'eve/hooks'
+
+// These tests cover the v26 events of eve 0.83 and earlier, whose `defineHook()` returns its input unchecked.
+vi.mock('eve/hooks', () => ({ defineHook: (definition: unknown) => definition }))
 import { getEnvironment, getGlobalDrain, initLogger, log } from '../src/logger'
 import { defineEvlog } from '../src/shared/define'
 import { resetGlobalRegistry } from '../src/shared/globalRegistry'
