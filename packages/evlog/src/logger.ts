@@ -1209,11 +1209,12 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
  * ```
  */
 export function createRequestLogger<T extends object = Record<string, unknown>>(options: RequestLoggerOptions = {}, internalOptions?: CreateLoggerInternalOptions): AuditableLogger<T> {
-  const { method, path, requestId, waitUntil: optionsWaitUntil } = options
+  const { method, path, requestId, operation, waitUntil: optionsWaitUntil } = options
   const initial: Record<string, unknown> = {}
   if (method !== undefined) initial.method = method
   if (path !== undefined) initial.path = path
   if (requestId !== undefined) initial.requestId = requestId
+  if (operation !== undefined) initial.operation = operation
   return createLogger<T>(initial, {
     ...internalOptions,
     waitUntil: internalOptions?.waitUntil ?? optionsWaitUntil,
