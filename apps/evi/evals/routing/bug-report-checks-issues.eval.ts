@@ -13,7 +13,7 @@ export default defineEval({
   tags: ['fast', 'needs-connect'],
   async test(t) {
     await t.send('evlog redaction is broken for me — my authorization header still shows up in the drained event.')
-    t.noFailedActions()
+    t.noFailedCalls()
     calledAnyTool(t, 'searched existing issues', GITHUB_ISSUE_SEARCH_TOOLS)
     // Soft on purpose: this is the "escalate, do not fan out" budget, and it is
     // the one number here that tracks cost rather than correctness. Measured at

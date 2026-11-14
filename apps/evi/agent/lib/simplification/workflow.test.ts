@@ -13,7 +13,7 @@ import {
   verificationMessage,
 } from './workflow'
 
-type Reply = { data: unknown } | { message: string } | { error: string }
+type Reply = { data: unknown } | { reply: string } | { error: string }
 
 /** Each sent message settles with the turn `reply` returns for it. */
 function agentSessions(reply: (target: string, message: string) => Reply) {
@@ -23,8 +23,8 @@ function agentSessions(reply: (target: string, message: string) => Reply) {
       sent.push({ target, message })
       const settled = reply(target, message)
       const result: AgentMessageResult = 'error' in settled
-        ? { status: 'failed', data: undefined, message: undefined, error: { message: settled.error } }
-        : { status: 'waiting', data: undefined, message: undefined, ...settled }
+        ? { status: 'failed', data: undefined, reply: undefined, sessionEnded: false, error: { message: settled.error } }
+        : { status: 'completed', data: undefined, reply: undefined, sessionEnded: false, ...settled }
       return Promise.resolve({ result: () => Promise.resolve(result as AgentMessageResult<TOutput>) })
     },
   }))
@@ -383,7 +383,7 @@ describe('simplification workflow', () => {
         return replied({ revision })
 
       if (target === 'finding_verifier')
-        return { message: 'Verification complete, but no structured result was produced.' }
+        return { reply: 'Verification complete, but no structured result was produced.' }
 
       return replied({
         scope: target,

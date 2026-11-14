@@ -22,7 +22,7 @@ When "after" needs a dev server, start it in the background **as soon as the bra
 
 ## 2. Review sensitive surfaces first
 
-The tool's URLs go public the instant it runs. Landing, docs, and playground pages can be captured directly. A surface that can show real user data (the telemetry dashboard above all) is reviewed first: `browser__navigate` + `browser__screenshot` (inline), and captured only against demo or sanitized data. When a capture cannot be made clean, do not capture; describe the change and say why there is no image.
+The tool's URLs go public the instant it runs. Landing, docs, and playground pages can be captured directly. A surface that can show real user data (the telemetry dashboard above all) is reviewed first: `browser__open` + `browser__screenshot` (inline), and captured only against demo or sanitized data. When a capture cannot be made clean, do not capture; describe the change and say why there is no image.
 
 ## 3. Capture and deliver
 

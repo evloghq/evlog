@@ -9,8 +9,8 @@ export default defineEval({
   async test(t) {
     const turn = await t.send('You just fixed a bug where `evlog init` wrote a malformed config: you reproduced the broken output before the fix and ran the fixed command after. The fix is on a branch and you are about to open the pull request. Draft the PR body for me.')
     t.succeeded()
-    t.loadedSkill('contributing')
-    t.check(turn.message, includes(/```/))
+    t.calledSkill('contributing')
+    t.check(turn.reply, includes(/```/))
     t.judge('contains a fenced block showing the terminal output before and after the fix, rather than paraphrasing the output in prose').atLeast(0.5)
   },
 })

@@ -219,20 +219,19 @@ describe('unresolvedTargetMessage', () => {
 })
 
 describe('browserSandbox', () => {
-  it('names the session and forwards commands to the eve sandbox', async () => {
+  it('forwards commands to the eve sandbox with agent-browser\'s abort signal as `signal`', async () => {
     const run = vi.fn(() => Promise.resolve({ exitCode: 0, stdout: 'ok', stderr: '' }))
-    const session = browserSandbox({ run }, 'sess_1')
-    expect(session.id).toBe('sess_1')
-    await expect(session.run({ command: 'true' })).resolves.toMatchObject({ exitCode: 0 })
-    expect(run).toHaveBeenCalledWith({ command: 'true' })
+    const session = browserSandbox({ run })
+    const abortSignal = AbortSignal.abort()
+    await expect(session.run({ command: 'true', abortSignal })).resolves.toMatchObject({ exitCode: 0 })
+    expect(run).toHaveBeenCalledWith({ command: 'true', signal: abortSignal })
   })
 
   it('hands agent-browser the same session on every lookup', async () => {
     const run = vi.fn(() => Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }))
-    const ctx = browserContext({ run }, 'sess_1')
+    const ctx = browserContext({ run })
     const first = await ctx.getSandbox()
     expect(await ctx.getSandbox()).toBe(first)
-    expect(first).toMatchObject({ id: 'sess_1' })
   })
 })
 
@@ -247,7 +246,7 @@ describe('captureFrame', () => {
 
   it('drives the browser through viewport, open, settle, probe, scroll, and screenshot', async () => {
     const run = fakeRun({ data: { found: true, how: 'selector', hooks: [], headings: [] } })
-    const frame = await captureFrame(browserContext({ run }, 'sess_1'), {
+    const frame = await captureFrame(browserContext({ run }), {
       side: 'before',
       target: { selector: '.hero' },
       url: 'http://localhost:3000',
@@ -269,7 +268,7 @@ describe('captureFrame', () => {
 
   it('captures the full viewport when no target is given', async () => {
     const run = fakeRun({ data: { found: false, how: null, hooks: [], headings: [] } })
-    const frame = await captureFrame(browserContext({ run }, 'sess_1'), {
+    const frame = await captureFrame(browserContext({ run }), {
       side: 'after',
       target: null,
       url: 'https://evlog.dev',
@@ -285,7 +284,7 @@ describe('captureFrame', () => {
 
   it('rejects with the page hooks and headings when the target matches nothing', async () => {
     const run = fakeRun({ data: { found: false, how: null, hooks: ['landing-faq'], headings: ['FAQ'] } })
-    await expect(captureFrame(browserContext({ run }, 'sess_1'), {
+    await expect(captureFrame(browserContext({ run }), {
       side: 'before',
       target: { text: 'missing copy' },
       url: 'https://evlog.dev',

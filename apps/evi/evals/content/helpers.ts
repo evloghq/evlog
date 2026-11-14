@@ -43,8 +43,8 @@ export type EvalEvents = EveEvalSession['events']
 
 export async function expectReviewedSnapshot(t: EveEvalContext, session: EveEvalSession, path: string): Promise<void> {
   // Parent streams contain delegation events, not the child's tool calls.
-  const children = session.events.flatMap(event => event.type === 'agent.started' && event.data.name === 'content_review' ? [event.data.sessionId] : [])
-  for (const child of new Set(children)) await t.target.attachSession(child)
+  const children = session.events.flatMap(event => event.type === 'child.opened' && event.data.name === 'content_review' ? [event.data.sessionId] : [])
+  for (const child of new Set(children)) await t.target.attach(child).nextTurn()
   t.calledTool('content_load', { input: fixtureSnapshot(path).snapshot })
 }
 
@@ -53,14 +53,19 @@ export const VERDICTS = ['pass', 'minor', 'significant', 'blocked'] as const
 
 export type Verdict = typeof VERDICTS[number]
 
+/** The output of the latest completed `content_review` call; its `call.settled` is the only place it appears. */
 export function reviewerReport(events: EvalEvents): string | null {
-  for (let index = events.length - 1; index >= 0; index--) {
-    const event = events[index]
-    if (event?.type === 'task.settled' && event.data.name === 'content_review' && event.data.status === 'completed' && typeof event.data.output === 'string') {
-      return event.data.output
+  const reviews = new Set<string>()
+  let report: string | null = null
+  for (const event of events) {
+    if (event.type === 'call.requested' && event.data.capability.kind === 'agent' && event.data.capability.name === 'content_review') {
+      reviews.add(event.data.callId)
+    }
+    if (event.type === 'call.settled' && reviews.has(event.data.callId) && event.data.outcome === 'completed' && typeof event.data.output === 'string') {
+      report = event.data.output
     }
   }
-  return null
+  return report
 }
 
 /** The `**Verdict**:` line from the review, or null when nothing parseable came back. */
@@ -87,15 +92,12 @@ export function expectVerdictIn(t: EveEvalContext, session: EveEvalSession, allo
 }
 
 /**
- * Gate that a subagent was never dispatched. `calledSubagent` has no negative
- * form, and delegations surface as `task.started` stream events.
+ * Gate that a subagent was never dispatched. `calledAgent` has no negative
+ * form, and every delegation starts with a `call.requested` for the agent.
  */
 export function expectNoSubagent(t: EveEvalContext, name: string) {
   return t.eventsSatisfy(`never dispatched ${name}`, events =>
-    !events.some((event) => {
-      const candidate = event as { type?: string, data?: { name?: unknown } }
-      return candidate.type === 'task.started' && candidate.data?.name === name
-    }))
+    !events.some(event => event.type === 'call.requested' && event.data.capability.kind === 'agent' && event.data.capability.name === name))
 }
 
 /**

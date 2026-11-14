@@ -40,22 +40,24 @@ export default githubChannel({
   events: {
     // Autonomous triage failures escalate silently (label + assign); only
     // interactive failures post an error comment.
-    async 'turn.failed'(event, channel, ctx) {
+    async 'turn.settled'(event, ctx) {
+      if (event.data.outcome !== 'failed') return
       if (isAutonomous(ctx.session.auth.current)) {
-        await escalate(channel.state)
+        await escalate(ctx.channel.state)
         return
       }
-      await channel.thread.post(
-        failureComment('I hit an error while handling this', 'Mention me again in this thread to retry.', event),
+      await ctx.channel.thread.post(
+        failureComment('I hit an error while handling this', 'Mention me again in this thread to retry.', event.data.error ?? {}),
       )
     },
-    async 'session.failed'(event, channel) {
-      if (isAutonomousTriageState(channel.state)) {
-        await escalate(channel.state)
+    async 'session.ended'(event, ctx) {
+      if (event.data.outcome !== 'failed') return
+      if (isAutonomousTriageState(ctx.channel.state)) {
+        await escalate(ctx.channel.state)
         return
       }
-      await channel.thread.post(
-        failureComment('This session could not recover from an error', 'Send a new mention in this thread to retry.', event),
+      await ctx.channel.thread.post(
+        failureComment('This session could not recover from an error', 'Send a new mention in this thread to retry.', event.data.error ?? {}),
       )
     },
   },

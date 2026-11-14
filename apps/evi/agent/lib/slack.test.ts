@@ -29,7 +29,7 @@ describe('scheduleTarget', () => {
 
     expect(target.channelId).toBe('C0123')
     expect(target.installationTeamId).toBe('T0123')
-    expect(target.initialMessage?.card.title).toBe('Daily digest')
+    expect(target.initialMessage).toMatchObject({ card: { title: 'Daily digest' } })
     expect(target).not.toHaveProperty('threadTs')
   })
 

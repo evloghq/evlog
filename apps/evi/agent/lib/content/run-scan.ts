@@ -10,9 +10,9 @@ export async function runContentScan(sandbox: ScanSandbox, input: ScanInput, tim
   let scanFailure: { error: unknown } | undefined
   try {
     return await withDeadline(async (abortSignal) => {
-      if (passage !== undefined) await sandbox.writeTextFile({ ...passage, abortSignal })
+      if (passage !== undefined) await sandbox.writeTextFile({ ...passage, signal: abortSignal })
       abortSignal.throwIfAborted()
-      return await sandbox.run({ command, abortSignal })
+      return await sandbox.run({ command, signal: abortSignal })
     }, timeoutMs)
   } catch (error) {
     scanFailure = { error }
@@ -20,7 +20,7 @@ export async function runContentScan(sandbox: ScanSandbox, input: ScanInput, tim
   } finally {
     if (passage !== undefined) {
       try {
-        await withDeadline(abortSignal => sandbox.removePath({ path: passage.path, force: true, abortSignal }), 5000)
+        await withDeadline(abortSignal => sandbox.removePath({ path: passage.path, force: true, signal: abortSignal }), 5000)
       } catch (cleanupError) {
         if (scanFailure) {
           throw new AggregateError(

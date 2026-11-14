@@ -11,7 +11,7 @@ This is a hypothetical writing task unrelated to evlog. Do not retrieve anything
 
     t.succeeded()
     t.check(
-      turn.message ?? '',
+      turn.reply ?? '',
       satisfies(reply => !/<\/?details>|<summary>ELI5<\/summary>/i.test(String(reply)), 'reply omits an ELI5 disclosure'),
     )
   },

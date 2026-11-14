@@ -9,8 +9,8 @@ export default defineEval({
   async test(t) {
     const turn = await t.send('You just added a new public helper `logger.timed(label, fn)` to packages/evlog on a branch, the checks are green, and you are about to open the pull request. Draft the PR body for me.')
     t.succeeded()
-    t.loadedSkill('contributing')
-    t.check(turn.message, includes(/```/))
+    t.calledSkill('contributing')
+    t.check(turn.reply, includes(/```/))
     t.judge('contains a fenced code block showing a usage snippet of logger.timed, rather than only describing the API in prose').atLeast(0.5)
   },
 })

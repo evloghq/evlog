@@ -336,7 +336,7 @@ async function askAgent(
   const response = await ctx.agent(name).send(message, { outputSchema })
   const result = await response.result()
   if (result.status === 'failed') throw new Error(result.error?.message ?? `${name} failed`)
-  return result.data ?? result.message
+  return result.data ?? result.reply
 }
 
 export async function runSimplificationSweep(
