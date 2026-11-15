@@ -254,6 +254,11 @@ export function toSentryLog(event: WideEvent, config: SentryConfig): SentryLog {
     attributes[key] = toAttributeValue(value)
   }
 
+  const userId = getUserId(event)
+  if (userId) {
+    attributes['user.id'] = { value: userId, type: 'string' }
+  }
+
   attributes['sentry.sdk.name'] = { value: SENTRY_SDK.name, type: 'string' }
   attributes['sentry.sdk.version'] = { value: SENTRY_SDK.version, type: 'string' }
 
