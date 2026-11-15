@@ -298,6 +298,40 @@ describe('auditDiff()', () => {
     expect(auditDiff({ m: a }, { m: c }).patch).toEqual([{ op: 'replace', path: '/m', value: c }])
   })
 
+  it('returns a patch for an added self-referential class instance', () => {
+    class Node {
+      self: Node = this
+      constructor(public password: string) {}
+    }
+    const diff = auditDiff(undefined, new Node('hunter2'), { redactPaths: ['password'] })
+    expect(diff.patch).toEqual([{ op: 'add', path: '', value: { self: '[Circular]', password: '[REDACTED]' } }])
+  })
+
+  it('diffs self-referential objects without overflowing the stack', () => {
+    const a: Record<string, unknown> = { n: 1 }
+    a.self = a
+    const b: Record<string, unknown> = { n: 2 }
+    b.self = b
+    expect(auditDiff(a, b).patch).toEqual([{ op: 'replace', path: '/n', value: 2 }])
+  })
+
+  it('redacts fields of objects that carry a Symbol.toStringTag', () => {
+    const tagged = auditDiff(undefined, { password: 'secret', [Symbol.toStringTag]: 'Login' }, { redactPaths: ['password'] })
+    expect(tagged.patch).toEqual([{ op: 'add', path: '', value: { password: '[REDACTED]' } }])
+
+    class Login {
+      constructor(public user: string, public password: string) {}
+      get [Symbol.toStringTag]() {
+        return 'Login' 
+      }
+    }
+    const instance = auditDiff({ at: new Date(0) }, { at: new Login('u', 'hunter2') }, { redactPaths: ['password'] })
+    expect(instance.patch).toEqual([{ op: 'replace', path: '/at', value: { user: 'u', password: '[REDACTED]' } }])
+
+    const changed = auditDiff({ login: new Login('u', 'old') }, { login: new Login('u', 'new') }, { redactPaths: ['password'] })
+    expect(changed.patch).toEqual([{ op: 'replace', path: '/login/password', value: '[REDACTED]' }])
+  })
+
   it('escapes "/" and "~" in JSON Pointer paths', () => {
     const doc = { 'a/b': 1, 'a': { b: 1 } }
     expect(auditDiff(doc, { 'a/b': 2, 'a': { b: 1 } }).patch).toEqual([{ op: 'replace', path: '/a~1b', value: 2 }])

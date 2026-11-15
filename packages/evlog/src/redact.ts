@@ -229,11 +229,13 @@ function unescapePointerSegment(segment: string): string {
  *
  * `pointerPath` is a JSON Pointer (e.g. `/user/password`).
  */
+// eslint-disable-next-line max-params
 export function redactValueByPaths(
   value: unknown,
   matchers: RedactPathMatchers,
   replacement: RedactReplacement,
   pointerPath = '',
+  ancestors = new Set<object>(),
 ): unknown {
   const segments = pointerPath.split('/').slice(1).map(unescapePointerSegment)
   const dotPath = segments.join('.')
@@ -244,24 +246,55 @@ export function redactValueByPaths(
   }
 
   if (value === null || typeof value !== 'object') return value
+  if (!Array.isArray(value) && !isFieldRecord(value)) return value
 
-  if (Array.isArray(value)) {
-    return value.map((v, i) => redactValueByPaths(v, matchers, replacement, `${pointerPath}/${i}`))
+  // Returning the original object here would hand back its fields unredacted.
+  if (ancestors.has(value)) return '[Circular]'
+  ancestors.add(value)
+
+  try {
+    if (Array.isArray(value)) {
+      return value.map((v, i) => redactValueByPaths(v, matchers, replacement, `${pointerPath}/${i}`, ancestors))
+    }
+
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      const childPointer = `${pointerPath}/${escapePointerSegment(k)}`
+      const childDot = dotPath ? `${dotPath}.${k}` : k
+      out[k] = matchesRedactPath(childDot, k, matchers)
+        ? resolveReplacement(replacement, v, { path: childDot, key: k })
+        : redactValueByPaths(v, matchers, replacement, childPointer, ancestors)
+    }
+    return out
+  } finally {
+    ancestors.delete(value)
   }
+}
 
-  // Plain objects, null-prototype objects and class instances are copied field by field.
-  // Built-ins such as `Date`, `Set` and `Map` are returned as they are.
-  if (Object.prototype.toString.call(value) !== '[object Object]') return value
-
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(value)) {
-    const childPointer = `${pointerPath}/${escapePointerSegment(k)}`
-    const childDot = dotPath ? `${dotPath}.${k}` : k
-    out[k] = matchesRedactPath(childDot, k, matchers)
-      ? resolveReplacement(replacement, v, { path: childDot, key: k })
-      : redactValueByPaths(v, matchers, replacement, childPointer)
-  }
-  return out
+/**
+ * @internal Whether `value` keeps its state in own fields and is walked key by key:
+ * plain objects, null-prototype objects and class instances. Built-ins that keep
+ * their state in internal slots (`Date`, `RegExp`, `Map`, `Set`, ...) are not.
+ * Classified by prototype chain, not `Object.prototype.toString`, so a
+ * `Symbol.toStringTag` cannot opt an object out of field redaction.
+ */
+export function isFieldRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  return !(
+    value instanceof Date
+    || value instanceof RegExp
+    || value instanceof Map
+    || value instanceof Set
+    || value instanceof WeakMap
+    || value instanceof WeakSet
+    || value instanceof Promise
+    || value instanceof Error
+    || value instanceof ArrayBuffer
+    || ArrayBuffer.isView(value)
+    || value instanceof Boolean
+    || value instanceof Number
+    || value instanceof String
+  )
 }
 
 /**

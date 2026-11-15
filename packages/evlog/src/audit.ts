@@ -1,6 +1,6 @@
 import type { AuditActor, AuditFields, AuditPatchOp, AuditTarget, DrainContext, EnrichContext, FieldContext, RedactConfig, RequestLogger, WideEvent } from './types'
 import { createLogger } from './logger'
-import { compileRedactPathMatchers, escapePointerSegment, redactValueByPaths } from './redact'
+import { compileRedactPathMatchers, escapePointerSegment, isFieldRecord, redactValueByPaths } from './redact'
 import { getHeader as getSharedHeader } from './shared/headers'
 import type { AuditInput } from './audit-action'
 
@@ -295,15 +295,6 @@ export interface WithAuditContext {
 }
 
 /**
- * @internal Objects `auditDiff` walks key by key: plain objects, null-prototype
- * objects and class instances. Built-ins such as `Date`, `Set`, `Map` and `RegExp`
- * keep their state outside own keys, so they are compared whole instead.
- */
-function isDiffableRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && Object.prototype.toString.call(value) === '[object Object]'
-}
-
-/**
  * @internal Equality for the values `auditDiff` does not recurse into:
  * `Date` by timestamp, `RegExp` by source and flags, `Set` and `Map` by content.
  * Anything else is equal only when it is the same reference.
@@ -357,6 +348,8 @@ export function auditDiff(
     caseInsensitiveLeaves: new Set<string>(),
   }
   const patch: AuditPatchOp[] = []
+  // Record pairs being diffed on the current path, so self-referential objects terminate.
+  const ancestors = new Map<object, Set<object>>()
 
   function diff(a: unknown, b: unknown, path: string): void {
     if (a === b) return
@@ -370,11 +363,15 @@ export function auditDiff(
       return
     }
 
-    if (isDiffableRecord(a) && isDiffableRecord(b)) {
+    if (isFieldRecord(a) && isFieldRecord(b)) {
+      const pairs = ancestors.get(a) ?? ancestors.set(a, new Set()).get(a)!
+      if (pairs.has(b)) return
+      pairs.add(b)
       const keys = new Set([...Object.keys(a), ...Object.keys(b)])
       for (const key of keys) {
         diff(a[key], b[key], `${path}/${escapePointerSegment(key)}`)
       }
+      pairs.delete(b)
       return
     }
 
