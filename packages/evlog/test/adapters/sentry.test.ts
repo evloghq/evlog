@@ -262,6 +262,18 @@ describe('sentry adapter', () => {
       expect(log.timestamp).toBeGreaterThan(0)
     })
 
+    it('marks the log item container as version 2, as the official SDK does', async () => {
+      await sendToSentry(createTestEvent({ level: 'info', message: 'hello' }), {
+        dsn: 'https://public@o123.ingest.sentry.io/456',
+      })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      const lines = (options.body as string).split('\n').filter(line => line.length > 0)
+      const itemPayload = JSON.parse(lines[2])
+
+      expect(itemPayload.version).toBe(2)
+    })
+
     it('identifies the SDK in the envelope header', async () => {
       await sendToSentry(createTestEvent({ level: 'info' }), {
         dsn: 'https://public@o123.ingest.sentry.io/456',
