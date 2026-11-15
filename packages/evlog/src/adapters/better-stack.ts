@@ -41,11 +41,28 @@ function applyApiKeyAlias(config: BetterStackConfig): BetterStackConfig {
 
 /**
  * Transform an evlog wide event into a Better Stack event.
- * Maps `timestamp` to `dt` (Better Stack's expected field).
+ * Maps `timestamp` to `dt` (Better Stack's expected field) and, when the event has
+ * no `message`, adds the console headline as one, because Live tail headlines a
+ * line with `message` and builds `_pattern` from it.
  */
 export function toBetterStackEvent(event: WideEvent): Record<string, unknown> {
   const { timestamp, ...rest } = event
-  return { ...rest, dt: timestamp }
+  const message = rest.message === undefined ? formatBetterStackMessage(event) : ''
+  return message ? { ...rest, message, dt: timestamp } : { ...rest, dt: timestamp }
+}
+
+/**
+ * The headline the pretty console prints for the event, `POST /api/checkout 402 in 104ms`,
+ * followed by the error message. Empty when the event carries none of them.
+ */
+function formatBetterStackMessage(event: WideEvent): string {
+  const parts: string[] = []
+  if (event.method && event.path) parts.push(`${event.method} ${event.path}`)
+  if (event.status) parts.push(String(event.status))
+  if (event.duration) parts.push(`in ${event.duration}`)
+  const error = event.error as { message?: unknown } | undefined
+  if (typeof error?.message === 'string' && error.message) parts.push(error.message)
+  return parts.join(' ')
 }
 
 /**

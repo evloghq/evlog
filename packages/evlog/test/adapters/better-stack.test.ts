@@ -45,6 +45,30 @@ describe('better-stack adapter', () => {
       expect(result.action).toBe('test-action')
       expect(result.userId).toBe('123')
     })
+
+    it('headlines a request event like the pretty console, then the error message', () => {
+      const event = createTestEvent({
+        level: 'error',
+        method: 'POST',
+        path: '/api/checkout',
+        status: 402,
+        duration: '104ms',
+        durationMs: 104,
+        error: { name: 'EvlogError', message: 'Payment failed', status: 402 },
+      })
+
+      expect(toBetterStackEvent(event).message).toBe('POST /api/checkout 402 in 104ms Payment failed')
+    })
+
+    it('adds no message when the event has nothing to headline', () => {
+      expect(toBetterStackEvent(createTestEvent({ action: 'sync' }))).not.toHaveProperty('message')
+    })
+
+    it('keeps a message the event already carries', () => {
+      const event = createTestEvent({ tag: 'auth', message: 'User logged in', path: '/login' })
+
+      expect(toBetterStackEvent(event).message).toBe('User logged in')
+    })
   })
 
   describe('sendToBetterStack', () => {
