@@ -5,8 +5,10 @@ name: Risk score
 # does not compute it.
 #
 # pull_request_target so fork PRs get a token that can comment. That token is
-# privileged, so the job only checks out the base branch's scripts/risk-score
-# and reads the PR through the API: the PR's own code never runs here.
+# privileged, so the job only checks out scripts/risk-score at github.sha, the
+# default branch tip this workflow file comes from, and reads the PR through
+# the API: the PR's own code never runs here. Not pull_request.base.sha, which
+# can predate the script on a PR that was never rebased.
 
 on:
   pull_request_target:
@@ -37,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.sha }}
           sparse-checkout: scripts/risk-score
           sparse-checkout-cone-mode: false
           persist-credentials: false
