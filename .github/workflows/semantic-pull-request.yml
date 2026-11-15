@@ -60,6 +60,7 @@ jobs:
             nitro
             nuxt
             orpc
+            otel
             otlp
             playground
             posthog
