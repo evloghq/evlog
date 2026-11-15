@@ -19,9 +19,13 @@ export interface CommitChanges {
   readonly deletions: ReadonlyArray<{ path: string }>
 }
 
-/** What a branch push recreates on GitHub: `base` is the commit GitHub already has under the first one. */
+/**
+ * What a branch push recreates on GitHub: `base` is the commit GitHub already has
+ * under the first one, `head` the local branch tip the commits were read from.
+ */
 export interface BranchCommits {
   readonly base: string
+  readonly head: string
   readonly branchExists: boolean
   readonly commits: readonly CommitChanges[]
 }
@@ -46,6 +50,10 @@ function shas(output: string): string[] {
  */
 export async function collectBranchCommits(sandbox: GitSandbox, dir: string, branch: string, remoteHead: string | null): Promise<BranchCommits> {
   const head = (await git(sandbox, dir, `rev-parse --verify 'refs/heads/${branch}^{commit}'`)).trim()
+  // The head reaches the command that runs with the brokered credential, so it has to be a sha.
+  if (!SHA.test(head)) {
+    throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} does not resolve to a commit.` })
+  }
   if (remoteHead !== null) {
     const contained = await sandbox.run({ command: `git -C ${dir} merge-base --is-ancestor ${remoteHead} ${head}` })
     if (contained.exitCode !== 0) {
@@ -63,7 +71,16 @@ export async function collectBranchCommits(sandbox: GitSandbox, dir: string, bra
   for (const sha of order) {
     commits.push(await readCommit(sandbox, dir, sha))
   }
-  return { base, branchExists: remoteHead !== null, commits }
+  return { base, head, branchExists: remoteHead !== null, commits }
+}
+
+/**
+ * Fetch `ref` into the checkout at `dir` and detach onto it. The fetched commit is
+ * kept under `refs/remotes/checkout/`, so {@link collectBranchCommits} counts it as
+ * already on GitHub: a single-branch clone has no remote-tracking ref for it otherwise.
+ */
+export function checkoutRefCommand(dir: string, ref: string): string {
+  return `git -C ${dir} fetch --depth 50 origin '${ref}' && git -C ${dir} update-ref "refs/remotes/checkout/$(git -C ${dir} rev-parse FETCH_HEAD)" FETCH_HEAD && git -C ${dir} checkout --detach FETCH_HEAD`
 }
 
 async function readCommit(sandbox: GitSandbox, dir: string, sha: string): Promise<CommitChanges> {
@@ -118,6 +135,10 @@ const CREATE_COMMIT = 'mutation($input: CreateCommitOnBranchInput!) { createComm
  * Recreate `commits` on `branch` through GitHub's createCommitOnBranch, which
  * signs each commit as the App; a `git push` from the sandbox has no key to sign
  * with. Creates the branch at `base` first unless it exists. Returns the new head.
+ *
+ * Each mutation moves the branch on GitHub at once. When one fails, the branch is
+ * put back where it was (deleted if this call created it), so the local branch
+ * still builds on GitHub's and the same push can run again.
  */
 export async function pushSignedCommits(token: string, repository: Repository, branch: string, { base, branchExists, commits }: BranchCommits): Promise<string> {
   const slug = repositorySlug(repository)
@@ -132,30 +153,46 @@ export async function pushSignedCommits(token: string, repository: Repository, b
     }
   }
   let head = base
-  for (const commit of commits) {
-    const [headline = '', ...rest] = commit.message.trim().split('\n')
-    const body = rest.join('\n').trim()
-    const response = await fetch(`${GITHUB_API}/graphql`, {
-      method: 'POST',
-      headers: headers(token),
-      body: JSON.stringify({
-        query: CREATE_COMMIT,
-        variables: {
-          input: {
-            branch: { repositoryNameWithOwner: slug, branchName: branch },
-            expectedHeadOid: head,
-            message: body ? { headline, body } : { headline },
-            fileChanges: { additions: commit.additions, deletions: commit.deletions },
+  try {
+    for (const commit of commits) {
+      const [headline = '', ...rest] = commit.message.trim().split('\n')
+      const body = rest.join('\n').trim()
+      const response = await fetch(`${GITHUB_API}/graphql`, {
+        method: 'POST',
+        headers: headers(token),
+        body: JSON.stringify({
+          query: CREATE_COMMIT,
+          variables: {
+            input: {
+              branch: { repositoryNameWithOwner: slug, branchName: branch },
+              expectedHeadOid: head,
+              message: body ? { headline, body } : { headline },
+              fileChanges: { additions: commit.additions, deletions: commit.deletions },
+            },
           },
-        },
-      }),
-    })
-    const text = await response.text()
-    const oid = response.ok ? (JSON.parse(text) as { data?: { createCommitOnBranch?: { commit?: { oid?: string } } } }).data?.createCommitOnBranch?.commit?.oid : undefined
-    if (oid === undefined || !SHA.test(oid)) {
-      throw eviErrors.GITHUB_REQUEST_FAILED({ request: 'commit creation', responseStatus: response.status, internal: { body: text } })
+        }),
+      })
+      const text = await response.text()
+      const oid = response.ok ? (JSON.parse(text) as { data?: { createCommitOnBranch?: { commit?: { oid?: string } } } }).data?.createCommitOnBranch?.commit?.oid : undefined
+      if (oid === undefined || !SHA.test(oid)) {
+        throw eviErrors.GITHUB_REQUEST_FAILED({ request: 'commit creation', responseStatus: response.status, internal: { body: text } })
+      }
+      head = oid
     }
-    head = oid
+  } catch (error) {
+    if (!branchExists || head !== base) await restoreBranch(token, slug, branch, branchExists ? base : null)
+    throw error
   }
   return head
+}
+
+/** Point `branch` back at `sha`, or delete it when `sha` is null. */
+async function restoreBranch(token: string, slug: string, branch: string, sha: string | null): Promise<void> {
+  const url = `${GITHUB_API}/repos/${slug}/git/refs/heads/${branch}`
+  const response = sha === null
+    ? await fetch(url, { method: 'DELETE', headers: headers(token) })
+    : await fetch(url, { method: 'PATCH', headers: headers(token), body: JSON.stringify({ sha, force: true }) })
+  if (!response.ok) {
+    throw eviErrors.GITHUB_REQUEST_FAILED({ request: 'branch restore', responseStatus: response.status, internal: { body: await response.text() } })
+  }
 }

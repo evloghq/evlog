@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { collectBranchCommits, pushSignedCommits, remoteBranchHead } from './signed-push'
+import { checkoutRefCommand, collectBranchCommits, pushSignedCommits, remoteBranchHead } from './signed-push'
 
 const exec = promisify(execCallback)
 const directories: string[] = []
@@ -69,9 +69,10 @@ describe('collectBranchCommits', () => {
     await commit(dir, 'feat: add notes\n\nWhy the notes exist.', { 'README.md': 'Widgets, updated.\n', 'docs/my notes.txt': 'spaced path\n', 'logo.bin': binary })
     await commit(dir, 'chore: drop keep', {}, ['keep.txt'])
 
-    const { base, branchExists, commits } = await collectBranchCommits(sandbox, dir, 'feat', null)
+    const { base, head, branchExists, commits } = await collectBranchCommits(sandbox, dir, 'feat', null)
 
     expect(base).toBe(git(dir, 'rev-parse', 'origin/main'))
+    expect(head).toBe(git(dir, 'rev-parse', 'feat'))
     expect(branchExists).toBe(false)
     expect(commits.map(c => c.message.trim())).toEqual(['feat: add notes\n\nWhy the notes exist.', 'chore: drop keep'])
     const files = Object.fromEntries(commits[0]!.additions.map(a => [a.path, Buffer.from(a.contents, 'base64')]))
@@ -90,6 +91,31 @@ describe('collectBranchCommits', () => {
     expect(base).toBe(first)
     expect(branchExists).toBe(true)
     expect(commits.map(c => c.message.trim())).toEqual(['second'])
+  })
+
+  it('counts a ref fetched by checkoutRefCommand as already on GitHub', async () => {
+    const dir = await clone()
+    const origin = join(dir, '..', 'origin')
+    git(origin, 'checkout', '-qb', 'release')
+    for (const n of [1, 2, 3]) {
+      await writeFile(join(origin, `release-${n}.txt`), `${n}\n`)
+      git(origin, 'add', '.')
+      git(origin, '-c', 'user.email=t@example.com', '-c', 'user.name=T', '-c', 'commit.gpgsign=false', 'commit', '-qm', `release ${n}`)
+    }
+    const shallow = join(dir, '..', 'shallow')
+    execFileSync('git', ['clone', '-q', '--depth', '1', '--single-branch', '--branch', 'main', `file://${origin}`, shallow])
+    git(shallow, 'config', 'user.email', 't@example.com')
+    git(shallow, 'config', 'user.name', 'T')
+    git(shallow, 'config', 'commit.gpgsign', 'false')
+
+    expect((await sandbox.run({ command: checkoutRefCommand(shallow, 'release') })).exitCode).toBe(0)
+    git(shallow, 'checkout', '-qb', 'feat')
+    await commit(shallow, 'on release', { 'a.txt': 'a\n' })
+
+    const { base, commits } = await collectBranchCommits(sandbox, shallow, 'feat', null)
+
+    expect(base).toBe(git(origin, 'rev-parse', 'release'))
+    expect(commits.map(c => c.message.trim())).toEqual(['on release'])
   })
 
   it('refuses a branch on GitHub that the local branch does not contain', async () => {
@@ -134,7 +160,7 @@ describe('pushSignedCommits', () => {
       return Promise.resolve(Response.json({ data: { createCommitOnBranch: { commit: { oid: String(next).repeat(40) } } } }))
     }))
 
-    const head = await pushSignedCommits('tok', REPOSITORY, 'feat', { base: 'b'.repeat(40), branchExists: false, commits })
+    const head = await pushSignedCommits('tok', REPOSITORY, 'feat', { base: 'b'.repeat(40), head: 'h'.repeat(40), branchExists: false, commits })
 
     expect(head).toBe('2'.repeat(40))
     expect(calls[0]).toEqual({ url: 'https://api.github.com/repos/acme/widgets/git/refs', body: { ref: 'refs/heads/feat', sha: 'b'.repeat(40) } })
@@ -156,8 +182,30 @@ describe('pushSignedCommits', () => {
 
   it('fails on a GraphQL error and keeps the response body out of the message', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json({ errors: [{ message: 'Expected branch to point to b' }] }))))
-    const failure = pushSignedCommits('tok', REPOSITORY, 'feat', { base: 'b'.repeat(40), branchExists: true, commits })
+    const failure = pushSignedCommits('tok', REPOSITORY, 'feat', { base: 'b'.repeat(40), head: 'h'.repeat(40), branchExists: true, commits })
     await expect(failure).rejects.toMatchObject({ code: 'evi.GITHUB_REQUEST_FAILED', message: 'GitHub commit creation failed (200)' })
+  })
+
+  it('puts the branch back where it was when a later commit fails, and deletes a branch it created', async () => {
+    const calls: Array<{ method: string, url: string, body?: unknown }> = []
+    vi.stubGlobal('fetch', vi.fn((url: string, init: RequestInit) => {
+      calls.push({ method: init.method ?? 'GET', url, body: init.body === undefined ? undefined : JSON.parse(String(init.body)) })
+      if (url.endsWith('/graphql')) {
+        const done = calls.filter(call => call.url.endsWith('/graphql')).length
+        return Promise.resolve(done === 1
+          ? Response.json({ data: { createCommitOnBranch: { commit: { oid: '1'.repeat(40) } } } })
+          : Response.json({ errors: [{ message: 'boom' }] }))
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    }))
+    const ref = 'https://api.github.com/repos/acme/widgets/git/refs/heads/feat'
+
+    await expect(pushSignedCommits('tok', REPOSITORY, 'feat', { base: 'b'.repeat(40), head: 'h'.repeat(40), branchExists: true, commits })).rejects.toMatchObject({ code: 'evi.GITHUB_REQUEST_FAILED' })
+    expect(calls.at(-1)).toEqual({ method: 'PATCH', url: ref, body: { sha: 'b'.repeat(40), force: true } })
+
+    calls.length = 0
+    await expect(pushSignedCommits('tok', REPOSITORY, 'feat', { base: 'b'.repeat(40), head: 'h'.repeat(40), branchExists: false, commits })).rejects.toMatchObject({ code: 'evi.GITHUB_REQUEST_FAILED' })
+    expect(calls.at(-1)).toEqual({ method: 'DELETE', url: ref, body: undefined })
   })
 })
 
