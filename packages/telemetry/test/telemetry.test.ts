@@ -648,6 +648,27 @@ describe('telemetry flush coalescing', () => {
     expect(requests).toBe(1)
   })
 
+  it('flush() sends nothing that was purged, even when telemetry is turned back on mid-flush', async () => {
+    let requests = 0
+    const server = await listen((request, response) => {
+      requests++
+      request.resume()
+      request.on('end', () => void disableTelemetry(TOOL)
+        .then(() => enableTelemetry(TOOL))
+        .then(() => response.writeHead(204).end()))
+    })
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    await Promise.all(
+      Array.from({ length: MAX_FLUSH_BATCH + 1 }, (_, i) =>
+        outbox.append(exampleRunEvent({ idempotencyKey: `purged-${i}` })),
+      ),
+    )
+
+    await createHandle({ endpoint: server.url }).flush()
+
+    expect(requests).toBe(1)
+  })
+
   it('flush() stops at the first failed batch and keeps the rest on disk', async () => {
     const server = await stubIngest(503)
     const outbox = new TelemetryOutbox({ toolName: TOOL })

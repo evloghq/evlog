@@ -48,6 +48,9 @@ class InternalTelemetry<
   TFields extends CollectFields = {},
 > implements TelemetryHandle<TFlags, TFields> {
   private _enabled: boolean
+  /* Counts consent changes, so a flush can tell consent was withdrawn while
+     it ran, even when it has been given again since. */
+  private consentGeneration = 0
   readonly options: TelemetryOptions<TFlags, TFields>
   private readonly outbox: TelemetryOutbox
   private readonly drain: TelemetryDrain
@@ -83,6 +86,7 @@ class InternalTelemetry<
 
   /** @internal Update runtime consent for the active instance. */
   setEnabled(enabled: boolean): void {
+    if (enabled !== this._enabled) this.consentGeneration++
     this._enabled = enabled
   }
 
@@ -180,10 +184,12 @@ class InternalTelemetry<
   }
 
   private async flushBacklog(drainAll: boolean): Promise<void> {
+    const generation = this.consentGeneration
     const pending = await this.outbox.readAll()
     for (let start = 0; start < pending.length; start += MAX_FLUSH_BATCH) {
-      /* Checked per batch: the opt-out can land while an earlier one is in flight. */
-      if (!this._enabled) return
+      /* Checked per batch: an opt-out can land while an earlier one is in
+         flight, and it purged the rest of what was read above. */
+      if (this.consentGeneration !== generation) return
       const batch = pending.slice(start, start + MAX_FLUSH_BATCH)
       if (!await this.drain(batch)) return
       await this.outbox.removeDelivered(new Set(batch.map(e => e.idempotencyKey)))
