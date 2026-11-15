@@ -3,6 +3,7 @@ import type { ConfigField } from '../shared/config'
 import { applyDeprecatedAlias, formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import { warnDeprecatedEnvVar } from '../shared/deprecate'
 import { chunkSerialized } from '../shared/chunk'
+import { formatEventSummary } from '../shared/event'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { trimTrailingSlashes } from '../utils'
@@ -41,11 +42,26 @@ function applyApiKeyAlias(config: BetterStackConfig): BetterStackConfig {
 
 /**
  * Transform an evlog wide event into a Better Stack event.
- * Maps `timestamp` to `dt` (Better Stack's expected field).
+ * Maps `timestamp` to `dt` (Better Stack's expected field) and adds a one-line
+ * `message` when the event has none, because Live tail headlines a line with
+ * `message` and builds `_pattern` from it.
  */
 export function toBetterStackEvent(event: WideEvent): Record<string, unknown> {
   const { timestamp, ...rest } = event
-  return { ...rest, dt: timestamp }
+  if (rest.message !== undefined) return { ...rest, dt: timestamp }
+  return { ...rest, message: formatBetterStackMessage(event), dt: timestamp }
+}
+
+/**
+ * One-line headline for an event without `message`: the request summary
+ * (`POST /api/checkout (402)`), then the error message, or the service name
+ * when the event carries neither.
+ */
+function formatBetterStackMessage(event: WideEvent): string {
+  const error = event.error as { message?: unknown } | undefined
+  const errorMessage = typeof error?.message === 'string' ? error.message : ''
+  const line = [formatEventSummary(event), errorMessage].filter(part => part.length > 0).join(' ')
+  return line || event.service
 }
 
 /**

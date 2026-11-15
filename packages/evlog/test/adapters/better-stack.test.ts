@@ -45,6 +45,28 @@ describe('better-stack adapter', () => {
       expect(result.action).toBe('test-action')
       expect(result.userId).toBe('123')
     })
+
+    it('headlines a request event with its summary and error message', () => {
+      const event = createTestEvent({
+        level: 'error',
+        method: 'POST',
+        path: '/api/checkout',
+        status: 402,
+        error: { name: 'EvlogError', message: 'Payment failed', status: 402 },
+      })
+
+      expect(toBetterStackEvent(event).message).toBe('POST /api/checkout (402) Payment failed')
+    })
+
+    it('falls back to the service name when the event has no request or error', () => {
+      expect(toBetterStackEvent(createTestEvent({ action: 'sync' })).message).toBe('test-service')
+    })
+
+    it('keeps a message the event already carries', () => {
+      const event = createTestEvent({ tag: 'auth', message: 'User logged in', path: '/login' })
+
+      expect(toBetterStackEvent(event).message).toBe('User logged in')
+    })
   })
 
   describe('sendToBetterStack', () => {
@@ -127,6 +149,7 @@ describe('better-stack adapter', () => {
           environment: 'test',
           action: 'test-action',
           userId: '123',
+          message: 'test-service',
         }
       ])
     })
