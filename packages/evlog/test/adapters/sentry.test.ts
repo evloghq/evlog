@@ -162,6 +162,19 @@ describe('sentry adapter', () => {
       expect(result.span_id).toBe('b'.repeat(16))
     })
 
+    it('sets the reserved user.id attribute from the wide event user', () => {
+      const withUserId = toSentryLog(createTestEvent({ userId: 'u_1' }), { dsn: 'https://public@o0.ingest.sentry.io/123' })
+      expect(withUserId.attributes?.['user.id']).toEqual({ value: 'u_1', type: 'string' })
+
+      const withUserObject = toSentryLog(createTestEvent({ user: { id: 'u_2' } }), { dsn: 'https://public@o0.ingest.sentry.io/123' })
+      expect(withUserObject.attributes?.['user.id']).toEqual({ value: 'u_2', type: 'string' })
+    })
+
+    it('omits user.id when the event has no user', () => {
+      const result = toSentryLog(createTestEvent(), { dsn: 'https://public@o0.ingest.sentry.io/123' })
+      expect(result.attributes).not.toHaveProperty('user.id')
+    })
+
     it('omits span_id when the event has no span', () => {
       const result = toSentryLog(createTestEvent(), { dsn: 'https://public@o0.ingest.sentry.io/123' })
 
@@ -247,6 +260,18 @@ describe('sentry adapter', () => {
       expect(log.body).toBe('boom')
       expect(log.trace_id).toMatch(/^[a-f0-9]{32}$/)
       expect(log.timestamp).toBeGreaterThan(0)
+    })
+
+    it('marks the log item container as version 2, as the official SDK does', async () => {
+      await sendToSentry(createTestEvent({ level: 'info', message: 'hello' }), {
+        dsn: 'https://public@o123.ingest.sentry.io/456',
+      })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      const lines = (options.body as string).split('\n').filter(line => line.length > 0)
+      const itemPayload = JSON.parse(lines[2])
+
+      expect(itemPayload.version).toBe(2)
     })
 
     it('identifies the SDK in the envelope header', async () => {
