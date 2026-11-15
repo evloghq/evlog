@@ -133,7 +133,7 @@ require it on every non-draft PR.
 Everything else keeps a real approval even for admin: `createIssue`, `closeIssue`,
 `deleteIssueComment`, `deletePullRequestComment`, `createPullRequest`,
 `updatePullRequest`, `createPullRequestReview`. Code itself never moves through
-the API: it ships from the sandbox via `git__push`, which is mounted on sessions
+the `github__*` tools: it ships from the sandbox via `git__push`, which is mounted on sessions
 that pass `canAccessAdminTools` in `agent/lib/trust.ts`: maintainers, plus
 schedule sessions, whose runs push feature branches to deliver their PRs. It
 refuses `main` and `master` for every caller.
