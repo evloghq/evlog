@@ -158,7 +158,10 @@ function checkIds(route: RouteEntry): CheckId[] {
  *
  * By id first. An id gains or loses its file when another entry point starts
  * or stops sharing the method and path, so what the ids leave unpaired is
- * paired by method, path and file.
+ * paired by method, path and file. One that also moved file is paired with
+ * the lowest-scoring entry point left with its method and path: nothing says
+ * which of them it became, and the gate would rather fail a move than pass a
+ * regression.
  */
 function pairRoutes(baseline: readonly RouteEntry[], current: readonly RouteEntry[]): Map<RouteEntry, RouteEntry> {
   const currentById = new Map(current.map(route => [route.id, route]))
@@ -169,12 +172,18 @@ function pairRoutes(baseline: readonly RouteEntry[], current: readonly RouteEntr
   }
 
   const paired = new Set(pairs.values())
-  const unpaired = current.filter(route => !paired.has(route))
-  for (const before of baseline) {
-    if (pairs.has(before)) continue
-    const at = unpaired.findIndex(route => route.file === before.file && routeKey(route) === routeKey(before))
-    if (at !== -1) pairs.set(before, unpaired.splice(at, 1)[0]!)
+  const unpaired = new Set(current.filter(route => !paired.has(route)))
+  const pairLowest = (matches: (before: RouteEntry, route: RouteEntry) => boolean) => {
+    for (const before of baseline) {
+      if (pairs.has(before)) continue
+      const [after] = [...unpaired].filter(route => matches(before, route)).sort((a, b) => a.score - b.score)
+      if (!after) continue
+      pairs.set(before, after)
+      unpaired.delete(after)
+    }
   }
+  pairLowest((before, route) => route.file === before.file && routeKey(route) === routeKey(before))
+  pairLowest((before, route) => routeKey(route) === routeKey(before))
   return pairs
 }
 
