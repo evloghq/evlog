@@ -5,7 +5,7 @@
 
 Telemetry now does what its docs say.
 
-- The run that opts out is no longer queued: `telemetry disable`, or `disableTelemetry()` called inside a run, used to purge the outbox and then write its own event to it.
+- The run that opts out is no longer queued: `telemetry disable`, or `disableTelemetry()` called inside a run, used to purge the outbox and then write its own event to it. `disableTelemetry()` turns off every handle created for the tool, and a `flush()` already sending stops at the batch in flight.
 - `EVLOG_TELEMETRY_DEBUG=1` prints each run's event as the run ends and makes no request. The event is not queued either. It used to print at the next flush, and that flush sent the events.
 - An endpoint that never answers no longer keeps the process alive for ten seconds. The drain closes its connection at the 400 ms timeout. It no longer follows redirects, so `endpoint` has to be the final URL.
 - `DO_NOT_TRACK=true`, `yes` and `on` opt out like `1`, and `EVLOG_TELEMETRY=false`, `no` and `off` like `0`.

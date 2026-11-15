@@ -26,7 +26,7 @@ import {
   resolveFlushThreshold,
   shouldFlushOutbox,
 } from '../src/flush-policy'
-import { closeServers, ingest } from './helpers/server'
+import { closeServers, ingest, listen } from './helpers/server'
 
 const TOOL = 'evlog-test'
 
@@ -434,6 +434,16 @@ describe('telemetry flush', () => {
     await closeServers()
   })
 
+  it('turns off every handle of the tool, not only the last one created', async () => {
+    const first = createTelemetry({ name: TOOL, version: '0.0.0' })
+    createTelemetry({ name: TOOL, version: '0.0.0' })
+
+    await first.run('telemetry disable', () => disableTelemetry(TOOL))
+
+    expect(first.enabled).toBe(false)
+    expect(await new TelemetryOutbox({ toolName: TOOL }).readAll()).toEqual([])
+  })
+
   it('prints the payload under EVLOG_TELEMETRY_DEBUG=1 without sending or queueing it', async () => {
     vi.stubEnv('EVLOG_TELEMETRY_DEBUG', '1')
     const server = await ingest()
@@ -617,6 +627,25 @@ describe('telemetry flush coalescing', () => {
     const sizes = server.bodies.map(body => (JSON.parse(body) as { events: unknown[] }).events.length)
     expect(sizes).toEqual([MAX_FLUSH_BATCH, 1])
     expect(await outbox.readAll()).toHaveLength(0)
+  })
+
+  it('flush() sends no further batch once telemetry is turned off', async () => {
+    let requests = 0
+    const server = await listen((request, response) => {
+      requests++
+      request.resume()
+      request.on('end', () => void disableTelemetry(TOOL).then(() => response.writeHead(204).end()))
+    })
+    const outbox = new TelemetryOutbox({ toolName: TOOL })
+    await Promise.all(
+      Array.from({ length: MAX_FLUSH_BATCH + 1 }, (_, i) =>
+        outbox.append(exampleRunEvent({ idempotencyKey: `off-${i}` })),
+      ),
+    )
+
+    await createHandle({ endpoint: server.url }).flush()
+
+    expect(requests).toBe(1)
   })
 
   it('flush() stops at the first failed batch and keeps the rest on disk', async () => {

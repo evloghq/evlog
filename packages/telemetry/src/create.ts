@@ -29,7 +29,9 @@ import type {
 import { getTelemetryDir } from './paths'
 import { formatTelemetryNotice, isInteractiveTerminal, wasNoticeShown } from './notice'
 
-let activeHandle: InternalTelemetry<any, any> | null = null
+/* Every handle created in this process: consent is a tool's, so turning it
+   off or on reaches each handle of that tool, not only the last one. */
+const handles: InternalTelemetry<any, any>[] = []
 
 /* A debug run shows its event and keeps it: nothing is sent, and nothing is
    queued for a later run to send. */
@@ -180,6 +182,8 @@ class InternalTelemetry<
   private async flushBacklog(drainAll: boolean): Promise<void> {
     const pending = await this.outbox.readAll()
     for (let start = 0; start < pending.length; start += MAX_FLUSH_BATCH) {
+      /* Checked per batch: the opt-out can land while an earlier one is in flight. */
+      if (!this._enabled) return
       const batch = pending.slice(start, start + MAX_FLUSH_BATCH)
       if (!await this.drain(batch)) return
       await this.outbox.removeDelivered(new Set(batch.map(e => e.idempotencyKey)))
@@ -251,7 +255,7 @@ export function createTelemetry<
 >(options: TelemetryOptions<TFlags, TFields>): TelemetryHandle<TFlags, TFields> {
   const enabled = resolveConsent(options.name)
   const instance = new InternalTelemetry<TFlags, TFields>(options, enabled)
-  activeHandle = instance
+  handles.push(instance)
   void instance.init()
   return instance
 }
@@ -297,8 +301,8 @@ export const telemetry = {
 
 /** Disable telemetry and purge the local outbox. */
 export async function disableTelemetry(toolName: string): Promise<void> {
-  if (activeHandle?.options.name === toolName) {
-    activeHandle.setEnabled(false)
+  for (const handle of handles) {
+    if (handle.options.name === toolName) handle.setEnabled(false)
   }
   await writePreference(toolName, 'disabled')
   await purgeOutbox(toolName)
@@ -307,20 +311,21 @@ export async function disableTelemetry(toolName: string): Promise<void> {
 /** Enable telemetry (persisted preference). */
 export async function enableTelemetry(toolName: string): Promise<void> {
   await writePreference(toolName, 'enabled')
-  if (activeHandle?.options.name === toolName) {
-    activeHandle.setEnabled(true)
-    void activeHandle.init()
+  for (const handle of handles) {
+    if (handle.options.name !== toolName) continue
+    handle.setEnabled(true)
+    void handle.init()
   }
 }
 
 /** @internal Test hook */
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export function _resetActiveTelemetryForTests(): void {
-  activeHandle = null
+  handles.length = 0
 }
 
 /** @internal Test hook */
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export function _getActiveTelemetryForTests(): InternalTelemetry<any, any> | null {
-  return activeHandle
+  return handles.at(-1) ?? null
 }
