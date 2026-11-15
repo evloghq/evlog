@@ -98,7 +98,7 @@ jobs:
       - name: Test release-notes
         run: pnpm run release-notes:test
 
-      # Same reason: the risk score runs from pull_request_target, off the base branch.
+      # Same reason: the risk score runs from pull_request_target, off the default branch.
       - name: Test risk-score
         run: pnpm run risk-score:test
 
