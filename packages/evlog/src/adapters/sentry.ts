@@ -324,7 +324,7 @@ export function toSentryErrorEvent(event: WideEvent, config: SentryConfig): Sent
   }
 }
 
-const SENTRY_LOG_ITEM_PREFIX = '{"items":['
+const SENTRY_LOG_ITEM_PREFIX = '{"version":2,"items":['
 const SENTRY_LOG_ITEM_SUFFIX = ']}'
 
 /**
@@ -333,7 +333,7 @@ const SENTRY_LOG_ITEM_SUFFIX = ']}'
  * Envelope format (line-delimited):
  * - Line 1: Envelope headers (dsn, sdk, sent_at)
  * - Line 2: Item header (type: log, item_count, content_type)
- * - Line 3: Item payload ({"items": [...]})
+ * - Line 3: Item payload ({"version": 2, "items": [...]})
  */
 function buildEnvelopeBody(logs: string[], dsn: string): string {
   const envelopeHeader = JSON.stringify({
