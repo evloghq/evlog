@@ -269,6 +269,35 @@ describe('auditDiff()', () => {
     expect(auditDiff(new Entity('a', 1), new Entity('a', 2)).patch).toEqual([{ op: 'replace', path: '/age', value: 2 }])
   })
 
+  it('redacts a changed Map stored under a redacted path', () => {
+    const diff = auditDiff(
+      { credentials: new Map([['token', 'old']]) },
+      { credentials: new Map([['token', 'secret']]) },
+      { redactPaths: ['credentials'] },
+    )
+    expect(diff.patch).toEqual([{ op: 'replace', path: '/credentials', value: '[REDACTED]' }])
+  })
+
+  it('redacts fields of a class instance that replaces a Date', () => {
+    class Login {
+      constructor(public user: string, public password: string) {}
+    }
+    const diff = auditDiff({ at: new Date(0) }, { at: new Login('u', 'hunter2') }, { redactPaths: ['password'] })
+    expect(diff.patch).toEqual([{ op: 'replace', path: '/at', value: { user: 'u', password: '[REDACTED]' } }])
+  })
+
+  it('compares self-referential Maps without overflowing the stack', () => {
+    const a = new Map<string, unknown>([['k', 1]])
+    a.set('self', a)
+    const b = new Map<string, unknown>([['k', 1]])
+    b.set('self', b)
+    expect(auditDiff({ m: a }, { m: b }).patch).toEqual([])
+
+    const c = new Map<string, unknown>([['k', 2]])
+    c.set('self', c)
+    expect(auditDiff({ m: a }, { m: c }).patch).toEqual([{ op: 'replace', path: '/m', value: c }])
+  })
+
   it('escapes "/" and "~" in JSON Pointer paths', () => {
     const doc = { 'a/b': 1, 'a': { b: 1 } }
     expect(auditDiff(doc, { 'a/b': 2, 'a': { b: 1 } }).patch).toEqual([{ op: 'replace', path: '/a~1b', value: 2 }])

@@ -308,7 +308,7 @@ function isDiffableRecord(value: unknown): value is Record<string, unknown> {
  * `Date` by timestamp, `RegExp` by source and flags, `Set` and `Map` by content.
  * Anything else is equal only when it is the same reference.
  */
-function isSameNonPlainValue(a: unknown, b: unknown): boolean {
+function isSameNonPlainValue(a: unknown, b: unknown, seen = new Map<object, Set<object>>()): boolean {
   if (Object.is(a, b)) return true
   if (a instanceof Date && b instanceof Date) return Object.is(a.getTime(), b.getTime())
   if (a instanceof RegExp && b instanceof RegExp) return String(a) === String(b)
@@ -316,7 +316,11 @@ function isSameNonPlainValue(a: unknown, b: unknown): boolean {
     return a.size === b.size && [...a].every(v => b.has(v))
   }
   if (a instanceof Map && b instanceof Map) {
-    return a.size === b.size && [...a].every(([k, v]) => b.has(k) && isSameNonPlainValue(v, b.get(k)))
+    // A pair already being compared is assumed equal, so self-referential Maps terminate.
+    const pairs = seen.get(a) ?? seen.set(a, new Set()).get(a)!
+    if (pairs.has(b)) return true
+    pairs.add(b)
+    return a.size === b.size && [...a].every(([k, v]) => b.has(k) && isSameNonPlainValue(v, b.get(k), seen))
   }
   return false
 }

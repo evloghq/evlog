@@ -239,18 +239,19 @@ export function redactValueByPaths(
   const dotPath = segments.join('.')
   const leafKey = segments.at(-1) ?? ''
 
-  if (value === null || typeof value !== 'object') {
-    if (dotPath && matchesRedactPath(dotPath, leafKey, matchers)) {
-      return resolveReplacement(replacement, value, { path: dotPath, key: leafKey })
-    }
-    return value
+  if (dotPath && matchesRedactPath(dotPath, leafKey, matchers)) {
+    return resolveReplacement(replacement, value, { path: dotPath, key: leafKey })
   }
+
+  if (value === null || typeof value !== 'object') return value
 
   if (Array.isArray(value)) {
     return value.map((v, i) => redactValueByPaths(v, matchers, replacement, `${pointerPath}/${i}`))
   }
 
-  if (!isPlainRecord(value)) return value
+  // Plain objects, null-prototype objects and class instances are copied field by field.
+  // Built-ins such as `Date`, `Set` and `Map` are returned as they are.
+  if (Object.prototype.toString.call(value) !== '[object Object]') return value
 
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value)) {
@@ -832,12 +833,6 @@ export function normalizeRedactConfig(raw: boolean | Record<string, unknown> | u
   }
 
   return resolveRedactConfig(config)
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const proto = Object.getPrototypeOf(value)
-  return proto === Object.prototype || proto === null
 }
 
 function deserializeRegexList(raw: unknown[]): RegExp[] {
