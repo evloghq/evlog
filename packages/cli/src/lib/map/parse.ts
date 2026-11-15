@@ -52,13 +52,27 @@ export function createLineIndex(source: string): LineIndex {
   }
 }
 
-/** Parse a route file (Vue `<script>` extracted first) into an oxc AST + source. */
+/**
+ * Parse a route file (Vue `<script>` extracted first) into an oxc AST + source.
+ * `null` when there is no file at `filePath`; one that cannot be read comes
+ * back empty, with the reason in `errors`.
+ */
 export function parseFile(filePath: string): ParseResult | null {
   let source: string
   try {
     source = readFileSync(filePath, 'utf8')
-  } catch {
-    return null
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException
+    if (code === 'ENOENT') return null
+    /* A file that is there and cannot be read still declares its entry
+       points, so it is reported like one that does not parse. */
+    return {
+      program: parseSync(filePath, '', { sourceType: 'module', lang: 'ts' }).program,
+      source: '',
+      errors: [`cannot be read (${code})`],
+      lines: createLineIndex(''),
+      comments: [],
+    }
   }
   return parseSource(filePath, source)
 }

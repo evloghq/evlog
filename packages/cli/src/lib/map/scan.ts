@@ -124,12 +124,10 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
       handler: null,
     })),
   ]
-  const ids = routeIds(extracted)
   const ignored = new Set(ctx.ignore?.length ? glob(ctx.ignore, ctx.projectRoot).map(file => relativeFromRoot(ctx.projectRoot, file)) : [])
-  const analysed = extracted
-    .map((raw, index) => ({ raw, id: ids[index]! }))
-    .filter(({ raw }) => !ignored.has(raw.file))
-    .map(({ raw, id }) => analyseRoute({ ctx, raw, id, project, capabilities }))
+  const kept = extracted.filter(raw => !ignored.has(raw.file))
+  const ids = routeIds(kept)
+  const analysed = kept.map((raw, index) => analyseRoute({ ctx, raw, id: ids[index]!, project, capabilities }))
   const routes = analysed.map(entry => entry.route)
   const unparsed = [...broken]
     .filter(([file]) => !ignored.has(file))

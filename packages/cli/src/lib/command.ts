@@ -107,18 +107,27 @@ export function defineEvlogCommand<T extends ArgsDef = {}>(
       name: baseMeta.name ?? command.split(' ').at(-1),
     },
     async run(ctx: CommandContext<T & typeof COMMON_ARGS>) {
-      const flags = runArgs(ctx.args)
+      /* Everything below reads the checked parse, not citty's: a bare
+         `--baseline --cwd app` reaches citty with `--cwd` as the baseline.
+         citty's reading is the fallback only when the flags are refused. */
+      let parsed: ParsedArgs<T & typeof COMMON_ARGS> | undefined
+      let usageError: unknown
+      try {
+        parsed = parseArgs<T & typeof COMMON_ARGS>(checkFlags(ctx.rawArgs, args, def.bare), args)
+      } catch (error) {
+        usageError = error
+      }
+      const read = parsed ?? ctx.args
+      const flags = runArgs(read)
       const cli = createContext(flags.cwd ? { cwd: flags.cwd } : {})
-      if (wantsHeader(cli, flags) && !def.skipHeader?.(cli, ctx.args)) {
+      if (wantsHeader(cli, flags) && !def.skipHeader?.(cli, read)) {
         writeHuman(formatCommandHeader(cli, { command }))
       }
       const ui = createUi({ json: flags.json })
       return await withCliDebug(cli, { command, ...flags }, async (log) => {
-        let parsed: ParsedArgs<T & typeof COMMON_ARGS>
-        try {
-          parsed = parseArgs(checkFlags(ctx.rawArgs, args, def.bare), args)
-        } catch (error) {
-          return failWith(error, { args: flags, log, ui })
+        if (!parsed) {
+          const json = flags.json || (read as { format?: unknown }).format === 'json'
+          return failWith(usageError, { args: { json }, log, ui })
         }
         return await def.run?.({ ...ctx, args: parsed, cli, log, ui })
       })

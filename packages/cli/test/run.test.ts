@@ -37,6 +37,29 @@ describe('run', () => {
     expect(process.exitCode).toBe(2)
   })
 
+  it.each([
+    { where: 'before the command', rawArgs: ['--dryrun', 'telemetry', 'status'] },
+    { where: 'between a group and its command', rawArgs: ['telemetry', '--dryrun', 'status'] },
+  ])('exits 2 on an unknown flag $where, without running the command', async ({ rawArgs }) => {
+    const stderr = capture('stderr')
+
+    await run(rawArgs)
+
+    expect(stderr()).toContain('Unknown flag --dryrun')
+    expect(stderr()).not.toContain('Telemetry')
+    expect(process.exitCode).toBe(2)
+  })
+
+  it('leaves the flags after a command to the command, value flags included', async () => {
+    const stdout = capture('stdout')
+    capture('stderr')
+
+    await run(['doctor', '--cwd', import.meta.dirname, '--json'])
+
+    expect((JSON.parse(stdout()) as { error?: unknown }).error).toBeUndefined()
+    expect(process.exitCode).not.toBe(2)
+  })
+
   it('prints the usage of the command --help was asked on and exits 0', async () => {
     const stderr = capture('stderr')
 

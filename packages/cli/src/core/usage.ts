@@ -3,7 +3,7 @@ import { formatBanner } from './brand'
 import { createContext } from './context'
 import { createStyle, writeHuman } from './output'
 
-async function resolve<T>(value: T | (() => T | Promise<T>) | Promise<T> | undefined): Promise<T | undefined> {
+export async function resolve<T>(value: T | (() => T | Promise<T>) | Promise<T> | undefined): Promise<T | undefined> {
   if (typeof value === 'function') return await (value as () => T | Promise<T>)()
   return await value
 }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -390,6 +390,25 @@ describe('entry points a scan must not lose', () => {
     }), 'next'))
 
     expect(result.map.routes.map(route => route.file).sort()).toEqual(['app/actions.ts', 'app/page.tsx'])
+  })
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('keeps a file it cannot read as a failing entry point', async () => {
+    const root = await project({ ...EXPRESS, 'src/dark.ts': DARK })
+    await chmod(join(root, 'src/dark.ts'), 0o000)
+
+    const result = await scan(await ctx(root, 'express'))
+
+    const entry = result.map.routes.find(route => route.file === 'src/dark.ts')
+    expect(entry?.checks['wide-event']).toMatchObject({ status: 'fail', message: 'file failed to parse' })
+    expect(result.warnings).toEqual(['src/dark.ts failed to parse: cannot be read (EACCES)'])
+  })
+
+  it('gives an entry point the same id whether or not an ignored file declares its route too', async () => {
+    const twin = 'import { Router } from \'express\'\nexport const twin = Router()\ntwin.get(\'/a\', (req, res) => { res.json(1) })\n'
+    const alone = await scan(await ctx(await project({ ...EXPRESS, 'src/dark.ts': DARK }), 'express'))
+    const shared = await scan({ ...await ctx(await project({ ...EXPRESS, 'src/dark.ts': DARK, 'src/twin.ts': twin }), 'express'), ignore: ['src/twin.ts'] })
+
+    expect(shared.map.routes.map(route => route.id)).toEqual(alone.map.routes.map(route => route.id))
   })
 
   it('leaves a file in map.ignore out even when it does not parse', async () => {

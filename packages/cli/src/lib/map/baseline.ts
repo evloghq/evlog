@@ -6,6 +6,7 @@ import { version as CLI_VERSION } from '../../../package.json'
 import { classifyRouteObservability, scoreGlobal } from './score'
 import { RULE_SET_VERSION } from './rules/index'
 import type { CheckId, MapFile, RouteEntry } from './types'
+import { routeKey } from './utils'
 import { MAP_FILE_NAME } from './write'
 
 /** Where a baseline map was read from — the label keeps the spelling the user typed. */
@@ -153,6 +154,31 @@ function checkIds(route: RouteEntry): CheckId[] {
 }
 
 /**
+ * Each baseline entry point with the one it is now.
+ *
+ * By id first. An id gains or loses its file when another entry point starts
+ * or stops sharing the method and path, so what the ids leave unpaired is
+ * paired by method, path and file.
+ */
+function pairRoutes(baseline: readonly RouteEntry[], current: readonly RouteEntry[]): Map<RouteEntry, RouteEntry> {
+  const currentById = new Map(current.map(route => [route.id, route]))
+  const pairs = new Map<RouteEntry, RouteEntry>()
+  for (const before of baseline) {
+    const after = currentById.get(before.id)
+    if (after) pairs.set(before, after)
+  }
+
+  const paired = new Set(pairs.values())
+  const unpaired = current.filter(route => !paired.has(route))
+  for (const before of baseline) {
+    if (pairs.has(before)) continue
+    const at = unpaired.findIndex(route => route.file === before.file && routeKey(route) === routeKey(before))
+    if (at !== -1) pairs.set(before, unpaired.splice(at, 1)[0]!)
+  }
+  return pairs
+}
+
+/**
  * Compare a fresh scan against a baseline, per entry point and per check.
  *
  * The unit is the requirement, not the score: a refactor that instruments one
@@ -161,15 +187,15 @@ function checkIds(route: RouteEntry): CheckId[] {
  * `--min-score`'s job.
  */
 export function compareToBaseline(baseline: MapFile, current: MapFile, source: BaselineSource): BaselineComparison {
-  const currentById = new Map(current.routes.map(route => [route.id, route]))
-  const baselineById = new Map(baseline.routes.map(route => [route.id, route]))
+  const pairs = pairRoutes(baseline.routes, current.routes)
+  const paired = new Set(pairs.values())
 
   const regressions: CheckRegression[] = []
   const fixed: CheckFix[] = []
   const removed: { path: string, method: string | null }[] = []
 
   for (const before of baseline.routes) {
-    const after = currentById.get(before.id)
+    const after = pairs.get(before)
     if (!after) {
       removed.push({ path: before.path, method: before.method })
       continue
@@ -193,7 +219,7 @@ export function compareToBaseline(baseline: MapFile, current: MapFile, source: B
   }
 
   const added: AddedRoute[] = current.routes
-    .filter(route => !baselineById.has(route.id))
+    .filter(route => !paired.has(route))
     .map(route => ({
       path: route.path,
       method: route.method,
@@ -202,8 +228,8 @@ export function compareToBaseline(baseline: MapFile, current: MapFile, source: B
       dark: classifyRouteObservability(route) === 'dark',
     }))
 
-  const carried = current.routes.filter(route => baselineById.has(route.id))
-  const carriedBefore = baseline.routes.filter(route => currentById.has(route.id))
+  const carried = current.routes.filter(route => paired.has(route))
+  const carriedBefore = baseline.routes.filter(route => pairs.has(route))
 
   return {
     source,

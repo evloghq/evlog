@@ -215,7 +215,7 @@ export const cliErrors = defineErrorCatalog('cli', {
     message: ({ file, error, more }: { file: string, error: string, more: number }) =>
       `${file} failed to parse: ${error}${more > 0 ? `, and ${more} more file${more === 1 ? '' : 's'}` : ''}`,
     why: 'A gate cannot pass a tree it could not read: the entry points in that file are not in the score or in the comparison',
-    fix: 'Fix the syntax error, or list the file under map.ignore in evlog.config if it is not app code',
+    fix: 'Fix the file, or list it under map.ignore in evlog.config if it is not app code',
     link: 'https://evlog.dev/cli/ci',
     tags: ['map'],
   },

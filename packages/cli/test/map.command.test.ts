@@ -478,6 +478,50 @@ describe('map command', () => {
     expect(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain('MAP_INVALID_MIN_SCORE')
   })
 
+  it('reports an unknown flag as JSON under --format json too', async () => {
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    await runCommand(map, { rawArgs: ['--cwd', join(FIXTURES, 'nuxt-basic'), '--format', 'json', '--no-header', '--min-scor', '90'] })
+
+    const payload = JSON.parse(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')) as { error: { code: string } }
+    expect(payload.error.code).toBe('cli.UNKNOWN_FLAG')
+    expect(process.exitCode).toBe(2)
+  })
+
+  it('reads --cwd when it follows a bare --baseline', async () => {
+    const cwd = await copyFixture('nuxt-basic')
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header'] })
+    stdout.mockClear()
+
+    await runCommand(map, { rawArgs: ['--json', '--no-header', '--no-write', '--baseline', '--cwd', cwd] })
+
+    const payload = JSON.parse(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')) as { error?: unknown, baseline?: { regressions: unknown[] } }
+    expect(payload.error).toBeUndefined()
+    expect(payload.baseline?.regressions).toEqual([])
+  })
+
+  it('fails --baseline on a regression that lands with a second route of the same method and path', async () => {
+    const cwd = await copyFixture('hono-basic')
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header'] })
+    stdout.mockClear()
+
+    const dark = (await readFile(join(cwd, 'src/checkout.ts'), 'utf8')).replace(/^ {2}log\.(?:set|audit)\(.*\n/gm, '')
+    await writeFile(join(cwd, 'src/checkout.ts'), dark)
+    await writeFile(join(cwd, 'src/twin.ts'), dark)
+
+    await runCommand(map, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--no-write', '--baseline'] })
+
+    const payload = JSON.parse(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')) as { baseline: { regressions: { file: string }[], removed: unknown[] } }
+    expect(payload.baseline.regressions.map(regression => regression.file)).toContain('src/checkout.ts')
+    expect(payload.baseline.removed).toEqual([])
+    expect(process.exitCode).toBe(1)
+  })
+
   it('exits 2 when the entry point to inspect does not exist', async () => {
     const cwd = join(FIXTURES, 'nuxt-basic')
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)

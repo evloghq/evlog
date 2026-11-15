@@ -6,7 +6,8 @@ const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'
 
 type RouteIdentity = Pick<RawRouteEntry, 'framework' | 'kind' | 'path' | 'method'>
 
-function routeKey(entry: RouteIdentity): string {
+/** What {@link routeId} hashes: an entry point as its framework, kind, method and path. */
+export function routeKey(entry: RouteIdentity): string {
   return `${entry.framework}:${entry.kind}:${entry.method ?? '*'}:${entry.path}`
 }
 

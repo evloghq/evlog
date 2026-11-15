@@ -204,7 +204,7 @@ export default defineNitroPlugin((nitroApp) => {
 
     await doctor.run!({
       args: { _: [] as string[], json: true, noHeader: true, cwd, debug: false },
-      rawArgs: [],
+      rawArgs: ['--json', '--no-header', '--cwd', cwd],
       cmd: doctor,
       data: {},
     })
