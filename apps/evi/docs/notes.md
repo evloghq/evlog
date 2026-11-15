@@ -41,8 +41,8 @@ and the continuation token carries only `repositoryId`. So `ctx.channel.metadata
 is empty in dynamic tools and instruction fragments on a GitHub turn, and the
 thread's `owner`/`repo` reach only the channel's own event handlers through
 `channel.state`. That is why escalation follows the thread (`repositoryOf(state)`)
-while `git__checkout`, `git__push` and the `github__*` defaults follow
-`EVI_REPOSITORY` and take an explicit repository otherwise. The upstream ask is a `metadata` projection of
+while the `github__*` defaults follow `EVI_REPOSITORY` and take an explicit
+repository otherwise. The upstream ask is a `metadata` projection of
 `{ owner, repo, installationId }` on the GitHub channel; with it, `repositoryOf`
 narrows `ctx.channel` through `isChannel` and the explicit inputs go away.
 
@@ -52,14 +52,14 @@ detail: an explicit `installationId` first, then `org` (or the owner of a
 qualified repository), then the connector's default. `installationParams` in
 `lib/github/credentials.ts` names the repository owner, so anyone who installs
 the App is covered with nothing to register, and `repositories` narrows the
-git tools' token to the one repository. A missing installation is
+escalation token to the one repository. A missing installation is
 `ConnectorInstallationRequiredError`, never a fallback to another account.
 This selection order landed in the Connect API with vercel/api#93139; before
 it, `org` was ignored and the default installation answered for every account.
-The `github__*` extension and the channel take one credential, the home
-account's; on a repository elsewhere the extension's write tools,
-`createPullRequest` first, answer 403. The upstream ask is a per-call
-`installationId` resolver on `@github-tools/eve-extension`.
+The channel takes one credential, the home account's. Since
+`@github-tools/eve-extension` 0.13 the `github__*` tools mint for the
+installation that owns each call's target repository, per its README, and
+`git__gh` mints for the `repository` each command declares.
 
 **iMessage attachments never reach the model.** The Photon adapter's chat
 mapping keeps name/mimeType/size, and eve's `messageToUserContent` only reads

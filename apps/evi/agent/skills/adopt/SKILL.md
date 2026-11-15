@@ -9,7 +9,7 @@ Five verbs, one loop. Every task here starts by measuring the repository, does i
 
 ## Before anything: where you are
 
-- On the home repository the checkout is `/workspace/repo`, dependencies installed. On any other repository, `git__checkout` then `git__install`, and work in `/workspace/<owner>/<repo>`; that checkout is cold, so say so when you report its checks.
+- On the home repository the checkout is `/workspace/repo`, dependencies installed. On any other repository, clone it with `git__gh` (`gh repo clone <owner>/<repo> /workspace/<owner>/<repo>`), install with `COREPACK_ENABLE_DOWNLOAD_PROMPT=0 nci` there, and work in `/workspace/<owner>/<repo>`; that checkout is cold, so say so when you report its checks.
 - `evlog` is on PATH: the CLI built from the current `main`. Run it from the target repository's root, never `npx @evlog/cli`.
 - Two commands ground every verb. Run both first, together:
   - `evlog doctor --json`: the stack, whether evlog is installed, which drains exist.

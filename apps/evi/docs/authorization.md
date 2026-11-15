@@ -6,8 +6,10 @@ Design note, in two halves. What runs today: a principal gate (`isMaintainer` in
 and `writePolicy` in `agent/lib/github/label-approval.ts`, which auto-approves
 maintainers, asks everyone else, and denies autonomous turns outright. What is
 still a proposal: the `tier` / `threadTier` attribute the rest of this page
-builds on. Evi is still gated to a single user (`onComment` rejects everyone
-but `hugorcd`), and the tier attribute has to land before that gate comes off.
+builds on. A comment reaches Evi only from someone with Maintain or Admin on
+the thread's repository (`respondTo: 'maintainers'` on the channel), and with
+`actAs: 'caller'` their calls run as the App only where that role allows. The
+tier attribute has to land before that gate widens.
 It is not a prerequisite for the autonomous hooks: `onIssue` is already wired,
 and `writePolicy` covers those turns.
 
@@ -133,10 +135,12 @@ require it on every non-draft PR.
 Everything else keeps a real approval even for admin: `createIssue`, `closeIssue`,
 `deleteIssueComment`, `deletePullRequestComment`, `createPullRequest`,
 `updatePullRequest`, `createPullRequestReview`. Code itself never moves through
-the `github__*` tools: it ships from the sandbox via `git__push`, which is mounted on sessions
-that pass `canAccessAdminTools` in `agent/lib/trust.ts`: maintainers, plus
-schedule sessions, whose runs push feature branches to deliver their PRs. It
-refuses `main` and `master` for every caller.
+the API: it ships from the sandbox via `git__gh`, eve's git extension, whose
+`authorize` (`agent/lib/github/gh.ts`) runs a command only for sessions that
+pass `canAccessAdminTools` in `agent/lib/trust.ts`: maintainers, plus schedule
+sessions, whose runs push feature branches to deliver their PRs. It accepts
+clones, fetches and feature-branch pushes, and refuses any push to `main` or
+`master` for every caller.
 
 Release writes are not on the list at all: `AGENTS.md` forbids an agent from
 creating one, so the tool set stops at reading them.

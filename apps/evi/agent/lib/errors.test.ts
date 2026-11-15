@@ -25,10 +25,10 @@ describe('eviErrors', () => {
 
 describe('refusal', () => {
   it('returns the code and the message the model reads, with the fix appended', () => {
-    expect(refusal(eviErrors.GITHUB_NOT_INSTALLED({ owner: 'acme', repository: 'acme/widgets' }))).toEqual({
+    expect(refusal(eviErrors.BLOB_TOKEN_MISSING())).toEqual({
       success: false,
-      code: 'evi.GITHUB_NOT_INSTALLED',
-      error: 'evlogai is not installed on acme, so acme/widgets is out of reach. Install the App on that account first.',
+      code: 'evi.BLOB_TOKEN_MISSING',
+      error: 'BLOB_READ_WRITE_TOKEN is not configured. Locally, run `vercel env pull` in apps/evi.',
     })
     expect(refusal(eviErrors.INPUT_REFUSED({ message: 'bad ref' }))).toEqual({
       success: false,
