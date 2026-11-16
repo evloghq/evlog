@@ -502,14 +502,6 @@ export interface LoggerConfig {
   _suppressDrainWarning?: boolean
 }
 
-/**
- * Audit actor — who initiated the action.
- *
- * `type` covers the most common actor families. `id` is required and should be
- * a stable identifier (user id, service name, API key id, agent id). `model`,
- * `tools`, `reason`, and `promptId` are filled when `type === 'agent'` and
- * mirror the AI SDK fields already used by `evlog/ai`.
- */
 /** Relative importance of an audit action for alerting and review prioritisation. */
 export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical'
 
@@ -532,6 +524,14 @@ export interface AuditActionDefinition {
   redactPaths?: readonly string[]
 }
 
+/**
+ * Audit actor — who initiated the action.
+ *
+ * `type` covers the most common actor families. `id` is required and should be
+ * a stable identifier (user id, service name, API key id, agent id). `model`,
+ * `tools`, `reason`, and `promptId` are filled when `type === 'agent'` and
+ * mirror the AI SDK fields already used by `evlog/ai`.
+ */
 export interface AuditActor {
   type: 'user' | 'system' | 'api' | 'agent'
   id: string
@@ -556,6 +556,20 @@ export interface AuditTarget {
   [key: string]: unknown
 }
 
+/** Single JSON Patch operation for audit change tracking (RFC 6902 subset). */
+export interface AuditPatchOp {
+  op: 'add' | 'remove' | 'replace'
+  path: string
+  value?: unknown
+}
+
+/** Before/after snapshots and optional patch produced by {@link auditDiff}. */
+export interface AuditChanges {
+  before?: unknown
+  after?: unknown
+  patch?: AuditPatchOp[]
+}
+
 /**
  * Reserved audit fields on the wide event.
  *
@@ -576,20 +590,6 @@ export interface AuditTarget {
  * - `context` — request/runtime context auto-populated by {@link auditEnricher}
  *   (`requestId`, `traceId`, `ip`, `userAgent`, `tenantId`).
  */
-/** Single JSON Patch operation for audit change tracking (RFC 6902 subset). */
-export interface AuditPatchOp {
-  op: 'add' | 'remove' | 'replace'
-  path: string
-  value?: unknown
-}
-
-/** Before/after snapshots and optional patch produced by {@link auditDiff}. */
-export interface AuditChanges {
-  before?: unknown
-  after?: unknown
-  patch?: AuditPatchOp[]
-}
-
 export interface AuditFields {
   /** Action name. Convention: `'<resource>.<verb>'`, e.g. `'invoice.refund'`. */
   action: string
