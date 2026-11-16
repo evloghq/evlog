@@ -13,7 +13,7 @@ export default defineEval({
     first.calledTool('docs__get-page')
 
     const followUp = await first.session.send('Give me more detail on how the decision is made.')
-    followUp.notCalledTool('connection_search')
+    followUp.notCalledTool('eve__search')
     followUp.notCalledTool('docs__list-pages')
 
     t.succeeded()

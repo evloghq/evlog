@@ -191,8 +191,8 @@ linear` provisions one of each: it is one command, not one connector.
 
 **App-scoped auth fails silently when the connector cannot mint an app token.**
 Because app-scoped is non-interactive, eve never emits a challenge:
-`connection_search` succeeds and reports `needsAuthorization: true` with nothing
-anyone can approve, on every turn. User-scoped at least fails loudly with
+`eve__search` succeeds and lists the connection under `unavailable` with
+nothing anyone can approve, on every turn. User-scoped at least fails loudly with
 `principal_required`.
 
 **The whole-run crash from a misconfigured OAuth connection is fixed in
