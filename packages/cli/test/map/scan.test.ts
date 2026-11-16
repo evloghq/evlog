@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -392,9 +392,10 @@ describe('entry points a scan must not lose', () => {
     expect(result.map.routes.map(route => route.file).sort()).toEqual(['app/actions.ts', 'app/page.tsx'])
   })
 
-  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('keeps a file it cannot read as a failing entry point', async () => {
+  it.skipIf(process.platform === 'win32')('keeps a file it cannot read as a failing entry point', async ({ skip }) => {
     const root = await project({ ...EXPRESS, 'src/dark.ts': DARK })
     await chmod(join(root, 'src/dark.ts'), 0o000)
+    skip(await readFile(join(root, 'src/dark.ts')).then(() => true, () => false), 'this process reads files whatever their mode')
 
     const result = await scan(await ctx(root, 'express'))
 
