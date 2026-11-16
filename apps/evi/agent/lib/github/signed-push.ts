@@ -87,41 +87,38 @@ async function assertReproducible(sandbox: GitSandbox, dir: string, branch: stri
   }
 }
 
-/** Where a branch replay stood when gh-signed-commit failed on `order[index]`. */
-interface Replay {
-  readonly worktree: string
-  readonly head: string
-  readonly order: readonly string[]
-  readonly index: number
+/** The tree and headline of `sha`: what a signed replay of a commit keeps from it. */
+async function snapshot(sandbox: GitSandbox, dir: string, sha: string): Promise<string> {
+  const [tree = '', headline = ''] = (await git(sandbox, dir, `log -1 --format=%T%n%B ${sha}`)).split('\n')
+  return `${tree} ${headline.trim()}`
 }
 
 /**
- * Works out how much of the branch GitHub took from the branch itself, not from
- * the reply: a commit can land and its reply still be lost. Rebuilds the commits
- * GitHub lacks on top of what it has, so the next push resumes there, and returns
- * how many it took. Returns null and leaves the local branch alone when GitHub's
- * branch matches neither case: someone else wrote to it mid-push, and rebuilding
- * from local snapshots would undo their change.
+ * Takes over the commits an earlier push left on GitHub without moving the
+ * local branch onto them: a publish failed after others landed, or a reply was
+ * lost after its commit landed. Each commit GitHub has past the fork point must
+ * match the local commit in the same position. Rebuilds the rest of the local
+ * branch on the last of them and returns the new head, or null when GitHub's
+ * branch holds anything else: someone else wrote to it.
  */
-async function recover(sandbox: GitSandbox, gh: GitHubCommand, { dir, repository, branch }: Push, { worktree, head, order, index }: Replay): Promise<number | null> {
-  const fetched = await gh({ command: `git fetch ${cloneUrl(repository)} refs/heads/${branch}`, description: `Read what reached ${branch} on GitHub`, workingDirectory: worktree })
-  if (fetched.exitCode !== 0) return null
-  const [acknowledged = '', remote = ''] = (await git(sandbox, worktree, 'rev-parse HEAD FETCH_HEAD')).trim().split('\n')
-  let taken = index
-  if (remote !== acknowledged) {
-    const parent = await sandbox.run({ command: `git -C ${dir} rev-parse --verify --quiet ${remote}^` })
-    if (String(parent.stdout ?? '').trim() !== acknowledged) return null
-    taken = index + 1
+async function adopt(sandbox: GitSandbox, gh: GitHubCommand, { dir, repository, branch }: Push, { head, remoteHead }: { head: string, remoteHead: string }): Promise<string | null> {
+  await github(gh, `git fetch ${cloneUrl(repository)} refs/heads/${branch}`, { description: `Read what reached ${branch} on GitHub`, workingDirectory: dir })
+  const fork = await sandbox.run({ command: `git -C ${dir} merge-base ${remoteHead} ${head}` })
+  if (fork.exitCode !== 0) return null
+  const base = String(fork.stdout ?? '').trim()
+  const theirs = shas(await git(sandbox, dir, `rev-list --reverse ${base}..${remoteHead}`))
+  const ours = shas(await git(sandbox, dir, `rev-list --reverse ${base}..${head}`))
+  if (theirs.length > ours.length) return null
+  for (const [index, sha] of theirs.entries()) {
+    const [published, local] = await Promise.all([snapshot(sandbox, dir, sha), snapshot(sandbox, dir, ours[index]!)])
+    if (published !== local) return null
   }
-  if (taken === 0) return 0
-  const [remoteTree, localTree] = await Promise.all([git(sandbox, dir, `rev-parse ${remote}^{tree}`), git(sandbox, dir, `rev-parse ${order[taken - 1]}^{tree}`)])
-  if (remoteTree.trim() !== localTree.trim()) return null
-  let tip = remote
-  for (const sha of order.slice(taken)) {
+  let tip = remoteHead
+  for (const sha of ours.slice(theirs.length)) {
     tip = (await git(sandbox, dir, `log -1 --format=%B ${sha} | git -C ${dir} commit-tree ${sha}^{tree} -p ${tip}`)).trim()
   }
   await git(sandbox, dir, `update-ref 'refs/heads/${branch}' ${tip} ${head}`)
-  return taken
+  return tip
 }
 
 /**
@@ -130,10 +127,12 @@ async function recover(sandbox: GitSandbox, gh: GitHubCommand, { dir, repository
  * files and messages, new shas. A `git push` from the sandbox has no key to
  * sign with, and `main` requires signed commits. Each commit is replayed from
  * a scratch worktree, because gh-signed-commit publishes the index against
- * HEAD. Moves the local branch onto the pushed head and returns it.
+ * HEAD. Moves the local branch onto the pushed head and returns it. A push
+ * that failed partway leaves the local branch as it was; the next one adopts
+ * what reached GitHub.
  */
 export async function pushSignedBranch(sandbox: GitSandbox, gh: GitHubCommand, { dir, repository, branch }: Push): Promise<{ sha: string, commits: number }> {
-  const head = (await git(sandbox, dir, `rev-parse --verify 'refs/heads/${branch}^{commit}'`)).trim()
+  let head = (await git(sandbox, dir, `rev-parse --verify 'refs/heads/${branch}^{commit}'`)).trim()
   // The URL is spelled out, never `origin`: remote config inside the sandbox is model-writable.
   const url = cloneUrl(repository)
   const listed = await github(gh, `git ls-remote ${url} refs/heads/${branch}`, { description: `Read the head of ${branch} on GitHub`, workingDirectory: dir })
@@ -141,7 +140,11 @@ export async function pushSignedBranch(sandbox: GitSandbox, gh: GitHubCommand, {
   if (remoteHead !== null) {
     const contained = await sandbox.run({ command: `git -C ${dir} merge-base --is-ancestor ${remoteHead} ${head}` })
     if (contained.exitCode !== 0) {
-      throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} on GitHub is at ${remoteHead.slice(0, 8)}, which the local branch does not contain. Rebuild the work on top of it, or push it under a new branch name.` })
+      const adopted = await adopt(sandbox, gh, { dir, repository, branch }, { head, remoteHead })
+      if (adopted === null) {
+        throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} on GitHub is at ${remoteHead.slice(0, 8)}, which the local branch does not contain. Rebuild the work on top of it, or push it under a new branch name.` })
+      }
+      head = adopted
     }
   }
   const range = remoteHead === null ? `${head} --not --remotes` : `${remoteHead}..${head}`
@@ -163,13 +166,15 @@ export async function pushSignedBranch(sandbox: GitSandbox, gh: GitHubCommand, {
       const [headline = '', ...rest] = (await git(sandbox, dir, `log -1 --format=%B ${sha}`)).trim().split('\n')
       const body = rest.join('\n').trim()
       const args = ['gh-signed-commit', '--repo', repositorySlug(repository), '--branch', branch, '-m', headline, ...(body ? ['-b', body] : [])]
+      const parent = (await git(sandbox, worktree, 'rev-parse HEAD')).trim()
       const result = await gh({ command: args.map(shellQuote).join(' '), description: `Publish ${sha.slice(0, 8)} on ${branch} as a signed commit`, workingDirectory: worktree })
       if (result.exitCode !== 0) {
-        const taken = await recover(sandbox, gh, { dir, repository, branch }, { worktree, head, order, index })
-        const outcome = taken === null
-          ? `${branch} on GitHub no longer matches what this push wrote, so the local branch was left as it was`
-          : `${taken} of ${order.length} commits reached GitHub${taken > 0 ? ', and the local branch now builds on them, so git__push again publishes the rest' : ''}`
-        throw eviErrors.GIT_COMMAND_FAILED({ command: 'gh-signed-commit', exitCode: result.exitCode, message: `gh-signed-commit exited ${result.exitCode}: ${runOutput(result)}. ${outcome}.` })
+        throw eviErrors.GIT_COMMAND_FAILED({ command: 'gh-signed-commit', exitCode: result.exitCode, message: `gh-signed-commit exited ${result.exitCode}: ${runOutput(result)}. ${index} of ${order.length} commits reached GitHub before this one, which may have landed too. The local branch is unchanged; git__push again takes over what reached GitHub and publishes the rest.` })
+      }
+      // gh-signed-commit builds on whatever head it reads from GitHub, so a commit another writer landed first sits underneath.
+      const landedOn = (await git(sandbox, worktree, 'rev-parse HEAD^')).trim()
+      if (landedOn !== parent) {
+        throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} on GitHub moved while this push ran: ${sha.slice(0, 8)} landed on ${landedOn.slice(0, 8)} instead of ${parent.slice(0, 8)}. The push stopped there and left the local branch as it was. Check the branch on GitHub before pushing again.` })
       }
     }
     const pushed = (await git(sandbox, worktree, 'rev-parse HEAD')).trim()

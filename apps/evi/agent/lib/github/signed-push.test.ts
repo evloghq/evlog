@@ -23,24 +23,27 @@ import { execFileSync } from 'node:child_process'
 const repo = process.env.FAKE_GITHUB_REPO
 const git = (args, options = {}) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', ...options }).trim()
 const json = (status, body) => new Response(JSON.stringify(body), { status })
+const headline = process.argv[process.argv.indexOf('-m') + 1]
+// Another writer lands a commit on the branch, at the moment FAKE_GITHUB_INTERLOPE_AT names.
+const interlope = (name, at) => {
+  if (headline !== process.env.FAKE_GITHUB_INTERLOPE || at !== process.env.FAKE_GITHUB_INTERLOPE_AT) return
+  const env = { ...process.env, GIT_INDEX_FILE: repo + '/interloper-index', GIT_WORK_TREE: repo }
+  git(['read-tree', git(['rev-parse', name])], { env })
+  git(['update-index', '--add', '--cacheinfo', '100644,' + git(['hash-object', '-w', '--stdin'], { input: 'theirs\\n' }) + ',theirs.txt'], { env })
+  git(['update-ref', name, git(['commit-tree', git(['write-tree'], { env }), '-p', git(['rev-parse', name]), '-m', 'theirs'])])
+}
 globalThis.fetch = async (url, init = {}) => {
   const { pathname } = new URL(url)
   const ref = /\\/git\\/ref\\/(.+)$/.exec(pathname)
   if (ref) {
+    interlope('refs/' + decodeURIComponent(ref[1]), 'read')
     try { return json(200, { object: { sha: git(['rev-parse', '--verify', 'refs/' + decodeURIComponent(ref[1])], { stdio: 'pipe' }) } }) }
     catch { return json(404, {}) }
   }
   if (pathname !== '/graphql') return json(500, {})
   const { input } = JSON.parse(init.body).variables
   const name = 'refs/heads/' + input.branch.branchName
-  // Another writer lands a commit on the branch just before this one.
-  if (input.message.headline === process.env.FAKE_GITHUB_INTERLOPE) {
-    const env = { ...process.env, GIT_INDEX_FILE: repo + '/interloper-index', GIT_WORK_TREE: repo }
-    git(['read-tree', git(['rev-parse', name])], { env })
-    git(['update-index', '--add', '--cacheinfo', '100644,' + git(['hash-object', '-w', '--stdin'], { input: 'theirs\\n' }) + ',theirs.txt'], { env })
-    git(['update-ref', name, git(['commit-tree', git(['write-tree'], { env }), '-p', git(['rev-parse', name]), '-m', 'theirs'])])
-    input.expectedHeadOid = git(['rev-parse', name])
-  }
+  interlope(name, 'commit')
   if (git(['rev-parse', name]) !== input.expectedHeadOid) return json(200, { errors: [{ message: 'stale head' }] })
   if (input.message.headline === process.env.FAKE_GITHUB_REFUSE) return json(200, { errors: [{ message: 'refused' }] })
   // update-index refuses a removal without a work tree, though it never reads one here.
@@ -52,7 +55,8 @@ globalThis.fetch = async (url, init = {}) => {
   }
   for (const { path } of input.fileChanges.deletions) git(['update-index', '--force-remove', path], { env })
   const message = [input.message.headline, input.message.body].filter(Boolean).join('\\n\\n')
-  const oid = git(['commit-tree', git(['write-tree'], { env }), '-p', input.expectedHeadOid, '-m', message])
+  // GitHub commits as itself, so a signed replay never shares the local commit's sha.
+  const oid = git(['commit-tree', git(['write-tree'], { env }), '-p', input.expectedHeadOid, '-m', message], { env: { ...env, GIT_COMMITTER_NAME: 'GitHub', GIT_COMMITTER_EMAIL: 'noreply@github.com' } })
   git(['update-ref', name, oid])
   if (input.message.headline === process.env.FAKE_GITHUB_LOSE) return json(502, {})
   return json(200, { data: { createCommitOnBranch: { commit: { oid } } } })
@@ -63,7 +67,8 @@ function git(dir: string, ...args: string[]): string {
   return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', env: { ...process.env, ...IDENTITY } }).trim()
 }
 
-async function run(command: string, env: NodeJS.ProcessEnv = process.env) {
+async function run(command: string, env: NodeJS.ProcessEnv = process.env, broken: RegExp | null = null) {
+  if (broken?.test(command)) return { stdout: '', stderr: 'broken on purpose', exitCode: 1, truncated: false }
   try {
     return { ...await exec(command, { encoding: 'utf8', env }), exitCode: 0, truncated: false }
   } catch (error) {
@@ -118,9 +123,10 @@ async function setup() {
   await write(root, { 'fake-github.mjs': FAKE_GITHUB, 'gh-signed-commit.cjs': GH_SIGNED_COMMIT_SOURCE })
   await write(bin, { 'gh-signed-commit': `#!/bin/sh\nexec node --import ${join(root, 'fake-github.mjs')} ${join(root, 'gh-signed-commit.cjs')} "$@"\n` })
   await chmod(join(bin, 'gh-signed-commit'), 0o755)
-  const env = { ...process.env, ...IDENTITY, PATH: `${bin}:${process.env.PATH}`, GH_TOKEN: 'placeholder', FAKE_GITHUB_REPO: github, FAKE_GITHUB_REFUSE: '', FAKE_GITHUB_INTERLOPE: '', FAKE_GITHUB_LOSE: '' }
-  const gh: GitHubCommand = ({ command, workingDirectory }) => run(`cd ${workingDirectory} && ${command}`, env)
-  const sandbox = { run: ({ command }: { command: string }) => run(command) } as Parameters<typeof pushSignedBranch>[0]
+  const env = { ...process.env, ...IDENTITY, PATH: `${bin}:${process.env.PATH}`, GH_TOKEN: 'placeholder', FAKE_GITHUB_REPO: github, FAKE_GITHUB_REFUSE: '', FAKE_GITHUB_INTERLOPE: '', FAKE_GITHUB_INTERLOPE_AT: '', FAKE_GITHUB_LOSE: '' }
+  let broken: RegExp | null = null
+  const gh: GitHubCommand = ({ command, workingDirectory }) => run(`cd ${workingDirectory} && ${command}`, env, broken)
+  const sandbox = { run: ({ command }: { command: string }) => run(command, process.env, broken) } as Parameters<typeof pushSignedBranch>[0]
   return {
     seed,
     work,
@@ -130,9 +136,18 @@ async function setup() {
     refuse: (headline: string) => {
       env.FAKE_GITHUB_REFUSE = headline
     },
-    /** Another writer pushes to the branch just before the commit with this headline. */
-    interlope: (headline: string) => {
+    /**
+     * Another writer pushes to the branch while the commit with this headline is
+     * published: before gh-signed-commit reads the branch head, or between that
+     * read and the commit, where GitHub refuses the stale expected head.
+     */
+    interlope: (headline: string, at: 'read' | 'commit') => {
       env.FAKE_GITHUB_INTERLOPE = headline
+      env.FAKE_GITHUB_INTERLOPE_AT = at
+    },
+    /** Every command matching `pattern` exits 1, in the sandbox and through the GitHub lease alike. */
+    breakCommand: (pattern: RegExp | null) => {
+      broken = pattern
     },
     /** GitHub takes the commit with this headline but its reply never arrives. */
     lose: (headline: string) => {
@@ -209,19 +224,24 @@ describe('pushSignedBranch', () => {
     expect(git(github, 'rev-parse', 'feat')).toBe(theirs)
   })
 
-  it('resumes after GitHub takes only part of the branch', async () => {
-    const { work, github, push, refuse } = await setup()
+  it('resumes after GitHub takes only part of the branch, once GitHub can be read again', async () => {
+    const { work, github, push, refuse, breakCommand } = await setup()
     await commit(work, 'first', { 'a.txt': 'a\n' })
-    await commit(work, 'second', { 'b.txt': 'b\n' })
+    const head = await commit(work, 'second', { 'b.txt': 'b\n' })
     const tree = git(work, 'rev-parse', 'feat^{tree}')
     refuse('second')
 
     await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_COMMAND_FAILED', message: expect.stringContaining('1 of 2 commits reached GitHub') })
     expect(messages(github, 'main..feat')).toEqual(['first'])
-    expect(git(work, 'rev-parse', 'feat^')).toBe(git(github, 'rev-parse', 'feat'))
-    expect(git(work, 'rev-parse', 'feat^{tree}')).toBe(tree)
+    expect(git(work, 'rev-parse', 'feat')).toBe(head)
 
+    // An unreadable GitHub is an unknown state, not another writer: nothing is refused or rewritten.
     refuse('')
+    breakCommand(/git fetch/)
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_COMMAND_FAILED' })
+    expect(git(work, 'rev-parse', 'feat')).toBe(head)
+
+    breakCommand(null)
     const retry = await push()
 
     expect(retry.commits).toBe(1)
@@ -229,30 +249,69 @@ describe('pushSignedBranch', () => {
     expect(git(github, 'rev-parse', 'feat^{tree}')).toBe(tree)
   })
 
-  it('leaves the local branch alone when another writer changed the branch mid-push', async () => {
-    const { work, github, push, refuse, interlope } = await setup()
+  it('stops and keeps the other writer\'s commit when the branch moves before a publish reads it', async () => {
+    const { work, github, push, interlope } = await setup()
     await commit(work, 'first', { 'a.txt': 'a\n' })
     await commit(work, 'second', { 'b.txt': 'b\n' })
     const head = await commit(work, 'third', { 'c.txt': 'c\n' })
-    interlope('second')
-    refuse('third')
+    interlope('second', 'read')
 
-    await expect(push()).rejects.toMatchObject({ message: expect.stringContaining('no longer matches') })
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_PUSH_REFUSED', message: expect.stringContaining('moved while this push ran') })
     expect(git(work, 'rev-parse', 'feat')).toBe(head)
     expect(messages(github, 'main..feat')).toEqual(['second', 'theirs', 'first'])
     expect(git(github, 'show', 'feat:theirs.txt')).toBe('theirs')
+
+    interlope('', 'read')
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_PUSH_REFUSED', message: expect.stringContaining('does not contain') })
+    expect(git(github, 'show', 'feat:theirs.txt')).toBe('theirs')
+  })
+
+  it('leaves the other writer\'s commit alone when GitHub refuses the stale head', async () => {
+    const { work, github, push, interlope } = await setup()
+    await commit(work, 'first', { 'a.txt': 'a\n' })
+    const head = await commit(work, 'second', { 'b.txt': 'b\n' })
+    interlope('second', 'commit')
+
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_COMMAND_FAILED', message: expect.stringContaining('stale head') })
+    expect(git(work, 'rev-parse', 'feat')).toBe(head)
+    expect(messages(github, 'main..feat')).toEqual(['theirs', 'first'])
+
+    interlope('', 'commit')
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_PUSH_REFUSED', message: expect.stringContaining('does not contain') })
+    expect(messages(github, 'main..feat')).toEqual(['theirs', 'first'])
+  })
+
+  it('resumes after a local replay step fails once a commit has landed', async () => {
+    const { work, github, push, breakCommand } = await setup()
+    await commit(work, 'first', { 'a.txt': 'a\n' })
+    const second = await commit(work, 'second', { 'b.txt': 'b\n' })
+    const tree = git(work, 'rev-parse', 'feat^{tree}')
+    breakCommand(new RegExp(`read-tree -u --reset ${second}`))
+
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_COMMAND_FAILED', message: expect.stringContaining('read-tree') })
+    expect(messages(github, 'main..feat')).toEqual(['first'])
+    expect(git(work, 'rev-parse', 'feat')).toBe(second)
+
+    breakCommand(null)
+    const retry = await push()
+
+    expect(retry.commits).toBe(1)
+    expect(messages(github, 'main..feat')).toEqual(['second', 'first'])
+    expect(git(github, 'rev-parse', 'feat^{tree}')).toBe(tree)
+    expect(git(work, 'rev-parse', 'feat')).toBe(retry.sha)
   })
 
   it('reads what landed from GitHub when a reply is lost', async () => {
     const { work, github, push, lose } = await setup()
     await commit(work, 'first', { 'a.txt': 'a\n' })
     await commit(work, 'second', { 'b.txt': 'b\n' })
-    await commit(work, 'third', { 'c.txt': 'c\n' })
+    const head = await commit(work, 'third', { 'c.txt': 'c\n' })
     const tree = git(work, 'rev-parse', 'feat^{tree}')
     lose('second')
 
-    await expect(push()).rejects.toMatchObject({ message: expect.stringContaining('2 of 3 commits reached GitHub') })
-    expect(git(work, 'rev-parse', 'feat^')).toBe(git(github, 'rev-parse', 'feat'))
+    await expect(push()).rejects.toMatchObject({ message: expect.stringContaining('may have landed too') })
+    expect(messages(github, 'main..feat')).toEqual(['second', 'first'])
+    expect(git(work, 'rev-parse', 'feat')).toBe(head)
 
     lose('')
     const retry = await push()

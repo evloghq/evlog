@@ -119,10 +119,14 @@ publishes the index against HEAD as one commit, so the push replays the
 branch one commit at a time from a scratch worktree, then moves the local
 branch onto the result. The API takes file contents without a mode, so the
 push refuses symlinks, submodules, executable bits and merges before anything
-reaches GitHub. When a publish fails, the push reads the branch back from
-GitHub to see what landed, because a commit can land and its reply still be
-lost. It never rewrites the branch on GitHub, so a commit someone else pushed
-mid-push stays.
+reaches GitHub. When any step fails, the push stops and leaves the local
+branch as it was, because a commit can land and its reply still be lost. The
+next push reads the branch from GitHub and takes over the commits there that
+match the local ones in tree and headline, then publishes the rest. Anything
+else on the branch is another writer's, and the push refuses instead of
+building on it. The script builds on whatever head it reads, so after each
+publish the push checks the new commit's parent and stops if the branch moved.
+It never rewrites the branch on GitHub.
 
 **Vercel evaluates schedule cron in UTC.** `0 5 * * *` fires 06:00 London in
 summer (BST) and drifts to 05:00 in winter (GMT). `eve dev` never fires crons;
