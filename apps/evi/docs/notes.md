@@ -123,6 +123,8 @@ local branch onto the result. That mutation takes file contents without a
 mode, so the push refuses symlinks, submodules, executable bits and merges. Each
 mutation moves the branch on GitHub at once, so when one fails the push puts
 the branch back where it was, and running it again starts from the same state.
+The rollback goes through `updateRefs` with the last head the push wrote as
+`beforeOid`, so a commit someone else pushed in between stays.
 
 **Vercel evaluates schedule cron in UTC.** `0 5 * * *` fires 06:00 London in
 summer (BST) and drifts to 05:00 in winter (GMT). `eve dev` never fires crons;

@@ -138,7 +138,9 @@ const CREATE_COMMIT = 'mutation($input: CreateCommitOnBranchInput!) { createComm
  *
  * Each mutation moves the branch on GitHub at once. When one fails, the branch is
  * put back where it was (deleted if this call created it), so the local branch
- * still builds on GitHub's and the same push can run again.
+ * still builds on GitHub's and the same push can run again. The restore only
+ * applies while the branch is still at the last commit this push wrote, so a
+ * commit someone else added since is never dropped.
  */
 export async function pushSignedCommits(token: string, repository: Repository, branch: string, { base, branchExists, commits }: BranchCommits): Promise<string> {
   const slug = repositorySlug(repository)
@@ -180,19 +182,33 @@ export async function pushSignedCommits(token: string, repository: Repository, b
       head = oid
     }
   } catch (error) {
-    if (!branchExists || head !== base) await restoreBranch(token, slug, branch, branchExists ? base : null)
+    if (!branchExists || head !== base) await restoreBranch(token, repository, branch, { from: head, to: branchExists ? base : null })
     throw error
   }
   return head
 }
 
-/** Point `branch` back at `sha`, or delete it when `sha` is null. */
-async function restoreBranch(token: string, slug: string, branch: string, sha: string | null): Promise<void> {
-  const url = `${GITHUB_API}/repos/${slug}/git/refs/heads/${branch}`
-  const response = sha === null
-    ? await fetch(url, { method: 'DELETE', headers: headers(token) })
-    : await fetch(url, { method: 'PATCH', headers: headers(token), body: JSON.stringify({ sha, force: true }) })
-  if (!response.ok) {
-    throw eviErrors.GITHUB_REQUEST_FAILED({ request: 'branch restore', responseStatus: response.status, internal: { body: await response.text() } })
+const REPOSITORY_ID = 'query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }'
+const UPDATE_REFS = 'mutation($input: UpdateRefsInput!) { updateRefs(input: $input) { clientMutationId } }'
+const NO_COMMIT = '0'.repeat(40)
+
+async function graphql<T>(token: string, request: string, query: string, variables: Record<string, unknown>): Promise<T> {
+  const response = await fetch(`${GITHUB_API}/graphql`, { method: 'POST', headers: headers(token), body: JSON.stringify({ query, variables }) })
+  const text = await response.text()
+  const payload = response.ok ? JSON.parse(text) as { data?: T, errors?: unknown[] } : {}
+  if (payload.data === undefined || payload.data === null || payload.errors !== undefined) {
+    throw eviErrors.GITHUB_REQUEST_FAILED({ request, responseStatus: response.status, internal: { body: text } })
   }
+  return payload.data
+}
+
+/**
+ * Move `branch` from `from` back to `to`, or delete it when `to` is null. GitHub
+ * refuses the update when the branch no longer points at `from`.
+ */
+async function restoreBranch(token: string, repository: Repository, branch: string, { from, to }: { from: string, to: string | null }): Promise<void> {
+  const { repository: target } = await graphql<{ repository: { id: string } }>(token, 'branch restore', REPOSITORY_ID, { owner: repository.owner, name: repository.repo })
+  await graphql(token, 'branch restore', UPDATE_REFS, {
+    input: { repositoryId: target.id, refUpdates: [{ name: `refs/heads/${branch}`, beforeOid: from, afterOid: to ?? NO_COMMIT, force: true }] },
+  })
 }

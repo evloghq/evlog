@@ -186,26 +186,35 @@ describe('pushSignedCommits', () => {
     await expect(failure).rejects.toMatchObject({ code: 'evi.GITHUB_REQUEST_FAILED', message: 'GitHub commit creation failed (200)' })
   })
 
-  it('puts the branch back where it was when a later commit fails, and deletes a branch it created', async () => {
-    const calls: Array<{ method: string, url: string, body?: unknown }> = []
+  it('puts the branch back only while it is at the last commit the push wrote, and deletes a branch it created', async () => {
+    const calls: Array<{ url: string, body: any }> = []
+    let restore: unknown = { data: { updateRefs: { clientMutationId: null } } }
     vi.stubGlobal('fetch', vi.fn((url: string, init: RequestInit) => {
-      calls.push({ method: init.method ?? 'GET', url, body: init.body === undefined ? undefined : JSON.parse(String(init.body)) })
-      if (url.endsWith('/graphql')) {
-        const done = calls.filter(call => call.url.endsWith('/graphql')).length
+      const body = JSON.parse(String(init.body ?? '{}'))
+      calls.push({ url, body })
+      if (!url.endsWith('/graphql')) return Promise.resolve(new Response('{}', { status: 201 }))
+      if (body.query.includes('createCommitOnBranch')) {
+        const done = calls.filter(call => call.body.query?.includes('createCommitOnBranch')).length
         return Promise.resolve(done === 1
           ? Response.json({ data: { createCommitOnBranch: { commit: { oid: '1'.repeat(40) } } } })
           : Response.json({ errors: [{ message: 'boom' }] }))
       }
-      return Promise.resolve(new Response('{}', { status: 200 }))
+      if (body.query.includes('repository(')) return Promise.resolve(Response.json({ data: { repository: { id: 'R_1' } } }))
+      return Promise.resolve(Response.json(restore))
     }))
-    const ref = 'https://api.github.com/repos/acme/widgets/git/refs/heads/feat'
+    const push = (branchExists: boolean) => pushSignedCommits('tok', REPOSITORY, 'feat', { base: 'b'.repeat(40), head: 'h'.repeat(40), branchExists, commits })
+    const restored = () => calls.at(-1)!.body.variables.input
 
-    await expect(pushSignedCommits('tok', REPOSITORY, 'feat', { base: 'b'.repeat(40), head: 'h'.repeat(40), branchExists: true, commits })).rejects.toMatchObject({ code: 'evi.GITHUB_REQUEST_FAILED' })
-    expect(calls.at(-1)).toEqual({ method: 'PATCH', url: ref, body: { sha: 'b'.repeat(40), force: true } })
+    await expect(push(true)).rejects.toMatchObject({ message: 'GitHub commit creation failed (200)' })
+    expect(restored()).toEqual({ repositoryId: 'R_1', refUpdates: [{ name: 'refs/heads/feat', beforeOid: '1'.repeat(40), afterOid: 'b'.repeat(40), force: true }] })
 
     calls.length = 0
-    await expect(pushSignedCommits('tok', REPOSITORY, 'feat', { base: 'b'.repeat(40), head: 'h'.repeat(40), branchExists: false, commits })).rejects.toMatchObject({ code: 'evi.GITHUB_REQUEST_FAILED' })
-    expect(calls.at(-1)).toEqual({ method: 'DELETE', url: ref, body: undefined })
+    await expect(push(false)).rejects.toMatchObject({ message: 'GitHub commit creation failed (200)' })
+    expect(restored()).toEqual({ repositoryId: 'R_1', refUpdates: [{ name: 'refs/heads/feat', beforeOid: '1'.repeat(40), afterOid: '0'.repeat(40), force: true }] })
+
+    calls.length = 0
+    restore = { data: null, errors: [{ message: 'feat no longer points at 1111111' }] }
+    await expect(push(true)).rejects.toMatchObject({ code: 'evi.GITHUB_REQUEST_FAILED', message: 'GitHub branch restore failed (200)' })
   })
 })
 
