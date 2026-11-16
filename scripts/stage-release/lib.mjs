@@ -181,5 +181,11 @@ export function approvalSummary({ staged, waiting, blocked, branch, windowMinute
       '',
     )
   }
+  if (lines.length > 0) {
+    lines.push(
+      `That run only reaches the staging step when \`${branch}\` has no pending changesets. Otherwise it updates the version pull request, and an approved version gets its tag and GitHub release from the release run that follows its merge.`,
+      '',
+    )
+  }
   return lines.join('\n')
 }

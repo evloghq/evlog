@@ -209,6 +209,7 @@ describe('approvalSummary', () => {
     expect(summary).toContain('### Waiting for approval')
     expect(summary).toContain('- `@evlog/cli@0.12.0`')
     expect(summary).toContain('`gh workflow run release.yml --ref v3`')
+    expect(summary).toContain('only reaches the staging step when `v3` has no pending changesets')
     expect(summary).not.toContain('Staged on npm')
   })
 
