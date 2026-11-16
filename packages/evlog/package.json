@@ -32,6 +32,7 @@
     "vite",
     "typescript",
     "datadog",
+    "opentelemetry",
     "better-auth"
   ],
   "license": "MIT",
@@ -265,6 +266,11 @@
       "import": "./dist/ai/index.mjs",
       "default": "./dist/ai/index.mjs"
     },
+    "./otel": {
+      "types": "./dist/otel/index.d.mts",
+      "import": "./dist/otel/index.mjs",
+      "default": "./dist/otel/index.mjs"
+    },
     "./better-auth": {
       "types": "./dist/better-auth/index.d.mts",
       "import": "./dist/better-auth/index.mjs",
@@ -407,6 +413,9 @@
       "ai": [
         "./dist/ai/index.d.mts"
       ],
+      "otel": [
+        "./dist/otel/index.d.mts"
+      ],
       "better-auth": [
         "./dist/better-auth/index.d.mts"
       ]
@@ -449,6 +458,7 @@
     "@nuxt/devtools": "^3.4.4",
     "@nuxt/schema": "^4.6.3",
     "@nuxt/test-utils": "^4.3.4",
+    "@opentelemetry/api": "^1.10.0",
     "@orpc/client": "^1.16.1",
     "@orpc/server": "^1.16.1",
     "@stryker-mutator/core": "^9.6.1",
@@ -477,6 +487,7 @@
     "nitro": "^3.0.260903-beta",
     "nitropack": "^2.13.5",
     "nuxt": "^4.6.3",
+    "otel-api-1-9": "npm:@opentelemetry/api@1.9.0",
     "pino": "^10.4.0",
     "react-router": "^8.5.0",
     "supertest": "^7.3.1",
@@ -493,6 +504,7 @@
     "@nestjs/common": "^11.2.8 || ^12.0.0",
     "@nestjs/core": "^11.2.8 || ^12.0.0",
     "@nuxt/kit": "^4.6.3",
+    "@opentelemetry/api": ">=1.9.0 <2",
     "@orpc/server": ">=1.16.1",
     "@tanstack/start-client-core": "^1.170.39",
     "ai": ">=6.0.168 <8.0.0",
@@ -513,6 +525,9 @@
   },
   "peerDependenciesMeta": {
     "@nuxt/kit": {
+      "optional": true
+    },
+    "@opentelemetry/api": {
       "optional": true
     },
     "h3": {

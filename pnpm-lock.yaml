@@ -1045,6 +1045,9 @@ importers:
       '@nuxt/test-utils':
         specifier: ^4.3.4
         version: 4.3.4(@nuxt/schema@4.6.3)(@oxc-project/types@0.156.0)(confbox@0.3.1)(dotenv@17.4.2)(esbuild@0.28.2)(giget@3.3.0)(h3@1.15.11)(happy-dom@21.0.4)(jiti@2.7.0)(mlly@1.8.2)(nuxt@4.6.3(b854b9c82a114437e970cc90feb8d8a9))(oxc-parser@0.156.0)(rolldown@1.2.16)(rollup@4.65.0)(vite@8.3.5(@types/node@25.9.9)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.2)(tsx@4.23.15)(yaml@2.9.1))(vitest@4.1.12)(vue@3.5.44(typescript@6.0.3))
+      '@opentelemetry/api':
+        specifier: ^1.10.0
+        version: 1.10.0
       '@orpc/client':
         specifier: ^1.16.1
         version: 1.16.1(@opentelemetry/api@1.10.0)
@@ -1129,6 +1132,9 @@ importers:
       nuxt:
         specifier: ^4.6.3
         version: 4.6.3(b854b9c82a114437e970cc90feb8d8a9)
+      otel-api-1-9:
+        specifier: npm:@opentelemetry/api@1.9.0
+        version: '@opentelemetry/api@1.9.0'
       pino:
         specifier: ^10.4.0
         version: 10.4.0
@@ -4300,6 +4306,10 @@ packages:
 
   '@opentelemetry/api@1.10.0':
     resolution: {integrity: sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ==}
+    engines: {node: '>=8.0.0'}
+
+  '@opentelemetry/api@1.9.0':
+    resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
 
   '@opentelemetry/api@1.9.1':
@@ -23760,6 +23770,8 @@ snapshots:
       '@opentelemetry/api': 1.9.1
 
   '@opentelemetry/api@1.10.0': {}
+
+  '@opentelemetry/api@1.9.0': {}
 
   '@opentelemetry/api@1.9.1': {}
 

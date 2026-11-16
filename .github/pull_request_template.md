@@ -51,6 +51,7 @@ scope.
 - nitro (Nitro plugin)
 - nuxt (Nuxt module)
 - orpc (oRPC integration)
+- otel (OpenTelemetry trace context, `evlog/otel`)
 - otlp (OTLP drain adapter)
 - playground (the playground app)
 - posthog (PostHog drain adapter)

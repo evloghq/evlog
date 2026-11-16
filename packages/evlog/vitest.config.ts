@@ -30,6 +30,12 @@ export default defineConfig({
         resolve: { alias: { hono: 'hono-5' } },
         test: { name: 'hono-5', include: ['test/frameworks/hono.test.ts'] },
       },
+      // The `@opentelemetry/api` peer starts at 1.9, the last minor that SDK 2 apps can install.
+      {
+        extends: true,
+        resolve: { alias: { '@opentelemetry/api': 'otel-api-1-9' } },
+        test: { name: 'otel-api-1.9', include: ['test/otel/**/*.test.ts'] },
+      },
     ],
     // Flag tests slower than this for triage; lift the suite out of the
     // "everything is fast, no signal" zone. Custom reporter in
