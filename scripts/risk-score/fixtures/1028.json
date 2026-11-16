@@ -1,0 +1,42 @@
+{
+ "number": 1028,
+ "title": "docs: answer-first wide events snippet, Pino TypeScript section, frontend logging",
+ "author": {
+  "login": "HugoRCD",
+  "fork": false,
+  "association": "MEMBER"
+ },
+ "files": [
+  {
+   "filename": "apps/docs/content/2.learn/1.simple-logging.md",
+   "status": "modified",
+   "additions": 3,
+   "deletions": 0
+  },
+  {
+   "filename": "apps/docs/content/2.learn/2.wide-events.md",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 4
+  },
+  {
+   "filename": "apps/docs/content/2.learn/3.structured-errors.md",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 0
+  },
+  {
+   "filename": "apps/docs/content/5.use-cases/1.client-logging.md",
+   "status": "modified",
+   "additions": 65,
+   "deletions": 36
+  },
+  {
+   "filename": "apps/docs/content/8.compare/1.pino.md",
+   "status": "modified",
+   "additions": 53,
+   "deletions": 2
+  }
+ ],
+ "manifests": {}
+}

@@ -1,0 +1,68 @@
+{
+ "number": 1069,
+ "title": "chore(deps): update actions/checkout action to v7",
+ "author": {
+  "login": "renovate[bot]",
+  "fork": false,
+  "association": "CONTRIBUTOR"
+ },
+ "files": [
+  {
+   "filename": ".github/workflows/autofix.yml",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1,
+   "patch": "@@ -18,7 +18,7 @@ jobs:\n \n     steps:\n       # autofix.ci pushes through its own GitHub App, not the checkout token\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           persist-credentials: false\n "
+  },
+  {
+   "filename": ".github/workflows/ci.yml",
+   "status": "modified",
+   "additions": 5,
+   "deletions": 5,
+   "patch": "@@ -33,7 +33,7 @@ jobs:\n       contents: read\n       id-token: write # remote cache OIDC\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           fetch-depth: 0 # --affected needs history\n           persist-credentials: false\n@@ -65,7 +65,7 @@ jobs:\n       contents: read\n       id-token: write # remote cache OIDC\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           fetch-depth: 0\n           persist-credentials: false\n@@ -145,7 +145,7 @@ jobs:\n       contents: read\n       id-token: write # remote cache OIDC\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           fetch-depth: 0\n           persist-credentials: false\n@@ -176,7 +176,7 @@ jobs:\n     permissions:\n       contents: read\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           fetch-depth: 0 # the base commit must be present for the worktree below\n           persist-credentials: false\n@@ -247,7 +247,7 @@ jobs:\n       id-token: write # remote cache OIDC\n       pull-requests: write # pkg-pr-new comments the preview install command\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           fetch-depth: 0\n           persist-credentials: false"
+  },
+  {
+   "filename": ".github/workflows/dependency-review.yml",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1,
+   "patch": "@@ -20,7 +20,7 @@ jobs:\n       contents: read\n       pull-requests: write # comment-summary-in-pr\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           persist-credentials: false\n "
+  },
+  {
+   "filename": ".github/workflows/e2e.yml",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 2,
+   "patch": "@@ -53,7 +53,7 @@ jobs:\n     runs-on: ubuntu-latest\n     timeout-minutes: 15\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           persist-credentials: false\n       - uses: ./.github/actions/setup\n@@ -79,7 +79,7 @@ jobs:\n     runs-on: ubuntu-latest\n     timeout-minutes: 15\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           persist-credentials: false\n       - uses: ./.github/actions/setup"
+  },
+  {
+   "filename": ".github/workflows/evi-evals.yml",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1,
+   "patch": "@@ -38,7 +38,7 @@ jobs:\n       # rather than failing on unauthenticated GitHub calls.\n       HAS_VERCEL: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_PROJECT_ID != '' }}\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           persist-credentials: false\n "
+  },
+  {
+   "filename": ".github/workflows/mutation.yml",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1,
+   "patch": "@@ -15,7 +15,7 @@ jobs:\n     runs-on: ubuntu-latest\n     timeout-minutes: 60\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           persist-credentials: false\n       - uses: ./.github/actions/setup"
+  },
+  {
+   "filename": ".github/workflows/release.yml",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1,
+   "patch": "@@ -22,7 +22,7 @@ jobs:\n     timeout-minutes: 20\n     steps:\n       # changesets/action pushes the release branch, so credentials stay\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           fetch-depth: 0\n "
+  },
+  {
+   "filename": ".github/workflows/risk-score.yml",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1,
+   "patch": "@@ -37,7 +37,7 @@ jobs:\n       contents: read\n       pull-requests: write # creates and updates the sticky comment\n     steps:\n-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0\n+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n         with:\n           ref: ${{ github.sha }}\n           sparse-checkout: scripts/risk-score"
+  }
+ ],
+ "manifests": {}
+}

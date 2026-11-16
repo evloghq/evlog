@@ -1,0 +1,19 @@
+{
+ "number": 1063,
+ "title": "ci(release): sign version commits through the github api",
+ "author": {
+  "login": "HugoRCD",
+  "fork": false,
+  "association": "MEMBER"
+ },
+ "files": [
+  {
+   "filename": ".github/workflows/release.yml",
+   "status": "modified",
+   "additions": 8,
+   "deletions": 1,
+   "patch": "@@ -43,6 +43,8 @@ jobs:\n           title: \"chore(repo): version packages\"\n           version: pnpm run version\n           publish: pnpm run release\n+          # main requires signed commits. Through the API, GitHub signs the version commit it creates.\n+          commitMode: github-api\n           # Releases are created here, then their bodies are rewritten below.\n           createGithubReleases: true\n         env:\n@@ -51,9 +53,14 @@ jobs:\n \n       # changesets sets `published` before it exits on a failed package, so these steps still\n       # run for the packages that did reach npm. The job stays failed either way.\n+      # The action creates each released tag through the API as a lightweight ref, while changeset\n+      # publish made an annotated one under the same name; pushing that again is refused.\n       - name: Push tags\n         if: ${{ !cancelled() && steps.changesets.outputs.published == 'true' }}\n-        run: git push --tags\n+        run: |\n+          for tag in $(git tag --points-at HEAD); do\n+            git ls-remote --exit-code --tags origin \"refs/tags/$tag\" > /dev/null || git push origin \"refs/tags/$tag\"\n+          done\n \n       # Rebuilds each release body from that package's PRs and changesets, then moves Latest\n       # back to evlog. The header of scripts/release-notes/index.mjs says why."
+  }
+ ],
+ "manifests": {}
+}

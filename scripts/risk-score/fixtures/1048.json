@@ -1,0 +1,30 @@
+{
+ "number": 1048,
+ "title": "chore(repo): record the repo health sweep of 2026-11-13",
+ "author": {
+  "login": "evlogai[bot]",
+  "fork": false,
+  "association": "CONTRIBUTOR"
+ },
+ "files": [
+  {
+   "filename": "apps/evi/agent/ledgers/archive/2026-11.md",
+   "status": "modified",
+   "additions": 41,
+   "deletions": 0
+  },
+  {
+   "filename": "apps/evi/agent/ledgers/repo-health-sweep-rejected.jsonl",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 0
+  },
+  {
+   "filename": "apps/evi/agent/ledgers/repo-health-sweep.md",
+   "status": "modified",
+   "additions": 15,
+   "deletions": 16
+  }
+ ],
+ "manifests": {}
+}

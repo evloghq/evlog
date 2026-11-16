@@ -1,0 +1,160 @@
+{
+ "number": 1083,
+ "title": "fix(cli): keep init and agents from breaking files, and apply every --where in logs",
+ "author": {
+  "login": "HugoRCD",
+  "fork": false,
+  "association": "MEMBER"
+ },
+ "files": [
+  {
+   "filename": ".changeset/agents-block-and-init-writes.md",
+   "status": "added",
+   "additions": 12,
+   "deletions": 0,
+   "patch": "@@ -0,0 +1,12 @@\n+---\n+'@evlog/cli': patch\n+---\n+\n+`evlog agents` and `evlog init` no longer delete or duplicate text in an `AGENTS.md` whose evlog markers are not one clean pair. A file that lost `<!-- evlog:end -->` got a second block on one run and lost the section below it on the next. Both commands now stop with `cli.AGENTS_MARKERS_UNPAIRED`, exit 1 and leave the file as it is. A marker quoted in a sentence or a code fence is read as text.\n+\n+`evlog init` also changes in four places:\n+\n+- A Nitro config that imports something else from `evlog/nitro` or `evlog/nitro/v3` gets `import evlog` along with `modules: [evlog()]`. It got the module entry with no import.\n+- The seeded `errors.ts` and `audit.ts` parse when a service or a route starts with a digit (`_3dShopErrors`, `_2FA_PASSWORD_CREATED`) or a route holds a wildcard.\n+- A failed `npx skills add` exits 1, and the `AGENTS.md` block no longer points at the skill that was not installed. `evlog agents` already did both.\n+- A file that cannot be written stops the run with `cli.WRITE_FAILED`, which names the file and the ones written before it, under `--json` too. `evlog agents` does the same. Both printed a stack trace and left stdout empty."
+  },
+  {
+   "filename": ".changeset/logs-where-and-odd-events.md",
+   "status": "added",
+   "additions": 9,
+   "deletions": 0,
+   "patch": "@@ -0,0 +1,9 @@\n+---\n+'@evlog/cli': patch\n+---\n+\n+`evlog logs` applies every `--where` when the flag is repeated. Only the last clause applied, so `--where path=/a --where n=5` returned events on any path. An empty `--where`, which is what an unset shell variable expands to, is now a usage error with exit 2.\n+\n+An event whose `duration`, `level` or `service` is not text no longer crashes every view, `--json` included.\n+\n+A `--where` value is a number only when it spells one exactly. `zip=123` no longer matches `\"00123\"`, a 19-digit id no longer matches its neighbours, and `amount>5000` no longer matches a field that holds text such as `\"n/a\"`. Write the value as the field holds it: `zip=00123`."
+  },
+  {
+   "filename": "apps/docs/content/3.cli/1.init.md",
+   "status": "modified",
+   "additions": 3,
+   "deletions": 1
+  },
+  {
+   "filename": "apps/docs/content/3.cli/10.logs.md",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 0
+  },
+  {
+   "filename": "apps/docs/content/3.cli/8.agents.md",
+   "status": "modified",
+   "additions": 4,
+   "deletions": 2
+  },
+  {
+   "filename": "packages/cli/src/commands/init.ts",
+   "status": "modified",
+   "additions": 7,
+   "deletions": 2,
+   "patch": "@@ -160,7 +160,7 @@ export default defineEvlogCommand('init', {\n         jsonMode: args.json,\n         json: { workspace: true, apps: results.map((result, index) => ({ app: selected[index]!.label, ...toJson(result) })) },\n       })\n-      if (results.some(result => result.install.status === 'failed')) ui.exit(EXIT_FAIL)\n+      if (results.some(stepFailed)) ui.exit(EXIT_FAIL)\n       return\n     }\n \n@@ -179,12 +179,17 @@ export default defineEvlogCommand('init', {\n       human: result.interactive ? undefined : formatInitReport(cli, result),\n     })\n \n-    if (result.install.status === 'failed') {\n+    if (stepFailed(result)) {\n       ui.exit(EXIT_FAIL)\n     }\n   },\n })\n \n+/** The files are written either way: what failed is a command the run shelled out to. */\n+function stepFailed(result: InitResult): boolean {\n+  return result.install.status === 'failed' || result.agentGuide?.status === 'failed'\n+}\n+\n function toJson(result: InitResult): Record<string, unknown> {\n   return {\n     framework: result.answers.framework,"
+  },
+  {
+   "filename": "packages/cli/src/commands/logs.ts",
+   "status": "modified",
+   "additions": 4,
+   "deletions": 3,
+   "patch": "@@ -9,6 +9,7 @@ import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'\n import { defineEvlogCommand } from '../lib/command'\n import { loadCliConfig } from '../lib/config'\n import { cliErrors } from '../lib/errors'\n+import { flagValues } from '../lib/flags'\n import { buildQuery, computeStats, select } from '../lib/logs/query'\n import type { LogsArgs, LogsQuery } from '../lib/logs/query'\n import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'\n@@ -271,15 +272,15 @@ export default defineEvlogCommand('logs', {\n     dir: { type: 'string', description: 'Log directory (default: the project\\'s .evlog/logs, or every app\\'s in a workspace)' },\n     url: { type: 'string', description: 'Read the memory drain\\'s dev endpoint instead of files (a JSON array of events)' },\n   },\n-  async run({ args, cli, ui }) {\n+  async run({ args, rawArgs, cli, ui }) {\n     const style = createStyle(cli)\n     const controller = new AbortController()\n     const stop = (): void => controller.abort()\n     if (args.follow) process.once('SIGINT', stop)\n \n     let result: LogsResult\n     try {\n-      result = await runLogs(cli, args as LogsArgs, {\n+      result = await runLogs(cli, { ...(args as LogsArgs), where: flagValues(rawArgs, 'where') }, {\n         dir: args.dir,\n         url: args.url,\n         follow: args.follow,\n@@ -321,7 +322,7 @@ export default defineEvlogCommand('logs', {\n         matched: result.matched,\n         ...(result.query.view === 'stats' ? { stats: computeStats(result.all) } : { events: result.events }),\n       },\n-      human: formatLogsReport(cli, result),\n+      human: args.json ? undefined : formatLogsReport(cli, result),\n     })\n   },\n })"
+  },
+  {
+   "filename": "packages/cli/src/lib/agents/block.ts",
+   "status": "modified",
+   "additions": 38,
+   "deletions": 4,
+   "patch": "@@ -1,3 +1,4 @@\n+import { cliErrors } from '../errors'\n import { getFramework } from '../frameworks'\n import type { Framework } from '../frameworks'\n \n@@ -81,22 +82,55 @@ export function renderBlock(input: BlockInput): string {\n   ].join('\\n')\n }\n \n+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/\n+\n+/**\n+ * Where each marker stands alone on its line, outside fenced code. A marker\n+ * quoted in a sentence or shown in an example is the author's text.\n+ */\n+function findMarkers(source: string): { starts: number[], ends: number[] } {\n+  const starts: number[] = []\n+  const ends: number[] = []\n+  let fence: string | undefined\n+  let offset = 0\n+  for (const line of source.split('\\n')) {\n+    const edge = FENCE.exec(line.trimEnd())\n+    if (fence) {\n+      if (edge && edge[1]![0] === fence[0] && edge[1]!.length >= fence.length && edge[2]!.trim() === '') fence = undefined\n+    } else if (edge) {\n+      [, fence] = edge\n+    } else if (line.trim() === MARKER_START) {\n+      starts.push(offset + line.indexOf(MARKER_START))\n+    } else if (line.trim() === MARKER_END) {\n+      ends.push(offset + line.indexOf(MARKER_END))\n+    }\n+    offset += line.length + 1\n+  }\n+  return { starts, ends }\n+}\n+\n /**\n  * Put `block` into `source`, replacing an existing one.\n  *\n  * Returns `null` when the file already says exactly this, which is what makes a\n  * second run a no-op rather than a no-op-shaped rewrite.\n+ *\n+ * @throws `cli.AGENTS_MARKERS_UNPAIRED` when the markers are not one start\n+ * followed by one end: any rewrite would then delete or duplicate text.\n  */\n export function upsertBlock(source: string, block: string): string | null {\n-  const start = source.indexOf(MARKER_START)\n-  const end = source.indexOf(MARKER_END)\n+  const { starts, ends } = findMarkers(source)\n \n-  if (start === -1 || end === -1 || end < start) {\n+  if (starts.length === 0 && ends.length === 0) {\n     const separator = source.length === 0 || source.endsWith('\\n\\n') ? '' : source.endsWith('\\n') ? '\\n' : '\\n\\n'\n     return `${source}${separator}${block}`\n   }\n \n-  const next = `${source.slice(0, start)}${block.trimEnd()}${source.slice(end + MARKER_END.length)}`\n+  const [start] = starts\n+  const [end] = ends\n+  if (starts.length !== 1 || ends.length !== 1 || end! < start!) throw cliErrors.AGENTS_MARKERS_UNPAIRED()\n+\n+  const next = `${source.slice(0, start)}${block.trimEnd()}${source.slice(end! + MARKER_END.length)}`\n   return next === source ? null : next\n }\n "
+  },
+  {
+   "filename": "packages/cli/src/lib/agents/run.ts",
+   "status": "modified",
+   "additions": 18,
+   "deletions": 18,
+   "patch": "@@ -1,10 +1,9 @@\n-import { mkdir, writeFile } from 'node:fs/promises'\n-import { dirname } from 'node:path'\n import { telemetry } from '@evlog/telemetry'\n import type { CliContext } from '../../core/context'\n import type { CliDebug } from '../debug'\n import { createNoopCliDebug } from '../debug'\n import type { FileAction } from '../init/wiring'\n+import { writeActions } from '../init/write'\n import {\n   canPrompt,\n   closeAgents,\n@@ -21,6 +20,7 @@ import type { Framework } from '../map/types'\n import { resolveProject } from '../project'\n import type { ProjectInfo } from '../project'\n import { planAgents } from './plan'\n+import type { AgentsPlanInput } from './plan'\n import { findInstalledSkills, runSkills, skillsCommand } from './skills'\n \n export interface AgentsOptions {\n@@ -162,10 +162,7 @@ export async function runAgents(\n \n   if (!dryRun) {\n     await log.step('write', async () => {\n-      for (const action of plan.actions) {\n-        await mkdir(dirname(action.path), { recursive: true })\n-        await writeFile(action.path, action.contents, 'utf8')\n-      }\n+      await writeActions(plan.actions)\n       return plan.actions.length\n     })\n   }\n@@ -187,22 +184,12 @@ export async function runAgents(\n       : { status: 'failed', command: command.display, found: [], dirs: [], error: outcome.error }\n   }\n \n-  /* The block was written before the install, so it could stand whatever the\n-     subprocess did — which means it promises a skill that is now known not to\n-     exist. Rewrite it rather than leave an agent chasing a missing file. */\n   if (skills.status === 'failed' && !dryRun) {\n-    const corrected = planAgents({\n+    await log.step('rewriteBlock', () => dropSkillsPointer({\n       root: project.packageDir,\n       projectName: project.packageName ?? 'This project',\n       framework,\n-      hasSkills: false,\n-    })\n-    await log.step('rewriteBlock', async () => {\n-      for (const action of corrected.actions) {\n-        await writeFile(action.path, action.contents, 'utf8')\n-      }\n-      return corrected.actions.length\n-    })\n+    }))\n   }\n \n   if (interactive) {\n@@ -225,6 +212,19 @@ export async function runAgents(\n   return result\n }\n \n+/**\n+ * Rewrite the block after a failed skills install.\n+ *\n+ * The block is written before the install so it stands whatever the\n+ * subprocess does, which means on failure it points at a skill that is known\n+ * not to exist.\n+ */\n+export async function dropSkillsPointer(input: Omit<AgentsPlanInput, 'hasSkills'>): Promise<number> {\n+  const corrected = planAgents({ ...input, hasSkills: false })\n+  await writeActions(corrected.actions)\n+  return corrected.actions.length\n+}\n+\n function cancelled(input: {\n   project: ProjectInfo\n   framework: Framework | null"
+  },
+  {
+   "filename": "packages/cli/src/lib/errors.ts",
+   "status": "modified",
+   "additions": 16,
+   "deletions": 0,
+   "patch": "@@ -183,6 +183,22 @@ export const cliErrors = defineErrorCatalog('cli', {\n     link: 'https://evlog.dev/cli/agents',\n     tags: ['agents'],\n   },\n+  AGENTS_MARKERS_UNPAIRED: {\n+    status: 400,\n+    message: 'The evlog markers in AGENTS.md are not one start and end pair',\n+    why: 'The block is rewritten between <!-- evlog:start --> and <!-- evlog:end -->, each alone on its line. With one missing, repeated or out of order, a rewrite would delete text that is yours',\n+    fix: 'Restore the pair around the evlog section, or delete the leftover marker with the old section, then run the command again',\n+    link: 'https://evlog.dev/cli/agents',\n+    tags: ['agents'],\n+  },\n+  WRITE_FAILED: {\n+    status: 500,\n+    message: ({ file, reason, written }: { file: string, reason: string, written: readonly string[] }) =>\n+      `Could not write ${file} (${reason}). ${written.length > 0 ? `Written before it: ${written.join(', ')}` : 'No file was written before it'}`,\n+    why: 'The run stops at the first file it cannot write, so the files planned after it were not attempted',\n+    fix: 'Check the path and its permissions, then run the command again. Files already in place are left as they are',\n+    tags: ['init', 'agents'],\n+  },\n   MAP_BASELINE_NOT_FOUND: {\n     status: 404,\n     message: ({ source }: { source: string }) =>"
+  },
+  {
+   "filename": "packages/cli/src/lib/flags.ts",
+   "status": "modified",
+   "additions": 19,
+   "deletions": 0,
+   "patch": "@@ -66,3 +66,22 @@ export function checkFlags(rawArgs: readonly string[], args: ArgsDef, bare: read\n \n   return checked\n }\n+\n+/**\n+ * Every value given to a flag that may repeat, in the order written. citty\n+ * keeps the last one only.\n+ *\n+ * Call it on arguments {@link checkFlags} accepted: the flag is then followed\n+ * by its value or carries it after `=`.\n+ */\n+export function flagValues(rawArgs: readonly string[], name: string): string[] {\n+  const flag = `--${name}`\n+  const end = rawArgs.indexOf('--')\n+  const values: string[] = []\n+  for (let index = 0; index < (end === -1 ? rawArgs.length : end); index++) {\n+    const arg = rawArgs[index]!\n+    if (arg === flag) values.push(rawArgs[++index]!)\n+    else if (arg.startsWith(`${flag}=`)) values.push(arg.slice(flag.length + 1))\n+  }\n+  return values\n+}"
+  },
+  {
+   "filename": "packages/cli/src/lib/frameworks/nitro/init.ts",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 2,
+   "patch": "@@ -1,5 +1,5 @@\n import { join, relative } from 'node:path'\n-import { addImport, appendProperty, appendToArray, applySplices, arrayMentions, findConfigObject, getProperty, hasImportFrom, hasProperty, readConfig } from '../../init/edit'\n+import { addImport, appendProperty, appendToArray, applySplices, arrayMentions, findConfigObject, getProperty, hasDefaultImport, hasProperty, readConfig } from '../../init/edit'\n import type { ArrayNode, ObjectNode, Splice } from '../../init/edit'\n import type { WiringInput, WiringPlan } from '../../init/wiring'\n import { configCandidates, firstExisting } from '../../init/wiring'\n@@ -81,7 +81,7 @@ export default function planNitro(input: WiringInput): WiringPlan {\n     needsImport = true\n   }\n \n-  if (needsImport && !hasImportFrom(config.program, specifier)) {\n+  if (needsImport && !hasDefaultImport(config.program, specifier, 'evlog')) {\n     splices.push(addImport(config.source, config.program, `import evlog from '${specifier}'`))\n   }\n "
+  },
+  {
+   "filename": "packages/cli/src/lib/init/edit.ts",
+   "status": "modified",
+   "additions": 4,
+   "deletions": 3,
+   "patch": "@@ -71,12 +71,13 @@ export function hasProperty(object: ObjectNode, name: string): boolean {\n   return object.properties.some(prop => propertyName(prop) === name)\n }\n \n-/** Whether the file already imports anything from `specifier`. */\n-export function hasImportFrom(program: Program, specifier: string): boolean {\n+/** Whether the file already binds `name` to the default export of `specifier`. */\n+export function hasDefaultImport(program: Program, specifier: string, name: string): boolean {\n   return (program.body as Node[]).some((statement) => {\n     if (statement.type !== 'ImportDeclaration') return false\n-    const { source } = (statement as unknown as { source: { value: string } })\n+    const { source, specifiers } = (statement as unknown as { source: { value: string }, specifiers: { type: string, local: { name: string } }[] })\n     return source.value === specifier\n+      && specifiers.some(entry => entry.type === 'ImportDefaultSpecifier' && entry.local.name === name)\n   })\n }\n "
+  },
+  {
+   "filename": "packages/cli/src/lib/init/insight.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1,
+   "patch": "@@ -143,7 +143,7 @@ function uniqueKey(key: string, used: Set<string>): string {\n export function auditActionName(gap: AuditGap): string {\n   const segments = gap.path\n     .split('/')\n-    .filter(segment => segment.length > 0 && segment !== 'api' && !segment.startsWith(':') && !segment.startsWith('['))\n+    .filter(segment => segment.length > 0 && segment !== 'api' && !segment.startsWith(':') && !segment.startsWith('[') && !segment.includes('*'))\n   const resource = segments.slice(-2).join('.') || 'resource'\n   const verb = VERBS[gap.method ?? ''] ?? 'accessed'\n   return `${resource}.${verb}`"
+  },
+  {
+   "filename": "packages/cli/src/lib/init/run.ts",
+   "status": "modified",
+   "additions": 11,
+   "deletions": 7,
+   "patch": "@@ -1,8 +1,7 @@\n-import { mkdir, writeFile } from 'node:fs/promises'\n-import { dirname } from 'node:path'\n import { runDoctor } from '../../commands/doctor'\n import type { CliContext } from '../../core/context'\n import { planAgents } from '../agents/plan'\n+import { dropSkillsPointer } from '../agents/run'\n import { findInstalledSkills, runSkills, skillsCommand } from '../agents/skills'\n import type { CliDebug } from '../debug'\n import { createNoopCliDebug } from '../debug'\n@@ -35,6 +34,7 @@ import {\n } from './prompts'\n import type { InitAnswers } from './prompts'\n import { droppedExtras, resolveAnswers } from './resolve'\n+import { writeActions } from './write'\n import { recordInitAnswers } from './telemetry'\n \n export interface InstallOutcome {\n@@ -384,10 +384,7 @@ export async function runInit(\n \n   if (!dryRun) {\n     await log.step('write', async () => {\n-      for (const action of plan.actions) {\n-        await mkdir(dirname(action.path), { recursive: true })\n-        await writeFile(action.path, action.contents, 'utf8')\n-      }\n+      await writeActions(plan.actions)\n       return plan.actions.length\n     })\n   }\n@@ -407,7 +404,14 @@ export async function runInit(\n         r => ({ installed: r.ok }),\n       )\n       agentGuide.status = outcome.ok ? 'installed' : 'failed'\n-      if (!outcome.ok) agentGuide.error = outcome.error\n+      if (!outcome.ok) {\n+        agentGuide.error = outcome.error\n+        await log.step('rewriteBlock', () => dropSkillsPointer({\n+          root: project.packageDir,\n+          projectName: project.packageName ?? 'This project',\n+          framework: answers.framework,\n+        }))\n+      }\n     }\n   }\n "
+  },
+  {
+   "filename": "packages/cli/src/lib/init/wiring.ts",
+   "status": "modified",
+   "additions": 11,
+   "deletions": 4,
+   "patch": "@@ -418,7 +418,7 @@ function errorCatalogTemplate(input: WiringInput): string {\n      stripping them gives `shopapi`. The variable gets the camelCase spelling\n      because that is what an identifier has to be. */\n   const prefix = input.service.replace(/[^a-z0-9-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'app'\n-  const identifier = `${prefix.replace(/-(.)/g, (_, char) => char.toUpperCase())}Errors`\n+  const identifier = identifierFor(`${prefix.replace(/-(.)/g, (_, char) => char.toUpperCase())}Errors`)\n   const entries = input.repeatedErrors.map((seed) => {\n     const files = seed.files.slice(0, 3).join(', ')\n     const status = seed.status ? `\\n    status: ${seed.status},` : ''\n@@ -456,16 +456,18 @@ declare module 'evlog' {\n /** Audit actions named after the sensitive routes the scan found without a trail. */\n function auditCatalogTemplate(input: WiringInput): string {\n   const seen = new Set<string>()\n+  const constants: string[] = []\n   const entries = input.auditGaps.map((gap) => {\n     let name = auditActionName(gap)\n     while (seen.has(name)) name = `${name}2`\n     seen.add(name)\n \n-    const constant = name.replace(/[^a-z0-9]+/gi, '_').toUpperCase()\n+    const constant = identifierFor(name.replace(/[^a-z0-9]+/gi, '_').toUpperCase())\n+    constants.push(constant)\n     const target = gap.path.split('/').filter(Boolean).at(-1)?.replace(/[^a-z0-9]/gi, '') || 'resource'\n     const why = gap.reasons.length > 0 ? ` — flagged for ${gap.reasons.join(', ')}` : ''\n \n-    return `/** ${gap.method ?? 'ANY'} ${gap.path}${why} */\n+    return `/** ${gap.method ?? 'ANY'} ${gap.path.replaceAll('*/', '*\\\\/')}${why} */\n export const ${constant} = defineAuditAction('${name}', {\n   target: '${target}',\n   description: 'TODO: what this records, in one line',\n@@ -481,12 +483,17 @@ export const ${constant} = defineAuditAction('${name}', {\n  * sensitive with no audit trail. Call them from the handlers listed above each\n  * one:\n  *\n- *   log.audit(${entries.length > 0 ? [...seen][0]!.replace(/[^a-z0-9]+/gi, '_').toUpperCase() : 'ACTION'}({ actor: { type: 'user', id: user.id }, outcome: 'success' }))\n+ *   log.audit(${constants[0] ?? 'ACTION'}({ actor: { type: 'user', id: user.id }, outcome: 'success' }))\n  */\n ${entries.join('\\n\\n')}\n `\n }\n \n+/** A name read off a route or a package can start with a digit, which an identifier cannot. */\n+function identifierFor(name: string): string {\n+  return /^\\d/.test(name) ? `_${name}` : name\n+}\n+\n /** Single-quoted, since generated files go through the reader's linter. */\n function quote(value: string): string {\n   /* Newlines are escaped rather than dropped: a message spanning two lines is"
+  },
+  {
+   "filename": "packages/cli/src/lib/init/write.ts",
+   "status": "added",
+   "additions": 28,
+   "deletions": 0,
+   "patch": "@@ -0,0 +1,28 @@\n+import { mkdir, writeFile } from 'node:fs/promises'\n+import { dirname } from 'node:path'\n+import { cliErrors } from '../errors'\n+import type { FileAction } from './wiring'\n+\n+/**\n+ * Write the planned files in order.\n+ *\n+ * @throws `cli.WRITE_FAILED` at the first file that cannot be written, naming\n+ * it and the files written before it. The files after it are not attempted.\n+ */\n+export async function writeActions(actions: readonly FileAction[]): Promise<void> {\n+  const written: string[] = []\n+  for (const action of actions) {\n+    try {\n+      await mkdir(dirname(action.path), { recursive: true })\n+      await writeFile(action.path, action.contents, 'utf8')\n+    } catch (error) {\n+      throw cliErrors.WRITE_FAILED({\n+        file: action.relative,\n+        reason: (error as NodeJS.ErrnoException).code ?? (error as Error).message,\n+        written,\n+        cause: error as Error,\n+      })\n+    }\n+    written.push(action.relative)\n+  }\n+}"
+  },
+  {
+   "filename": "packages/cli/src/lib/logs/query.ts",
+   "status": "modified",
+   "additions": 27,
+   "deletions": 14,
+   "patch": "@@ -85,11 +85,21 @@ export interface Where {\n \n const WHERE = /^(!?)([\\w.$-]+)(?:(>=|<=|!=|=|>|<|~)(.*))?$/s\n \n+/**\n+ * The number a piece of text spells exactly. Leading zeros, an exponent, or\n+ * more digits than a double holds make it an id, a code or a label, and those\n+ * compare as text.\n+ */\n+function exactNumber(text: string): number | undefined {\n+  if (!/^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$/.test(text)) return undefined\n+  const number = Number(text)\n+  return text.includes('.') || Number.isSafeInteger(number) ? number : undefined\n+}\n+\n function coerce(raw: string): string | number | boolean {\n   if (raw === 'true') return true\n   if (raw === 'false') return false\n-  const number = Number(raw)\n-  return raw.trim() !== '' && !Number.isNaN(number) ? number : raw\n+  return exactNumber(raw) ?? raw\n }\n \n /**\n@@ -139,18 +149,21 @@ export function matchesWhere(event: WideEvent, where: Where): boolean {\n   /* A numeric field does not always arrive as a number — a header, an env var\n      or a hand-written payload carries it as text, and `\"10000\" > \"5000\"` is\n      false lexicographically. Against a numeric clause, read it as the number\n-     it is rather than silently answering the wrong question. */\n-  const number = typeof actual === 'number'\n-    ? actual\n-    : typeof actual === 'string' && actual.trim() !== '' ? Number(actual) : Number.NaN\n-  if (typeof expected === 'number' && !Number.isNaN(number)) {\n-    switch (where.op) {\n-      case '=': return number === expected\n-      case '!=': return number !== expected\n-      case '>': return number > expected\n-      case '>=': return number >= expected\n-      case '<': return number < expected\n-      case '<=': return number <= expected\n+     it is rather than silently answering the wrong question. Text that is not\n+     a number has no order against one: `\"n/a\" > 5000` is false both ways. */\n+  if (typeof expected === 'number') {\n+    const number = typeof actual === 'number' ? actual : typeof actual === 'string' ? exactNumber(actual) : undefined\n+    if (number === undefined) {\n+      if (where.op !== '=' && where.op !== '!=') return false\n+    } else {\n+      switch (where.op) {\n+        case '=': return number === expected\n+        case '!=': return number !== expected\n+        case '>': return number > expected\n+        case '>=': return number >= expected\n+        case '<': return number < expected\n+        case '<=': return number <= expected\n+      }\n     }\n   }\n   const left = typeof actual === 'object' ? JSON.stringify(actual) : String(actual)"
+  },
+  {
+   "filename": "packages/cli/src/lib/logs/render.ts",
+   "status": "modified",
+   "additions": 8,
+   "deletions": 3,
+   "patch": "@@ -16,6 +16,11 @@ function str(value: unknown): string | undefined {\n   return typeof value === 'string' ? value : undefined\n }\n \n+/** A field as a column: text as it is, a number or a boolean spelled out, anything else left empty. */\n+function column(value: unknown): string {\n+  return typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : ''\n+}\n+\n const CONTROL_CHAR = /[\\x00-\\x08\\x0A-\\x1F\\x7F-\\x9F]/g\n \n /**\n@@ -98,7 +103,7 @@ export type Sourced = WideEvent & { [SOURCE]?: string }\n export function formatLine(style: Style, event: Sourced): string {\n   const status = typeof field(event, 'status') === 'number' ? field(event, 'status') as number : undefined\n   const method = str(field(event, 'method'))\n-  const path = printable(str(field(event, 'path')) ?? str(field(event, 'operation')) ?? event.service)\n+  const path = printable(str(field(event, 'path')) ?? str(field(event, 'operation')) ?? column(event.service))\n   const where = method ? `${printable(method).padEnd(6)} ${path}` : `       ${path}`\n   const summarized = summary(event)\n   const text = printable(summarized.text)\n@@ -107,8 +112,8 @@ export function formatLine(style: Style, event: Sourced): string {\n     style.paint('dim', clock(event.timestamp)),\n     ...(source ? [style.paint('cyan', source.padEnd(12))] : []),\n     where.padEnd(44),\n-    style.paint(statusColor(status, event.level), status !== undefined ? String(status) : printable(event.level).padEnd(3)),\n-    style.paint('dim', printable(event.duration ?? '').padStart(7)),\n+    style.paint(statusColor(status, event.level), status !== undefined ? String(status) : printable(column(event.level)).padEnd(3)),\n+    style.paint('dim', printable(column(event.duration)).padStart(7)),\n     summarized.color ? style.paint(summarized.color, text) : text,\n   ]\n   return columns.join('  ').trimEnd()"
+  },
+  {
+   "filename": "packages/cli/test/agents.test.ts",
+   "status": "modified",
+   "additions": 41,
+   "deletions": 1
+  },
+  {
+   "filename": "packages/cli/test/init.test.ts",
+   "status": "modified",
+   "additions": 113,
+   "deletions": 1
+  },
+  {
+   "filename": "packages/cli/test/logs.command.test.ts",
+   "status": "modified",
+   "additions": 81,
+   "deletions": 0
+  }
+ ],
+ "manifests": {}
+}

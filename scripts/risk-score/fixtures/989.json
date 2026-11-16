@@ -1,0 +1,57 @@
+{
+ "number": 989,
+ "title": "fix(telemetry): read the session secret from NUXT_APP_SECRET",
+ "author": {
+  "login": "HugoRCD",
+  "fork": false,
+  "association": "MEMBER"
+ },
+ "files": [
+  {
+   "filename": "apps/telemetry/.env.example",
+   "status": "modified",
+   "additions": 6,
+   "deletions": 6
+  },
+  {
+   "filename": "apps/telemetry/README.md",
+   "status": "modified",
+   "additions": 3,
+   "deletions": 3
+  },
+  {
+   "filename": "apps/telemetry/server/api/login.post.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 5,
+   "patch": "@@ -13,11 +13,7 @@ export default defineEventHandler(async (event) => {\n     throw telemetryErrors.LOGIN_NOT_CONFIGURED()\n   }\n \n-  // Fail loudly here instead of letting the session cookie sealing throw a\n-  // cryptic h3/iron error after the password check has already passed —\n-  // NUXT_SESSION_PASSWORD is easy to confuse with ANALYTICS_PASSWORD since\n-  // both get set together when deploying.\n-  if (!isSessionSecretValid(useRuntimeConfig().session.password)) {\n+  if (!isSessionSecretValid(useRuntimeConfig())) {\n     throw telemetryErrors.SESSION_SECRET_TOO_SHORT()\n   }\n "
+  },
+  {
+   "filename": "apps/telemetry/server/utils/errors.ts",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 2,
+   "patch": "@@ -20,8 +20,8 @@ export const telemetryErrors = defineErrorCatalog('telemetry', {\n   SESSION_SECRET_TOO_SHORT: {\n     status: 500,\n     message: 'Dashboard session secret is missing or too short',\n-    why: 'NUXT_SESSION_PASSWORD must be at least 32 characters — it encrypts the session cookie and is a different value from ANALYTICS_PASSWORD (the login password you type in)',\n-    fix: 'Generate a secret with `openssl rand -base64 32` and set it as NUXT_SESSION_PASSWORD in the deployment environment, then redeploy',\n+    why: 'NUXT_APP_SECRET must be at least 32 characters — the session cookie is sealed with a key derived from it, and it is a different value from ANALYTICS_PASSWORD (the login password you type in). NUXT_SESSION_PASSWORD is no longer read',\n+    fix: 'Generate a secret with `openssl rand -base64 32` and set it as NUXT_APP_SECRET in the deployment environment, then redeploy',\n   },\n   INVALID_PASSWORD: {\n     status: 401,"
+  },
+  {
+   "filename": "apps/telemetry/server/utils/session.ts",
+   "status": "modified",
+   "additions": 8,
+   "deletions": 8,
+   "patch": "@@ -1,4 +1,5 @@\n import type { H3Event } from 'h3'\n+import type { RuntimeConfig } from 'nuxt/schema'\n \n /**\n  * The password gate is opt-in: it only activates once `ANALYTICS_PASSWORD`\n@@ -16,13 +17,12 @@ export async function requireDashboardSession(event: H3Event): Promise<void> {\n }\n \n /**\n- * `nuxt-auth-utils` (via h3's iron-webcrypto sealing) silently requires a\n- * 32+ character `NUXT_SESSION_PASSWORD` to encrypt the session cookie — set\n- * it too short (or reuse `ANALYTICS_PASSWORD`, which is often short and\n- * memorable) and the seal call throws deep inside `setUserSession`, well\n- * after the password check already passed. Checking this upfront lets the\n- * login route fail with an actionable error instead of a cryptic one.\n+ * `nuxt-auth-utils` seals the session cookie with a key Nuxt derives from\n+ * `appSecret` (`NUXT_APP_SECRET`), which must be 32+ characters. Unset or too\n+ * short (often from reusing `ANALYTICS_PASSWORD`), the derivation throws\n+ * inside `setUserSession`, after the password check already passed. Checking\n+ * upfront lets the login route fail with an error that names the variable.\n  */\n-export function isSessionSecretValid(secret: string | undefined): boolean {\n-  return !!secret && secret.length >= 32\n+export function isSessionSecretValid(config: Pick<RuntimeConfig, 'appSecret'>): boolean {\n+  return !!config.appSecret && config.appSecret.length >= 32\n }"
+  },
+  {
+   "filename": "apps/telemetry/test/session.test.ts",
+   "status": "modified",
+   "additions": 8,
+   "deletions": 9
+  },
+  {
+   "filename": "turbo.json",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 2
+  }
+ ],
+ "manifests": {}
+}

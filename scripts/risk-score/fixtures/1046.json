@@ -1,0 +1,39 @@
+{
+ "number": 1046,
+ "title": "refactor: drop dead code in the fs, sentry and posthog adapters",
+ "author": {
+  "login": "evlogai[bot]",
+  "fork": false,
+  "association": "CONTRIBUTOR"
+ },
+ "files": [
+  {
+   "filename": "packages/evlog/src/adapters/fs.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -234,11 +234,6 @@ export interface TailFsLogsOptions extends ReadFsLogsOptions {\n   signal?: AbortSignal\n }\n \n-interface ParsedFilename {\n-  date: string\n-  index: number\n-}\n-\n function isLogFilename(filename: string): boolean {\n   return /^\\d{4}-\\d{2}-\\d{2}(\\.\\d+)?\\.jsonl$/.test(filename)\n }"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/posthog.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 3,
+   "patch": "@@ -239,9 +239,7 @@ export function createPostHogDrain(overrides?: Partial<PostHogConfig>) {\n       }\n       return config as PostHogConfig\n     },\n-    send: async (events, config) => {\n-      await sendBatchToPostHog(events, config)\n-    },\n+    send: sendBatchToPostHog,\n   })\n }\n "
+  },
+  {
+   "filename": "packages/evlog/src/adapters/sentry.ts",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 8,
+   "patch": "@@ -201,10 +201,7 @@ function getFirstStringValue(event: WideEvent, keys: string[]): string | undefin\n   return undefined\n }\n \n-function toAttributeValue(value: unknown): SentryAttributeValue | undefined {\n-  if (value === null || value === undefined) {\n-    return undefined\n-  }\n+function toAttributeValue(value: unknown): SentryAttributeValue {\n   if (typeof value === 'string') {\n     return { value, type: 'string' }\n   }\n@@ -253,10 +250,7 @@ export function toSentryLog(event: WideEvent, config: SentryConfig): SentryLog {\n   for (const [key, value] of Object.entries(rest)) {\n     if (key === 'traceId' || key === 'spanId') continue\n     if (value === undefined || value === null) continue\n-    const attr = toAttributeValue(value)\n-    if (attr) {\n-      attributes[key] = attr\n-    }\n+    attributes[key] = toAttributeValue(value)\n   }\n \n   attributes['sentry.sdk.name'] = { value: SENTRY_SDK.name, type: 'string' }"
+  },
+  {
+   "filename": "packages/evlog/test/e2e/seed.mjs",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  }
+ ],
+ "manifests": {}
+}

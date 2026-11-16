@@ -1,0 +1,19 @@
+{
+ "number": 1029,
+ "title": "refactor(next): drop unused local imports in client",
+ "author": {
+  "login": "evlogai[bot]",
+  "fork": false,
+  "association": "CONTRIBUTOR"
+ },
+ "files": [
+  {
+   "filename": "packages/evlog/src/next/client.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1,
+   "patch": "@@ -2,7 +2,7 @@\n \n import { useEffect } from 'react'\n import type { LogLevel, TransportConfig } from '../types'\n-import { initLog, log, setIdentity, clearIdentity } from '../runtime/client/log'\n+import { initLog } from '../runtime/client/log'\n \n export { log, setIdentity, clearIdentity, setMinLevel } from '../runtime/client/log'\n "
+  }
+ ],
+ "manifests": {}
+}

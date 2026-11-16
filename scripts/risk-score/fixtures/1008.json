@@ -1,0 +1,42 @@
+{
+ "number": 1008,
+ "title": "chore(repo): version packages",
+ "author": {
+  "login": "github-actions[bot]",
+  "fork": false,
+  "association": "CONTRIBUTOR"
+ },
+ "files": [
+  {
+   "filename": ".changeset/nuxt-nitro-v3-error-handler.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-Register the Nitro v3 error handler and plugin in the Nuxt module when running on Nitro 3, so error responses keep their status code and JSON content type under Nuxt 5."
+  },
+  {
+   "filename": "packages/evlog/CHANGELOG.md",
+   "status": "modified",
+   "additions": 6,
+   "deletions": 0
+  },
+  {
+   "filename": "packages/evlog/package.json",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  }
+ ],
+ "manifests": {
+  "packages/evlog/package.json": {
+   "base": {
+    "name": "evlog",
+    "version": "2.35.0"
+   },
+   "head": {
+    "name": "evlog",
+    "version": "2.35.1"
+   }
+  }
+ }
+}

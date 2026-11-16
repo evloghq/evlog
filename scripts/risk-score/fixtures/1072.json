@@ -1,0 +1,381 @@
+{
+ "number": 1072,
+ "title": "fix: drop comments that restate the code and reattach misplaced jsdoc",
+ "author": {
+  "login": "HugoRCD",
+  "fork": false,
+  "association": "MEMBER"
+ },
+ "files": [
+  {
+   "filename": ".changeset/misplaced-jsdoc.md",
+   "status": "added",
+   "additions": 5,
+   "deletions": 0,
+   "patch": "@@ -0,0 +1,5 @@\n+---\n+'evlog': patch\n+---\n+\n+`createDrainPipeline` from `evlog/pipeline`, and the `AuditActor` and `AuditFields` types from `evlog`, show their documentation again in the published types and in editor hovers. Each doc block sat directly on top of another one, so TypeScript attached it to nothing. `createDrainPipeline` gets its description and usage example back, `AuditActor` the meaning of each actor field, and `AuditFields` the description of each reserved audit field."
+  },
+  {
+   "filename": "AGENTS.md",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 2
+  },
+  {
+   "filename": "packages/evlog/src/adapters/axiom.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 14,
+   "patch": "@@ -7,13 +7,8 @@ import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'\n import { trimTrailingSlashes } from '../utils'\n \n interface BaseAxiomConfig {\n-  /** Axiom dataset name. */\n   dataset: string\n-  /**\n-   * Axiom API key.\n-   *\n-   * @example `xaat-...`\n-   */\n+  /** @example `xaat-...` */\n   apiKey: string\n   /**\n    * @deprecated Removed in evlog v3. Use `apiKey` instead.\n@@ -120,11 +115,6 @@ export function createAxiomDrain(overrides?: Partial<AxiomConfig>) {\n /** Axiom ingests at most 10,000 events per batch: larger batches are split. */\n const AXIOM_MAX_EVENTS_PER_REQUEST = 10_000\n \n-/**\n- * Encode a batch of wide events into the Axiom ingest request. Shared by\n- * {@link createAxiomDrain} and {@link sendBatchToAxiom} so both paths build\n- * the same URL, headers and body.\n- */\n function encodeAxiomRequest(events: WideEvent[], config: AxiomConfig): HttpDrainRequest {\n   const headers: Record<string, string> = {\n     'Content-Type': 'application/json',\n@@ -134,9 +124,6 @@ function encodeAxiomRequest(events: WideEvent[], config: AxiomConfig): HttpDrain\n   return { url: resolveIngestUrl(config), headers, body: JSON.stringify(events) }\n }\n \n-/**\n- * Send a single event to Axiom.\n- */\n export async function sendToAxiom(event: WideEvent, config: AxiomConfig): Promise<void> {\n   await sendBatchToAxiom([event], config)\n }"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/better-stack.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 4,
+   "patch": "@@ -103,7 +103,6 @@ export function createBetterStackDrain(overrides?: Partial<BetterStackConfig>) {\n /** Better Stack accepts at most 10 MiB per request: larger batches are split. */\n const BETTER_STACK_MAX_REQUEST_BYTES = 10 * 1024 * 1024\n \n-/** Encode serialized Better Stack events into one ingest request. */\n function encodeBetterStackRequest(entries: string[], config: BetterStackConfig): HttpDrainRequest {\n   return {\n     url: trimTrailingSlashes(config.endpoint ?? 'https://in.logs.betterstack.com'),\n@@ -115,9 +114,6 @@ function encodeBetterStackRequest(entries: string[], config: BetterStackConfig):\n   }\n }\n \n-/**\n- * Send a single event to Better Stack.\n- */\n export async function sendToBetterStack(event: WideEvent, config: BetterStackConfig): Promise<void> {\n   await sendBatchToBetterStack([event], config)\n }"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/clickhouse.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 8,
+   "patch": "@@ -61,7 +61,6 @@ const CLICKHOUSE_FIELDS: ConfigField<ClickHouseConfig>[] = [\n   { key: 'retries' },\n ]\n \n-/** Read a string field off an event, or `undefined` when absent/not a string. */\n function readString(event: WideEvent, key: string): string | undefined {\n   const value = (event as Record<string, unknown>)[key]\n   return typeof value === 'string' ? value : undefined\n@@ -161,10 +160,6 @@ function buildHeaders(config: ClickHouseConfig): Record<string, string> {\n   return headers\n }\n \n-/**\n- * Encode a batch of wide events into the ClickHouse insert request. Shared by\n- * {@link createClickHouseDrain} and {@link sendBatchToClickHouse}.\n- */\n function encodeClickHouseRequest(events: WideEvent[], config: ClickHouseConfig): HttpDrainRequest {\n   return {\n     url: resolveClickHouseUrl(config),\n@@ -216,9 +211,6 @@ export function createClickHouseDrain(overrides?: Partial<ClickHouseConfig>) {\n   })\n }\n \n-/**\n- * Insert a single wide event into ClickHouse.\n- */\n export async function sendToClickHouse(event: WideEvent, config: ClickHouseConfig): Promise<void> {\n   await sendBatchToClickHouse([event], config)\n }"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/datadog.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 7,
+   "patch": "@@ -143,9 +143,6 @@ export function toDatadogLog(event: WideEvent): Record<string, unknown> {\n   }\n }\n \n-/**\n- * Resolve the Logs intake URL from configuration.\n- */\n export function resolveDatadogIntakeUrl(config: Pick<DatadogConfig, 'site' | 'intakeUrl'>): string {\n   if (config.intakeUrl) {\n     return trimTrailingSlashes(config.intakeUrl)\n@@ -194,7 +191,6 @@ export function createDatadogDrain(overrides?: Partial<DatadogConfig>) {\n const DATADOG_MAX_ENTRIES_PER_REQUEST = 1000\n const DATADOG_MAX_PAYLOAD_BYTES = 5_000_000\n \n-/** Encode serialized Datadog logs into one Logs intake request. */\n function encodeDatadogRequest(logs: string[], config: DatadogConfig): HttpDrainRequest {\n   return {\n     url: resolveDatadogIntakeUrl(config),\n@@ -207,9 +203,6 @@ function encodeDatadogRequest(logs: string[], config: DatadogConfig): HttpDrainR\n   }\n }\n \n-/**\n- * Send a single wide event to Datadog.\n- */\n export async function sendToDatadog(event: WideEvent, config: DatadogConfig): Promise<void> {\n   await sendBatchToDatadog([event], config)\n }"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/fs.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 3,
+   "patch": "@@ -199,21 +199,18 @@ export function createFsDrain(overrides?: Partial<FsConfig>) {\n   })\n }\n \n-/** Options accepted by {@link readFsLogs}. */\n export interface ReadFsLogsOptions {\n   /** Directory to read from. Default: `.evlog/logs` */\n   dir?: string\n   /** Only yield events with `event.timestamp >= since`. */\n   since?: Date | string\n   /** Only yield events with `event.timestamp <= until`. */\n   until?: Date | string\n-  /** Filter by event level. */\n   level?: LogLevel | LogLevel[]\n   /** Custom predicate — return `false` to skip the event. */\n   filter?: (event: WideEvent) => boolean\n }\n \n-/** Options accepted by {@link tailFsLogs}. */\n export interface TailFsLogsOptions extends ReadFsLogsOptions {\n   /**\n    * Polling interval (ms) used to detect new bytes / new files."
+  },
+  {
+   "filename": "packages/evlog/src/adapters/hyperdx.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -25,7 +25,6 @@ export interface HyperDXConfig {\n   endpoint?: string\n   /** Passed through to the OTLP encoder; maps to `service.name`. */\n   serviceName?: string\n-  /** Additional OTLP resource attributes. */\n   resourceAttributes?: Record<string, string | number | boolean>\n   /** Request timeout in milliseconds. Default: 5000 */\n   timeout?: number"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/loki.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 8,
+   "patch": "@@ -5,7 +5,6 @@ import type { HttpDrainRequest } from '../shared/drain'\n import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'\n import { trimTrailingSlashes } from '../utils'\n \n-/** Default Loki push path appended to {@link LokiConfig.endpoint}. */\n const LOKI_PUSH_PATH = '/loki/api/v1/push'\n \n /**\n@@ -161,10 +160,6 @@ function buildHeaders(config: LokiConfig): Record<string, string> {\n   return headers\n }\n \n-/**\n- * Encode a batch of wide events into the Loki push request. Shared by\n- * {@link createLokiDrain} and {@link sendBatchToLoki}.\n- */\n function encodeLokiRequest(events: WideEvent[], config: LokiConfig): HttpDrainRequest {\n   return {\n     url: resolveLokiPushUrl(config.endpoint),\n@@ -215,9 +210,6 @@ export function createLokiDrain(overrides?: Partial<LokiConfig>) {\n   })\n }\n \n-/**\n- * Send a single wide event to Loki.\n- */\n export async function sendToLoki(event: WideEvent, config: LokiConfig): Promise<void> {\n   await sendBatchToLoki([event], config)\n }"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/memory.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -3,9 +3,6 @@ import type { ConfigField } from '../shared/config'\n import { resolveAdapterConfig } from '../shared/config'\n import { defineDrain } from '../shared/drain'\n \n-/**\n- * Configuration for the in-memory drain.\n- */\n export interface MemoryConfig {\n   /** Named store key. Multiple drains sharing the same key share the same buffer. Default: `'default'` */\n   store: string\n@@ -98,15 +95,13 @@ export function createMemoryDrain(overrides?: Partial<MemoryConfig>) {\n   })\n }\n \n-/** Options accepted by {@link readMemoryLogs}. */\n export interface ReadMemoryLogsOptions {\n   /** Named store to read from. Default: `'default'` */\n   store?: string\n   /** Only include events with `timestamp >= since`. */\n   since?: Date | string\n   /** Only include events with `timestamp <= until`. */\n   until?: Date | string\n-  /** Filter by log level. */\n   level?: LogLevel | LogLevel[]\n   /** Custom predicate — return `false` to skip the event. */\n   filter?: (event: WideEvent) => boolean"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/otlp.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 20,
+   "patch": "@@ -20,7 +20,6 @@ import { OTEL_SEVERITY_NUMBER, OTEL_SEVERITY_TEXT } from '../shared/severity'\n  */\n export type OTLPRecordShape = 'json' | 'compact'\n \n-/** OTLP HTTP transport encoding. */\n export type OTLPProtocol = 'http/json' | 'http/protobuf'\n \n export interface OTLPConfig {\n@@ -33,7 +32,6 @@ export interface OTLPConfig {\n   recordShape?: OTLPRecordShape\n   /** Override service name (defaults to event.service) */\n   serviceName?: string\n-  /** Additional resource attributes */\n   resourceAttributes?: Record<string, string | number | boolean>\n   /**\n    * Also emit OpenTelemetry semantic convention attributes (`http.request.method`,\n@@ -61,7 +59,6 @@ export interface OTLPConfig {\n   retries?: number\n }\n \n-/** OTLP Log Record structure */\n export interface OTLPLogRecord {\n   timeUnixNano: string\n   severityNumber: number\n@@ -75,15 +72,13 @@ export interface OTLPLogRecord {\n   spanId?: string\n }\n \n-/** OTLP Resource structure */\n interface OTLPResource {\n   attributes: Array<{\n     key: string\n     value: OtlpAttributeValue\n   }>\n }\n \n-/** OTLP Scope structure */\n interface OTLPScope {\n   name: string\n   version?: string\n@@ -140,8 +135,6 @@ function toTraceContextId(value: unknown, pattern: RegExp): string | undefined {\n   return value.toLowerCase()\n }\n \n-// Re-exposed under a local name to keep call-sites tight while delegating to\n-// the shared OTLP attribute encoder in `evlog/toolkit`.\n const toAttributeValue = toOtlpAttributeValue\n \n /**\n@@ -168,7 +161,6 @@ function collectAttributes(\n   }\n }\n \n-/** A nested plain object as an OTLP key-value list; anything else through the shared encoder. */\n function toNestedAttributeValue(value: unknown): OtlpAttributeValue {\n   if (!isPlainObject(value) || Object.keys(value).length === 0) return toAttributeValue(value)\n   const values: Array<{ key: string, value: OtlpAttributeValue }> = []\n@@ -221,15 +213,12 @@ function pushSemanticConventionAttributes(event: Record<string, unknown>, attrib\n   }\n }\n \n-/** Options for {@link toOTLPLogRecord}. */\n export interface OTLPLogRecordOptions {\n   /** @see {@link OTLPConfig.semanticConventions} */\n   semanticConventions?: boolean\n }\n \n /**\n- * Convert an evlog WideEvent to an OTLP LogRecord.\n- *\n  * @param shape See {@link OTLPRecordShape}. Defaults to `'json'`.\n  */\n export function toOTLPLogRecord(event: WideEvent, shape: OTLPRecordShape = 'json', options: OTLPLogRecordOptions = {}): OTLPLogRecord {\n@@ -378,7 +367,6 @@ export function createOTLPDrain(overrides?: Partial<OTLPConfig>) {\n     resolve: async () => {\n       const config: Partial<ResolvedOTLPConfig> = await resolveAdapterConfig<OTLPConfig>('otlp', OTLP_FIELDS, overrides)\n \n-      // OTLP-specific: resolve headers from env if not provided via config\n       if (!config.headers) {\n         config.headers = getHeadersFromEnv()\n       }\n@@ -407,10 +395,6 @@ export function createOTLPDrain(overrides?: Partial<OTLPConfig>) {\n   })\n }\n \n-/**\n- * Encode a batch of wide events into the OTLP/HTTP logs request. Shared by\n- * {@link createOTLPDrain} and {@link sendBatchToOTLP}.\n- */\n function encodeOTLPRequest(events: WideEvent[], config: ResolvedOTLPConfig): HttpDrainRequest {\n   const payload = buildOTLPPayload(events, config)\n   return {\n@@ -447,8 +431,6 @@ function buildOTLPPayload(events: WideEvent[], config: ResolvedOTLPConfig): OTLP\n }\n \n /**\n- * Send a single event to an OTLP endpoint.\n- *\n  * @example\n  * ```ts\n  * await sendToOTLP(event, {\n@@ -461,8 +443,6 @@ export async function sendToOTLP(event: WideEvent, config: OTLPConfig): Promise<\n }\n \n /**\n- * Send a batch of events to an OTLP endpoint.\n- *\n  * @example\n  * ```ts\n  * await sendBatchToOTLP(events, {"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/posthog.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 5,
+   "patch": "@@ -80,7 +80,6 @@ export interface PostHogConfig {\n  */\n export type PostHogEventsConfig = PostHogConfig\n \n-/** PostHog event structure for the batch API */\n export interface PostHogEvent {\n   event: string\n   distinct_id: string\n@@ -296,10 +295,7 @@ export async function sendBatchToPostHogEvents(events: WideEvent[], config: Post\n   }\n }\n \n-/**\n- * Encode serialized PostHog events into one custom-events `/batch/` request.\n- * `prefix` is the body up to the opening bracket of `batch`.\n- */\n+/** `prefix` is the body up to the opening bracket of `batch`. */\n function encodePostHogEventsRequest(prefix: string, entries: string[], config: PostHogConfig): HttpDrainRequest {\n   return {\n     url: `${resolveHost(config)}/batch/`,"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/sazabi.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -16,7 +16,6 @@ export interface SazabiConfig {\n   endpoint: string\n   /** Passed through to the OTLP encoder; maps to `service.name`. */\n   serviceName?: string\n-  /** Additional OTLP resource attributes. */\n   resourceAttributes?: Record<string, string | number | boolean>\n   /** Request timeout in milliseconds. Default: 5000 */\n   timeout?: number"
+  },
+  {
+   "filename": "packages/evlog/src/adapters/sentry.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 4,
+   "patch": "@@ -9,7 +9,6 @@ import { OTEL_SEVERITY_NUMBER } from '../shared/severity'\n import { EVLOG_VERSION } from '../shared/http'\n \n export interface SentryConfig {\n-  /** Sentry DSN */\n   dsn: string\n   /** Environment override (defaults to event.environment) */\n   environment?: string\n@@ -30,13 +29,11 @@ export interface SentryConfig {\n   issues?: boolean\n }\n \n-/** Sentry Log attribute value with type annotation */\n export interface SentryAttributeValue {\n   value: string | number | boolean\n   type: 'string' | 'integer' | 'double' | 'boolean'\n }\n \n-/** Sentry Structured Log payload */\n export interface SentryLog {\n   timestamp: number\n   trace_id: string\n@@ -405,7 +402,6 @@ function getSentryEnvelopeRequest(config: SentryConfig, body: string): HttpDrain\n   }\n }\n \n-/** Encode serialized structured logs into one Sentry envelope request. */\n function encodeSentryRequest(logs: string[], config: SentryConfig): HttpDrainRequest {\n   return getSentryEnvelopeRequest(config, buildEnvelopeBody(logs, config.dsn))\n }"
+  },
+  {
+   "filename": "packages/evlog/src/ai/index.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 9,
+   "patch": "@@ -52,9 +52,6 @@ export type EvlogTelemetry = {\n /** @internal Concrete integration class — both v6 and v7 hook names. */\n interface EvlogTelemetryIntegration extends EvlogTelemetry {}\n \n-/**\n- * Fine-grained control over tool call input capture.\n- */\n export interface ToolInputsOptions {\n   /**\n    * Max character length for the stringified input JSON.\n@@ -93,9 +90,6 @@ export interface ModelCost {\n   output: number\n }\n \n-/**\n- * Options for `createAILogger` and `createAIMiddleware`.\n- */\n export interface AILoggerOptions {\n   /**\n    * When enabled, `toolCalls` contains `{ name, input }` objects instead of plain tool name strings.\n@@ -147,9 +141,6 @@ export interface AILoggerOptions {\n   cost?: Record<string, ModelCost>\n }\n \n-/**\n- * Per-step token usage breakdown for multi-step agent runs.\n- */\n export interface AIStepUsage {\n   model: string\n   inputTokens: number"
+  },
+  {
+   "filename": "packages/evlog/src/audit.ts",
+   "status": "modified",
+   "additions": 5,
+   "deletions": 5,
+   "patch": "@@ -12,18 +12,18 @@ export { defineAuditAction, type AuditInput, type DefineAuditActionOptions, type\n  */\n export const AUDIT_SCHEMA_VERSION = 1\n \n-/**\n- * @internal Stable JSON stringification with deterministic key order.\n- * Used by `idempotencyKey` and `hash-chain` so the same logical event always\n- * produces the same digest, regardless of how object keys were added.\n- */\n function isPlainObject(value: unknown): value is Record<string, unknown> {\n   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false\n   if (Object.prototype.toString.call(value) !== '[object Object]') return false\n   const proto = Object.getPrototypeOf(value)\n   return proto === Object.prototype || value.constructor === Object\n }\n \n+/**\n+ * @internal Stable JSON stringification with deterministic key order.\n+ * Used by `idempotencyKey` and `hash-chain` so the same logical event always\n+ * produces the same digest, regardless of how object keys were added.\n+ */\n function stableStringify(value: unknown, ancestors = new WeakSet<object>()): string {\n   if (value === null || typeof value !== 'object') return JSON.stringify(value)\n   // Track only the current recursion path: shared (diamond) references are fine, true cycles are not."
+  },
+  {
+   "filename": "packages/evlog/src/better-auth/index.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 9,
+   "patch": "@@ -63,9 +63,6 @@ export interface AuthSessionData {\n   createdAt?: string\n }\n \n-/**\n- * Options for `identifyUser`.\n- */\n export interface IdentifyOptions {\n   /**\n    * Whether to mask the user email (e.g. `h***@domain.com`).\n@@ -99,9 +96,6 @@ export interface IdentifyOptions {\n   extend?: (session: { user: Record<string, unknown>, session: Record<string, unknown> }) => Record<string, unknown> | undefined\n }\n \n-/**\n- * Options for `createAuthMiddleware`.\n- */\n export interface AuthMiddlewareOptions extends IdentifyOptions {\n   /**\n    * Route patterns to skip session resolution (glob).\n@@ -124,9 +118,6 @@ export interface AuthMiddlewareOptions extends IdentifyOptions {\n   onAnonymous?: (log: RequestLogger) => void | Promise<void>\n }\n \n-/**\n- * Options for `createAuthIdentifier`.\n- */\n export type AuthIdentifierOptions = AuthMiddlewareOptions\n \n const DEFAULT_USER_FIELDS = ['id', 'name', 'email', 'image', 'emailVerified', 'createdAt']"
+  },
+  {
+   "filename": "packages/evlog/src/effect/withLogger.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -10,7 +10,6 @@ import type { EvlogLogger, Unit } from './unit'\n import { recordCause } from './cause'\n import { TraceState, provideUnit, traceFields } from './unit'\n \n-/** Options for {@link withLogger}. */\n export interface WithLoggerOptions extends Pick<BaseEvlogOptions, 'drain' | 'enrich' | 'keep' | 'redact' | 'plugins' | 'waitUntil'> {\n   /** Fields the wide event starts with. */\n   fields?: Record<string, unknown>"
+  },
+  {
+   "filename": "packages/evlog/src/error.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -191,7 +191,6 @@ Object.defineProperty(EvlogError.prototype, evlogErrorBrand, {\n /**\n  * Create a structured error with context for debugging and user-facing messages.\n  *\n- * @param options - Error message string or full options object\n  * @returns EvlogError with HTTP metadata (`status`, `statusText`) and `data`; also includes `statusCode` and `statusMessage` for legacy compatibility\n  *\n  * @example"
+  },
+  {
+   "filename": "packages/evlog/src/eve/index.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 2,
+   "patch": "@@ -890,7 +890,6 @@ function flushEveMetadata(state: TurnState): void {\n   }\n }\n \n-/** Wide-event view of the eve instance and the parent session, when there is one. */\n /**\n  * Who triggered this turn, from the caller principal eve resolved at dispatch.\n  *\n@@ -909,6 +908,7 @@ function buildCaller(ctx: HookContext): Record<string, string> | null {\n   }\n }\n \n+/** Wide-event view of the eve instance and the parent session, when there is one. */\n function buildLineage(sessionId: string, ctx: HookContext): Record<string, unknown> {\n   const eve: Record<string, unknown> = {}\n   const runtime = sessionRuntimes().get(sessionId)\n@@ -2031,7 +2031,6 @@ function acceptsV26Events(): boolean {\n   }\n }\n \n-/** Options for {@link defineEvlogInstrumentation}. */\n export interface EvlogEveInstrumentationOptions {\n   /** Overrides `ai.telemetry.functionId` on spans. Defaults to the agent name. */\n   functionId?: string"
+  },
+  {
+   "filename": "packages/evlog/src/http.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -17,7 +17,6 @@ export interface HttpDrainConfig {\n }\n \n export interface HttpLogDrainOptions {\n-  /** HTTP drain configuration (endpoint is required) */\n   drain: HttpDrainConfig\n   /** Pipeline configuration overrides */\n   pipeline?: DrainPipelineOptions<DrainContext>"
+  },
+  {
+   "filename": "packages/evlog/src/logger.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 15,
+   "patch": "@@ -193,9 +193,6 @@ export function getGlobalPluginRunner(): PluginRunner {\n   return state.pluginRunner\n }\n \n-/**\n- * Check if logging is globally enabled.\n- */\n export function isEnabled(): boolean {\n   return state.enabled\n }\n@@ -248,14 +245,12 @@ export function shouldSample(level: LogLevel): boolean {\n     return level !== 'trace' // No sampling configured, log everything except trace\n   }\n \n-  // Error defaults to 100% and trace to 0% unless explicitly set\n   const percentage = level === 'error' && rates.error === undefined\n     ? 100\n     : level === 'trace' && rates.trace === undefined\n       ? 0\n       : rates[level] ?? 100\n \n-  // 0% = never log, 100% = always log\n   if (percentage <= 0) return false\n   if (percentage >= 100) return true\n \n@@ -551,7 +546,6 @@ function asCapturedLines(value: unknown): string[] | undefined {\n function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {\n   const entries: TreeEntry[] = []\n \n-  // Header\n   const headerParts: string[] = []\n   if (ai.model) {\n     let m = String(ai.model)\n@@ -566,7 +560,6 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {\n   if (steps !== undefined && steps > 1) headerParts.push(`${steps} steps`)\n   entries.push({ key: 'ai', value: headerParts.join(' · ') })\n \n-  // Tokens\n   const inputTokens = asNumber(ai.inputTokens)\n   const outputTokens = asNumber(ai.outputTokens)\n   const totalTokens = asNumber(ai.totalTokens)\n@@ -581,7 +574,6 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {\n     entries.push({ key: 'ai.tokens', value: tokLine })\n   }\n \n-  // Streaming\n   const msFirst = asNumber(ai.msToFirstChunk)\n   const msFinish = asNumber(ai.msToFinish)\n   const tps = asNumber(ai.tokensPerSecond)\n@@ -594,13 +586,11 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {\n     entries.push({ key: 'ai.streaming', value: streamLine })\n   }\n \n-  // Cost\n   const estimatedCost = asNumber(ai.estimatedCost)\n   if (estimatedCost !== undefined) {\n     entries.push({ key: 'ai.cost', value: formatCost(estimatedCost) })\n   }\n \n-  // Total duration\n   const totalDurationMs = asNumber(ai.totalDurationMs)\n   if (totalDurationMs !== undefined) {\n     entries.push({ key: 'ai.totalDuration', value: formatDuration(totalDurationMs) })\n@@ -640,7 +630,6 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {\n     }\n   }\n \n-  // Steps\n   const stepsUsage = Array.isArray(ai.stepsUsage)\n     ? ai.stepsUsage.filter(isPlainObject)\n     : undefined\n@@ -666,7 +655,6 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {\n   const outputLines = asCapturedLines(ai.output)\n   if (outputLines) entries.push({ key: 'ai.output', value: '', children: outputLines })\n \n-  // Embedding\n   const embedding = isPlainObject(ai.embedding) ? ai.embedding : undefined\n   if (embedding) {\n     const parts: string[] = []\n@@ -1220,9 +1208,6 @@ export function createRequestLogger<T extends object = Record<string, unknown>>(\n   })\n }\n \n-/**\n- * Get the current environment context.\n- */\n export function getEnvironment(): EnvironmentContext {\n   return { ...state.env }\n }"
+  },
+  {
+   "filename": "packages/evlog/src/next/handler.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 2,
+   "patch": "@@ -147,7 +147,6 @@ export function createWithEvlog(options: NextEvlogOptions) {\n         return await handler(...args) as Awaited<TReturn>\n       }\n \n-      // Extract request info from first argument if it's a Request\n       const [firstArg] = args\n       const isRequest = firstArg instanceof Request\n       const request = isRequest ? firstArg : undefined\n@@ -167,7 +166,6 @@ export function createWithEvlog(options: NextEvlogOptions) {\n         return await handler(...args) as Awaited<TReturn>\n       }\n \n-      // Apply start time from middleware if present\n       if (request) {\n         const startHeader = request.headers.get('x-evlog-start')\n         if (startHeader) {"
+  },
+  {
+   "filename": "packages/evlog/src/next/instrumentation-create.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 3,
+   "patch": "@@ -44,13 +44,11 @@ export interface InstrumentationOptions {\n   enabled?: boolean\n   /** Service name for all logged events. */\n   service?: string\n-  /** Environment context overrides. */\n   env?: Partial<EnvironmentContext>\n-  /** Enable pretty printing. @default true in development */\n+  /** @default true in development */\n   pretty?: boolean\n   /** Suppress built-in console output. @default false */\n   silent?: boolean\n-  /** Sampling configuration for filtering logs. */\n   sampling?: SamplingConfig\n   /** Minimum severity for the global `log` API. @default 'debug' */\n   minLevel?: LogLevel"
+  },
+  {
+   "filename": "packages/evlog/src/next/middleware.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 3,
+   "patch": "@@ -34,17 +34,14 @@ export function evlogMiddleware(config?: EvlogMiddlewareConfig) {\n   return async (request: NextRequest) => {\n     const path = request.nextUrl.pathname\n \n-    // Check include/exclude patterns\n     if (!shouldLog(path, config?.include, config?.exclude)) {\n       const { NextResponse: nextResponse } = await import('next/server') as { NextResponse: NextResponseStatic }\n       return nextResponse.next()\n     }\n \n-    // Generate or reuse request ID\n     const existingId = request.headers.get('x-request-id')\n     const requestId = existingId || crypto.randomUUID()\n \n-    // Forward modified headers to the route handler\n     const requestHeaders = new Headers(request.headers as HeadersInit)\n \n     requestHeaders.set('x-request-id', requestId)"
+  },
+  {
+   "filename": "packages/evlog/src/next/types.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 7,
+   "patch": "@@ -8,13 +8,9 @@ export interface NextEvlogOptions extends BaseEvlogOptions {\n    */\n   service?: string\n \n-  /**\n-   * Environment context overrides.\n-   */\n   env?: Partial<EnvironmentContext>\n \n   /**\n-   * Enable pretty printing.\n    * @default true in development, false in production\n    */\n   pretty?: boolean\n@@ -25,9 +21,6 @@ export interface NextEvlogOptions extends BaseEvlogOptions {\n    */\n   enabled?: boolean\n \n-  /**\n-   * Sampling configuration for filtering logs.\n-   */\n   sampling?: SamplingConfig\n \n   /**"
+  },
+  {
+   "filename": "packages/evlog/src/nitro-v3/plugin.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -264,7 +264,6 @@ export default definePlugin(async (nitroApp) => {\n       requestId: resolveRequestId(event, ctx),\n     }, { _deferDrain: true })\n \n-    // Apply route-based service configuration if a matching route is found\n     const routeService = getServiceForPath(pathname, evlogConfig?.routes)\n     if (routeService) {\n       log.set({ service: routeService })"
+  },
+  {
+   "filename": "packages/evlog/src/nitro-v3/useLogger.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 2,
+   "patch": "@@ -5,9 +5,7 @@ import type { FieldContext } from '../types'\n /**\n  * Returns the request logger attached to the given Nitro v3 HTTP event.\n  *\n- * @param event - The current HTTPEvent from Nitro v3.\n  * @param service - Optional service name to override the default service.\n- * @returns The request-scoped logger.\n  * @throws Error if the logger is not initialized on the event context.\n  *\n  * @example"
+  },
+  {
+   "filename": "packages/evlog/src/nitro.ts",
+   "status": "modified",
+   "additions": 3,
+   "deletions": 9,
+   "patch": "@@ -17,9 +17,6 @@ export interface NitroModuleOptions {\n    */\n   enabled?: boolean\n \n-  /**\n-   * Environment context overrides.\n-   */\n   env?: Partial<EnvironmentContext>\n \n   /**\n@@ -62,9 +59,6 @@ export interface NitroModuleOptions {\n    */\n   routes?: Record<string, RouteConfig>\n \n-  /**\n-   * Sampling configuration for filtering logs.\n-   */\n   sampling?: SamplingConfig\n \n   /**\n@@ -227,13 +221,13 @@ export function serializeBundledEvlogConfig(options: object | undefined): string\n   return JSON.stringify({ ...options, _suppressDrainWarning: true })\n }\n \n+let cachedConfigKey: string | undefined\n+let cachedSuppressOverlay: boolean | undefined\n+\n /**\n  * Whether the Nitro dev Youch overlay should be suppressed for this process.\n  * @internal\n  */\n-let cachedConfigKey: string | undefined\n-let cachedSuppressOverlay: boolean | undefined\n-\n export function shouldSuppressNitroDevOverlay(): boolean {\n   const config = readEvlogConfigSync()\n   const key = config ? JSON.stringify(config) : ''"
+  },
+  {
+   "filename": "packages/evlog/src/nitro/plugin.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 2,
+   "patch": "@@ -129,15 +129,13 @@ export default defineNitroPlugin(async (nitroApp) => {\n     // without throwing.  Filtering is enforced at emit time instead.\n     e.context._evlogShouldEmit = shouldLog(e.path, evlogConfig?.include, evlogConfig?.exclude)\n \n-    // Successful client transport batches are quiet; failures still emit.\n     e.context._evlogQuietOnSuccess = transportEndpoint !== undefined && e.path.split('?')[0] === transportEndpoint\n \n     // Store start time for duration calculation in tail sampling\n     e.context._evlogStartTime = Date.now()\n \n     const requestLog = createDeferredRequestLogger(e)\n \n-    // Apply route-based service configuration if a matching route is found\n     const routeService = getServiceForPath(e.path, evlogConfig?.routes)\n     if (routeService) {\n       requestLog.set({ service: routeService })"
+  },
+  {
+   "filename": "packages/evlog/src/nuxt/module.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 9,
+   "patch": "@@ -24,7 +24,6 @@ import { name, version } from '../../package.json'\n import { warnDeprecated } from '../shared/deprecate'\n \n interface ModuleAxiomBaseConfig {\n-  /** Axiom dataset name */\n   dataset: string\n   /** Axiom API token (evlog field `apiKey`) */\n   apiKey?: string\n@@ -66,9 +65,6 @@ export interface ModuleOptions {\n    */\n   enabled?: boolean\n \n-  /**\n-   * Environment context overrides.\n-   */\n   env?: Partial<EnvironmentContext>\n \n   /**\n@@ -80,7 +76,6 @@ export interface ModuleOptions {\n   console?: boolean\n \n   /**\n-   * Enable pretty printing.\n    * @default true in development, false in production\n    */\n   pretty?: boolean\n@@ -230,7 +225,6 @@ export interface ModuleOptions {\n     endpoint: string\n     /** Override service name (defaults to event.service) */\n     serviceName?: string\n-    /** Additional resource attributes */\n     resourceAttributes?: Record<string, string | number | boolean>\n     /** Custom headers (e.g., for authentication) */\n     headers?: Record<string, string>\n@@ -271,7 +265,6 @@ export interface ModuleOptions {\n    * ```\n    */\n   sentry?: {\n-    /** Sentry DSN */\n     dsn: string\n     /** Environment override (defaults to event.environment) */\n     environment?: string\n@@ -376,8 +369,6 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM\n \n     nuxt.options.runtimeConfig.evlog = options\n \n-    // Register custom error handler for proper EvlogError serialization\n-    // Only set if not already configured to avoid overwriting user's custom handler\n     // Mirror standalone Nitro modules: serialize evlog options into __EVLOG_CONFIG so\n     // resolveEvlogConfigForNitroPlugin() picks them up in dev (Nitro worker threads\n     // often cannot resolve useRuntimeConfig().evlog via dynamic import reliably)."
+  },
+  {
+   "filename": "packages/evlog/src/pipeline.ts",
+   "status": "modified",
+   "additions": 12,
+   "deletions": 12,
+   "patch": "@@ -34,6 +34,18 @@ export interface PipelineDrainFn<T> {\n   readonly pending: number\n }\n \n+/**\n+ * Unref a timer on runtimes that support it (Node, Bun) so an idle flush\n+ * scheduling timer never holds the process open. Buffered events are delivered\n+ * on shutdown via the documented `flush()` contract, not by keeping timers\n+ * alive. Retry backoff timers are intentionally left ref'd: an in-flight batch\n+ * is active work, and an unref'd timer awaited by `flush()` would let the\n+ * process exit mid-retry.\n+ */\n+function unrefTimer(timer: ReturnType<typeof setTimeout>): void {\n+  (timer as { unref?: () => void }).unref?.()\n+}\n+\n /**\n  * Create a drain pipeline that batches events, retries on failure, and manages buffer overflow.\n  *\n@@ -59,18 +71,6 @@ export interface PipelineDrainFn<T> {\n  * nitroApp.hooks.hook('close', () => drain.flush())\n  * ```\n  */\n-/**\n- * Unref a timer on runtimes that support it (Node, Bun) so an idle flush\n- * scheduling timer never holds the process open. Buffered events are delivered\n- * on shutdown via the documented `flush()` contract, not by keeping timers\n- * alive. Retry backoff timers are intentionally left ref'd: an in-flight batch\n- * is active work, and an unref'd timer awaited by `flush()` would let the\n- * process exit mid-retry.\n- */\n-function unrefTimer(timer: ReturnType<typeof setTimeout>): void {\n-  (timer as { unref?: () => void }).unref?.()\n-}\n-\n export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<T>): (drain: (batch: T[]) => void | Promise<void>) => PipelineDrainFn<T> {\n   const batchSize = options?.batch?.size ?? 50\n   const intervalMs = options?.batch?.intervalMs ?? 5000"
+  },
+  {
+   "filename": "packages/evlog/src/redact.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 2,
+   "patch": "@@ -590,8 +590,6 @@ function cloneForRedaction(event: Record<string, unknown>): Record<string, unkno\n  * 2. **Masker-based**: built-in patterns with smart partial masking (e.g. `****1111`).\n  * 3. **Pattern-based**: custom RegExp patterns on string values replaced with `replacement`.\n  *\n- * @param event - The wide event object (not mutated).\n- * @param config - Redaction configuration.\n  * @returns A redacted deep clone of `event`.\n  */\n export function redactEvent(event: Record<string, unknown>, config: RedactConfig): Record<string, unknown> {"
+  },
+  {
+   "filename": "packages/evlog/src/runtime/client/log.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -69,7 +69,6 @@ async function sendToServer(event: Record<string, unknown>): Promise<void> {\n   }\n }\n \n-/** The fields every client event starts with, ahead of the logged fields. */\n function eventHead(level: LogLevel) {\n   return { timestamp: isoNow(), level, service: clientService, ...identityContext }\n }"
+  },
+  {
+   "filename": "packages/evlog/src/runtime/server/routes/_evlog/ingest.post.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 2,
+   "patch": "@@ -63,7 +63,6 @@ async function readJsonBody(event: IngestEvent): Promise<unknown> {\n   }\n }\n \n-// ISO 8601 datetime pattern (e.g., 2024-01-31T14:00:00.000Z)\n const ISO_8601_REGEX = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$/\n \n function isValidISOTimestamp(value: string): boolean {\n@@ -85,7 +84,7 @@ function validatePayload(body: unknown): IngestPayload {\n   let timestamp: string\n   if (typeof rawTimestamp === 'number') {\n     const minTimestamp = new Date('2000-01-01').getTime()\n-    const maxTimestamp = Date.now() + 24 * 60 * 60 * 1000 // 1 day in the future\n+    const maxTimestamp = Date.now() + 24 * 60 * 60 * 1000\n     if (rawTimestamp < minTimestamp || rawTimestamp > maxTimestamp) {\n       throw createError({ statusCode: 400, message: 'Invalid timestamp: value out of reasonable range' })\n     }"
+  },
+  {
+   "filename": "packages/evlog/src/runtime/server/useLogger.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 2,
+   "patch": "@@ -4,9 +4,7 @@ import type { FieldContext, ServerEvent } from '../../types'\n /**\n  * Returns the request logger attached to the given server event.\n  *\n- * @param event - The current server event containing the context with the logger.\n  * @param service - Optional service name to override the default service.\n- * @returns The request-scoped logger.\n  * @throws Error if the logger is not initialized on the event context.\n  *\n  * @example"
+  },
+  {
+   "filename": "packages/evlog/src/shared/define.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 3,
+   "patch": "@@ -71,7 +71,6 @@ export interface EvlogConfig extends BaseEvlogOptions {\n   environment?: string\n   /** Full environment context override (advanced). */\n   env?: Partial<EnvironmentContext>\n-  /** Enable or disable all logging globally. */\n   enabled?: boolean\n   /** Auto-detected from `NODE_ENV` when omitted. */\n   pretty?: boolean\n@@ -87,9 +86,7 @@ export interface EvlogConfig extends BaseEvlogOptions {\n   stringify?: boolean\n   /** Minimum severity for the global `log` API. */\n   minLevel?: LoggerConfig['minLevel']\n-  /** `evlog map` settings. */\n   map?: EvlogMapConfig\n-  /** `evlog logs` settings. */\n   logs?: EvlogLogsConfig\n }\n "
+  },
+  {
+   "filename": "packages/evlog/src/shared/dev-terminal.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 8,
+   "patch": "@@ -14,26 +14,21 @@ export interface DevPrettyErrorConfig {\n   detail?: DevPrettyErrorDetail\n }\n \n-/** Resolved pretty-error settings used at runtime. */\n export type ResolvedPrettyError = Required<DevPrettyErrorConfig>\n \n-/** Resolved dev terminal object (alternative to preset strings). */\n export interface DevTerminalConfigObject {\n   /** Show Nitro `[request error]` + Youch in the terminal. @default false when pretty in dev. */\n   frameworkOverlay?: boolean\n   prettyError?: DevPrettyErrorConfig\n }\n \n-/** User-facing dev terminal config: preset string or explicit object. */\n export type DevTerminalInput = DevTerminalPreset | DevTerminalConfigObject\n \n-/** Resolved dev terminal settings used at runtime. */\n export interface ResolvedDevTerminal {\n   frameworkOverlay: boolean\n   prettyError: ResolvedPrettyError\n }\n \n-/** Config surface accepted by {@link resolveDevTerminal}. */\n export interface DevTerminalResolveInput {\n   pretty?: boolean\n   dev?: DevTerminalInput\n@@ -61,9 +56,6 @@ function finalizePrettyError(\n   return { snippet, stackDepth, compact, detail }\n }\n \n-/**\n- * Resolve dev terminal settings from `dev` presets or explicit objects.\n- */\n export function resolveDevTerminal(input: DevTerminalResolveInput = {}): ResolvedDevTerminal {\n   const pretty = input.pretty ?? isDev()\n   const inDev = isDev()"
+  },
+  {
+   "filename": "packages/evlog/src/shared/enrich-error-stack-next.node.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -4,7 +4,6 @@ import { isAbsolute, relative } from 'node:path'\n import { pathToFileURL, fileURLToPath } from 'node:url'\n import { isFrameworkRuntimePath } from './pretty-error'\n \n-/** Parsed stack frame from Next.js `parseStack`. */\n interface NextParsedFrame {\n   file: string | null\n   line1: number | null"
+  },
+  {
+   "filename": "packages/evlog/src/shared/enrich-error-stack.node.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -1,4 +1,3 @@\n-/** Options for {@link enrichErrorStackForDev}. */\n export interface EnrichErrorStackOptions {\n   /** When false, skip Nitro source-map stack enrichment. @default true in dev when pretty is enabled */\n   pretty?: boolean"
+  },
+  {
+   "filename": "packages/evlog/src/shared/event.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 4,
+   "patch": "@@ -1,7 +1,3 @@\n-/**\n- * Helpers for building / mutating wide events from inside enrichers and adapters.\n- */\n-\n import type { WideEvent } from '../types'\n \n /**"
+  },
+  {
+   "filename": "packages/evlog/src/shared/fork.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 2,
+   "patch": "@@ -17,8 +17,6 @@ export interface ForkLifecycle {\n }\n \n /**\n- * Options for {@link forkBackgroundLogger}.\n- *\n  * @beta Part of `evlog/toolkit`\n  */\n export interface ForkBackgroundLoggerOptions {"
+  },
+  {
+   "filename": "packages/evlog/src/shared/integration.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 3,
+   "patch": "@@ -7,7 +7,6 @@ import { extractSafeHeaders, extractSafeNodeHeaders } from './headers'\n import type { BaseEvlogOptions, MiddlewareLoggerOptions, MiddlewareLoggerResult } from './middleware'\n import { createMiddlewareLogger } from './middleware'\n \n-/** Request shape extracted from a framework context. */\n export interface ExtractedRequest {\n   method: string\n   path: string\n@@ -59,7 +58,6 @@ interface StoragelessFrameworkIntegrationSpec<TCtx> extends FrameworkIntegration\n  */\n export type FrameworkIntegrationSpec<TCtx> = StorageFrameworkIntegrationSpec<TCtx> | StoragelessFrameworkIntegrationSpec<TCtx>\n \n-/** Result returned by {@link FrameworkIntegrationHelpers.start}. */\n export interface FrameworkRequestHandle extends MiddlewareLoggerResult {\n   middlewareOptions: MiddlewareLoggerOptions\n   /**\n@@ -69,7 +67,6 @@ export interface FrameworkRequestHandle extends MiddlewareLoggerResult {\n   runWith: <T>(fn: () => T | Promise<T>) => Promise<T>\n }\n \n-/** Helpers returned by {@link defineFrameworkIntegration}. */\n export interface FrameworkIntegrationHelpers<TCtx> {\n   start: (ctx: TCtx, options?: BaseEvlogOptions) => FrameworkRequestHandle\n }"
+  },
+  {
+   "filename": "packages/evlog/src/shared/middleware.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -20,7 +20,6 @@ export interface BaseEvlogOptions {\n   include?: string[]\n   /** Route glob patterns to exclude. Takes precedence over `include`. */\n   exclude?: string[]\n-  /** Per-route service overrides. */\n   routes?: Record<string, RouteConfig>\n   /** Drain callback invoked with every emitted event. */\n   drain?: (ctx: DrainContext) => void | Promise<void>"
+  },
+  {
+   "filename": "packages/evlog/src/shared/plugin.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 1,
+   "patch": "@@ -1,6 +1,5 @@\n import type { DrainContext, EnrichContext, EnvironmentContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'\n \n-/** Context passed to {@link EvlogPlugin.setup} when the plugin is registered. */\n export interface PluginSetupContext {\n   env: EnvironmentContext\n }"
+  },
+  {
+   "filename": "packages/evlog/src/shared/pretty-error.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 8,
+   "patch": "@@ -30,7 +30,6 @@ export interface PrettyErrorTreeEntry {\n   children?: string[]\n }\n \n-/** Normalized error fields extracted from wide-event `error` context. */\n export interface NormalizedErrorContext {\n   message: string\n   name?: string\n@@ -54,7 +53,6 @@ export interface StackFrame {\n   isApp: boolean\n }\n \n-/** Options for {@link buildErrorEntries}. */\n export type PrettyErrorOptions = Partial<ResolvedPrettyError> & {\n   /** Project root for relative paths in snippets. @default process.cwd() */\n   cwd?: string\n@@ -93,9 +91,6 @@ function extractGuidance(data: Record<string, unknown>): Pick<NormalizedErrorCon\n   }\n }\n \n-/**\n- * Extract structured error fields from a wide-event `error` value.\n- */\n export function normalizeErrorContext(error: unknown): NormalizedErrorContext | null {\n   if (error === null || error === undefined) return null\n \n@@ -354,9 +349,6 @@ function formatGuidanceLine(label: string, text: string, labelColor: string): st\n   return lines\n }\n \n-/**\n- * Build pretty-print tree entries for a wide-event `error` field.\n- */\n export function buildErrorEntries(\n   error: unknown,\n   options: PrettyErrorOptions = {},"
+  },
+  {
+   "filename": "packages/evlog/src/shared/routes.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 7,
+   "patch": "@@ -2,19 +2,16 @@ import type { RouteConfig } from '../types'\n import { matchesPattern } from '../utils'\n \n export function shouldLog(path: string, include?: string[], exclude?: string[]): boolean {\n-  // Check exclusions first (they take precedence)\n   if (exclude && exclude.length > 0) {\n     if (exclude.some(pattern => matchesPattern(path, pattern))) {\n       return false\n     }\n   }\n \n-  // If no include patterns, log everything (that wasn't excluded)\n   if (!include || include.length === 0) {\n     return true\n   }\n \n-  // Log only if path matches at least one include pattern\n   return include.some(pattern => matchesPattern(path, pattern))\n }\n \n@@ -25,10 +22,6 @@ export function shouldLog(path: string, include?: string[], exclude?: string[]):\n  * based on object iteration order. To ensure predictable behavior, order your\n  * route patterns from most specific to most general.\n  *\n- * @param path - The request path to match\n- * @param routes - Route configuration mapping patterns to service names\n- * @returns The service name for the matching route, or undefined if no match\n- *\n  * @example\n  * ```ts\n  * // Good: specific patterns first, general patterns last"
+  },
+  {
+   "filename": "packages/evlog/src/shared/wideEventChannel.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1,
+   "patch": "@@ -17,7 +17,7 @@ export function registerWideEventPublisher(fn: WideEventPublisher | null): void\n   publisher = fn\n }\n \n-/** Whether a publisher is registered. @internal */\n+/** @internal */\n export function hasWideEventPublisher(): boolean {\n   return publisher !== null\n }"
+  },
+  {
+   "filename": "packages/evlog/src/types.ts",
+   "status": "modified",
+   "additions": 22,
+   "deletions": 58,
+   "patch": "@@ -263,9 +263,7 @@ export interface TailSamplingContext {\n   status?: number\n   /** Request duration in milliseconds (raw number) */\n   duration?: number\n-  /** Request path */\n   path?: string\n-  /** HTTP method */\n   method?: string\n   /** Full accumulated context from the request logger */\n   context: Record<string, unknown>\n@@ -283,15 +281,13 @@ export interface TailSamplingContext {\n export interface EnrichContext {\n   /** The emitted wide event (mutable). */\n   event: WideEvent\n-  /** Request metadata (if available) */\n   request?: {\n     method?: string\n     path: string\n     requestId?: string\n   }\n   /** Safe HTTP request headers (sensitive headers filtered out) */\n   headers?: Record<string, string>\n-  /** Optional response metadata */\n   response?: {\n     status?: number\n     headers?: Record<string, string>\n@@ -303,9 +299,7 @@ export interface EnrichContext {\n  * Contains the complete wide event and request metadata for external transport.\n  */\n export interface DrainContext {\n-  /** The complete wide event to drain */\n   event: WideEvent\n-  /** Request metadata (if available) */\n   request?: {\n     method?: string\n     path?: string\n@@ -315,9 +309,6 @@ export interface DrainContext {\n   headers?: Record<string, string>\n }\n \n-/**\n- * Sampling configuration for filtering logs\n- */\n export interface SamplingConfig {\n   /**\n    * Sampling rates per log level (head sampling).\n@@ -361,9 +352,6 @@ export interface SamplingConfig {\n   keep?: TailSamplingCondition[]\n }\n \n-/**\n- * Route-based service configuration\n- */\n export interface RouteConfig {\n   /** Service name to use for routes matching this pattern */\n   service: string\n@@ -375,7 +363,6 @@ export interface RouteConfig {\n export interface EnvironmentContext {\n   /** Service name (auto-detected from package.json or configurable) */\n   service: string\n-  /** Environment: 'development', 'production', 'test', etc. */\n   environment: 'development' | 'production' | 'test' | string\n   /** Application version (auto-detected from package.json) */\n   version?: string\n@@ -385,17 +372,13 @@ export interface EnvironmentContext {\n   region?: string\n }\n \n-/**\n- * Logger configuration options\n- */\n export interface LoggerConfig {\n   /**\n    * Enable or disable all logging globally.\n    * When false, all emits, tagged logs, and request logger operations become no-ops.\n    * @default true\n    */\n   enabled?: boolean\n-  /** Environment context overrides */\n   env?: Partial<EnvironmentContext>\n   /** Enable pretty printing (auto-detected: true in dev, false in prod) */\n   pretty?: boolean\n@@ -404,7 +387,6 @@ export interface LoggerConfig {\n    * @default 'evlog' when pretty in development\n    */\n   dev?: DevTerminalInput\n-  /** Sampling configuration for filtering logs */\n   sampling?: SamplingConfig\n   /**\n    * Minimum severity for the global `log` API (tagged and object form).\n@@ -520,14 +502,6 @@ export interface LoggerConfig {\n   _suppressDrainWarning?: boolean\n }\n \n-/**\n- * Audit actor — who initiated the action.\n- *\n- * `type` covers the most common actor families. `id` is required and should be\n- * a stable identifier (user id, service name, API key id, agent id). `model`,\n- * `tools`, `reason`, and `promptId` are filled when `type === 'agent'` and\n- * mirror the AI SDK fields already used by `evlog/ai`.\n- */\n /** Relative importance of an audit action for alerting and review prioritisation. */\n export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical'\n \n@@ -550,6 +524,14 @@ export interface AuditActionDefinition {\n   redactPaths?: readonly string[]\n }\n \n+/**\n+ * Audit actor — who initiated the action.\n+ *\n+ * `type` covers the most common actor families. `id` is required and should be\n+ * a stable identifier (user id, service name, API key id, agent id). `model`,\n+ * `tools`, `reason`, and `promptId` are filled when `type === 'agent'` and\n+ * mirror the AI SDK fields already used by `evlog/ai`.\n+ */\n export interface AuditActor {\n   type: 'user' | 'system' | 'api' | 'agent'\n   id: string\n@@ -574,6 +556,20 @@ export interface AuditTarget {\n   [key: string]: unknown\n }\n \n+/** Single JSON Patch operation for audit change tracking (RFC 6902 subset). */\n+export interface AuditPatchOp {\n+  op: 'add' | 'remove' | 'replace'\n+  path: string\n+  value?: unknown\n+}\n+\n+/** Before/after snapshots and optional patch produced by {@link auditDiff}. */\n+export interface AuditChanges {\n+  before?: unknown\n+  after?: unknown\n+  patch?: AuditPatchOp[]\n+}\n+\n /**\n  * Reserved audit fields on the wide event.\n  *\n@@ -594,20 +590,6 @@ export interface AuditTarget {\n  * - `context` — request/runtime context auto-populated by {@link auditEnricher}\n  *   (`requestId`, `traceId`, `ip`, `userAgent`, `tenantId`).\n  */\n-/** Single JSON Patch operation for audit change tracking (RFC 6902 subset). */\n-export interface AuditPatchOp {\n-  op: 'add' | 'remove' | 'replace'\n-  path: string\n-  value?: unknown\n-}\n-\n-/** Before/after snapshots and optional patch produced by {@link auditDiff}. */\n-export interface AuditChanges {\n-  before?: unknown\n-  after?: unknown\n-  patch?: AuditPatchOp[]\n-}\n-\n export interface AuditFields {\n   /** Action name. Convention: `'<resource>.<verb>'`, e.g. `'invoice.refund'`. */\n   action: string\n@@ -664,9 +646,6 @@ export interface BaseWideEvent {\n   audit?: AuditFields\n }\n \n-/**\n- * Wide event with arbitrary additional fields\n- */\n export type WideEvent = BaseWideEvent & Record<string, unknown>\n \n /**\n@@ -693,9 +672,6 @@ export interface InternalFields {\n   _parentRequestId?: string\n }\n \n-/**\n- * Request-scoped log entry captured during a request lifecycle.\n- */\n export interface RequestLogEntry {\n   level: 'info' | 'warn' | 'fatal' | 'debug' | 'trace'\n   message: string\n@@ -838,9 +814,6 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {\n    */\n   emit: (overrides?: FieldContext<T> & { _forceKeep?: boolean, _durationMs?: number }) => WideEvent | null\n \n-  /**\n-   * Get the current accumulated context\n-   */\n   getContext: () => FieldContext<T> & Record<string, unknown>\n \n   /**\n@@ -903,8 +876,6 @@ export interface AuditLoggerMethod {\n }\n \n /**\n- * Log level type.\n- *\n  * Severity order: `trace` and `debug` < `info` < `warn` < `error` < `fatal`.\n  */\n export type LogLevel = 'info' | 'error' | 'warn' | 'debug' | 'fatal' | 'trace'\n@@ -1039,9 +1010,6 @@ export type AuditAction = {\n   [K in keyof RegisteredAuditCatalogs]: ExtractCatalogActions<RegisteredAuditCatalogs[K]>\n }[keyof RegisteredAuditCatalogs]\n \n-/**\n- * Error options for creating structured errors\n- */\n export interface ErrorOptions {\n   /** What actually happened */\n   message: string\n@@ -1063,7 +1031,6 @@ export interface ErrorOptions {\n   fix?: string\n   /** Link to documentation or more information */\n   link?: string\n-  /** The original error that caused this */\n   cause?: Error\n   /**\n    * Extra payload returned to the client, merged into the response body's\n@@ -1091,9 +1058,6 @@ export type EvlogErrorData = Record<string, unknown> & {\n   link?: string\n }\n \n-/**\n- * Options for creating a request logger\n- */\n export interface RequestLoggerOptions {\n   method?: string\n   path?: string"
+  },
+  {
+   "filename": "packages/evlog/src/utils.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 3,
+   "patch": "@@ -182,9 +182,6 @@ export function hasMessageSpecifiers(format: string): boolean {\n  * arguments are appended space-separated, and a message without arguments is\n  * returned unchanged. Objects and arrays render as JSON instead of node's\n  * `util.inspect` to keep the formatter free of bundle weight.\n- *\n- * @param format - Message possibly containing format specifiers\n- * @param args - Values for the specifiers\n  */\n export function formatMessage(format: string, args: unknown[]): string {\n   if (args.length === 0) return format"
+  },
+  {
+   "filename": "packages/evlog/src/vite/types.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 2,
+   "patch": "@@ -31,7 +31,6 @@ export interface EvlogViteOptions {\n   pretty?: boolean\n   /** Suppress console output @default false */\n   silent?: boolean\n-  /** Sampling configuration */\n   sampling?: SamplingConfig\n   /** Minimum severity for the global `log` API (not request wide events) @default 'debug' */\n   minLevel?: LogLevel\n@@ -43,6 +42,5 @@ export interface EvlogViteOptions {\n   strip?: LogLevel[]\n   /** Inject source file:line into log calls. When 'dev', active only during development. @default false */\n   sourceLocation?: boolean | 'dev'\n-  /** Client-side logging configuration */\n   client?: ClientOptions\n }"
+  },
+  {
+   "filename": "packages/evlog/src/workers/index.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 3,
+   "patch": "@@ -12,9 +12,6 @@ export interface WorkerExecutionContext {\n   waitUntil(promise: Promise<unknown>): void\n }\n \n-/**\n- * Options for createWorkersLogger\n- */\n export interface WorkersLoggerOptions {\n   /** Override the request ID (default: cf-ray header) */\n   requestId?: string"
+  },
+  {
+   "filename": "packages/evlog/test/toolkit/jsdoc-placement.test.ts",
+   "status": "added",
+   "additions": 23,
+   "deletions": 0
+  }
+ ],
+ "manifests": {}
+}

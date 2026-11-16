@@ -1,0 +1,42 @@
+{
+ "number": 1017,
+ "title": "chore(repo): version packages (beta)",
+ "author": {
+  "login": "github-actions[bot]",
+  "fork": false,
+  "association": "CONTRIBUTOR"
+ },
+ "files": [
+  {
+   "filename": ".changeset/pre.json",
+   "status": "modified",
+   "additions": 4,
+   "deletions": 0,
+   "patch": "@@ -22,6 +22,7 @@\n     \"error-status-field\",\n     \"evlog-upgrade-scaffold\",\n     \"faster-set-and-redaction\",\n+    \"fs-owner-only\",\n     \"hyperdx-sazabi-otlp-options\",\n     \"iban-before-card\",\n     \"linear-stack-frames\",\n@@ -30,7 +31,10 @@\n     \"merge-plain-objects-only\",\n     \"nitro-entry-v3\",\n     \"nitro-error-body-status\",\n+    \"nitro-plugin-request-hooks\",\n+    \"otel-trace-context\",\n     \"otlp-compact-defaults\",\n+    \"peer-ranges-tested-majors\",\n     \"peer-ranges-v3\",\n     \"plain-logs-output\",\n     \"plain-terminal-values\","
+  },
+  {
+   "filename": "packages/evlog/CHANGELOG.md",
+   "status": "modified",
+   "additions": 38,
+   "deletions": 0
+  },
+  {
+   "filename": "packages/evlog/package.json",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  }
+ ],
+ "manifests": {
+  "packages/evlog/package.json": {
+   "base": {
+    "name": "evlog",
+    "version": "3.0.0-beta.2"
+   },
+   "head": {
+    "name": "evlog",
+    "version": "3.0.0-beta.3"
+   }
+  }
+ }
+}

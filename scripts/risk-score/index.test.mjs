@@ -17,7 +17,7 @@ function fakeGithub({ comments, heads = [SHA], files, contents = {} }) {
     rest: {
       pulls: {
         // Each call returns the next head in `heads`, then keeps the last one.
-        get: vi.fn(async () => ({ data: { title: 'fix(loki): flush on shutdown', base: { ref: 'main', sha: 'base' }, head: { sha: heads.length > 1 ? heads.shift() : heads[0] } } })),
+        get: vi.fn(async () => ({ data: { title: 'fix(loki): flush on shutdown', user: { login: 'someone' }, author_association: 'MEMBER', base: { ref: 'main', sha: 'base', repo: { full_name: 'evloghq/evlog' } }, head: { sha: heads.length > 1 ? heads.shift() : heads[0], repo: { full_name: 'evloghq/evlog' } } } })),
         listFiles,
       },
       repos: {
