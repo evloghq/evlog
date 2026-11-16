@@ -3,8 +3,7 @@ import { eviErrors } from '../errors'
 import { jobLogger } from '../job'
 import { type Repository, repositorySlug } from '../repo'
 import { MAINTAINER_GITHUB_LOGIN } from '../trust'
-import { githubCredentialsFor } from './credentials'
-import { mintInstallationToken } from './push'
+import { githubCredentialsFor, mintInstallationToken } from './credentials'
 
 const GITHUB_API = 'https://api.github.com'
 

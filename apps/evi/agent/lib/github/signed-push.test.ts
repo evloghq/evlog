@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { checkoutRefCommand, collectBranchCommits, pushSignedCommits, remoteBranchHead } from './signed-push'
+import { collectBranchCommits, pushSignedCommits, remoteBranchHead } from './signed-push'
 
 const exec = promisify(execCallback)
 const directories: string[] = []
@@ -91,31 +91,6 @@ describe('collectBranchCommits', () => {
     expect(base).toBe(first)
     expect(branchExists).toBe(true)
     expect(commits.map(c => c.message.trim())).toEqual(['second'])
-  })
-
-  it('counts a ref fetched by checkoutRefCommand as already on GitHub', async () => {
-    const dir = await clone()
-    const origin = join(dir, '..', 'origin')
-    git(origin, 'checkout', '-qb', 'release')
-    for (const n of [1, 2, 3]) {
-      await writeFile(join(origin, `release-${n}.txt`), `${n}\n`)
-      git(origin, 'add', '.')
-      git(origin, '-c', 'user.email=t@example.com', '-c', 'user.name=T', '-c', 'commit.gpgsign=false', 'commit', '-qm', `release ${n}`)
-    }
-    const shallow = join(dir, '..', 'shallow')
-    execFileSync('git', ['clone', '-q', '--depth', '1', '--single-branch', '--branch', 'main', `file://${origin}`, shallow])
-    git(shallow, 'config', 'user.email', 't@example.com')
-    git(shallow, 'config', 'user.name', 'T')
-    git(shallow, 'config', 'commit.gpgsign', 'false')
-
-    expect((await sandbox.run({ command: checkoutRefCommand(shallow, 'release') })).exitCode).toBe(0)
-    git(shallow, 'checkout', '-qb', 'feat')
-    await commit(shallow, 'on release', { 'a.txt': 'a\n' })
-
-    const { base, commits } = await collectBranchCommits(sandbox, shallow, 'feat', null)
-
-    expect(base).toBe(git(origin, 'rev-parse', 'release'))
-    expect(commits.map(c => c.message.trim())).toEqual(['on release'])
   })
 
   it('refuses a branch on GitHub that the local branch does not contain', async () => {

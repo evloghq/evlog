@@ -74,15 +74,6 @@ export async function collectBranchCommits(sandbox: GitSandbox, dir: string, bra
   return { base, head, branchExists: remoteHead !== null, commits }
 }
 
-/**
- * Fetch `ref` into the checkout at `dir` and detach onto it. The fetched commit is
- * kept under `refs/remotes/checkout/`, so {@link collectBranchCommits} counts it as
- * already on GitHub: a single-branch clone has no remote-tracking ref for it otherwise.
- */
-export function checkoutRefCommand(dir: string, ref: string): string {
-  return `git -C ${dir} fetch --depth 50 origin '${ref}' && git -C ${dir} update-ref "refs/remotes/checkout/$(git -C ${dir} rev-parse FETCH_HEAD)" FETCH_HEAD && git -C ${dir} checkout --detach FETCH_HEAD`
-}
-
 async function readCommit(sandbox: GitSandbox, dir: string, sha: string): Promise<CommitChanges> {
   const message = await git(sandbox, dir, `log -1 --format=%B ${sha}`)
   // `-z` keeps paths verbatim, and blobs are read by id, so no path ever reaches the command line.

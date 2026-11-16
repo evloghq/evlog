@@ -2,7 +2,8 @@ import { initLogger, type WideEvent } from 'evlog'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ESCALATION_LABEL, escalateFailedTriage, escalateFailedTriageQuietly, isAutonomousTriageState } from './escalate'
 
-vi.mock('./credentials', () => ({
+vi.mock('./credentials', async importOriginal => ({
+  ...await importOriginal<typeof import('./credentials')>(),
   githubCredentialsFor: () => ({ installationToken: () => Promise.resolve('tok_test') }),
 }))
 

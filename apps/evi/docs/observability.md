@@ -27,7 +27,7 @@ Tool executes enrich the same event with their outcome, in the pattern
 `tools/git.ts` set: one namespace per domain, holding counts, reason codes,
 and identifiers Evi authored. Never raw error strings, tool payloads, or
 untrusted URLs, so the metadata-only PostHog policy holds. The namespaces:
-`git.{branch,pushed,sha,reason,exitCode}`, `git.checkout.{repository,done,sha,reason,exitCode}`, `git.install.{repository,done,reason,exitCode}`,
+`git.{branch,pushed,sha,commits,reason}`,
 `capture.{published,viewport,target,beforeHost,afterHost,reason}`,
 `blob.{uploaded,bytes,reason}`, `turbo.{remoteCache,reason}`,
 `vercel.{env,key,project,target,reason,status}`,
@@ -43,7 +43,7 @@ work that run outside a turn emit their own events (below).
 
 Every failure Evi authors comes from the catalog in `agent/lib/errors.ts`
 (`defineErrorCatalog('evi', …)`), so a `reason` field is always a catalog code
-(`evi.GITHUB_NOT_INSTALLED`, `evi.GIT_COMMAND_FAILED`, …) and never an ad-hoc
+(`evi.BLOB_TOKEN_MISSING`, `evi.GIT_COMMAND_FAILED`, …) and never an ad-hoc
 string. A tool refuses through `refusal(eviErrors.X(...))`, which returns
 `{ success: false, code, error }`: the model reads `error` (message plus the
 entry's `fix`), the turn event records `code` under the tool's namespace.

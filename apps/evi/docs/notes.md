@@ -41,8 +41,8 @@ and the continuation token carries only `repositoryId`. So `ctx.channel.metadata
 is empty in dynamic tools and instruction fragments on a GitHub turn, and the
 thread's `owner`/`repo` reach only the channel's own event handlers through
 `channel.state`. That is why escalation follows the thread (`repositoryOf(state)`)
-while `git__checkout`, `git__push` and the `github__*` defaults follow
-`EVI_REPOSITORY` and take an explicit repository otherwise. The upstream ask is a `metadata` projection of
+while the `github__*` defaults follow `EVI_REPOSITORY` and take an explicit
+repository otherwise. The upstream ask is a `metadata` projection of
 `{ owner, repo, installationId }` on the GitHub channel; with it, `repositoryOf`
 narrows `ctx.channel` through `isChannel` and the explicit inputs go away.
 
@@ -52,14 +52,14 @@ detail: an explicit `installationId` first, then `org` (or the owner of a
 qualified repository), then the connector's default. `installationParams` in
 `lib/github/credentials.ts` names the repository owner, so anyone who installs
 the App is covered with nothing to register, and `repositories` narrows the
-git tools' token to the one repository. A missing installation is
+escalation token to the one repository. A missing installation is
 `ConnectorInstallationRequiredError`, never a fallback to another account.
 This selection order landed in the Connect API with vercel/api#93139; before
 it, `org` was ignored and the default installation answered for every account.
-The `github__*` extension and the channel take one credential, the home
-account's; on a repository elsewhere the extension's write tools,
-`createPullRequest` first, answer 403. The upstream ask is a per-call
-`installationId` resolver on `@github-tools/eve-extension`.
+The channel takes one credential, the home account's. Since
+`@github-tools/eve-extension` 0.13 the `github__*` tools mint for the
+installation that owns each call's target repository, per its README, and
+`git__gh` and `git__push` mint for the `repository` each call declares.
 
 **iMessage attachments never reach the model.** The Photon adapter's chat
 mapping keeps name/mimeType/size, and eve's `messageToUserContent` only reads
@@ -111,14 +111,15 @@ them, only mentions and DMs reach the agent.
 
 **`main` requires signed commits, and the sandbox has no key to sign with.**
 A `git push` from the sandbox lands unsigned commits, and GitHub then blocks
-the PR, squash merge included. `git__push` recreates each commit with the
-GraphQL `createCommitOnBranch`, which GitHub signs as the App, and moves the
-local branch onto the result. That mutation takes file contents without a
-mode, so the push refuses symlinks, submodules, executable bits and merges. Each
-mutation moves the branch on GitHub at once, so when one fails the push puts
-the branch back where it was, and running it again starts from the same state.
-The rollback goes through `updateRefs` with the last head the push wrote as
-`beforeOid`, so a commit someone else pushed in between stays.
+the PR, squash merge included. So `git__gh` refuses `git push`, and
+`git__push` recreates each commit with the GraphQL `createCommitOnBranch`,
+which GitHub signs as the App, and moves the local branch onto the result.
+That mutation takes file contents without a mode, so the push refuses
+symlinks, submodules, executable bits and merges. Each mutation moves the
+branch on GitHub at once, so when one fails the push puts the branch back
+where it was, and running it again starts from the same state. The rollback
+goes through `updateRefs` with the last head the push wrote as `beforeOid`,
+so a commit someone else pushed in between stays.
 
 **Vercel evaluates schedule cron in UTC.** `0 5 * * *` fires 06:00 London in
 summer (BST) and drifts to 05:00 in winter (GMT). `eve dev` never fires crons;

@@ -1,4 +1,5 @@
 import { installAgentBrowser } from '@agent-browser/eve/sandbox'
+import { installCodeTooling } from 'eve/extensions/code/sandbox'
 import { defineSandbox } from 'eve/sandbox'
 import type { SandboxSession } from 'eve/sandbox'
 import { browserSandbox } from './lib/capture'
@@ -39,6 +40,8 @@ async function prepareSandbox(sandbox: SandboxSession) {
   }
   // Commits authored in the sandbox belong to the bot, on every channel.
   await sandbox.run({ command: 'git config --global user.name "evlogai[bot]" && git config --global user.email "evlogai[bot]@users.noreply.github.com"' })
+  // `gh` and the wrapper `git__gh` runs it through.
+  await installCodeTooling(sandbox)
   const { stdout: architecture } = await sandbox.run({ command: 'uname -m' })
   await installAgentBrowser(browserSandbox(sandbox), agentBrowserInstallOptions(architecture))
 }

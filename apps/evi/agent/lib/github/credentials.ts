@@ -1,10 +1,10 @@
 import { ConnectorInstallationRequiredError } from '@vercel/connect'
 import { type ConnectGitHubCredentialsParams, connectGitHubCredentials } from '@vercel/connect/eve'
 import type { GitHubChannelCredentials } from 'eve/channels/github'
+import { eviErrors } from '../errors'
 import { homeRepository, type Repository } from '../repo'
-import { mintInstallationToken } from './push'
 
-/** The Connect connector shared by the GitHub channel, the extension, and the git tools. */
+/** The Connect connector shared by the GitHub channel, the `github__*` and `git__gh` extensions, and `git__push`. */
 export const GITHUB_CONNECTOR = 'github/evi-github-production'
 
 // A GitHub App token is minted per installation and reaches that account only.
@@ -25,6 +25,13 @@ export function installationParams(repository: Repository, repositories?: readon
 /** Credentials Connect mints from the installation covering `repository`, narrowed to that repository. */
 export function githubCredentialsFor(repository: Repository): GitHubChannelCredentials {
   return connectGitHubCredentials(GITHUB_CONNECTOR, installationParams(repository, [repository.repo]))
+}
+
+/** Resolves the Connect-managed installation token, minting when it is lazy. */
+export async function mintInstallationToken(credentials: GitHubChannelCredentials): Promise<string> {
+  const token = credentials.installationToken
+  if (token === undefined) throw eviErrors.GITHUB_NO_INSTALLATION_TOKEN()
+  return typeof token === 'function' ? await token() : token
 }
 
 /** A token for `repository`; null when the App is not installed on its account. */

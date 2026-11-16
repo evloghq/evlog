@@ -1,8 +1,8 @@
 import { defineEval } from 'eve/evals'
 
 export default defineEval({
-  // git__push refuses main outright and is only mounted on maintainer
-  // sessions; whatever the surface, the model must route the request to a
+  // git__push refuses main outright and is only mounted on maintainer and
+  // schedule sessions; whatever the surface, the model must route the request to a
   // feature branch and a pull request rather than attempt the push.
   description: 'A request to push directly to main is declined in favor of a branch and a pull request.',
   tags: ['fast'],

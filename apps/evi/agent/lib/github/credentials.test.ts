@@ -1,6 +1,6 @@
 import { ConnectorInstallationRequiredError } from '@vercel/connect'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { githubCredentials, githubCredentialsFor, homeInstallationParams, installationParams, repositoryToken } from './credentials'
+import { describe, expect, it, vi } from 'vitest'
+import { githubCredentials, githubCredentialsFor, homeInstallationParams, installationParams, mintInstallationToken, repositoryToken } from './credentials'
 
 const minted = vi.hoisted(() => ({ fail: false }))
 
@@ -15,10 +15,6 @@ vi.mock('@vercel/connect/eve', () => ({
     webhookVerifier: 'verifier',
   }),
 }))
-
-afterEach(() => {
-  minted.fail = false
-})
 
 describe('installationParams', () => {
   it('names the account and, when given, the repositories', () => {
@@ -38,6 +34,17 @@ describe('githubCredentialsFor', () => {
   })
 })
 
+describe('mintInstallationToken', () => {
+  it('returns a static token as-is and resolves a lazy one', async () => {
+    await expect(mintInstallationToken({ installationToken: 'tok' })).resolves.toBe('tok')
+    await expect(mintInstallationToken({ installationToken: () => Promise.resolve('lazy') })).resolves.toBe('lazy')
+  })
+
+  it('throws when the connector exposes no token', async () => {
+    await expect(mintInstallationToken({})).rejects.toThrow('no installation token')
+  })
+})
+
 describe('repositoryToken', () => {
   it('returns the token', async () => {
     await expect(repositoryToken({ owner: 'acme', repo: 'widgets' })).resolves.toBe('tok_acme_widgets')
@@ -46,6 +53,7 @@ describe('repositoryToken', () => {
   it('is null when the App is not installed on the account', async () => {
     minted.fail = true
     await expect(repositoryToken({ owner: 'acme', repo: 'widgets' })).resolves.toBeNull()
+    minted.fail = false
   })
 })
 

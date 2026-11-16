@@ -29,10 +29,6 @@ export const eviErrors = defineErrorCatalog('evi', {
   GIT_COMMAND_FAILED: {
     message: ({ command, exitCode }: { command: string, exitCode: number }) => `git ${command} exited ${exitCode}`,
   },
-  GIT_NO_COMMITS: {
-    message: ({ repository }: { repository: string }) => `${repository} has no commits to check out.`,
-  },
-  INSTALL_FAILED: { message: ({ exitCode }: { exitCode: number }) => `install exited ${exitCode}` },
 
   TURBO_NOT_CONFIGURED: {
     message: 'TURBO_TEAM and VERCEL_TEAM_ID must be configured for remote caching.',
