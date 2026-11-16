@@ -501,6 +501,20 @@ describe('requestMinLevel', () => {
     expect(defined(fatalLogger.emit()).level).toBe('fatal')
   })
 
+  it('emits error and fatal events when the floor arrives untyped, as from an env variable', () => {
+    for (const floor of ['WARN', 'fatal']) {
+      initLogger({ pretty: false, requestMinLevel: floor as 'warn' })
+
+      const errorLogger = createRequestLogger({ path: '/error' })
+      errorLogger.error(new Error('boom'))
+      expect(defined(errorLogger.emit()).level).toBe('error')
+
+      const fatalLogger = createRequestLogger({ path: '/fatal' })
+      fatalLogger.fatal(new Error('down'))
+      expect(defined(fatalLogger.emit()).level).toBe('fatal')
+    }
+  })
+
   it('runs before sampling.keep, so a keep rule does not rescue an event below the floor', () => {
     initLogger({ pretty: false, requestMinLevel: 'warn', sampling: { keep: [{ duration: 0 }] } })
 

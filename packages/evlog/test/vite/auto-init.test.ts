@@ -75,6 +75,14 @@ describe('vite auto-init plugin', () => {
     expect(config.minLevel).toBe('warn')
   })
 
+  it('includes requestMinLevel from the options and from evlog.config.ts', async () => {
+    const fromOptions = JSON.parse(getDefineConfig(createAutoInitPlugin({ requestMinLevel: 'warn' })).__EVLOG_CONFIG__)
+    expect(fromOptions.requestMinLevel).toBe('warn')
+
+    const { define } = await defineWithFile(`export default { requestMinLevel: 'info' }\n`)
+    expect(JSON.parse(define.__EVLOG_CONFIG__).requestMinLevel).toBe('info')
+  })
+
   it('includes all serializable options', () => {
     const plugin = createAutoInitPlugin({
       service: 'api',

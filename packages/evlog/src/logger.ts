@@ -1123,7 +1123,8 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
       const auditForceKeep = consumeAuditForceKeep(context)
-      if (!auditForceKeep && state.requestMinLevel && !isLevelEnabled(level, state.requestMinLevel)) {
+      // error and fatal are checked by level, not through the floor, so an untyped floor ('WARN', 'fatal') cannot drop them.
+      if (!auditForceKeep && level !== 'error' && level !== 'fatal' && state.requestMinLevel && !isLevelEnabled(level, state.requestMinLevel)) {
         emitted = true
         pendingWideEvent = null
         return null
