@@ -1,9 +1,9 @@
 /**
  * Pure helpers for `index.mjs`: no network, so they can be tested on fixtures.
  *
- * The assessment reads only the pull request metadata and the file list the
- * GitHub API returns (paths, line counts, patches). It never runs code from the
- * pull request.
+ * The assessment reads only the pull request metadata, the file list the
+ * GitHub API returns (paths, line counts, patches) and the parsed package
+ * manifests. It never runs code from the pull request.
  */
 
 export const LEVELS = { 1: 'Low', 2: 'Typical', 3: 'High', 4: 'Very high' }
@@ -14,37 +14,109 @@ export const COMMENT_MARKER = '<!-- evlog-risk-score -->'
 const MAX_TEXT = 200
 const MAX_ITEMS = 8
 const LARGE_CHANGE = 500
+const SMALL_CHANGE = 30
 
 const isTest = path => /(^|\/)(test|tests|__tests__|__snapshots__)\//.test(path) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(path)
 const isShipped = path => /^packages\/[^/]+\/(src|bin)\//.test(path) && !isTest(path)
 const isChangeset = path => /^\.changeset\/(?!README\.md$)[^/]+\.md$/.test(path)
+/** A published package's manifest, whose base and head contents `index.mjs` fetches. */
+export const isManifest = path => /^packages\/[^/]+\/package\.json$/.test(path)
+const isWorkflow = path => /^\.github\/(workflows|actions)\//.test(path)
 // A rename counts under both paths, so moving a module out of a watched directory still matches.
 const pathsOf = file => file.previous_filename ? [file.filename, file.previous_filename] : [file.filename]
+const lineCount = files => files.reduce((sum, f) => sum + f.additions + f.deletions, 0)
 
 /**
  * Path rules, one per signal. `level` is the area level the rule raises the
- * area to when at least one changed file matches.
+ * area to when at least one changed file matches. `additive` lowers it to
+ * Typical when the matched files only gain lines. `scaled` lowers it to Typical
+ * when the matched files change {@link SMALL_CHANGE} lines or fewer and none
+ * is removed or renamed.
  */
 const RULES = [
-  { area: 'compatibility', level: 3, match: /^packages\/[^/]+\/package\.json$/, reason: 'Changes a package manifest (exports, dependencies, engines)' },
-  { area: 'compatibility', level: 3, match: /^packages\/[^/]+\/tsdown\.config\.ts$/, reason: 'Changes the build entrypoints' },
-  { area: 'compatibility', level: 3, match: /^packages\/evlog\/test\/toolkit\/__snapshots__\/api-surface/, reason: 'Changes the public API snapshot' },
+  { area: 'compatibility', level: 3, additive: true, match: /^packages\/[^/]+\/tsdown\.config\.ts$/, reason: 'Changes the build entrypoints' },
+  { area: 'compatibility', level: 3, additive: true, match: /^packages\/evlog\/test\/toolkit\/__snapshots__\/api-surface/, reason: 'Changes the public API snapshot' },
   { area: 'compatibility', level: 2, match: isShipped, reason: 'Changes shipped package source' },
 
-  { area: 'sensitiveData', level: 3, match: /^packages\/evlog\/src\/(redact\.ts|shared\/(headers|serialize-error)\.ts|enrichers\/|audit|better-auth\/|runtime\/server\/routes\/)/, reason: 'Touches redaction, headers, error serialization, audit or ingest code' },
+  { area: 'sensitiveData', level: 3, match: /^packages\/evlog\/src\/(shared\/(headers|serialize-error)\.ts|enrichers\/|audit|better-auth\/|runtime\/server\/routes\/)/, reason: 'Touches headers, error serialization, audit or ingest code' },
+  { area: 'sensitiveData', level: 3, scaled: true, match: /^packages\/evlog\/src\/redact\.ts$/, reason: 'Touches redaction' },
   { area: 'sensitiveData', level: 2, match: /^packages\/evlog\/src\/adapters\//, reason: 'Changes what drain adapters send to third parties' },
 
-  { area: 'loggingOverhead', level: 3, match: /^packages\/evlog\/src\/(logger|pipeline|redact|stream)\.ts$|^packages\/evlog\/src\/shared\/(event|middleware|fork|asyncStorageScope|wideEventChannel|enricher)\.ts$|^packages\/evlog\/src\/enrichers\//, reason: 'Changes the per-event hot path' },
+  { area: 'loggingOverhead', level: 3, scaled: true, match: /^packages\/evlog\/src\/(logger|pipeline|redact|stream)\.ts$|^packages\/evlog\/src\/shared\/(event|middleware|fork|asyncStorageScope|wideEventChannel|enricher)\.ts$|^packages\/evlog\/src\/enrichers\//, reason: 'Changes the per-event hot path' },
   { area: 'loggingOverhead', level: 3, match: /^packages\/evlog\/bench\/baseline\//, reason: 'Re-records the benchmark or bundle size baselines' },
   { area: 'loggingOverhead', level: 2, match: path => /^packages\/evlog\/src\//.test(path) && !isTest(path), reason: 'Changes code that runs inside the request lifecycle' },
 
-  { area: 'delivery', level: 3, match: /^packages\/evlog\/src\/(adapters\/|pipeline\.ts$|http\.ts$|shared\/(drain|deferred-drain|http|chunk)\.ts$|nitro\/(deferred-drain|enrich-drain)\.ts$)/, reason: 'Changes how events are batched, retried or sent to drains' },
+  { area: 'delivery', level: 3, scaled: true, match: /^packages\/evlog\/src\/(adapters\/|pipeline\.ts$|http\.ts$|shared\/(drain|deferred-drain|http|chunk)\.ts$|nitro\/(deferred-drain|enrich-drain)\.ts$)/, reason: 'Changes how events are batched, retried or sent to drains' },
   { area: 'delivery', level: 2, match: /^packages\/evlog\/src\/(workers|next|nitro|nitro-v3|nuxt|sveltekit|hono|express|fastify|elysia|nestjs|react-router|orpc|effect)\//, reason: 'Changes when a framework integration flushes events' },
 
-  { area: 'release', level: 4, match: /^\.github\/workflows\/release\.yml$|^\.changeset\/(config|pre)\.json$/, reason: 'Changes how packages are versioned or published to npm' },
-  { area: 'release', level: 3, match: /^\.github\/(workflows|actions)\//, reason: 'Changes CI that runs with repository credentials' },
+  { area: 'release', level: 4, match: /^\.changeset\/config\.json$/, reason: 'Changes how packages are versioned' },
   { area: 'release', level: 2, match: /^(scripts\/|turbo\.json$|pnpm-workspace\.yaml$|pnpm-lock\.yaml$|package\.json$)/, reason: 'Changes repository tooling or the lockfile' },
 ]
+
+// Manifest fields that decide what consumers import, or where the package installs.
+const ENTRY_FIELDS = ['exports', 'typesVersions', 'imports', 'main', 'module', 'types', 'typings', 'bin', 'files', 'type', 'sideEffects']
+const INSTALL_FIELDS = ['engines', 'peerDependencies', 'peerDependenciesMeta', 'optionalDependencies']
+const FLOOR_RANGE = /^(\^|~|>=)(\d+)\.(\d+)\.(\d+)$/
+
+/** True when `head` only raises the minimum of `base` within the same operator and major, as `>=4.13.14` to `>=4.13.17`. */
+function raisesFloor(base, head) {
+  const [b, h] = [FLOOR_RANGE.exec(base ?? ''), FLOOR_RANGE.exec(head ?? '')]
+  if (!b || !h || b[1] !== h[1] || b[2] !== h[2]) return false
+  return Number(h[3]) > Number(b[3]) || (h[3] === b[3] && Number(h[4]) >= Number(b[4]))
+}
+
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+const isObject = value => typeof value === 'object' && value !== null && !Array.isArray(value)
+/** True when `head` keeps every value of `base`, nested keys included, and only adds new ones. */
+const extends_ = (base, head) => isObject(base) && isObject(head)
+  ? Object.keys(base).every(k => extends_(base[k], head[k]))
+  : same(base, head)
+
+/**
+ * Classify a package manifest change from its parsed base and head contents
+ * (`null` when the file is added or removed). Returns `entry`, `install`,
+ * `peerFloors`, `addedOrRemovedDeps`, `depRanges` or `other` for the most
+ * consequential difference, and whether the entrypoint change only adds entries.
+ */
+export function classifyManifest(base, head) {
+  const before = base ?? {}
+  const after = head ?? {}
+  const changed = key => !same(before[key], after[key])
+  if (ENTRY_FIELDS.some(changed))
+    return { kind: 'entry', additive: base !== null && ENTRY_FIELDS.every(k => extends_(before[k], after[k])) }
+  const peers = [before.peerDependencies ?? {}, after.peerDependencies ?? {}]
+  const onlyFloors = same(Object.keys(peers[0]).sort(), Object.keys(peers[1]).sort())
+    && Object.keys(peers[0]).every(k => peers[0][k] === peers[1][k] || raisesFloor(peers[0][k], peers[1][k]))
+  if (INSTALL_FIELDS.some(k => k === 'peerDependencies' ? !onlyFloors : changed(k))) return { kind: 'install' }
+  if (changed('peerDependencies')) return { kind: 'peerFloors' }
+  const deps = [before.dependencies ?? {}, after.dependencies ?? {}].map(Object.keys)
+  if (!same(deps[0].sort(), deps[1].sort())) return { kind: 'addedOrRemovedDeps' }
+  if (changed('dependencies')) return { kind: 'depRanges' }
+  return { kind: 'other' }
+}
+
+/** Lines the patch adds and removes, without the leading `+` or `-`. */
+function changedLines(patch) {
+  return (patch ?? '').split('\n').filter(l => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)).map(l => l.slice(1))
+}
+
+// A workflow line that only moves a pinned action or tool version, once its trailing comment is dropped.
+const PIN_LINE = /^(-\s+)?uses:\s*\S+@\S+$|^[A-Z0-9_]+_VERSION:\s*\S+$/
+// A workflow line that grants permissions, reads a secret, or changes what code a privileged job checks out.
+const CREDENTIAL_LINE = /secrets\.|_TOKEN\b|--token|permissions:|:\s*write\b|id-token|pull_request_target|persist-credentials|\bref:|environment:/i
+
+/**
+ * Classify a workflow or composite action change from its patch: `pins` when
+ * every changed line only moves a pinned version, `credentials` when a changed
+ * line touches permissions, secrets or the checked-out ref, `other` otherwise.
+ * A file without a patch (too large for the API) counts as `credentials`.
+ */
+export function classifyWorkflow(patch) {
+  if (patch === undefined) return 'credentials'
+  const lines = changedLines(patch).map(l => l.replace(/(^|\s)#.*$/, '').trim()).filter(Boolean)
+  if (lines.every(l => PIN_LINE.test(l))) return 'pins'
+  return lines.some(l => CREDENTIAL_LINE.test(l)) ? 'credentials' : 'other'
+}
 
 const AREAS = [
   { key: 'compatibility', name: 'Compatibility', quiet: 'No change to the public API, package manifests or shipped source' },
@@ -55,7 +127,8 @@ const AREAS = [
 ]
 
 // Added lines in shipped code that mention a credential or a request field that usually carries one.
-const SENSITIVE_TOKENS = /\b(authorization|cookie|set-cookie|password|passwd|secret|api[_-]?key|apikey|access[_-]?token|bearer|private[_-]?key|session[_-]?id)\b/i
+const SENSITIVE_TOKENS = /\b(authorization|cookie|set-cookie|password|passwd|secret|api[_-]?key|apikey|access[_-]?token|bearer|private[_-]?key)\b/i
+const isComment = line => /^\s*(\/\/|\/\*|\*)/.test(line)
 
 /** Cut a string to Linear's 200 character limit. */
 export function clip(text) {
@@ -101,22 +174,76 @@ function addedLines(patch) {
  * level is the highest area level, raised to High when the shipped source
  * change exceeds {@link LARGE_CHANGE} lines.
  *
- * @param {{ title: string, files: Array<{ filename: string, status: string, additions: number, deletions: number, patch?: string, previous_filename?: string }> }} pr
+ * Package manifests are scored by which fields changed, from their parsed
+ * contents in `manifests`, keyed by head path. A manifest missing from it is
+ * scored High, since nothing shows which fields changed.
+ *
+ * @param {{ title: string, files: Array<{ filename: string, status: string, additions: number, deletions: number, patch?: string, previous_filename?: string }>, manifests?: Record<string, { base: object | null, head: object | null }> }} pr
  */
-export function assessRisk({ title, files }) {
+export function assessRisk({ title, files, manifests = {} }) {
   const areas = new Map(AREAS.map(a => [a.key, { ...a, level: 1, reasons: [] }]))
   const raise = (key, level, reason) => {
     const area = areas.get(key)
     area.level = Math.max(area.level, level)
     area.reasons.push({ level, text: reason })
   }
+  // Raise once per reason, listing every file that gave it.
+  const raiseEach = (key, findings) => {
+    const groups = Map.groupBy(findings, ({ level, reason }) => `${level}\n${reason}`)
+    for (const group of groups.values())
+      raise(key, group[0].level, `${group[0].reason}: ${listFiles(group.map(g => g.path))}`)
+  }
 
   for (const rule of RULES) {
     const test = typeof rule.match === 'function' ? rule.match : p => rule.match.test(p)
-    const hits = files.flatMap(f => pathsOf(f).find(test) ?? [])
+    const matched = files.filter(f => pathsOf(f).some(test))
+    if (matched.length === 0) continue
+    let level = rule.level
+    let reason = rule.reason
+    if (rule.additive && matched.every(f => f.deletions === 0)) {
+      level = 2
+      reason = `${reason}, additions only`
+    }
+    else if (rule.scaled && lineCount(matched) <= SMALL_CHANGE && matched.every(f => f.status === 'modified' || f.status === 'added')) {
+      level = 2
+      reason = `${reason} (${lineCount(matched)} lines)`
+    }
     // A broader rule adds nothing once a stricter rule already explained the same area.
-    if (hits.length > 0 && !areas.get(rule.area).reasons.some(r => r.level >= rule.level))
-      raise(rule.area, rule.level, `${rule.reason}: ${listFiles(hits)}`)
+    if (!areas.get(rule.area).reasons.some(r => r.level >= level))
+      raise(rule.area, level, `${reason}: ${listFiles(matched.map(f => pathsOf(f).find(test)))}`)
+  }
+
+  raiseEach('compatibility', files.filter(f => isManifest(f.filename)).map((f) => {
+    const contents = manifests[f.filename]
+    if (!contents) return { path: f.filename, level: 3, reason: 'Changes a package manifest' }
+    const { kind, additive } = classifyManifest(contents.base, contents.head)
+    const [level, reason] = {
+      entry: additive ? [2, 'Adds package entrypoints'] : [3, 'Changes or removes package entrypoints (exports, bin, files)'],
+      install: [3, 'Changes peer dependency ranges or engines'],
+      peerFloors: [2, 'Raises peer dependency minimums within their major'],
+      addedOrRemovedDeps: [3, 'Adds or removes a runtime dependency'],
+      depRanges: [2, 'Moves runtime dependency ranges'],
+      other: [1, 'Changes dev dependencies, scripts or package metadata'],
+    }[kind]
+    return { path: f.filename, level, reason }
+  }).filter(f => f.level > 1))
+
+  raiseEach('release', files.filter(f => isWorkflow(f.filename)).map((f) => {
+    const kind = classifyWorkflow(f.patch)
+    const [level, reason] = kind === 'pins'
+      ? [2, 'Moves pinned action or tool versions in CI']
+      : /^\.github\/workflows\/release\.yml$/.test(f.filename)
+        ? [4, 'Changes how packages are published to npm']
+        : kind === 'credentials' ? [3, 'Changes permissions, secrets or the checked-out ref in CI'] : [2, 'Changes CI steps']
+    return { path: f.filename, level, reason }
+  }))
+
+  const pre = files.find(f => f.filename === '.changeset/pre.json')
+  if (pre) {
+    if (changedLines(pre.patch).some(l => /"(mode|tag)"/.test(l)) || pre.patch === undefined)
+      raise('release', 4, 'Enters or leaves changesets pre mode: .changeset/pre.json')
+    else
+      raise('release', 2, 'Records changesets for the prerelease: .changeset/pre.json')
   }
 
   const shipped = files.filter(f => pathsOf(f).some(isShipped))
@@ -129,9 +256,9 @@ export function assessRisk({ title, files }) {
   if (bumps.has('major') || breakingTitle)
     raise('compatibility', 4, breakingTitle ? 'The title marks the change as breaking' : 'A changeset declares a major bump')
   else if (bumps.has('minor'))
-    raise('compatibility', 3, 'A changeset declares a minor bump (new public behavior)')
+    raise('compatibility', 2, 'A changeset declares a minor bump (new public behavior)')
 
-  const sensitive = shipped.filter(f => addedLines(f.patch).some(l => SENSITIVE_TOKENS.test(l)))
+  const sensitive = shipped.filter(f => addedLines(f.patch).some(l => !isComment(l) && SENSITIVE_TOKENS.test(l)))
   if (sensitive.length > 0)
     raise('sensitiveData', 3, `Added lines mention credentials or auth headers: ${listFiles(sensitive.map(f => f.filename))}`)
 
@@ -211,7 +338,7 @@ export function renderComment({ sha, assessment }) {
     block,
     `### Risk score: ${LEVELS[assessment.level]} (${assessment.level}/4)`,
     '',
-    `Assessed at ${sha.slice(0, 7)} from the changed paths and the title, by \`scripts/risk-score\`. A new push replaces this score.`,
+    `Assessed at ${sha.slice(0, 7)} from the changed files and the title, by \`scripts/risk-score\`. A new push replaces this score.`,
     '',
     ...assessment.explanations.map(e => `- ${e}`),
     '',

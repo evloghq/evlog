@@ -4,8 +4,9 @@
  *
  * Runs from `.github/workflows/risk-score.yml` through `actions/github-script`,
  * which passes an authenticated Octokit and the event context. The score is
- * computed by the rules in `lib.mjs` from the file list and title the GitHub
- * API returns; no code from the pull request is checked out or executed.
+ * computed by the rules in `lib.mjs` from the file list, patches, title and
+ * package manifests the GitHub API returns; no code from the pull request is
+ * checked out or executed.
  *
  * Linear reads the `<!-- linear:extension ... -->` block once the repository is
  * connected through the Linear GitHub integration with code access. No secret
@@ -13,7 +14,7 @@
  *
  * Format and validation rules: https://linear.app/docs/diffs#risk-score
  */
-import { assessRisk, COMMENT_MARKER, LEVELS, renderComment } from './lib.mjs'
+import { assessRisk, COMMENT_MARKER, isManifest, LEVELS, renderComment } from './lib.mjs'
 
 /**
  * Assess the pull request in `context` and create or update its risk score comment.
@@ -26,6 +27,24 @@ export async function publishRiskScore({ github, context, core }) {
   const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number })
   const files = await github.paginate(github.rest.pulls.listFiles, { ...context.repo, pull_number, per_page: 100 })
 
+  // Manifests are scored by which fields changed, so read both sides. The file list diffs against the merge base,
+  // not `pr.base.sha`. The PR head is readable from this repository by SHA, fork PRs included.
+  const manifests = {}
+  const manifestFiles = files.filter(f => isManifest(f.filename))
+  if (manifestFiles.length > 0) {
+    const { data: compare } = await github.rest.repos.compareCommitsWithBasehead({ ...context.repo, basehead: `${pr.base.sha}...${pr.head.sha}` })
+    const read = async (path, ref) => {
+      const { data } = await github.rest.repos.getContent({ ...context.repo, path, ref, mediaType: { format: 'raw' } })
+      return JSON.parse(data)
+    }
+    for (const f of manifestFiles) {
+      manifests[f.filename] = {
+        base: f.status === 'added' ? null : await read(f.previous_filename ?? f.filename, compare.merge_base_commit.sha),
+        head: f.status === 'removed' ? null : await read(f.filename, pr.head.sha),
+      }
+    }
+  }
+
   // The file list follows the live pull request, not `pr.head.sha`. A push, title edit or base change while
   // it was read starts its own run, which publishes the score for the new revision.
   const { data: current } = await github.rest.pulls.get({ ...context.repo, pull_number })
@@ -34,7 +53,7 @@ export async function publishRiskScore({ github, context, core }) {
     return
   }
 
-  const assessment = assessRisk({ title: pr.title, files })
+  const assessment = assessRisk({ title: pr.title, files, manifests })
   const body = renderComment({ sha: pr.head.sha, assessment })
 
   const issue = { ...context.repo, issue_number: pull_number }

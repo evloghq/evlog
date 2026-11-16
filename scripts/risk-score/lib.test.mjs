@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assessRisk, changesetBumps, clip, COMMENT_MARKER, renderComment, validateRiskScore } from './lib.mjs'
+import { assessRisk, changesetBumps, classifyManifest, classifyWorkflow, clip, COMMENT_MARKER, renderComment, validateRiskScore } from './lib.mjs'
 
 const SHA = '0123456789abcdef0123456789abcdef01234567'
 
@@ -39,7 +39,7 @@ describe('assessRisk', () => {
   it('rates adapter changes High for delivery and Typical for sensitive data', () => {
     const result = assessRisk({
       title: 'fix(axiom): retry on 429',
-      files: [file('packages/evlog/src/adapters/axiom.ts'), file('packages/evlog/test/adapters/axiom.test.ts')],
+      files: [file('packages/evlog/src/adapters/axiom.ts', { additions: 40 }), file('packages/evlog/test/adapters/axiom.test.ts')],
     })
     expect(area(result, 'Delivery reliability').level).toBe(3)
     expect(area(result, 'Sensitive data exposure').level).toBe(2)
@@ -50,7 +50,7 @@ describe('assessRisk', () => {
     const result = assessRisk({
       title: 'feat(core): redact more headers',
       files: [
-        file('packages/evlog/src/redact.ts'),
+        file('packages/evlog/src/redact.ts', { additions: 40 }),
         file('packages/evlog/src/express/index.ts', { patch: '@@ -1 +1,2 @@\n const a = 1\n+const auth = req.headers.authorization' }),
         file('packages/evlog/test/redact.test.ts'),
       ],
@@ -76,7 +76,7 @@ describe('assessRisk', () => {
   it('rates the per-event hot path High for overhead', () => {
     const result = assessRisk({
       title: 'perf(core): avoid a copy',
-      files: [file('packages/evlog/src/logger.ts'), file('packages/evlog/test/logger.test.ts')],
+      files: [file('packages/evlog/src/logger.ts', { additions: 40 }), file('packages/evlog/test/logger.test.ts')],
     })
     expect(area(result, 'Logging overhead').level).toBe(3)
     expect(area(result, 'Logging overhead').explanation).toBe('Changes the per-event hot path: src/logger.ts')
@@ -100,11 +100,11 @@ describe('assessRisk', () => {
     expect(area(result, 'Logging overhead').level).toBe(3)
   })
 
-  it('rates a major changeset Very high and a minor one High', () => {
+  it('rates a major changeset Very high and a minor one Typical', () => {
     const changeset = bump => file('.changeset/x.md', { status: 'added', patch: `@@ -0,0 +1,3 @@\n+---\n+"evlog": ${bump}\n+---` })
     const test = file('packages/evlog/test/x.test.ts')
     expect(assessRisk({ title: 'feat: x', files: [changeset('major'), test] }).level).toBe(4)
-    expect(assessRisk({ title: 'feat: x', files: [changeset('minor'), test] }).level).toBe(3)
+    expect(assessRisk({ title: 'feat: x', files: [changeset('minor'), test] }).level).toBe(2)
   })
 
   it('rates the public API surface and manifests High for compatibility', () => {
@@ -142,6 +142,57 @@ describe('assessRisk', () => {
     expect(area(assessRisk({ title: 'chore: x', files: [file('pnpm-lock.yaml')] }), 'CI and release').level).toBe(2)
   })
 
+  it('rates a small edit to the hot path or an adapter Typical', () => {
+    const result = assessRisk({
+      title: 'refactor: drop dead code',
+      files: [file('packages/evlog/src/logger.ts', { additions: 4, deletions: 10 }), file('packages/evlog/src/adapters/fs.ts', { additions: 2, deletions: 6 })],
+    })
+    expect(result.level).toBe(2)
+    expect(area(result, 'Logging overhead').explanation).toBe('Changes the per-event hot path (14 lines): src/logger.ts')
+  })
+
+  it('rates a small redaction fix Typical but keeps small audit changes High', () => {
+    const redact = assessRisk({ title: 'fix(core): x', files: [file('packages/evlog/src/redact.ts', { additions: 20, deletions: 2 })] })
+    expect(area(redact, 'Sensitive data exposure')).toMatchObject({ level: 2, explanation: 'Touches redaction (22 lines): src/redact.ts' })
+    expect(redact.level).toBe(2)
+    const audit = assessRisk({ title: 'fix(core): x', files: [file('packages/evlog/src/audit.ts', { additions: 2, deletions: 1 })] })
+    expect(area(audit, 'Sensitive data exposure').level).toBe(3)
+  })
+
+  it('ignores credential words in comments', () => {
+    const result = assessRisk({
+      title: 'fix(cli): x',
+      files: [file('packages/cli/src/a.ts', { patch: '@@ -1 +1,2 @@\n+  * the secret is dropped\n+// bearer tokens too' })],
+    })
+    expect(area(result, 'Sensitive data exposure').level).toBe(1)
+  })
+
+  it('scores package manifests by the fields that changed', () => {
+    const base = { exports: { '.': './a.mjs' }, dependencies: { a: '^1.0.0' }, devDependencies: { v: '^1.0.0' }, peerDependencies: { hono: '>=4.1.0' } }
+    const level = head => area(assessRisk({ title: 'chore: x', files: [file('packages/evlog/package.json')], manifests: { 'packages/evlog/package.json': { base, head: { ...base, ...head } } } }), 'Compatibility').level
+    expect(level({ devDependencies: { v: '^2.0.0' } })).toBe(1)
+    expect(level({ peerDependencies: { hono: '>=4.3.0' } })).toBe(2)
+    expect(level({ peerDependencies: { hono: '^4.1.0 || ^5.0.0' } })).toBe(3)
+    expect(level({ exports: { '.': './a.mjs', './b': './b.mjs' } })).toBe(2)
+    expect(level({ exports: { '.': './b.mjs' } })).toBe(3)
+    expect(level({ dependencies: { a: '^1.2.0' } })).toBe(2)
+    expect(level({ dependencies: { a: '^1.0.0', b: '^1.0.0' } })).toBe(3)
+  })
+
+  it('rates a workflow pin bump Typical, even in the publish workflow', () => {
+    const pin = '@@ -1,2 +1,2 @@\n-      - uses: actions/checkout@aaa # v6.1.0\n+      - uses: actions/checkout@bbb # v7.0.1'
+    const release = assessRisk({ title: 'chore(deps): x', files: [file('.github/workflows/release.yml', { patch: pin })] })
+    expect(area(release, 'CI and release').level).toBe(2)
+    const step = assessRisk({ title: 'ci: x', files: [file('.github/workflows/release.yml', { patch: '@@ -1 +1 @@\n-        run: a\n+        run: b' })] })
+    expect(area(step, 'CI and release').level).toBe(4)
+  })
+
+  it('scores prerelease bookkeeping apart from entering pre mode', () => {
+    const level = patch => area(assessRisk({ title: 'chore: x', files: [file('.changeset/pre.json', { patch })] }), 'CI and release').level
+    expect(level('@@ -8,3 +8,4 @@\n   "changesets": [\n+    "new-one",\n     "old-one"')).toBe(2)
+    expect(level('@@ -1,2 +1,2 @@\n {\n-  "mode": "pre",\n+  "mode": "exit",')).toBe(4)
+  })
+
   it('stays within Linear limits on a huge pull request', () => {
     const files = Array.from({ length: 300 }, (_, i) => file(`packages/evlog/src/adapters/adapter-with-a-long-file-name-${i}.ts`, { status: 'removed' }))
     files.push(file('.github/workflows/release.yml'), file('packages/evlog/src/logger.ts'), file('packages/evlog/src/redact.ts'))
@@ -173,6 +224,30 @@ describe('changesetBumps', () => {
   it('reads an edited changeset whose first hunk shows neither fence', () => {
     const patch = '@@ -3,7 +3,7 @@\n \'@evlog/cli\': patch\n \'@evlog/nuxthub\': patch\n \'@evlog/signals\': patch\n-\'@evlog/telemetry\': patch\n+\'@evlog/telemetry\': minor\n \'@evlog/eve\': patch\n \'@evlog/hono\': patch\n \'@evlog/next\': patch'
     expect([...changesetBumps(patch)].sort()).toEqual(['minor', 'patch'])
+  })
+})
+
+describe('classifyManifest', () => {
+  it('treats a new manifest as a non-additive entrypoint change', () => {
+    expect(classifyManifest(null, { name: 'x', exports: { '.': './a.mjs' } })).toEqual({ kind: 'entry', additive: false })
+  })
+
+  it('does not take a peer floor raised into a new major for a floor raise', () => {
+    expect(classifyManifest({ peerDependencies: { a: '^4.9.0' } }, { peerDependencies: { a: '^5.0.0' } }).kind).toBe('install')
+    expect(classifyManifest({ peerDependencies: { a: '>=4.9.0' } }, { peerDependencies: { a: '>=4.8.0' } }).kind).toBe('install')
+  })
+})
+
+describe('classifyWorkflow', () => {
+  it.each([
+    ['a pinned action bump', '@@ -1 +1 @@\n-    - uses: a/b@111 # v1\n+    - uses: a/b@222 # v2', 'pins'],
+    ['a pinned tool version', '@@ -1 +1 @@\n-          VERCEL_CLI_VERSION: 1.0.0\n+          VERCEL_CLI_VERSION: 1.1.0', 'pins'],
+    ['a new write permission', '@@ -1 +1,2 @@\n     permissions:\n+      contents: write', 'credentials'],
+    ['a new checked-out ref', '@@ -1 +1 @@\n-          ref: ${{ github.event.pull_request.base.sha }}\n+          ref: ${{ github.sha }}', 'credentials'],
+    ['a changed step', '@@ -1 +1 @@\n-        run: pnpm test\n+        run: pnpm test --shard 1', 'other'],
+    ['a file without a patch', undefined, 'credentials'],
+  ])('classifies %s', (_, patch, kind) => {
+    expect(classifyWorkflow(patch)).toBe(kind)
   })
 })
 
@@ -210,7 +285,7 @@ describe('clip', () => {
 describe('renderComment', () => {
   const assessment = assessRisk({
     title: 'fix(axiom): retry | backoff',
-    files: [file('packages/evlog/src/adapters/axiom.ts'), file('packages/evlog/test/adapters/axiom.test.ts')],
+    files: [file('packages/evlog/src/adapters/axiom.ts', { additions: 40 }), file('packages/evlog/test/adapters/axiom.test.ts')],
   })
   const body = renderComment({ sha: SHA, assessment })
 
