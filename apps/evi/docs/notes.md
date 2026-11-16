@@ -117,12 +117,14 @@ the PR, squash merge included. So `git__gh` refuses `git push`, and
 which goes through GitHub's API, so GitHub signs it as the App. That script
 publishes the index against HEAD as one commit, so the push replays the
 branch one commit at a time from a scratch worktree, then moves the local
-branch onto the result. The API takes file contents without a mode, so the
-push refuses symlinks, submodules, executable bits and merges before anything
-reaches GitHub. When any step fails, the push stops and leaves the local
-branch as it was, because a commit can land and its reply still be lost. The
-next push reads the branch from GitHub and takes over the commits there that
-match the local ones in tree and headline, then publishes the rest. Anything
+branch onto the result. The API takes file contents without a mode, and the
+script refuses an index with nothing staged, so the push refuses symlinks,
+submodules, executable bits, merges and empty commits before anything reaches
+GitHub. When any step fails, the push stops without moving the local branch
+onto what it published, because a commit can land and its reply still be lost.
+The next push reads the branch from GitHub and takes over the commits there
+that match the local ones in tree and headline: it rebuilds the rest of the
+local branch on them, same files and messages, before publishing it. Anything
 else on the branch is another writer's, and the push refuses instead of
 building on it. The script builds on whatever head it reads, so after each
 publish the push checks the new commit's parent and stops if the branch moved.

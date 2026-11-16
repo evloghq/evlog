@@ -210,6 +210,33 @@ describe('pushSignedBranch', () => {
     git(merged.work, 'merge', '-q', '--no-edit', 'side')
     await expect(merged.push()).rejects.toMatchObject({ message: expect.stringContaining('merge commit') })
     expect(git(merged.github, 'branch', '--list', 'feat')).toBe('')
+
+    const empty = await setup()
+    await commit(empty.work, 'first', { 'a.txt': 'a\n' })
+    git(empty.work, 'commit', '-q', '--allow-empty', '-m', 'nothing')
+    await commit(empty.work, 'third', { 'c.txt': 'c\n' })
+    await expect(empty.push()).rejects.toMatchObject({ code: 'evi.GIT_PUSH_REFUSED', message: expect.stringContaining('changes no files') })
+    expect(git(empty.github, 'branch', '--list', 'feat')).toBe('')
+  })
+
+  it('refuses a merge made locally after part of the branch landed', async () => {
+    const { work, github, push, refuse } = await setup()
+    await commit(work, 'first', { 'a.txt': 'a\n' })
+    await commit(work, 'second', { 'b.txt': 'b\n' })
+    refuse('second')
+    await expect(push()).rejects.toMatchObject({ message: expect.stringContaining('1 of 2 commits reached GitHub') })
+    const landed = git(github, 'rev-parse', 'feat')
+
+    git(work, 'checkout', '-qb', 'side', 'origin/main')
+    await commit(work, 'on side', { 'd.txt': 'd\n' })
+    git(work, 'checkout', '-q', 'feat')
+    git(work, 'merge', '-q', '--no-edit', 'side')
+    const head = git(work, 'rev-parse', 'feat')
+    refuse('')
+
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_PUSH_REFUSED', message: expect.stringContaining('merge commit') })
+    expect(git(github, 'rev-parse', 'feat')).toBe(landed)
+    expect(git(work, 'rev-parse', 'feat')).toBe(head)
   })
 
   it('refuses a branch on GitHub that the local branch does not build on', async () => {

@@ -67,13 +67,20 @@ function shas(output: string): string[] {
 }
 
 /**
- * Refuses what gh-signed-commit cannot reproduce (merges, symlinks,
- * submodules, executable bits) before anything reaches GitHub, so a refused
+ * Refuses what gh-signed-commit cannot reproduce (merges, empty commits,
+ * symlinks, submodules, executable bits) before anything reaches GitHub, so a refused
  * branch never lands half pushed.
  */
 async function assertReproducible(sandbox: GitSandbox, dir: string, branch: string, range: string): Promise<void> {
   if (shas(await git(sandbox, dir, `rev-list --min-parents=2 ${range}`)).length > 0) {
     throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} contains a merge commit, which cannot be pushed as signed commits. Rebase it onto the base branch instead.` })
+  }
+  for (const line of (await git(sandbox, dir, `log --format='%H %T %P' ${range}`)).split('\n')) {
+    const [sha, tree, parent] = line.trim().split(' ')
+    if (sha === undefined || tree === undefined || parent === undefined) continue
+    if ((await git(sandbox, dir, `rev-parse ${parent}^{tree}`)).trim() === tree) {
+      throw eviErrors.GIT_PUSH_REFUSED({ message: `${sha.slice(0, 8)} on ${branch} changes no files, which a signed push cannot publish. Squash it into a neighbouring commit or drop it.` })
+    }
   }
   const raw = await git(sandbox, dir, `log --format= --raw --no-renames ${range}`)
   for (const line of raw.split('\n')) {
@@ -106,6 +113,8 @@ async function adopt(sandbox: GitSandbox, gh: GitHubCommand, { dir, repository, 
   const fork = await sandbox.run({ command: `git -C ${dir} merge-base ${remoteHead} ${head}` })
   if (fork.exitCode !== 0) return null
   const base = String(fork.stdout ?? '').trim()
+  // The rebuild below gives each commit one parent, so a local merge must be refused before it, not after.
+  await assertReproducible(sandbox, dir, branch, `${base}..${head}`)
   const theirs = shas(await git(sandbox, dir, `rev-list --reverse ${base}..${remoteHead}`))
   const ours = shas(await git(sandbox, dir, `rev-list --reverse ${base}..${head}`))
   if (theirs.length > ours.length) return null
@@ -128,8 +137,8 @@ async function adopt(sandbox: GitSandbox, gh: GitHubCommand, { dir, repository, 
  * sign with, and `main` requires signed commits. Each commit is replayed from
  * a scratch worktree, because gh-signed-commit publishes the index against
  * HEAD. Moves the local branch onto the pushed head and returns it. A push
- * that failed partway leaves the local branch as it was; the next one adopts
- * what reached GitHub.
+ * that fails partway does not move the local branch onto what it published;
+ * the next one adopts what reached GitHub.
  */
 export async function pushSignedBranch(sandbox: GitSandbox, gh: GitHubCommand, { dir, repository, branch }: Push): Promise<{ sha: string, commits: number }> {
   let head = (await git(sandbox, dir, `rev-parse --verify 'refs/heads/${branch}^{commit}'`)).trim()
@@ -169,12 +178,12 @@ export async function pushSignedBranch(sandbox: GitSandbox, gh: GitHubCommand, {
       const parent = (await git(sandbox, worktree, 'rev-parse HEAD')).trim()
       const result = await gh({ command: args.map(shellQuote).join(' '), description: `Publish ${sha.slice(0, 8)} on ${branch} as a signed commit`, workingDirectory: worktree })
       if (result.exitCode !== 0) {
-        throw eviErrors.GIT_COMMAND_FAILED({ command: 'gh-signed-commit', exitCode: result.exitCode, message: `gh-signed-commit exited ${result.exitCode}: ${runOutput(result)}. ${index} of ${order.length} commits reached GitHub before this one, which may have landed too. The local branch is unchanged; git__push again takes over what reached GitHub and publishes the rest.` })
+        throw eviErrors.GIT_COMMAND_FAILED({ command: 'gh-signed-commit', exitCode: result.exitCode, message: `gh-signed-commit exited ${result.exitCode}: ${runOutput(result)}. ${index} of ${order.length} commits reached GitHub before this one, which may have landed too. The local branch was not moved onto what reached GitHub; git__push again takes it over and publishes the rest.` })
       }
       // gh-signed-commit builds on whatever head it reads from GitHub, so a commit another writer landed first sits underneath.
       const landedOn = (await git(sandbox, worktree, 'rev-parse HEAD^')).trim()
       if (landedOn !== parent) {
-        throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} on GitHub moved while this push ran: ${sha.slice(0, 8)} landed on ${landedOn.slice(0, 8)} instead of ${parent.slice(0, 8)}. The push stopped there and left the local branch as it was. Check the branch on GitHub before pushing again.` })
+        throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} on GitHub moved while this push ran: ${sha.slice(0, 8)} landed on ${landedOn.slice(0, 8)} instead of ${parent.slice(0, 8)}. The push stopped there without moving the local branch onto it. Check the branch on GitHub before pushing again.` })
       }
     }
     const pushed = (await git(sandbox, worktree, 'rev-parse HEAD')).trim()
