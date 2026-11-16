@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defined } from '../helpers/defined'
 
 // Regression test for https://github.com/evloghq/evlog/issues/435
 //
@@ -111,5 +112,58 @@ describe('nuxt module server type templates', () => {
     // No explicit context passed → nuxt-only by @nuxt/kit's default.
     expect(clientContext).toBeUndefined()
     expect(clientTemplate.getContents()).toContain('const log: typeof import(\'evlog/client\').log')
+  })
+})
+
+describe('nuxt module with client: false', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  async function setupServerOnly() {
+    const moduleDefinition = (await import('../../src/nuxt/module')).default as unknown as {
+      setup: (options: Record<string, unknown>, nuxt: ReturnType<typeof makeFakeNuxt>) => void
+    }
+    const nuxt = makeFakeNuxt()
+    moduleDefinition.setup({ client: false, transport: { enabled: true } }, nuxt)
+    return nuxt
+  }
+
+  it('registers the server side only', async () => {
+    const nuxt = await setupServerOnly()
+
+    expect(addPlugin).not.toHaveBeenCalled()
+    expect(addImports.mock.calls.flatMap(([imports]) => imports.map((i: { name: string }) => i.name)))
+      .toEqual(['createEvlogError', 'parseError'])
+    expect(nuxt.options.runtimeConfig.public).toEqual({})
+    expect(addServerPlugin.mock.calls.map(([path]) => path)).toEqual(['../nitro/plugin'])
+
+    expect(addServerImports.mock.calls.flatMap(([imports]) => imports.map((i: { name: string }) => i.name)))
+      .toEqual(['useLogger', 'log', 'createEvlogError'])
+    expect(addServerHandler).toHaveBeenCalledWith(expect.objectContaining({ route: '/api/_evlog/ingest' }))
+    const nitroConfigHook = nuxt.hook.mock.calls.find(([hookName]) => hookName === 'nitro:config')
+    const nitroConfig: { errorHandler?: string | string[] } = {}
+    defined(nitroConfigHook, 'nitro:config hook')[1](nitroConfig)
+    expect(nitroConfig.errorHandler).toBe('../nitro/errorHandler')
+  })
+
+  it('declares the server `log` in the app project, which no client `log` collides with', async () => {
+    await setupServerOnly()
+
+    const [template, context] = defined(findTemplateCall('types/evlog-server-log.d.ts'), 'evlog-server-log.d.ts template')
+    expect(context).toEqual({ nitro: true, nuxt: true })
+    expect(template.getContents()).toContain('const log: typeof import(\'evlog\').log')
+  })
+
+  it('declares no client globals in the app type template', async () => {
+    await setupServerOnly()
+
+    const [template] = defined(findTemplateCall('types/evlog-client.d.ts'), 'evlog-client.d.ts template')
+    expect(template.getContents()).toBe(`declare global {
+  const createEvlogError: typeof import('evlog').createEvlogError
+  const parseError: typeof import('evlog').parseError
+}
+export {}
+`)
   })
 })
