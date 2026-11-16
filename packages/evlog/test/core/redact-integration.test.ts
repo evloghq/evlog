@@ -364,6 +364,8 @@ describe('built-in smart masking', () => {
       requestId: '00000000-1111-2222-3333-444444444444',
       file: '12345678-1234-1234-1234-abcdefabcdef_v2.json',
       key: 'id_00000000-0000-4000-8000-000000000000',
+      prefixed: '/orders/2026-0001-12345678-1234-1234-1234-abcdefabcdef',
+      digits: 'order 0001-41111111-1111-1111-1111-111111111111',
       message: 'Card 4111 1111 1111 1111 on order 00000000-1111-2222-3333-444444444444',
     }
     const event = redactEvent(source, defined(resolveRedactConfig({ builtins: ['creditCard'] }), 'redact config'))
@@ -372,6 +374,8 @@ describe('built-in smart masking', () => {
       requestId: '00000000-1111-2222-3333-444444444444',
       file: '12345678-1234-1234-1234-abcdefabcdef_v2.json',
       key: 'id_00000000-0000-4000-8000-000000000000',
+      prefixed: '/orders/2026-0001-12345678-1234-1234-1234-abcdefabcdef',
+      digits: 'order 0001-41111111-1111-1111-1111-111111111111',
       message: 'Card ****1111 on order 00000000-1111-2222-3333-444444444444',
     })
   })
@@ -381,12 +385,14 @@ describe('built-in smart masking', () => {
       prefixed: 'card-4111111111111111',
       suffixed: '4111111111111111-expires',
       grouped: 'ref-4111-1111-1111-1111-a',
+      beforeHexTail: '4111111111111111-abcd-abcdefabcdef',
     }
     const event = redactEvent(source, defined(resolveRedactConfig({ builtins: ['creditCard'] }), 'redact config'))
     expect(event).toEqual({
       prefixed: 'card-****1111',
       suffixed: '****1111-expires',
       grouped: 'ref-****1111-a',
+      beforeHexTail: '****1111-abcd-abcdefabcdef',
     })
   })
 
