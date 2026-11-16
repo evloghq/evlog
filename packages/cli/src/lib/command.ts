@@ -1,12 +1,15 @@
 import type { ArgsDef, CommandDef, CommandContext, CommandMeta, ParsedArgs, Resolvable } from 'citty'
-import { defineCommand } from 'citty'
+import { telemetry } from '@evlog/telemetry'
+import { defineCommand, parseArgs } from 'citty'
 import { EvlogError } from 'evlog'
 import { createContext } from '../core/context'
 import type { CliContext } from '../core/context'
 import { formatCommandHeader, wantsHeader } from '../core/brand'
-import { EXIT_FAIL, writeHuman } from '../core/output'
+import { EXIT_FAIL, EXIT_USAGE, writeHuman } from '../core/output'
 import { withCliDebug } from './debug'
 import type { CliDebug, DebugArgs } from './debug'
+import { isUsageError } from './errors'
+import { checkFlags } from './flags'
 import { createUi } from './ui'
 import type { CliUi } from './ui'
 
@@ -47,6 +50,8 @@ export type EvlogCommandDef<T extends ArgsDef = {}> = Omit<CommandDef<T>, 'run' 
    * programs starting. Global flags (`--no-header`, `--json`) still win.
    */
   skipHeader?: (ctx: CliContext, args: ParsedArgs<T & typeof COMMON_ARGS>) => boolean
+  /** Value flags that also work with no value, like `--baseline`. */
+  bare?: readonly (keyof T & string)[]
   run?: (ctx: EvlogRunContext<T & typeof COMMON_ARGS>) => ReturnType<NonNullable<CommandDef<T>['run']>>
 }
 
@@ -102,25 +107,42 @@ export function defineEvlogCommand<T extends ArgsDef = {}>(
       name: baseMeta.name ?? command.split(' ').at(-1),
     },
     async run(ctx: CommandContext<T & typeof COMMON_ARGS>) {
-      const flags = runArgs(ctx.args)
+      /* Everything below reads the checked parse, not citty's: a bare
+         `--baseline --cwd app` reaches citty with `--cwd` as the baseline.
+         citty's reading is the fallback only when the flags are refused. */
+      let parsed: ParsedArgs<T & typeof COMMON_ARGS> | undefined
+      let usageError: unknown
+      try {
+        parsed = parseArgs<T & typeof COMMON_ARGS>(checkFlags(ctx.rawArgs, args, def.bare), args)
+      } catch (error) {
+        usageError = error
+      }
+      const read = parsed ?? ctx.args
+      const flags = runArgs(read)
       const cli = createContext(flags.cwd ? { cwd: flags.cwd } : {})
-      if (wantsHeader(cli, flags) && !def.skipHeader?.(cli, ctx.args)) {
+      if (wantsHeader(cli, flags) && !def.skipHeader?.(cli, read)) {
         writeHuman(formatCommandHeader(cli, { command }))
       }
       const ui = createUi({ json: flags.json })
       return await withCliDebug(cli, { command, ...flags }, async (log) => {
-        return await def.run?.({ ...ctx, cli, log, ui })
+        if (!parsed) {
+          const json = flags.json || (read as { format?: unknown }).format === 'json'
+          return failWith(usageError, { args: { json }, log, ui })
+        }
+        return await def.run?.({ ...ctx, args: parsed, cli, log, ui })
       })
     },
   } as CommandDef<T & typeof COMMON_ARGS>)
 }
 
 /**
- * Render a catalog error and exit 1; rethrow anything unexpected.
+ * Render a catalog error and exit 1, or 2 for a usage error; rethrow anything
+ * unexpected.
  *
- * Shared because every command that writes needs the same three things from a
- * failure — the finding on the debug event, the `why` / `fix` for the reader,
- * and a non-zero exit — and three copies of that would drift.
+ * Shared because every command that writes needs the same things from a
+ * failure — the finding on the debug event, the error code on the telemetry
+ * event, the `why` / `fix` for the reader, and a non-zero exit — and three
+ * copies of that would drift.
  */
 export function failWith(
   error: unknown,
@@ -131,12 +153,13 @@ export function failWith(
     { code: error.code ?? 'cli.COMMAND_FAILED', why: error.why, fix: error.fix, link: error.link },
     { status: 'fail' },
   )
+  telemetry.fail(error.code)
   io.ui.done({
     jsonMode: io.args.json,
     json: { error: { code: error.code, message: error.message, why: error.why, fix: error.fix } },
     human: error.fix ? `${error.message}\n→ ${error.fix}` : error.message,
   })
-  io.ui.exit(EXIT_FAIL)
+  io.ui.exit(isUsageError(error) ? EXIT_USAGE : EXIT_FAIL)
 }
 
 async function resolve<T>(value: Resolvable<T>): Promise<T> {

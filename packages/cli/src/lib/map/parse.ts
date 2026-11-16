@@ -52,13 +52,27 @@ export function createLineIndex(source: string): LineIndex {
   }
 }
 
-/** Parse a route file (Vue `<script>` extracted first) into an oxc AST + source. */
+/**
+ * Parse a route file (Vue `<script>` extracted first) into an oxc AST + source.
+ * `null` when there is no file at `filePath`; one that cannot be read comes
+ * back empty, with the reason in `errors`.
+ */
 export function parseFile(filePath: string): ParseResult | null {
   let source: string
   try {
     source = readFileSync(filePath, 'utf8')
-  } catch {
-    return null
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException
+    if (code === 'ENOENT') return null
+    /* A file that is there and cannot be read still declares its entry
+       points, so it is reported like one that does not parse. */
+    return {
+      program: parseSync(filePath, '', { sourceType: 'module', lang: 'ts' }).program,
+      source: '',
+      errors: [`cannot be read (${code})`],
+      lines: createLineIndex(''),
+      comments: [],
+    }
   }
   return parseSource(filePath, source)
 }
@@ -84,6 +98,8 @@ export function createParseCache(): ParseFn {
   }
 }
 
+const JAVASCRIPT = new Set(['js', 'jsx', 'mjs', 'cjs'])
+
 /**
  * Parse source that is already in memory.
  *
@@ -103,7 +119,9 @@ export function parseSource(filePath: string, source: string): ParseResult | nul
 
   const result = parseSync(filePath, code, {
     sourceType: 'module',
-    lang: ext === 'tsx' || ext === 'jsx' ? 'tsx' : 'ts',
+    /* JavaScript is read with JSX on: as TypeScript, the `<main>` of a `.js`
+       page is a type assertion that never closes. */
+    lang: ext === 'tsx' ? 'tsx' : ext && JAVASCRIPT.has(ext) ? 'jsx' : 'ts',
   })
 
   return {

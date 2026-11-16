@@ -45,8 +45,11 @@ export interface SanitizeFlagsOptions {
   /**
    * The command's declared arguments.
    *
-   * Used to drop flags still sitting at their declared default, so the payload
-   * says what the user asked for rather than what the parser filled in.
+   * With them, a flag the command does not declare is dropped, name included: a
+   * lenient parser hands back whatever was typed, and a typed name can be a
+   * secret. Positionals are dropped, and so are flags still sitting at their
+   * declared default, so the payload says what the user asked for rather than
+   * what the parser filled in.
    */
   args?: FlagDefinitions
 }
@@ -57,7 +60,8 @@ export interface SanitizeFlagsOptions {
  * Booleans and numbers: value captured. Strings: {@link FLAG_VALUE_SET} unless
  * allowlisted in `collect.flags`. Argv artifacts are dropped: the positional
  * bucket (`_`), the kebab-case twin of every camelCase flag, and anything left
- * at its declared default.
+ * at its declared default. With `options.args`, so are positionals and flags
+ * the command does not declare.
  */
 export function sanitizeFlags(
   raw: Record<string, unknown> | undefined,
@@ -67,7 +71,7 @@ export function sanitizeFlags(
 
   const out: Record<string, boolean | number | string> = {}
   const allowlists = options.collect?.flags ?? {}
-  const defs = options.args ?? {}
+  const defs = options.args
 
   for (const [rawKey, value] of Object.entries(raw)) {
     if (value === undefined || value === null) continue
@@ -76,8 +80,11 @@ export function sanitizeFlags(
     if (rawKey === '_') continue
 
     const key = toCamelCase(rawKey)
-    const declaredDefault = defs[key]?.default ?? defs[rawKey]?.default
-    if (declaredDefault !== undefined && value === declaredDefault) continue
+    if (defs) {
+      const def = defs[key] ?? defs[rawKey]
+      if (!def || def.type === 'positional') continue
+      if (def.default !== undefined && value === def.default) continue
+    }
 
     if (typeof value === 'boolean' || typeof value === 'number') {
       out[key] = value

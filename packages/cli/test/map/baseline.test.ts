@@ -111,6 +111,93 @@ describe('compareToBaseline', () => {
     expect(hasRegressed(comparison)).toBe(false)
   })
 
+  it('compares an entry point that moved file with one that has its method and path', () => {
+    const before = mapOf([route('/checkout', { 'wide-event': { status: 'pass' } }, 'unique')])
+    const twin = { ...route('/checkout', { 'wide-event': { status: 'pass' } }, 'twin', 100), file: 'server/api/v2/checkout.ts' }
+    const moved = { ...route('/checkout', { 'wide-event': { status: 'fail' } }, 'moved', 45), file: 'server/routes/checkout.ts' }
+    const after = mapOf([twin, moved], 72)
+
+    const comparison = compareToBaseline(before, after, SOURCE)
+
+    expect(comparison.regressions).toEqual([expect.objectContaining({ file: 'server/routes/checkout.ts', check: 'wide-event', to: 'fail' })])
+    expect(comparison.removed).toEqual([])
+    expect(comparison.added.map(route => route.file)).toEqual(['server/api/v2/checkout.ts'])
+    expect(hasRegressed(comparison)).toBe(true)
+  })
+
+  it('picks, among the candidates for a moved entry point, the one that regressed the most checks', () => {
+    const checks = { 'wide-event': { status: 'pass' }, 'structured-errors': { status: 'fail' } } as const
+    const before = mapOf([route('/checkout', checks, 'unique', 80)])
+    const twin = { ...route('/checkout', checks, 'twin', 80), file: 'server/api/v2/checkout.ts' }
+    const moved = {
+      ...route('/checkout', { 'wide-event': { status: 'fail' }, 'structured-errors': { status: 'pass' } }, 'moved', 85),
+      file: 'server/routes/checkout.ts',
+    }
+
+    const comparison = compareToBaseline(before, mapOf([twin, moved], 82), SOURCE)
+
+    expect(comparison.regressions).toEqual([expect.objectContaining({ file: 'server/routes/checkout.ts', check: 'wide-event', to: 'fail' })])
+    expect(comparison.added.map(route => route.file)).toEqual(['server/api/v2/checkout.ts'])
+    expect(hasRegressed(comparison)).toBe(true)
+  })
+
+  it('picks the lowest-scoring candidate when none regressed a check', () => {
+    const before = mapOf([route('/checkout', { 'wide-event': { status: 'pass' } }, 'unique')])
+    const twin = { ...route('/checkout', { 'wide-event': { status: 'pass' } }, 'twin', 100), file: 'server/api/v2/checkout.ts' }
+    const moved = { ...route('/checkout', { 'wide-event': { status: 'pass' } }, 'moved', 70), file: 'server/routes/checkout.ts' }
+
+    const comparison = compareToBaseline(before, mapOf([twin, moved], 85), SOURCE)
+
+    expect(comparison.added.map(route => route.file)).toEqual(['server/api/v2/checkout.ts'])
+    expect(hasRegressed(comparison)).toBe(true)
+  })
+
+  it('reports the regression of one of two moved entry points with the same method and path, in either baseline order', () => {
+    const lacksErrors = { 'wide-event': { status: 'pass' }, 'structured-errors': { status: 'fail' } } as const
+    const lacksEvent = { 'wide-event': { status: 'fail' }, 'structured-errors': { status: 'pass' } } as const
+    const first = { ...route('/checkout', lacksErrors, 'first', 80), file: 'server/api/a/checkout.ts' }
+    const second = { ...route('/checkout', lacksEvent, 'second', 60), file: 'server/api/b/checkout.ts' }
+    const movedFirst = {
+      ...route('/checkout', { 'wide-event': { status: 'pass' }, 'structured-errors': { status: 'pass' } }, 'moved-first', 100),
+      file: 'server/routes/a/checkout.ts',
+    }
+    const movedSecond = { ...route('/checkout', lacksErrors, 'moved-second', 80), file: 'server/routes/b/checkout.ts' }
+
+    for (const baseline of [[first, second], [second, first]]) {
+      const comparison = compareToBaseline(mapOf(baseline), mapOf([movedFirst, movedSecond], 90), SOURCE)
+
+      expect(comparison.regressions).toEqual([expect.objectContaining({ file: 'server/routes/b/checkout.ts', check: 'structured-errors', to: 'fail' })])
+      expect(comparison.removed).toEqual([])
+      expect(comparison.added).toEqual([])
+      expect(hasRegressed(comparison)).toBe(true)
+    }
+  })
+
+  it('compares a moved entry point with the baseline entry it lost the most score against, in either baseline order', () => {
+    const checks = { 'wide-event': { status: 'pass' } } as const
+    const high = { ...route('/checkout', checks, 'high', 90), file: 'server/api/a/checkout.ts' }
+    const low = { ...route('/checkout', checks, 'low', 50), file: 'server/api/b/checkout.ts' }
+    const moved = { ...route('/checkout', checks, 'moved', 70), file: 'server/routes/checkout.ts' }
+
+    for (const baseline of [[high, low], [low, high]]) {
+      const comparison = compareToBaseline(mapOf(baseline), mapOf([moved], 70), SOURCE)
+
+      expect(comparison.delta).toBe(-20)
+      expect(comparison.removed).toHaveLength(1)
+      expect(hasRegressed(comparison)).toBe(true)
+    }
+  })
+
+  it('leaves an entry point with another method and path to be removed and added', () => {
+    const before = mapOf([route('/checkout', { 'wide-event': { status: 'pass' } }, 'unique')])
+    const after = mapOf([route('/orders', { 'wide-event': { status: 'fail' } }, 'other', 45)], 45)
+
+    const comparison = compareToBaseline(before, after, SOURCE)
+
+    expect(comparison.regressions).toEqual([])
+    expect(comparison.removed).toEqual([{ path: '/checkout', method: 'POST' }])
+  })
+
   it('treats a deleted entry point as removed, not broken', () => {
     const before = mapOf([route('/legacy', { 'wide-event': { status: 'pass' } })])
     const after = mapOf([])

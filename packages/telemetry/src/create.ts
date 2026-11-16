@@ -2,14 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isCI } from 'std-env'
 import { readPreferenceSync, resolveConsent, writePreference, purgeOutbox } from './consent'
-import {
-  composeDrains,
-  createDebugDrain,
-  createHttpDrain,
-  createNoopDrain,
-  resolveEndpoint,
-  type TelemetryDrain,
-} from './drain'
+import { createHttpDrain, createNoopDrain, resolveEndpoint, type TelemetryDrain } from './drain'
 import { buildEnvInfo, resolveMachineId } from './enrich'
 import {
   MAX_FLUSH_BATCH,
@@ -26,6 +19,7 @@ import type {
   CollectFlags,
   CustomFields,
   FlagDefinitions,
+  RunContext,
   RunEvent,
   RunOutcome,
   TelemetryCliError,
@@ -35,7 +29,15 @@ import type {
 import { getTelemetryDir } from './paths'
 import { formatTelemetryNotice, isInteractiveTerminal, wasNoticeShown } from './notice'
 
-let activeHandle: InternalTelemetry<any, any> | null = null
+/* Every handle created in this process: consent is a tool's, so turning it
+   off or on reaches each handle of that tool, not only the last one. */
+const handles: InternalTelemetry<any, any>[] = []
+
+/* A debug run shows its event and keeps it: nothing is sent, and nothing is
+   queued for a later run to send. */
+function isDebugRun(): boolean {
+  return process.env.EVLOG_TELEMETRY_DEBUG === '1'
+}
 
 function isCliError(err: unknown): err is TelemetryCliError {
   return typeof err === 'object' && err !== null && typeof (err as TelemetryCliError).code === 'string'
@@ -46,6 +48,9 @@ class InternalTelemetry<
   TFields extends CollectFields = {},
 > implements TelemetryHandle<TFlags, TFields> {
   private _enabled: boolean
+  /* Counts consent changes, so a flush can tell consent was withdrawn while
+     it ran, even when it has been given again since. */
+  private consentGeneration = 0
   readonly options: TelemetryOptions<TFlags, TFields>
   private readonly outbox: TelemetryOutbox
   private readonly drain: TelemetryDrain
@@ -62,10 +67,7 @@ class InternalTelemetry<
     })
 
     const endpoint = resolveEndpoint(options.endpoint)
-    const drains = [createDebugDrain()]
-    if (endpoint) drains.push(createHttpDrain(endpoint))
-    else drains.push(createNoopDrain())
-    this.drain = composeDrains(...drains)
+    this.drain = endpoint ? createHttpDrain(endpoint) : createNoopDrain()
   }
 
   get enabled(): boolean {
@@ -84,6 +86,7 @@ class InternalTelemetry<
 
   /** @internal Update runtime consent for the active instance. */
   setEnabled(enabled: boolean): void {
+    if (enabled !== this._enabled) this.consentGeneration++
     this._enabled = enabled
   }
 
@@ -106,31 +109,43 @@ class InternalTelemetry<
     await this.maybeShowNotice()
     const started = Date.now()
     const timestamp = new Date().toISOString()
-    const ctx = {
-      custom: sanitizeSystemCustom(opts?.systemCustom) as Record<string, boolean | number | string>,
+    const ctx: RunContext = {
+      custom: sanitizeSystemCustom(opts?.systemCustom),
       collect: this.options.collect,
     }
     let outcome: RunOutcome = 'success'
     let errorCode: string | undefined
 
     try {
-      return await runWithContext(ctx, async () => await fn())
+      const result = await runWithContext(ctx, async () => await fn())
+      if (ctx.failure) {
+        outcome = 'error'
+        errorCode = ctx.failure.code
+      }
+      return result
     } catch (err) {
       outcome = 'error'
       if (isCliError(err)) errorCode = err.code
       throw err
     } finally {
-      const event = this.buildEvent({
-        command,
-        durationMs: Date.now() - started,
-        outcome,
-        errorCode,
-        flags: sanitizeFlags(opts?.flags, { collect: this.options.collect, args: opts?.args }),
-        custom: ctx.custom,
-        timestamp,
-      })
-      await this.record(event)
-      if (await this.shouldFlush()) await this.deliver(false)
+      /* Checked again: the run may be the one that turned telemetry off. */
+      if (this._enabled) {
+        const event = this.buildEvent({
+          command,
+          durationMs: Date.now() - started,
+          outcome,
+          errorCode,
+          flags: sanitizeFlags(opts?.flags, { collect: this.options.collect, args: opts?.args }),
+          custom: ctx.custom,
+          timestamp,
+        })
+        if (isDebugRun()) {
+          process.stderr.write(`[@evlog/telemetry] ${JSON.stringify(event)}\n`)
+        } else {
+          await this.record(event)
+          if (await this.shouldFlush()) await this.deliver(false)
+        }
+      }
     }
   }
 
@@ -140,7 +155,7 @@ class InternalTelemetry<
 
   /** `drainAll` sends batch after batch until the outbox is empty; a `run()` sends one batch per command. */
   private async deliver(drainAll: boolean): Promise<void> {
-    if (!this._enabled) return
+    if (!this._enabled || isDebugRun()) return
     const timeoutMs = this.options.flushTimeoutMs ?? 500
     try {
       await Promise.race([
@@ -169,8 +184,12 @@ class InternalTelemetry<
   }
 
   private async flushBacklog(drainAll: boolean): Promise<void> {
+    const generation = this.consentGeneration
     const pending = await this.outbox.readAll()
     for (let start = 0; start < pending.length; start += MAX_FLUSH_BATCH) {
+      /* Checked per batch: an opt-out can land while an earlier one is in
+         flight, and it purged the rest of what was read above. */
+      if (this.consentGeneration !== generation) return
       const batch = pending.slice(start, start + MAX_FLUSH_BATCH)
       if (!await this.drain(batch)) return
       await this.outbox.removeDelivered(new Set(batch.map(e => e.idempotencyKey)))
@@ -222,7 +241,7 @@ class InternalTelemetry<
     if (wasNoticeShown(this.options.name)) return
     this.noticeShown = true
     const dir = getTelemetryDir(this.options.name)
-    process.stderr.write(formatTelemetryNotice(this.options.name))
+    process.stderr.write(formatTelemetryNotice(this.options.bin ?? this.options.name))
     try {
       await mkdir(dir, { recursive: true })
       await writeFile(join(dir, 'notice-shown'), '', 'utf-8')
@@ -242,7 +261,7 @@ export function createTelemetry<
 >(options: TelemetryOptions<TFlags, TFields>): TelemetryHandle<TFlags, TFields> {
   const enabled = resolveConsent(options.name)
   const instance = new InternalTelemetry<TFlags, TFields>(options, enabled)
-  activeHandle = instance
+  handles.push(instance)
   void instance.init()
   return instance
 }
@@ -263,12 +282,33 @@ export const telemetry = {
       ctx.collect,
     )
   },
+  /**
+   * Mark the active run as failed when the command handled the failure itself:
+   * it printed the error and set an exit code instead of throwing. The event
+   * is sent with `outcome: 'error'` and `code` as its `errorCode`. An error
+   * thrown later in the run still wins. No-op outside a `run()` scope.
+   *
+   * @example
+   * ```ts
+   * try {
+   *   await sync()
+   * } catch (error) {
+   *   console.error(error.message)
+   *   telemetry.fail(error.code)
+   *   process.exitCode = 1
+   * }
+   * ```
+   */
+  fail(code?: string): void {
+    const ctx = getRunContext()
+    if (ctx) ctx.failure = { code }
+  },
 }
 
 /** Disable telemetry and purge the local outbox. */
 export async function disableTelemetry(toolName: string): Promise<void> {
-  if (activeHandle?.options.name === toolName) {
-    activeHandle.setEnabled(false)
+  for (const handle of handles) {
+    if (handle.options.name === toolName) handle.setEnabled(false)
   }
   await writePreference(toolName, 'disabled')
   await purgeOutbox(toolName)
@@ -277,20 +317,21 @@ export async function disableTelemetry(toolName: string): Promise<void> {
 /** Enable telemetry (persisted preference). */
 export async function enableTelemetry(toolName: string): Promise<void> {
   await writePreference(toolName, 'enabled')
-  if (activeHandle?.options.name === toolName) {
-    activeHandle.setEnabled(true)
-    void activeHandle.init()
+  for (const handle of handles) {
+    if (handle.options.name !== toolName) continue
+    handle.setEnabled(true)
+    void handle.init()
   }
 }
 
 /** @internal Test hook */
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export function _resetActiveTelemetryForTests(): void {
-  activeHandle = null
+  handles.length = 0
 }
 
 /** @internal Test hook */
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export function _getActiveTelemetryForTests(): InternalTelemetry<any, any> | null {
-  return activeHandle
+  return handles.at(-1) ?? null
 }

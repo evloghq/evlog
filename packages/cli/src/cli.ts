@@ -1,5 +1,3 @@
-import { runMain } from 'citty'
-import { showUsage } from './core/usage'
-import { main } from './index'
+import { run } from './run'
 
-runMain(main, { showUsage })
+await run(process.argv.slice(2))

@@ -83,7 +83,7 @@ export const RULES: readonly MapRule[] = REGISTRY
  * baseline for nothing. Written beside the CLI version so `--baseline` can
  * tell a stale committed map apart from a merely older one.
  */
-export const RULE_SET_VERSION = 1
+export const RULE_SET_VERSION = 2
 
 /** Why a check is `n/a` when `evlog.config` turns it off. */
 export const RULE_OFF_MESSAGE = 'turned off in evlog.config'

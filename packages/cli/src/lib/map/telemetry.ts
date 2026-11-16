@@ -222,6 +222,7 @@ export function mapTelemetryFieldNames(): string[] {
     project: {} as ScanResult['project'],
     suggestions: [],
     warnings: [],
+    unparsed: [],
     ignored: 0,
     summary: { instrumented: 0, partial: 0, dark: 0, exempt: 0, suppressedChecks: 0 },
   }

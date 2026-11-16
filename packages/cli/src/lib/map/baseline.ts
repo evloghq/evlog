@@ -5,7 +5,8 @@ import { cliErrors } from '../errors'
 import { version as CLI_VERSION } from '../../../package.json'
 import { classifyRouteObservability, scoreGlobal } from './score'
 import { RULE_SET_VERSION } from './rules/index'
-import type { CheckId, MapFile, RouteEntry } from './types'
+import type { CheckId, CheckResult, MapFile, RouteEntry } from './types'
+import { routeKey } from './utils'
 import { MAP_FILE_NAME } from './write'
 
 /** Where a baseline map was read from — the label keeps the spelling the user typed. */
@@ -152,6 +153,64 @@ function checkIds(route: RouteEntry): CheckId[] {
   return Object.keys(route.checks) as CheckId[]
 }
 
+/** What became of one check between the baseline and now, when that is a regression or a fix. */
+function checkChange(was: CheckResult | undefined, now: CheckResult | undefined): CheckRegression['to'] | 'fixed' | undefined {
+  if (!was || !now) return undefined
+  if (was.status === 'pass' && now.status === 'fail') return 'fail'
+  if (was.status === 'pass' && now.status === 'n/a' && now.suppressed) return 'suppressed'
+  if (was.status === 'fail' && now.status === 'pass') return 'fixed'
+  return undefined
+}
+
+function regressedChecks(before: RouteEntry, after: RouteEntry): number {
+  return checkIds(before).filter((id) => {
+    const change = checkChange(before.checks[id], after.checks[id])
+    return change === 'fail' || change === 'suppressed'
+  }).length
+}
+
+/**
+ * Each baseline entry point with the one it is now.
+ *
+ * By id first. An id gains or loses its file when another entry point starts
+ * or stops sharing the method and path, so what the ids leave unpaired is
+ * paired by method, path and file. One that also moved file is paired with
+ * an entry point left with its method and path. Nothing says which of them it
+ * became, so the pairs are taken across all of them, the one that regressed
+ * the most checks first, then the one that lost the most score: the gate
+ * would rather fail a move than pass a regression, whatever order the
+ * baseline lists them in.
+ */
+function pairRoutes(baseline: readonly RouteEntry[], current: readonly RouteEntry[]): Map<RouteEntry, RouteEntry> {
+  const currentById = new Map(current.map(route => [route.id, route]))
+  const pairs = new Map<RouteEntry, RouteEntry>()
+  for (const before of baseline) {
+    const after = currentById.get(before.id)
+    if (after) pairs.set(before, after)
+  }
+
+  const paired = new Set(pairs.values())
+  const unpaired = new Set(current.filter(route => !paired.has(route)))
+  const lostScore = (pair: { before: RouteEntry, after: RouteEntry }) => pair.before.score - pair.after.score
+  const pairWorst = (matches: (before: RouteEntry, route: RouteEntry) => boolean) => {
+    const left = [...unpaired]
+    const candidates = baseline
+      .filter(before => !pairs.has(before))
+      .flatMap(before => left
+        .filter(after => matches(before, after))
+        .map(after => ({ before, after, regressed: regressedChecks(before, after) })))
+      .sort((a, b) => b.regressed - a.regressed || lostScore(b) - lostScore(a))
+    for (const { before, after } of candidates) {
+      if (pairs.has(before) || !unpaired.has(after)) continue
+      pairs.set(before, after)
+      unpaired.delete(after)
+    }
+  }
+  pairWorst((before, route) => route.file === before.file && routeKey(route) === routeKey(before))
+  pairWorst((before, route) => routeKey(route) === routeKey(before))
+  return pairs
+}
+
 /**
  * Compare a fresh scan against a baseline, per entry point and per check.
  *
@@ -161,39 +220,32 @@ function checkIds(route: RouteEntry): CheckId[] {
  * `--min-score`'s job.
  */
 export function compareToBaseline(baseline: MapFile, current: MapFile, source: BaselineSource): BaselineComparison {
-  const currentById = new Map(current.routes.map(route => [route.id, route]))
-  const baselineById = new Map(baseline.routes.map(route => [route.id, route]))
+  const pairs = pairRoutes(baseline.routes, current.routes)
+  const paired = new Set(pairs.values())
 
   const regressions: CheckRegression[] = []
   const fixed: CheckFix[] = []
   const removed: { path: string, method: string | null }[] = []
 
   for (const before of baseline.routes) {
-    const after = currentById.get(before.id)
+    const after = pairs.get(before)
     if (!after) {
       removed.push({ path: before.path, method: before.method })
       continue
     }
 
     for (const id of checkIds(before)) {
-      const was = before.checks[id]
-      const now = after.checks[id]
-      if (!was || !now) continue
+      const change = checkChange(before.checks[id], after.checks[id])
+      if (!change) continue
 
       const entry = { routeId: after.id, path: after.path, method: after.method, file: after.file, check: id }
-
-      if (was.status === 'pass' && now.status === 'fail') {
-        regressions.push({ ...entry, to: 'fail' })
-      } else if (was.status === 'pass' && now.status === 'n/a' && now.suppressed) {
-        regressions.push({ ...entry, to: 'suppressed' })
-      } else if (was.status === 'fail' && now.status === 'pass') {
-        fixed.push(entry)
-      }
+      if (change === 'fixed') fixed.push(entry)
+      else regressions.push({ ...entry, to: change })
     }
   }
 
   const added: AddedRoute[] = current.routes
-    .filter(route => !baselineById.has(route.id))
+    .filter(route => !paired.has(route))
     .map(route => ({
       path: route.path,
       method: route.method,
@@ -202,8 +254,8 @@ export function compareToBaseline(baseline: MapFile, current: MapFile, source: B
       dark: classifyRouteObservability(route) === 'dark',
     }))
 
-  const carried = current.routes.filter(route => baselineById.has(route.id))
-  const carriedBefore = baseline.routes.filter(route => currentById.has(route.id))
+  const carried = current.routes.filter(route => paired.has(route))
+  const carriedBefore = baseline.routes.filter(route => pairs.has(route))
 
   return {
     source,
