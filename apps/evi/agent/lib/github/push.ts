@@ -1,5 +1,3 @@
-import type { SandboxNetworkPolicy } from 'eve/sandbox'
-
 const PROTECTED_BRANCHES = new Set(['main', 'master'])
 
 /**
@@ -32,19 +30,4 @@ export function validatePushBranch(branch: string): string | null {
     return `Direct pushes to ${branch} are not allowed. Push a feature branch and open a pull request.`
   }
   return null
-}
-
-/**
- * Firewall policy that brokers the installation token onto egress to
- * github.com only, mirroring the shape eve's own channel checkout uses. The
- * token never enters the sandbox process. `"*": []` keeps general egress open.
- */
-export function pushBrokerPolicy(installationToken: string): SandboxNetworkPolicy {
-  const authorization = `Basic ${Buffer.from(`x-access-token:${installationToken}`).toString('base64')}`
-  return {
-    allow: {
-      'github.com': [{ transform: [{ headers: { Authorization: authorization } }] }],
-      '*': [],
-    },
-  }
 }

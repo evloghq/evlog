@@ -42,7 +42,7 @@ async function prepareSandbox(sandbox: SandboxSession) {
   }
   // Commits authored in the sandbox belong to the bot, on every channel.
   await sandbox.run({ command: 'git config --global user.name "evlogai[bot]" && git config --global user.email "evlogai[bot]@users.noreply.github.com"' })
-  // `gh` and the wrapper `git__gh` runs it through.
+  // `gh` for `git__gh`, and gh-signed-commit, which git__push publishes every commit through.
   await installCodeTooling(sandbox)
   const { stdout: architecture } = await sandbox.run({ command: 'uname -m' })
   await installAgentBrowser(browserSandbox(sandbox), agentBrowserInstallOptions(architecture))
