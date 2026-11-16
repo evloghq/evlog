@@ -17,8 +17,7 @@
  *
  * 1. A version on npm without a release tag, approved after an earlier run stopped
  *    waiting, gets its tag on the commit it was packed from.
- * 2. A version missing from npm that no run staged, or any version missing from npm
- *    when the run was started by hand, is packed with `pnpm pack` (which resolves
+ * 2. A version missing from npm that no run staged is packed with `pnpm pack` (which resolves
  *    `workspace:` ranges the way `pnpm publish` does) and staged with the dist-tag
  *    `changeset publish` would use.
  * 3. The run waits for the staged versions to be approved, and tags each one on
@@ -32,9 +31,11 @@
  * The release job has no npm token: `npm stage publish` authenticates through the
  * trusted publisher, and `npm stage list` cannot. So right after a version is
  * staged, the run pushes a `staged/<name>@<version>` tag on the commit it packed.
- * A later run reads it to know the version is already staged, instead of staging
- * it again on every push, and tags the release on that commit. The run deletes it
- * once the version is released.
+ * A later run, pushed or started by hand, reads it to know the version is already
+ * staged instead of staging it again, which npm refuses while that stage is pending,
+ * and tags the release on that commit. The run deletes it once the version is
+ * released. To stage a rejected version again, delete its staged tag and run
+ * `release.yml` again.
  *
  * A version whose run failed before `npm stage publish` has no staged tag, so the
  * next run stages it.
@@ -48,7 +49,6 @@
  *
  * ## Env
  *
- * - `GITHUB_EVENT_NAME`    `workflow_dispatch` for a run started by hand
  * - `GITHUB_REF_NAME`      the branch, for the instructions in the job summary
  * - `GITHUB_STEP_SUMMARY`  where the approval instructions go, when set
  */
@@ -119,15 +119,15 @@ function stage(pkg, tag, destination) {
   const args = ['stage', 'publish', filename, '--tag', tag, '--access', 'public', '--registry', `${REGISTRY}/`, '--json']
   const stageId = stageIdFrom(run('npm', args), pkg.name)
   console.error(`Staged ${idOf(pkg)} with the ${tag} tag, stage ${stageId}`)
-  // A run started by hand stages a version again from a later commit, so the tag moves with it.
-  const ref = `refs/tags/${stagedTagOf(pkg)}`
-  git('tag', '--force', stagedTagOf(pkg), 'HEAD')
-  git('push', 'origin', `+${ref}:${ref}`)
+  git('tag', stagedTagOf(pkg), 'HEAD')
+  git('push', 'origin', `refs/tags/${stagedTagOf(pkg)}`)
   return { ...pkg, tag, stageId }
 }
 
 function release(pkg, commit) {
   git('tag', idOf(pkg), '-m', idOf(pkg), commit)
+  // changesets/action in github-api mode tags the run's HEAD unless the tag already exists on the remote.
+  git('push', 'origin', `refs/tags/${idOf(pkg)}`)
   console.log(`New tag: ${idOf(pkg)}`)
   if (!hasTag(stagedTagOf(pkg))) return
   git('tag', '--delete', stagedTagOf(pkg))
@@ -143,7 +143,6 @@ const { release: toRelease, stage: toStage, waiting } = plan(packages, {
   published,
   tagged: new Set(packages.map(idOf).filter(hasTag)),
   staged: new Set(packages.filter(pkg => hasTag(stagedTagOf(pkg))).map(idOf)),
-  manual: process.env.GITHUB_EVENT_NAME === 'workflow_dispatch',
 })
 
 for (const pkg of toRelease) release(pkg, packedCommit(pkg))

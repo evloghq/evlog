@@ -32,29 +32,18 @@ describe('plan', () => {
       published: new Set(['@evlog/signals@0.2.2']),
       tagged: new Set(['@evlog/signals@0.2.2']),
       staged: none,
-      manual: false,
     })
     expect(result).toEqual({ release: [], stage: [evlog], waiting: [] })
   })
 
   it('stages a version a later push sees unstaged, after the run that bumped it failed before staging', () => {
-    const result = plan([evlog], { published: none, tagged: none, staged: none, manual: false })
+    const result = plan([evlog], { published: none, tagged: none, staged: none })
     expect(result.stage).toEqual([evlog])
   })
 
   it('waits on a version an earlier run staged, instead of staging it again', () => {
-    const result = plan([evlog], { published: none, tagged: none, staged: new Set(['evlog@2.35.0']), manual: false })
+    const result = plan([evlog], { published: none, tagged: none, staged: new Set(['evlog@2.35.0']) })
     expect(result).toEqual({ release: [], stage: [], waiting: [evlog] })
-  })
-
-  it('stages every version missing from npm when started by hand, a staged one included', () => {
-    const result = plan([evlog, signals], {
-      published: new Set(['@evlog/signals@0.2.2']),
-      tagged: new Set(['@evlog/signals@0.2.2']),
-      staged: new Set(['evlog@2.35.0']),
-      manual: true,
-    })
-    expect(result.stage).toEqual([evlog])
   })
 
   it('releases a version that is on npm without a tag, and leaves a tagged one alone', () => {
@@ -62,7 +51,6 @@ describe('plan', () => {
       published: new Set(['evlog@2.35.0', '@evlog/signals@0.2.2']),
       tagged: new Set(['@evlog/signals@0.2.2']),
       staged: new Set(['evlog@2.35.0']),
-      manual: false,
     })
     expect(result).toEqual({ release: [evlog], stage: [], waiting: [] })
   })
