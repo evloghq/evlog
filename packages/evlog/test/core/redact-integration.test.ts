@@ -362,14 +362,16 @@ describe('built-in smart masking', () => {
     const source = {
       path: '/api/orders/00000000-0000-4000-8000-000000000000',
       requestId: '00000000-1111-2222-3333-444444444444',
-      file: 'order_12345678-1234-1234-1234-abcdefabcdef_v2.json',
+      file: '12345678-1234-1234-1234-abcdefabcdef_v2.json',
+      key: 'id_00000000-0000-4000-8000-000000000000',
       message: 'Card 4111 1111 1111 1111 on order 00000000-1111-2222-3333-444444444444',
     }
     const event = redactEvent(source, defined(resolveRedactConfig({ builtins: ['creditCard'] }), 'redact config'))
     expect(event).toEqual({
       path: '/api/orders/00000000-0000-4000-8000-000000000000',
       requestId: '00000000-1111-2222-3333-444444444444',
-      file: 'order_12345678-1234-1234-1234-abcdefabcdef_v2.json',
+      file: '12345678-1234-1234-1234-abcdefabcdef_v2.json',
+      key: 'id_00000000-0000-4000-8000-000000000000',
       message: 'Card ****1111 on order 00000000-1111-2222-3333-444444444444',
     })
   })
