@@ -418,7 +418,7 @@ function errorCatalogTemplate(input: WiringInput): string {
      stripping them gives `shopapi`. The variable gets the camelCase spelling
      because that is what an identifier has to be. */
   const prefix = input.service.replace(/[^a-z0-9-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'app'
-  const identifier = `${prefix.replace(/-(.)/g, (_, char) => char.toUpperCase())}Errors`
+  const identifier = identifierFor(`${prefix.replace(/-(.)/g, (_, char) => char.toUpperCase())}Errors`)
   const entries = input.repeatedErrors.map((seed) => {
     const files = seed.files.slice(0, 3).join(', ')
     const status = seed.status ? `\n    status: ${seed.status},` : ''
@@ -456,16 +456,18 @@ declare module 'evlog' {
 /** Audit actions named after the sensitive routes the scan found without a trail. */
 function auditCatalogTemplate(input: WiringInput): string {
   const seen = new Set<string>()
+  const constants: string[] = []
   const entries = input.auditGaps.map((gap) => {
     let name = auditActionName(gap)
     while (seen.has(name)) name = `${name}2`
     seen.add(name)
 
-    const constant = name.replace(/[^a-z0-9]+/gi, '_').toUpperCase()
+    const constant = identifierFor(name.replace(/[^a-z0-9]+/gi, '_').toUpperCase())
+    constants.push(constant)
     const target = gap.path.split('/').filter(Boolean).at(-1)?.replace(/[^a-z0-9]/gi, '') || 'resource'
     const why = gap.reasons.length > 0 ? ` — flagged for ${gap.reasons.join(', ')}` : ''
 
-    return `/** ${gap.method ?? 'ANY'} ${gap.path}${why} */
+    return `/** ${gap.method ?? 'ANY'} ${gap.path.replaceAll('*/', '*\\/')}${why} */
 export const ${constant} = defineAuditAction('${name}', {
   target: '${target}',
   description: 'TODO: what this records, in one line',
@@ -481,10 +483,15 @@ export const ${constant} = defineAuditAction('${name}', {
  * sensitive with no audit trail. Call them from the handlers listed above each
  * one:
  *
- *   log.audit(${entries.length > 0 ? [...seen][0]!.replace(/[^a-z0-9]+/gi, '_').toUpperCase() : 'ACTION'}({ actor: { type: 'user', id: user.id }, outcome: 'success' }))
+ *   log.audit(${constants[0] ?? 'ACTION'}({ actor: { type: 'user', id: user.id }, outcome: 'success' }))
  */
 ${entries.join('\n\n')}
 `
+}
+
+/** A name read off a route or a package can start with a digit, which an identifier cannot. */
+function identifierFor(name: string): string {
+  return /^\d/.test(name) ? `_${name}` : name
 }
 
 /** Single-quoted, since generated files go through the reader's linter. */

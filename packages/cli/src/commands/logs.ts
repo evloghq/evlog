@@ -9,6 +9,7 @@ import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
 import { loadCliConfig } from '../lib/config'
 import { cliErrors } from '../lib/errors'
+import { flagValues } from '../lib/flags'
 import { buildQuery, computeStats, select } from '../lib/logs/query'
 import type { LogsArgs, LogsQuery } from '../lib/logs/query'
 import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'
@@ -271,7 +272,7 @@ export default defineEvlogCommand('logs', {
     dir: { type: 'string', description: 'Log directory (default: the project\'s .evlog/logs, or every app\'s in a workspace)' },
     url: { type: 'string', description: 'Read the memory drain\'s dev endpoint instead of files (a JSON array of events)' },
   },
-  async run({ args, cli, ui }) {
+  async run({ args, rawArgs, cli, ui }) {
     const style = createStyle(cli)
     const controller = new AbortController()
     const stop = (): void => controller.abort()
@@ -279,7 +280,7 @@ export default defineEvlogCommand('logs', {
 
     let result: LogsResult
     try {
-      result = await runLogs(cli, args as LogsArgs, {
+      result = await runLogs(cli, { ...(args as LogsArgs), where: flagValues(rawArgs, 'where') }, {
         dir: args.dir,
         url: args.url,
         follow: args.follow,
@@ -321,7 +322,7 @@ export default defineEvlogCommand('logs', {
         matched: result.matched,
         ...(result.query.view === 'stats' ? { stats: computeStats(result.all) } : { events: result.events }),
       },
-      human: formatLogsReport(cli, result),
+      human: args.json ? undefined : formatLogsReport(cli, result),
     })
   },
 })

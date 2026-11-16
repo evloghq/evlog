@@ -1,8 +1,10 @@
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runCommand } from 'citty'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import init from '../src/commands/init'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
 import { readConfig, RuntimeValue } from '../src/lib/config/read'
@@ -12,6 +14,7 @@ import type { FileAction, WiringPlan } from '../src/lib/init/wiring'
 import type { DrainId } from '../src/lib/init/catalog'
 import { detectPackageManager, installCommand } from '../src/lib/init/pm'
 import { detectNitroMajor, runInit } from '../src/lib/init/run'
+import { parseSource } from '../src/lib/map/parse'
 
 /** Only the spawn is faked; the rest of the skills module stays real. */
 const skills = vi.hoisted(() => ({
@@ -82,6 +85,8 @@ const DEFINE = `import { defineEvlog } from 'evlog'\n\n`
 afterEach(async () => {
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
+  vi.restoreAllMocks()
+  process.exitCode = undefined
   skills.spawnResult = null
   skills.calls = 0
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
@@ -179,6 +184,20 @@ describe('planWiring — nitro', () => {
     expect(contents).toContain(`import evlog from 'evlog/nitro/v3'`)
     expect(contents).toContain('modules: [evlog()]')
     expect(contents).not.toContain('service')
+  })
+
+  it('adds the default import to a config that imports something else from the module', async () => {
+    const root = await project({
+      'package.json': '{"name":"api"}',
+      'nitro.config.ts': `import { defineConfig } from 'nitro'\nimport { evlogErrorHandler } from 'evlog/nitro/v3'\n\nexport default defineConfig({\n  errorHandler: evlogErrorHandler,\n})\n`,
+    })
+
+    const plan = await planWiring({ root, framework: 'nitro', service: 'api', ...wiring({ devDrain: 'none' }), nitroMajor: 3 })
+    const { contents } = action(plan, 'nitro.config.ts')
+
+    expect(contents).toContain('modules: [evlog()]')
+    expect(contents).toContain(`import evlog from 'evlog/nitro/v3'`)
+    expect(contents).toContain(`import { evlogErrorHandler } from 'evlog/nitro/v3'`)
   })
 
   it('uses the v2 subpath and factory when the project is on nitropack', async () => {
@@ -503,6 +522,47 @@ describe('runInit — agent guidelines', () => {
     expect(existsSync(join(cwd, 'AGENTS.md'))).toBe(true)
   })
 
+  it('does not leave the block promising a skill the failed install never wrote', async () => {
+    skills.spawnResult = { ok: false, error: 'npx: command not found' }
+    const cwd = await nuxtProject()
+
+    await runInit(fakeContext(cwd), undefined, { agentGuide: true, install: false, yes: true })
+
+    const contents = await readFile(join(cwd, 'AGENTS.md'), 'utf8')
+    expect(contents).not.toContain('review-logging-patterns')
+    expect(contents).toContain('https://evlog.dev/learn/wide-events')
+  })
+
+  it('exits 1 when the skills install fails, with the outcome in the JSON', async () => {
+    skills.spawnResult = { ok: false, error: 'npx: command not found' }
+    const cwd = await nuxtProject()
+    const out: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+      out.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString())
+      return true
+    }) as typeof process.stdout.write)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    vi.stubEnv('HOME', join(cwd, '__home'))
+
+    await runCommand(init, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--no-install'] })
+
+    expect(JSON.parse(out.join('')).agentGuide).toMatchObject({ status: 'failed', error: 'npx: command not found' })
+    expect(process.exitCode).toBe(1)
+  })
+
+  it('names the file it could not write and the files written before it', async () => {
+    /* A link into a directory that is not there fails the write for any user, root included. */
+    const cwd = await nuxtProject({ '.claude/skills/review-logging-patterns/SKILL.md': '# x\n' })
+    await symlink(join(cwd, 'missing', 'AGENTS.md'), join(cwd, 'AGENTS.md'))
+
+    await expect(runInit(fakeContext(cwd), undefined, { agentGuide: true, install: false, yes: true })).rejects.toMatchObject({
+      code: 'cli.WRITE_FAILED',
+      message: 'Could not write AGENTS.md (ENOENT). Written before it: evlog.config.ts, nuxt.config.ts',
+    })
+    expect(await readFile(join(cwd, 'nuxt.config.ts'), 'utf8')).toContain('evlog/nuxt')
+    expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(true)
+  })
+
   it('previews the skills command under --dry-run without running it', async () => {
     const cwd = await nuxtProject()
 
@@ -512,6 +572,58 @@ describe('runInit — agent guidelines', () => {
     expect(result.agentGuide?.command).toContain('npx --yes skills add')
     expect(skills.calls).toBe(0)
     expect(existsSync(join(cwd, 'AGENTS.md'))).toBe(false)
+  })
+})
+
+describe('catalog files seeded from the scan', () => {
+  function parses(file: FileAction): boolean {
+    return parseSource(file.path, file.contents)?.errors.length === 0
+  }
+
+  it('writes audit actions that parse for a route that starts with a digit or holds a wildcard', async () => {
+    const root = await project({ 'package.json': '{"name":"api"}' })
+
+    const plan = await planWiring({
+      root,
+      framework: 'nitro',
+      service: 'api',
+      ...wiring({
+        devDrain: 'none',
+        extras: ['audit-catalog'],
+        auditGaps: [
+          { path: '/api/2fa/password', method: 'POST', file: 'server/api/2fa/password.post.ts', reasons: ['auth'] },
+          { path: '/api/files/*/share', method: 'POST', file: 'server/api/files/[...path]/share.post.ts', reasons: ['pii'] },
+        ],
+      }),
+      nitroMajor: 3,
+    })
+    const file = action(plan, 'server/utils/audit.ts')
+
+    expect(parses(file)).toBe(true)
+    expect(file.contents).toContain(`export const _2FA_PASSWORD_CREATED = defineAuditAction('2fa.password.created', {`)
+    expect(file.contents).toContain(`export const FILES_SHARE_CREATED = defineAuditAction('files.share.created', {`)
+    expect(file.contents).toContain('log.audit(_2FA_PASSWORD_CREATED({')
+  })
+
+  it('writes an error catalog that parses for a service that starts with a digit', async () => {
+    const root = await project({ 'package.json': '{"name":"@acme/3d-shop"}' })
+
+    const plan = await planWiring({
+      root,
+      framework: 'nitro',
+      service: '3d-shop',
+      ...wiring({
+        devDrain: 'none',
+        extras: ['error-catalog'],
+        repeatedErrors: [{ key: 'CARD_DECLINED', status: 402, message: 'Card declined', files: ['server/api/a.ts', 'server/api/b.ts'] }],
+      }),
+      nitroMajor: 3,
+    })
+    const file = action(plan, 'server/utils/errors.ts')
+
+    expect(parses(file)).toBe(true)
+    expect(file.contents).toContain(`export const _3dShopErrors = defineErrorCatalog('3d-shop', {`)
+    expect(file.contents).toContain(`'3d-shop': typeof _3dShopErrors`)
   })
 })
 

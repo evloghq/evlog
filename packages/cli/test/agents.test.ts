@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -110,6 +110,24 @@ describe('upsertBlock', () => {
     const next = upsertBlock('# shop\n\nOur rules.\n', `${MARKER_START}\nnew\n${MARKER_END}\n`)
 
     expect(next).toBe(`# shop\n\nOur rules.\n\n${MARKER_START}\nnew\n${MARKER_END}\n`)
+  })
+
+  it.each([
+    ['a start marker with no end', `# shop\n\n${MARKER_START}\nold\n\n## Deploys\n\nAsk first.\n`],
+    ['an end marker with no start', `# shop\n\nold\n${MARKER_END}\n\n## Deploys\n`],
+    ['the end marker before the start', `${MARKER_END}\nold\n${MARKER_START}\n`],
+    ['two blocks', `${MARKER_START}\na\n${MARKER_END}\n\n${MARKER_START}\nb\n${MARKER_END}\n`],
+  ])('refuses %s', (_, source) => {
+    expect(() => upsertBlock(source, `${MARKER_START}\nnew\n${MARKER_END}\n`))
+      .toThrowError(expect.objectContaining({ code: 'cli.AGENTS_MARKERS_UNPAIRED' }))
+  })
+
+  it('reads a marker quoted in a sentence or a code fence as text', () => {
+    const quoted = `# shop\n\nevlog owns what sits between \`${MARKER_START}\` and \`${MARKER_END}\`:\n\n\`\`\`md\n${MARKER_START}\n…\n${MARKER_END}\n\`\`\`\n\nOur rules.\n\n`
+    const source = `${quoted}${MARKER_START}\nold\n${MARKER_END}\n\nMore rules.\n`
+
+    expect(upsertBlock(source, `${MARKER_START}\nnew\n${MARKER_END}\n`))
+      .toBe(`${quoted}${MARKER_START}\nnew\n${MARKER_END}\n\nMore rules.\n`)
   })
 })
 
@@ -330,6 +348,28 @@ describe('runAgents', () => {
     const contents = await readFile(join(root, 'AGENTS.md'), 'utf8')
     expect(contents).toContain('Run the tests before you push.')
     expect(contents).toContain('## Logging with evlog')
+  })
+
+  it('leaves a file that lost its end marker as it is, run after run', async () => {
+    const broken = `# shop\n\n${MARKER_START}\n## Logging with evlog\n\n## Deploys\n\nAsk before you deploy.\n`
+    const root = await project({ 'package.json': '{"name":"shop"}', 'AGENTS.md': broken })
+
+    for (let run = 0; run < 2; run++) {
+      await expect(runAgents(fakeContext(root), undefined, { noSkills: true }))
+        .rejects.toMatchObject({ code: 'cli.AGENTS_MARKERS_UNPAIRED' })
+      expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toBe(broken)
+    }
+  })
+
+  it('names the file it could not write', async () => {
+    /* A link into a directory that is not there fails the write for any user, root included. */
+    const root = await project({ 'package.json': '{"name":"shop"}' })
+    await symlink(join(root, 'missing', 'AGENTS.md'), join(root, 'AGENTS.md'))
+
+    await expect(runAgents(fakeContext(root), undefined, { noSkills: true })).rejects.toMatchObject({
+      code: 'cli.WRITE_FAILED',
+      message: 'Could not write AGENTS.md (ENOENT). No file was written before it',
+    })
   })
 
   it('leaves already-installed skills to npx skills update', async () => {

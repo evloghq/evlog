@@ -71,12 +71,13 @@ export function hasProperty(object: ObjectNode, name: string): boolean {
   return object.properties.some(prop => propertyName(prop) === name)
 }
 
-/** Whether the file already imports anything from `specifier`. */
-export function hasImportFrom(program: Program, specifier: string): boolean {
+/** Whether the file already binds `name` to the default export of `specifier`. */
+export function hasDefaultImport(program: Program, specifier: string, name: string): boolean {
   return (program.body as Node[]).some((statement) => {
     if (statement.type !== 'ImportDeclaration') return false
-    const { source } = (statement as unknown as { source: { value: string } })
+    const { source, specifiers } = (statement as unknown as { source: { value: string }, specifiers: { type: string, local: { name: string } }[] })
     return source.value === specifier
+      && specifiers.some(entry => entry.type === 'ImportDefaultSpecifier' && entry.local.name === name)
   })
 }
 
