@@ -1,0 +1,56 @@
+{
+ "number": 1077,
+ "title": "feat(evi): refuse GitHub writes that break the PR body and style rules",
+ "author": {
+  "login": "HugoRCD",
+  "fork": false,
+  "association": "MEMBER"
+ },
+ "files": [
+  {
+   "filename": "apps/evi/agent/extensions/github.ts",
+   "status": "modified",
+   "additions": 22,
+   "deletions": 10,
+   "patch": "@@ -2,6 +2,7 @@ import githubExtension from '@github-tools/eve-extension'\n import type { ApprovalContext, ApprovalStatus } from 'eve/tools/approval'\n import { GITHUB_CONNECTOR } from '../lib/github/credentials'\n import { createLabelPolicy, writePolicy } from '../lib/github/label-approval'\n+import { outboundDenial } from '../lib/github/outbound'\n import { createPullRequestPolicy } from '../lib/github/pull-request-approval'\n import { homeRepository } from '../lib/repo'\n import { isAutonomous, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'\n@@ -93,29 +94,40 @@ function assignPolicy(ctx: ApprovalContext): ApprovalStatus {\n   return policy(ctx)\n }\n \n+type Policy = (ctx: ApprovalContext) => ApprovalStatus\n+\n+/** Refuses a write whose text breaks a mechanical rule, before any approval card. */\n+function checked(next: Policy): Policy {\n+  return (ctx) => {\n+    const reason = outboundDenial(ctx.toolName, ctx.toolInput)\n+    return reason ? { type: 'denied', reason } : next(ctx)\n+  }\n+}\n+\n export default githubExtension({\n   connector: GITHUB_CONNECTOR,\n   context: homeRepository(),\n   include: [...TOOLS],\n-  // Omitted write tools keep the default always(): closeIssue, createPullRequestReview.\n+  // Omitted write tools keep the default always(): closeIssue.\n   // Connect scopes are derived from `include` (createLabel → issues:write) in sdk ≥ 1.11.1.\n   requireApproval: {\n     // Reversible and harmless on every kind of run; a card here only slows the PR flow down.\n     requestReviewers: (): ApprovalStatus => 'not-applicable',\n-    createPullRequest: (ctx: ApprovalContext) => createPullRequestPolicy(ctx.session.auth.current, ctx.toolInput),\n-    updatePullRequest: policy,\n-    createIssue: autonomousWrite,\n-    updateIssue: policy,\n-    addIssueComment: policy,\n-    updateIssueComment: policy,\n-    addPullRequestComment: policy,\n-    updatePullRequestComment: policy,\n-    addDiscussionComment: policy,\n+    createPullRequest: checked((ctx: ApprovalContext) => createPullRequestPolicy(ctx.session.auth.current, ctx.toolInput)),\n+    updatePullRequest: checked(policy),\n+    createIssue: checked(autonomousWrite),\n+    updateIssue: checked(policy),\n+    addIssueComment: checked(policy),\n+    updateIssueComment: checked(policy),\n+    addPullRequestComment: checked(policy),\n+    updatePullRequestComment: checked(policy),\n+    addDiscussionComment: checked(policy),\n     addAssignees: assignPolicy,\n     removeAssignees: policy,\n     addLabels: autonomousWrite,\n     removeLabel: policy,\n     createLabel: (ctx: ApprovalContext) => createLabelPolicy(ctx.session.auth.current, ctx.toolInput),\n     updateLabel: policy,\n+    createPullRequestReview: checked(() => 'user-approval'),\n   },\n })"
+  },
+  {
+   "filename": "apps/evi/agent/instructions.md",
+   "status": "modified",
+   "additions": 8,
+   "deletions": 1
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/outbound.test.ts",
+   "status": "added",
+   "additions": 72,
+   "deletions": 0
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/outbound.ts",
+   "status": "added",
+   "additions": 98,
+   "deletions": 0,
+   "patch": "@@ -0,0 +1,98 @@\n+/**\n+ * Checks on the text Evi writes to GitHub, applied in the approval policy so a\n+ * failing write never reaches the API and the model gets a reason it can fix.\n+ * Only prose is checked: fenced blocks and inline code quote real output.\n+ */\n+\n+const FENCE = /(`{3,})[\\s\\S]*?\\1/g\n+const HAS_FENCE = /(`{3,})[\\s\\S]*?\\1/\n+const INLINE_CODE = /`[^`\\n]+`/g\n+const DETAILS = /<details>[\\s\\S]*?<\\/details>/g\n+const ELI5_DISCLOSURE = /<details>\\s*<summary>ELI5<\\/summary>\\s*\\n\\s*\\S[\\s\\S]*?<\\/details>\\s*$/\n+const TABLE_ROW = /^\\s*\\|.*\\|\\s*$/m\n+const IMAGE = /!\\[[^\\]]*\\]\\([^)]+\\)|<img\\s/i\n+const PLACEHOLDER = /\\bTODO\\b|\\bTBD\\b|<!--[\\s\\S]*?-->|\\[(?:paste|insert|add)[^\\]]*\\]/i\n+const NARRATION = /^\\s*(?:ok(?:ay)?[,.]?\\s*)?(?:let me|i'?ll|i am going to|i'm going to)\\b/i\n+const PR_TITLE = /^[a-z]+(?:\\([a-z0-9-]+\\))?!?: [^A-Z\\s]/\n+\n+/** Most prose words a pull request body may carry outside its proof and ELI5. */\n+export const PR_PROSE_WORD_LIMIT = 250\n+\n+const TEXT_FIELDS = ['title', 'body'] as const\n+\n+/** Text a reader sees as prose: code, tables, the ELI5 disclosure and the disclosure quote excluded. */\n+export function proseOf(markdown: string) {\n+  return markdown\n+    .replace(FENCE, '')\n+    .replace(DETAILS, '')\n+    .replace(INLINE_CODE, '')\n+    .split('\\n')\n+    .filter(line => !line.trim().startsWith('|') && !line.trim().startsWith('>'))\n+    .join('\\n')\n+}\n+\n+/** Prose word count of a markdown body. */\n+export function proseWords(markdown: string) {\n+  return proseOf(markdown).split(/\\s+/).filter(word => /\\w/.test(word)).length\n+}\n+\n+function excerpt(text: string, index: number) {\n+  return text.slice(Math.max(0, index - 30), index + 30).replace(/\\s+/g, ' ').trim()\n+}\n+\n+function textDenial(field: string, text: string): string | null {\n+  const prose = proseOf(text)\n+  const dash = prose.indexOf('\\u2014')\n+  if (dash !== -1) {\n+    return `The ${field} has an em dash near \"${excerpt(prose, dash)}\". Use a comma, a colon, or a period, then retry.`\n+  }\n+  if (/^\\s*\\+\\+\\+ ELI5/m.test(text)) {\n+    return `The ${field} uses Linear's \"+++ ELI5\" block. On GitHub, write it as <details><summary>ELI5</summary> ... </details>, then retry.`\n+  }\n+  return null\n+}\n+\n+function pullRequestBodyDenial(body: string): string | null {\n+  if (PLACEHOLDER.test(body.replace(FENCE, ''))) {\n+    return 'The pull request body has a placeholder (TODO, an HTML comment, or \"[paste ...]\"). Use only evidence you have; say plainly what could not be captured, then retry.'\n+  }\n+  const withoutDetails = body.replace(DETAILS, '')\n+  if (!HAS_FENCE.test(withoutDetails) && !TABLE_ROW.test(withoutDetails) && !IMAGE.test(withoutDetails)) {\n+    return 'The pull request body has no proof: add the real output, a diff, a usage snippet, a table, or a capture in the body, then retry.'\n+  }\n+  if (!ELI5_DISCLOSURE.test(body)) {\n+    return 'The pull request body must end with a <details><summary>ELI5</summary> disclosure. Add it, then retry.'\n+  }\n+  const words = proseWords(body)\n+  if (words > PR_PROSE_WORD_LIMIT) {\n+    return `The pull request body has ${words} words of prose outside its proof and ELI5; the limit is ${PR_PROSE_WORD_LIMIT}. Keep Why, Proof, Risk, Checks, cut the rest, then retry.`\n+  }\n+  return null\n+}\n+\n+/**\n+ * Reason to refuse a GitHub write, or null when its text passes. `name` is the\n+ * github-tools name (`createPullRequest`), with or without its `github__` prefix.\n+ */\n+export function outboundDenial(name: string, toolInput: unknown): string | null {\n+  const toolName = name.replace(/^.*__/, '')\n+  const input = (toolInput ?? {}) as Record<string, unknown>\n+  for (const field of TEXT_FIELDS) {\n+    const value = input[field]\n+    if (typeof value !== 'string') continue\n+    const reason = textDenial(field, value)\n+    if (reason) return reason\n+  }\n+  const body = typeof input.body === 'string' ? input.body : undefined\n+  if (body !== undefined && /Comment$/.test(toolName) && NARRATION.test(body)) {\n+    return 'The comment opens by narrating what you will do. Post the result instead, or nothing, then retry.'\n+  }\n+  if (toolName === 'createPullRequest' || toolName === 'updatePullRequest') {\n+    const { title } = input\n+    if (typeof title === 'string' && !PR_TITLE.test(title)) {\n+      return `The title \"${title}\" is not a Conventional Commits title with a lowercase subject, such as \"fix(sentry): ...\". Fix it, then retry.`\n+    }\n+    if (body !== undefined) return pullRequestBodyDenial(body)\n+  }\n+  return null\n+}"
+  },
+  {
+   "filename": "apps/evi/agent/skills/contributing/SKILL.md",
+   "status": "modified",
+   "additions": 5,
+   "deletions": 4
+  },
+  {
+   "filename": "apps/evi/evals/contributing/pr-body-concise.eval.ts",
+   "status": "modified",
+   "additions": 5,
+   "deletions": 12
+  },
+  {
+   "filename": "apps/evi/evals/contributing/pr-shows-cli-output.eval.ts",
+   "status": "modified",
+   "additions": 13,
+   "deletions": 1
+  }
+ ],
+ "manifests": {}
+}

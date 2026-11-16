@@ -20,6 +20,7 @@ pnpm content:lint [path]           # rank the written corpus by content findings
 pnpm content:lint:test             # the scanner's own tests, including its two calibration fixtures
 pnpm release-notes:test            # tests for scripts/release-notes, which rewrites GitHub release bodies and pins Latest to evlog
 pnpm risk-score:test               # tests for scripts/risk-score, the rules behind the Linear risk score comment on each PR
+pnpm risk-score:record <pr>...     # record a real PR as a calibration fixture; add its expected score to calibration.test.mjs
 ```
 
 Publishing is automated: changesets + `.github/workflows/release.yml`. Never run `pnpm release` or `changeset publish` manually. CI publishes with npm Trusted Publishing, so a new package needs GitHub Actions (`evloghq/evlog`, `release.yml`) added as its Trusted Publisher on npmjs.com before the first release that includes it; without it npm answers `E404` on the publish.

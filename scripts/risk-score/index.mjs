@@ -53,7 +53,9 @@ export async function publishRiskScore({ github, context, core }) {
     return
   }
 
-  const assessment = assessRisk({ title: pr.title, files, manifests })
+  // A deleted fork leaves `head.repo` null, which still counts as a fork.
+  const author = { login: pr.user.login, fork: pr.head.repo?.full_name !== pr.base.repo.full_name, association: pr.author_association }
+  const assessment = assessRisk({ title: pr.title, author, files, manifests })
   const body = renderComment({ sha: pr.head.sha, assessment })
 
   const issue = { ...context.repo, issue_number: pull_number }

@@ -1,0 +1,187 @@
+{
+ "number": 1065,
+ "title": "refactor(evi): use github-tools channel and eve's git extension",
+ "author": {
+  "login": "HugoRCD",
+  "fork": false,
+  "association": "MEMBER"
+ },
+ "files": [
+  {
+   "filename": "apps/evi/agent/channels/github.ts",
+   "status": "modified",
+   "additions": 5,
+   "deletions": 11,
+   "patch": "@@ -1,25 +1,19 @@\n-import { defaultGitHubAuth, githubChannel } from 'eve/channels/github'\n+import { githubChannel } from '@github-tools/eve-extension/channels'\n+import { defaultGitHubAuth } from 'eve/channels/github'\n import type { GitHubChannelState } from 'eve/channels/github'\n import { githubCredentials } from '../lib/github/credentials'\n import { escalateFailedTriageQuietly, isAutonomousTriageState } from '../lib/github/escalate'\n import { failureComment } from '../lib/failure'\n import { isHomeRepository, repositoryOf } from '../lib/repo'\n-import { AUTONOMOUS_GITHUB_PRINCIPAL, isAutonomous, MAINTAINER_GITHUB_ID, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'\n+import { AUTONOMOUS_GITHUB_PRINCIPAL, isAutonomous, MAINTAINER_GITHUB_ID } from '../lib/trust'\n \n const botName = 'evlogai'\n-const mentionPattern = new RegExp(\n-  `@${botName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}(?=$|[^A-Za-z0-9_-])`,\n-  'iu',\n-)\n \n export default githubChannel({\n   botName,\n   credentials: githubCredentials,\n-  onComment: (ctx, comment) => {\n-    if (ctx.sender.login.toLowerCase() !== MAINTAINER_GITHUB_LOGIN) return null\n-    if (!mentionPattern.test(comment.body)) return null\n-    return { auth: defaultGitHubAuth(ctx) }\n-  },\n+  // A mention from anyone below Maintain on the thread's repository starts nothing.\n+  respondTo: 'maintainers',\n   onIssue: (ctx) => {\n     // Unattended triage is a service to one community; an App installation elsewhere grants nothing by itself.\n     if (!isHomeRepository(ctx.repository)) return null"
+  },
+  {
+   "filename": "apps/evi/agent/extensions/git/extension.ts",
+   "status": "added",
+   "additions": 14,
+   "deletions": 0,
+   "patch": "@@ -0,0 +1,14 @@\n+import git from 'eve/extensions/git'\n+import { GITHUB_CONNECTOR } from '../../lib/github/credentials'\n+import { authorizeGitHubCommand, brokerGitHubLease } from '../../lib/github/gh'\n+\n+/** `git__gh` clones and fetches into the sandbox; branches go out through `git__push`, so it only reads contents. */\n+export default git({\n+  github: {\n+    connector: GITHUB_CONNECTOR,\n+    principalType: 'app',\n+    permissions: ['contents:read'],\n+    broker: brokerGitHubLease,\n+    authorize: authorizeGitHubCommand,\n+  },\n+})"
+  },
+  {
+   "filename": "apps/evi/agent/extensions/git/skills/pr.md",
+   "status": "added",
+   "additions": 11,
+   "deletions": 0
+  },
+  {
+   "filename": "apps/evi/agent/extensions/github.ts",
+   "status": "modified",
+   "additions": 41,
+   "deletions": 59,
+   "patch": "@@ -7,63 +7,43 @@ import { homeRepository } from '../lib/repo'\n import { isAutonomous, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'\n \n /**\n- * Every tool here is carried in the prompt on every turn, whatever the turn is\n- * about, so the list stays at what the agent's instructions and skills actually\n- * reach for. A capability that reads well on paper and is never called is paid\n- * for on every request; add one back when a run needs it, not in anticipation.\n+ * `preset: 'auto'` lists only the tools a session's first request needs, and\n+ * defers the rest behind `eve__search`. These writes stay out of reach whatever\n+ * the routing picks: merges, releases (AGENTS.md forbids an agent creating\n+ * one), branch and file writes (code ships through `git__push` from the\n+ * sandbox), CI control, deletions, gists and reactions.\n  */\n-const TOOLS = [\n-  // Repository and code\n-  'getRepository',\n-  'getRepositoryTree',\n-  'getFileContent',\n-  'searchCode',\n-  'getBlame',\n-  'listCommits',\n-\n-  // Issues\n-  'searchIssues',\n-  'listIssues',\n-  'getIssueContext',\n-  'listIssueComments',\n-  'createIssue',\n-  'updateIssue',\n-  'closeIssue',\n-  'addIssueComment',\n-  'updateIssueComment',\n-\n-  // Triage\n-  'listLabels',\n-  'createLabel',\n-  'updateLabel',\n-  'addLabels',\n-  'removeLabel',\n-  'addAssignees',\n-  'removeAssignees',\n-\n-  // Pull requests\n-  'listPullRequests',\n-  'getPullRequestContext',\n-  'listPullRequestFiles',\n-  'listPullRequestReviews',\n-  'createPullRequest',\n-  'updatePullRequest',\n-  'addPullRequestComment',\n-  'updatePullRequestComment',\n-  'createPullRequestReview',\n-  'requestReviewers',\n-\n-  // Discussions\n-  'listDiscussions',\n-  'getDiscussion',\n-  'addDiscussionComment',\n-\n-  // Releases, read only: AGENTS.md forbids agents from creating one\n-  'listReleases',\n-\n-  // CI, read only — diagnose a red build, never restart or cancel one\n-  'listCheckRuns',\n-  'getCiFailureContext',\n+const EXCLUDED_WRITES = [\n+  'mergePullRequest',\n+  'enablePullRequestAutoMerge',\n+  'disablePullRequestAutoMerge',\n+  'updatePullRequestBranch',\n+  'createRelease',\n+  'updateRelease',\n+  'deleteRelease',\n+  'createBranch',\n+  'deleteBranch',\n+  'createOrUpdateFile',\n+  'editFiles',\n+  'createRepository',\n+  'forkRepository',\n+  'triggerWorkflow',\n+  'rerunWorkflowRun',\n+  'cancelWorkflowRun',\n+  'createCommitStatus',\n+  'deleteIssueComment',\n+  'deletePullRequestComment',\n+  'deleteLabel',\n+  'addSubIssue',\n+  'replyToReviewComment',\n+  'resolveReviewThread',\n+  'addCommentReaction',\n+  'addIssueReaction',\n+  'markNotificationRead',\n+  'createGist',\n+  'updateGist',\n+  'deleteGist',\n+  'createGistComment',\n ] as const\n \n /**\n@@ -96,9 +76,11 @@ function assignPolicy(ctx: ApprovalContext): ApprovalStatus {\n export default githubExtension({\n   connector: GITHUB_CONNECTOR,\n   context: homeRepository(),\n-  include: [...TOOLS],\n-  // Omitted write tools keep the default always(): closeIssue, createPullRequestReview.\n-  // Connect scopes are derived from `include` (createLabel → issues:write) in sdk ≥ 1.11.1.\n+  preset: 'auto',\n+  exclude: [...EXCLUDED_WRITES],\n+  // A person's own GitHub access bounds what their turn does; schedules and autonomous triage run as the App.\n+  actAs: 'caller',\n+  // Write tools without a policy keep the default always(): closeIssue, createPullRequestReview.\n   requireApproval: {\n     // Reversible and harmless on every kind of run; a card here only slows the PR flow down.\n     requestReviewers: (): ApprovalStatus => 'not-applicable',"
+  },
+  {
+   "filename": "apps/evi/agent/instructions/workspace.ts",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 2,
+   "patch": "@@ -12,7 +12,7 @@ In conversation, a fact you just read in the docs or in a file is already ground\n \n const checkedOut = (home: string) => `## Workspace\n \n-Your home repository is \\`${home}\\`: the \\`github__*\\` tools default to it, and so does \\`git__push\\`. When the thread you were summoned on lives in another repository, pass \\`owner\\` and \\`repo\\` to the GitHub tools; to change it, \\`git__checkout\\` clones it under \\`/workspace/<owner>/<repo>\\`, \\`git__install\\` installs its dependencies, and \\`git__push\\` takes the same \\`repository\\`. That checkout is cold: nothing is cached there, so a check you run in it takes its full time, and you say so when you report it. For anything about a repository's use of evlog (instrumenting, reviewing, verifying, monitoring, auditing), load the \\`adopt\\` skill; the \\`evlog\\` CLI built from \\`main\\` is on PATH.\n+Your home repository is \\`${home}\\`: the \\`github__*\\` tools default to it, and so does \\`git__push\\`. When the thread you were summoned on lives in another repository, pass \\`owner\\` and \\`repo\\` to the GitHub tools; to change it, clone it with \\`git__gh\\` (\\`gh repo clone <owner>/<repo> /workspace/<owner>/<repo>\\`) and install its dependencies there with \\`COREPACK_ENABLE_DOWNLOAD_PROMPT=0 nci\\`; \\`git__push\\` then takes the same \\`repository\\`. That checkout is cold: nothing is cached there, so a check you run in it takes its full time, and you say so when you report it. For anything about a repository's use of evlog (instrumenting, reviewing, verifying, monitoring, auditing), load the \\`adopt\\` skill; the \\`evlog\\` CLI built from \\`main\\` is on PATH.\n \n Two checkouts are live in the sandbox, and this channel has already opened it to check the thread out, so the file tools cost you nothing here:\n \n@@ -25,7 +25,7 @@ ${RUN_BEFORE_ASSERT}`\n \n const noThreadCheckout = (home: string) => `## Workspace\n \n-Your home repository is \\`${home}\\`: the \\`github__*\\` tools default to it, and so does \\`git__push\\`. Name another repository only when the person asked about one: \\`owner\\` and \\`repo\\` on the GitHub tools, \\`git__checkout\\` to clone it under \\`/workspace/<owner>/<repo>\\`, \\`git__install\\` for its dependencies, and the same \\`repository\\` on \\`git__push\\`. That checkout is cold: nothing is cached there, so a check you run in it takes its full time, and you say so when you report it. For anything about a repository's use of evlog (instrumenting, reviewing, verifying, monitoring, auditing), load the \\`adopt\\` skill; the \\`evlog\\` CLI built from \\`main\\` is on PATH.\n+Your home repository is \\`${home}\\`: the \\`github__*\\` tools default to it, and so does \\`git__push\\`. Name another repository only when the person asked about one: \\`owner\\` and \\`repo\\` on the GitHub tools, and \\`git__gh\\` to clone it (\\`gh repo clone <owner>/<repo> /workspace/<owner>/<repo>\\`), then \\`COREPACK_ENABLE_DOWNLOAD_PROMPT=0 nci\\` there for its dependencies, and the same \\`repository\\` on \\`git__push\\`. That checkout is cold: nothing is cached there, so a check you run in it takes its full time, and you say so when you report it. For anything about a repository's use of evlog (instrumenting, reviewing, verifying, monitoring, auditing), load the \\`adopt\\` skill; the \\`evlog\\` CLI built from \\`main\\` is on PATH.\n \n There is no thread checkout on this channel. The sandbox carries \\`${home}\\` at \\`/workspace/repo\\` — a working copy on the current \\`main\\`, dependencies installed and \\`dev:prepare\\` run — but it is an **execution** surface here, not a reading one: opening it costs a VM start, which is minutes when the session has not touched it yet.\n "
+  },
+  {
+   "filename": "apps/evi/agent/lib/errors.test.ts",
+   "status": "modified",
+   "additions": 3,
+   "deletions": 3
+  },
+  {
+   "filename": "apps/evi/agent/lib/errors.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 4,
+   "patch": "@@ -29,10 +29,6 @@ export const eviErrors = defineErrorCatalog('evi', {\n   GIT_COMMAND_FAILED: {\n     message: ({ command, exitCode }: { command: string, exitCode: number }) => `git ${command} exited ${exitCode}`,\n   },\n-  GIT_NO_COMMITS: {\n-    message: ({ repository }: { repository: string }) => `${repository} has no commits to check out.`,\n-  },\n-  INSTALL_FAILED: { message: ({ exitCode }: { exitCode: number }) => `install exited ${exitCode}` },\n \n   TURBO_NOT_CONFIGURED: {\n     message: 'TURBO_TEAM and VERCEL_TEAM_ID must be configured for remote caching.',"
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/credentials.test.ts",
+   "status": "modified",
+   "additions": 14,
+   "deletions": 6
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/credentials.ts",
+   "status": "modified",
+   "additions": 9,
+   "deletions": 2,
+   "patch": "@@ -1,10 +1,10 @@\n import { ConnectorInstallationRequiredError } from '@vercel/connect'\n import { type ConnectGitHubCredentialsParams, connectGitHubCredentials } from '@vercel/connect/eve'\n import type { GitHubChannelCredentials } from 'eve/channels/github'\n+import { eviErrors } from '../errors'\n import { homeRepository, type Repository } from '../repo'\n-import { mintInstallationToken } from './push'\n \n-/** The Connect connector shared by the GitHub channel, the extension, and the git tools. */\n+/** The Connect connector shared by the GitHub channel, the `github__*` and `git__gh` extensions, and `git__push`. */\n export const GITHUB_CONNECTOR = 'github/evi-github-production'\n \n // A GitHub App token is minted per installation and reaches that account only.\n@@ -27,6 +27,13 @@ export function githubCredentialsFor(repository: Repository): GitHubChannelCrede\n   return connectGitHubCredentials(GITHUB_CONNECTOR, installationParams(repository, [repository.repo]))\n }\n \n+/** Resolves the Connect-managed installation token, minting when it is lazy. */\n+export async function mintInstallationToken(credentials: GitHubChannelCredentials): Promise<string> {\n+  const token = credentials.installationToken\n+  if (token === undefined) throw eviErrors.GITHUB_NO_INSTALLATION_TOKEN()\n+  return typeof token === 'function' ? await token() : token\n+}\n+\n /** A token for `repository`; null when the App is not installed on its account. */\n export async function repositoryToken(repository: Repository): Promise<string | null> {\n   try {"
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/escalate.test.ts",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 1
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/escalate.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 2,
+   "patch": "@@ -3,8 +3,7 @@ import { eviErrors } from '../errors'\n import { jobLogger } from '../job'\n import { type Repository, repositorySlug } from '../repo'\n import { MAINTAINER_GITHUB_LOGIN } from '../trust'\n-import { githubCredentialsFor } from './credentials'\n-import { mintInstallationToken } from './push'\n+import { githubCredentialsFor, mintInstallationToken } from './credentials'\n \n const GITHUB_API = 'https://api.github.com'\n "
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/gh.test.ts",
+   "status": "added",
+   "additions": 36,
+   "deletions": 0
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/gh.ts",
+   "status": "added",
+   "additions": 34,
+   "deletions": 0,
+   "patch": "@@ -0,0 +1,34 @@\n+import type { GitHubAppAuthorizeRequest, GitHubLeaseRule } from 'eve/extensions/git'\n+import type { SandboxSession } from 'eve/sandbox'\n+import type { VercelSandboxSession } from 'eve/sandbox/vercel'\n+import { canAccessAdminTools } from '../trust'\n+\n+/** Fetching git data writes nothing on GitHub. */\n+const GIT_READS = new Set(['clone', 'fetch', 'pull', 'ls-remote'])\n+\n+/**\n+ * The `git__gh` access policy, eve's only gate on it. Maintainer and schedule\n+ * turns may clone and fetch. Nothing pushes through it: a `git push` from the\n+ * sandbox lands unsigned commits, so branches ship through `git__push`, and\n+ * every other GitHub write through the `github__*` tools and their approvals.\n+ */\n+export function authorizeGitHubCommand({ argv, auth }: Pick<GitHubAppAuthorizeRequest, 'argv' | 'auth'>): boolean {\n+  if (!canAccessAdminTools(auth)) return false\n+  const [program, ...rest] = argv\n+  if (program === 'gh') return rest[0] === 'repo' && rest[1] === 'clone'\n+  if (program !== 'git') return false\n+  let index = 0\n+  while (rest[index] === '-C') index += 2\n+  const command = rest[index]\n+  return command !== undefined && GIT_READS.has(command)\n+}\n+\n+/**\n+ * Installs eve's GitHub header rules for one `gh` command and removes them\n+ * after it. General egress stays open, as it is outside a command. Only Vercel\n+ * Sandbox rewrites headers at its firewall; the Docker sandbox refuses, so a\n+ * local session cannot reach GitHub with the token.\n+ */\n+export async function brokerGitHubLease(sandbox: SandboxSession, rules: Readonly<Record<string, readonly GitHubLeaseRule[]>> | null): Promise<void> {\n+  await (sandbox as VercelSandboxSession).setNetworkPolicy(rules === null ? 'allow-all' : { allow: { ...rules, '*': [] } })\n+}"
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/push.test.ts",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 13
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/push.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 9,
+   "patch": "@@ -1,6 +1,4 @@\n-import type { GitHubChannelCredentials } from 'eve/channels/github'\n import type { SandboxNetworkPolicy } from 'eve/sandbox'\n-import { eviErrors } from '../errors'\n \n const PROTECTED_BRANCHES = new Set(['main', 'master'])\n \n@@ -50,10 +48,3 @@ export function pushBrokerPolicy(installationToken: string): SandboxNetworkPolic\n     },\n   }\n }\n-\n-/** Resolves the Connect-managed installation token, minting when it is lazy. */\n-export async function mintInstallationToken(credentials: GitHubChannelCredentials): Promise<string> {\n-  const token = credentials.installationToken\n-  if (token === undefined) throw eviErrors.GITHUB_NO_INSTALLATION_TOKEN()\n-  return typeof token === 'function' ? await token() : token\n-}"
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/signed-push.test.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 26
+  },
+  {
+   "filename": "apps/evi/agent/lib/github/signed-push.ts",
+   "status": "modified",
+   "additions": 0,
+   "deletions": 9,
+   "patch": "@@ -74,15 +74,6 @@ export async function collectBranchCommits(sandbox: GitSandbox, dir: string, bra\n   return { base, head, branchExists: remoteHead !== null, commits }\n }\n \n-/**\n- * Fetch `ref` into the checkout at `dir` and detach onto it. The fetched commit is\n- * kept under `refs/remotes/checkout/`, so {@link collectBranchCommits} counts it as\n- * already on GitHub: a single-branch clone has no remote-tracking ref for it otherwise.\n- */\n-export function checkoutRefCommand(dir: string, ref: string): string {\n-  return `git -C ${dir} fetch --depth 50 origin '${ref}' && git -C ${dir} update-ref \"refs/remotes/checkout/$(git -C ${dir} rev-parse FETCH_HEAD)\" FETCH_HEAD && git -C ${dir} checkout --detach FETCH_HEAD`\n-}\n-\n async function readCommit(sandbox: GitSandbox, dir: string, sha: string): Promise<CommitChanges> {\n   const message = await git(sandbox, dir, `log -1 --format=%B ${sha}`)\n   // `-z` keeps paths verbatim, and blobs are read by id, so no path ever reaches the command line."
+  },
+  {
+   "filename": "apps/evi/agent/lib/workspace.test.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 7
+  },
+  {
+   "filename": "apps/evi/agent/lib/workspace.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 6,
+   "patch": "@@ -3,17 +3,12 @@ import { isHomeRepository, type Repository, repositorySlug } from './repo'\n /** The template clone with dependencies installed; sessions read, verify, and push from here. */\n export const REPO_DIR = '/workspace/repo'\n \n-/** Where a repository lives in the sandbox: the template clone for the home one, its own directory otherwise. */\n+/** Where a repository lives in the sandbox: the template clone for the home one, `/workspace/<owner>/<repo>` otherwise. */\n export function checkoutDir(repository: Repository): string {\n   if (isHomeRepository({ owner: repository.owner, name: repository.repo })) return REPO_DIR\n   return `/workspace/${repositorySlug(repository)}`\n }\n \n-/** Frozen install with whatever package manager the lockfile names; corepack fetches a missing one without asking. */\n-export function installCommand(dir: string): string {\n-  return `cd ${dir} && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 nci`\n-}\n-\n /** What a failed sandbox command has to say for itself: stderr first, stdout as fallback. */\n export function runOutput(run: { stdout?: unknown, stderr?: unknown }): string {\n   return String(run.stderr ?? '').trim() || String(run.stdout ?? '').trim()"
+  },
+  {
+   "filename": "apps/evi/agent/sandbox.ts",
+   "status": "modified",
+   "additions": 3,
+   "deletions": 0,
+   "patch": "@@ -1,4 +1,5 @@\n import { installAgentBrowser } from '@agent-browser/eve/sandbox'\n+import { installCodeTooling } from 'eve/extensions/code/sandbox'\n import { defineSandbox } from 'eve/sandbox'\n import type { SandboxSession } from 'eve/sandbox'\n import { browserSandbox } from './lib/capture'\n@@ -39,6 +40,8 @@ async function prepareSandbox(sandbox: SandboxSession) {\n   }\n   // Commits authored in the sandbox belong to the bot, on every channel.\n   await sandbox.run({ command: 'git config --global user.name \"evlogai[bot]\" && git config --global user.email \"evlogai[bot]@users.noreply.github.com\"' })\n+  // `gh` and the wrapper `git__gh` runs it through.\n+  await installCodeTooling(sandbox)\n   const { stdout: architecture } = await sandbox.run({ command: 'uname -m' })\n   await installAgentBrowser(browserSandbox(sandbox), agentBrowserInstallOptions(architecture))\n }"
+  },
+  {
+   "filename": "apps/evi/agent/skills/adopt/SKILL.md",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "filename": "apps/evi/agent/skills/contributing/SKILL.md",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "filename": "apps/evi/agent/tools/git.ts",
+   "status": "modified",
+   "additions": 13,
+   "deletions": 106,
+   "patch": "@@ -4,142 +4,49 @@ import { defineDynamic, defineTool } from 'eve/tools'\n import { z } from 'zod'\n import { eviErrors, refusal, type ToolRefusal } from '../lib/errors'\n import { repositoryToken } from '../lib/github/credentials'\n-import { isValidRefName, pushBrokerPolicy, validatePushBranch } from '../lib/github/push'\n-import { checkoutRefCommand, collectBranchCommits, pushSignedCommits, remoteBranchHead } from '../lib/github/signed-push'\n+import { pushBrokerPolicy, validatePushBranch } from '../lib/github/push'\n+import { collectBranchCommits, pushSignedCommits, remoteBranchHead } from '../lib/github/signed-push'\n import { cloneUrl, homeRepository, parseRepository, type Repository, repositorySlug } from '../lib/repo'\n import { isVercelEnvironment } from '../lib/sandbox-backend'\n import { canAccessAdminTools } from '../lib/trust'\n-import { checkoutDir, installCommand, REPO_DIR, runOutput } from '../lib/workspace'\n+import { checkoutDir, REPO_DIR, runOutput } from '../lib/workspace'\n import { environment } from '../sandbox'\n \n-function notAllowed(tool: string) {\n-  return refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool, message: 'Only maintainer and schedule-app sessions may use git over the network.' }))\n-}\n-\n-function notSlug(input: string) {\n-  return refusal(eviErrors.INPUT_REFUSED({ message: `\"${input}\" is not an owner/repo slug.` }))\n-}\n-\n-function needsFirewall(tool: string) {\n-  return refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool, message: `${tool} needs the Vercel Sandbox firewall to broker the GitHub token, and this sandbox is local Docker. Run it on a deployment.` }))\n-}\n-\n-function notInstalled(repository: Repository) {\n-  return refusal(eviErrors.GITHUB_NOT_INSTALLED({ owner: repository.owner, repository: repositorySlug(repository) }))\n-}\n-\n-// Maintainer and schedule-app turns ship code; nothing else reaches git over the network.\n+// Maintainer and schedule-app turns ship code; nothing else pushes.\n export default defineDynamic((ctx) => {\n   if (!canAccessAdminTools(ctx.session.auth.current)) return null\n   const home = repositorySlug(homeRepository())\n   return {\n-    git__checkout: defineTool({\n-      description: `Clone a repository the GitHub App is installed on into the sandbox, at /workspace/<owner>/<repo>, and install its dependencies with the package manager its lockfile names, so you can read, run and change it there. ${home} is already checked out at ${REPO_DIR} and never needs this. Pass \\`ref\\` to land on a branch or commit instead of the default branch. Nothing is cached for this checkout: checks run cold, so say so when you report them. The credential is brokered at the sandbox firewall and never enters the sandbox.`,\n-      inputSchema: z.object({\n-        repository: z.string().min(1).describe('owner/repo to clone'),\n-        ref: z.string().optional().describe('Branch or commit to check out'),\n-      }),\n-      async execute(input, toolCtx) {\n-        if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAllowed('git__checkout')\n-        const log = useLogger(toolCtx)\n-        const repository = parseRepository(input.repository)\n-        if (repository === null) return notSlug(input.repository)\n-        if (input.ref !== undefined && !isValidRefName(input.ref)) {\n-          return refusal(eviErrors.INPUT_REFUSED({ message: `\"${input.ref}\" is not a valid ref.` }))\n-        }\n-        const slug = repositorySlug(repository)\n-        if (!isVercelEnvironment(environment)) {\n-          const refused = needsFirewall('git__checkout')\n-          log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code } } })\n-          return refused\n-        }\n-        const token = await repositoryToken(repository)\n-        if (token === null) {\n-          const refused = notInstalled(repository)\n-          log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code } } })\n-          return refused\n-        }\n-        const dir = checkoutDir(repository)\n-        const sandbox = await toolCtx.getSandbox(environment)\n-        await sandbox.setNetworkPolicy(pushBrokerPolicy(token))\n-        try {\n-          const clone = await sandbox.run({ command: `test -d ${dir}/.git || (mkdir -p ${dir} && git clone --depth 50 ${cloneUrl(repository)} ${dir})` })\n-          if (clone.exitCode !== 0) {\n-            const refused = refusal(eviErrors.GIT_COMMAND_FAILED({ command: 'clone', exitCode: clone.exitCode, message: `git clone exited ${clone.exitCode}: ${runOutput(clone)}` }))\n-            log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code, exitCode: clone.exitCode } } })\n-            return refused\n-          }\n-          if (input.ref !== undefined) {\n-            const checkout = await sandbox.run({ command: checkoutRefCommand(dir, input.ref) })\n-            if (checkout.exitCode !== 0) {\n-              const refused = refusal(eviErrors.GIT_COMMAND_FAILED({ command: 'checkout', exitCode: checkout.exitCode, message: `git checkout exited ${checkout.exitCode}: ${runOutput(checkout)}` }))\n-              log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code, exitCode: checkout.exitCode } } })\n-              return refused\n-            }\n-          }\n-          const head = await sandbox.run({ command: `git -C ${dir} rev-parse --verify HEAD` })\n-          if (head.exitCode !== 0) {\n-            const refused = refusal(eviErrors.GIT_NO_COMMITS({ repository: slug }))\n-            log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code } } })\n-            return refused\n-          }\n-          const sha = String(head.stdout).trim()\n-          log.set({ git: { checkout: { repository: slug, done: true, sha } } })\n-          return { success: true as const, repository: slug, path: dir, sha }\n-        } finally {\n-          await sandbox.setNetworkPolicy('allow-all')\n-        }\n-      },\n-    }),\n-    git__install: defineTool({\n-      description: `Install the dependencies of a git__checkout directory with the package manager its lockfile names (pnpm, yarn, npm or bun), frozen to the lockfile. Run it once after the checkout and before any check; ${REPO_DIR} already has its dependencies.`,\n-      inputSchema: z.object({\n-        repository: z.string().min(1).describe('owner/repo already checked out'),\n-      }),\n-      async execute(input, toolCtx) {\n-        if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAllowed('git__install')\n-        const log = useLogger(toolCtx)\n-        const repository = parseRepository(input.repository)\n-        if (repository === null) return notSlug(input.repository)\n-        const slug = repositorySlug(repository)\n-        const dir = checkoutDir(repository)\n-        const sandbox = await toolCtx.getSandbox()\n-        const install = await sandbox.run({ command: installCommand(dir) })\n-        if (install.exitCode !== 0) {\n-          const refused = refusal(eviErrors.INSTALL_FAILED({ exitCode: install.exitCode, message: `install exited ${install.exitCode}: ${runOutput(install)}` }))\n-          log.set({ git: { install: { repository: slug, done: false, reason: refused.code, exitCode: install.exitCode } } })\n-          return refused\n-        }\n-        log.set({ git: { install: { repository: slug, done: true } } })\n-        return { success: true as const, repository: slug, path: dir }\n-      },\n-    }),\n     git__push: defineTool({\n-      description: `Push a local branch to GitHub: to ${home} from ${REPO_DIR}, or to the repository named in \\`repository\\` from its git__checkout directory. The branch must already exist locally with the work committed and the checks run; main and master are refused. Each new commit is recreated on GitHub so that GitHub signs it, then the local branch is moved onto those commits: same files and messages, new shas. That push takes regular files only: merge commits, symlinks, submodules and executable bits are refused, and so is a branch on GitHub that the local one does not build on. The credential never enters the sandbox. After a successful push, open the pull request with github__createPullRequest.`,\n+      description: `Push a local branch to GitHub: to ${home} from ${REPO_DIR}, or to the repository named in \\`repository\\` from its clone at /workspace/<owner>/<repo>. The branch must already exist locally with the work committed and the checks run; main and master are refused. Each new commit is recreated on GitHub so that GitHub signs it, then the local branch is moved onto those commits: same files and messages, new shas. That push takes regular files only: merge commits, symlinks, submodules and executable bits are refused, and so is a branch on GitHub that the local one does not build on. The credential never enters the sandbox. After a successful push, open the pull request with github__createPullRequest.`,\n       inputSchema: z.object({\n         branch: z.string().min(1).describe('Branch name to push, e.g. fix/pipeline-flush'),\n         repository: z.string().optional().describe(`owner/repo to push to; defaults to ${home}`),\n       }),\n       async execute(input, toolCtx) {\n-        if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAllowed('git__push')\n         const log = useLogger(toolCtx)\n         const refuse = (refused: ToolRefusal) => {\n           log.set({ git: { branch: input.branch, pushed: false, reason: refused.code } })\n           return refused\n         }\n+        if (!canAccessAdminTools(toolCtx.session.auth.current)) {\n+          return refuse(refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool: 'git__push', message: 'Only maintainer and schedule-app sessions may push.' })))\n+        }\n         const reason = validatePushBranch(input.branch)\n         if (reason) return refuse(refusal(eviErrors.GIT_PUSH_REFUSED({ message: reason })))\n         let repository: Repository\n         if (input.repository === undefined) {\n           repository = homeRepository()\n         } else {\n           const parsed = parseRepository(input.repository)\n-          if (parsed === null) return refuse(notSlug(input.repository))\n+          if (parsed === null) return refuse(refusal(eviErrors.INPUT_REFUSED({ message: `\"${input.repository}\" is not an owner/repo slug.` })))\n           repository = parsed\n         }\n-        if (!isVercelEnvironment(environment)) return refuse(needsFirewall('git__push'))\n+        if (!isVercelEnvironment(environment)) {\n+          return refuse(refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool: 'git__push', message: 'git__push needs the Vercel Sandbox firewall to broker the GitHub token, and this sandbox is local Docker. Run it on a deployment.' })))\n+        }\n         const token = await repositoryToken(repository)\n-        if (token === null) return refuse(notInstalled(repository))\n+        if (token === null) return refuse(refusal(eviErrors.GITHUB_NOT_INSTALLED({ owner: repository.owner, repository: repositorySlug(repository) })))\n         const dir = checkoutDir(repository)\n         const sandbox = await toolCtx.getSandbox(environment)\n         let sha: string"
+  },
+  {
+   "filename": "apps/evi/docs/authorization.md",
+   "status": "modified",
+   "additions": 8,
+   "deletions": 3
+  },
+  {
+   "filename": "apps/evi/docs/notes.md",
+   "status": "modified",
+   "additions": 16,
+   "deletions": 15
+  },
+  {
+   "filename": "apps/evi/docs/observability.md",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 2
+  },
+  {
+   "filename": "apps/evi/evals/safety/no-push-to-main.eval.ts",
+   "status": "modified",
+   "additions": 2,
+   "deletions": 2
+  }
+ ],
+ "manifests": {}
+}
