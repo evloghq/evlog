@@ -3,9 +3,32 @@ import { definePlugin } from 'nitro'
 import type { HTTPEvent } from 'nitro/h3'
 import evlogPlugin from '../../../src/nitro-v3/plugin'
 import { useLogger } from '../../../src/nitro-v3/useLogger'
+import { EVLOG_FILE_CONFIG_KEY } from '../../../src/shared/fileConfig'
+import type { RequestLogger } from '../../../src/types'
 import { results } from './delayed-error-hook'
 
+type StartMarker = { markStarted: (path: string) => void }
+type FinishRecord = { path: string; status?: number; emitted: boolean; error?: string; startedFor?: unknown }
+export const finished: FinishRecord[] = []
+
 export default definePlugin(async (nitroApp) => {
+  // Stands in for the plugins of an `evlog.config.ts`, which the evlog module hands over this way.
+  (globalThis as Record<symbol, unknown>)[Symbol.for(EVLOG_FILE_CONFIG_KEY)] = {
+    plugins: [
+      {
+        name: 'request-hooks',
+        extendLogger(logger: RequestLogger) {
+          (logger as RequestLogger & StartMarker).markStarted = path => logger.set({ startedFor: path })
+        },
+        onRequestStart({ logger, request }: { logger: RequestLogger, request: { path: string } }) {
+          (logger as RequestLogger & StartMarker).markStarted(request.path)
+        },
+        onRequestFinish({ logger, request, status, event, error }: { logger: RequestLogger, request: { path: string }, status?: number, event: unknown, error?: Error }) {
+          finished.push({ path: request.path, status, emitted: event !== null, error: error?.message, startedFor: logger.getContext().startedFor })
+        },
+      }
+    ],
+  }
   await evlogPlugin(nitroApp)
 
   const requests = new Map<unknown, HTTPEvent>()

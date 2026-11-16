@@ -15,6 +15,7 @@ import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shar
 import { bindStreamingResponseLifecycle, shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { startStreamServer, type StreamServerOptions } from '../stream'
 import type { AuditableLogger } from '../audit'
+import type { RequestLifecycleContext } from '../shared/plugin'
 import type { RequestLogger, ServerEvent, TailSamplingContext, WideEvent } from '../types'
 import { elapsedMs } from '../utils'
 import { callEnrichAndDrain, getSafeHeaders, getResponseStatus } from './enrich-drain'
@@ -32,11 +33,17 @@ function createDeferredRequestLogger(e: ServerEvent): AuditableLogger {
   }, { _deferDrain: true })
 }
 
+function requestInfo(requestLog: RequestLogger, e: ServerEvent): RequestLifecycleContext['request'] {
+  return { method: e.method, path: e.path, requestId: requestLog.getContext().requestId as string | undefined }
+}
+
+// eslint-disable-next-line max-params
 async function emitWithTailSampling(
   nitroApp: NitroApp,
   requestLog: RequestLogger,
   e: ServerEvent,
   status: number,
+  error?: Error,
 ): Promise<WideEvent | null> {
   const startTime = e.context._evlogStartTime as number | undefined
   const durationMs = startTime ? elapsedMs(startTime) : undefined
@@ -54,7 +61,19 @@ async function emitWithTailSampling(
   const runner = getGlobalPluginRunner()
   if (runner.hasKeep) await runner.runKeep(tailCtx)
 
-  return requestLog.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
+  const emittedEvent = requestLog.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
+  if (runner.hasRequestLifecycle) {
+    runner.runOnRequestFinish({
+      logger: requestLog,
+      request: requestInfo(requestLog, e),
+      headers: getSafeHeaders(e),
+      event: emittedEvent,
+      status,
+      durationMs: durationMs ?? 0,
+      error,
+    })
+  }
+  return emittedEvent
 }
 
 const DEFAULT_TRANSPORT_ENDPOINT = '/api/_evlog/ingest'
@@ -140,6 +159,12 @@ export default defineNitroPlugin(async (nitroApp) => {
       requestLog.set({ service: routeService })
     }
 
+    const runner = getGlobalPluginRunner()
+    if (runner.hasExtendLogger) runner.applyExtendLogger(requestLog)
+    if (runner.hasRequestLifecycle) {
+      runner.runOnRequestStart({ logger: requestLog, request: requestInfo(requestLog, e), headers: getSafeHeaders(e) })
+    }
+
     e.context.log = requestLog
   })
 
@@ -160,7 +185,7 @@ export default defineNitroPlugin(async (nitroApp) => {
       const errorStatus = extractErrorStatus(error)
       requestLog.set({ status: errorStatus })
 
-      const emittedEvent = await emitWithTailSampling(nitroApp, requestLog, e, errorStatus)
+      const emittedEvent = await emitWithTailSampling(nitroApp, requestLog, e, errorStatus, err)
       if (emittedEvent) {
         e.context._evlogEmitted = true
         void callEnrichAndDrain(nitroApp, emittedEvent, e, { deferDrain: true }).catch((err) => {
@@ -179,12 +204,12 @@ export default defineNitroPlugin(async (nitroApp) => {
     const requestLog = e.context.log as RequestLogger | undefined
     if (!requestLog) return
 
-    const emitSuccessResponse = async () => {
+    const emitSuccessResponse = async (error?: Error) => {
       const status = getResponseStatus(e)
       if (e.context._evlogQuietOnSuccess && status < 400) return
       requestLog.set({ status })
 
-      const emittedEvent = await emitWithTailSampling(nitroApp, requestLog, e, status)
+      const emittedEvent = await emitWithTailSampling(nitroApp, requestLog, e, status, error)
       await callEnrichAndDrain(nitroApp, emittedEvent, e)
     }
 
@@ -193,7 +218,7 @@ export default defineNitroPlugin(async (nitroApp) => {
         if (meta.error) {
           requestLog.error(meta.error)
         }
-        await emitSuccessResponse()
+        await emitSuccessResponse(meta.error)
       })
       return
     }

@@ -360,4 +360,17 @@ describe.sequential('Nitro v3 Server with evlog', () => {
     })
     expect(result.warnings.join('\n')).not.toContain('after the wide event was emitted')
   })
+
+  it('runs the request hooks of evlog plugins on success and on error', async () => {
+    await server.fetch(new Request(new URL('/works', server.url)))
+    await server.fetch(new Request(new URL('/throws', server.url)))
+
+    const finished = await vi.waitFor(async () => {
+      const records = await (await server.fetch(new Request(new URL('/finished', server.url)))).json()
+      expect(records.some((record: { path: string }) => record.path === '/throws')).toBe(true)
+      return records
+    })
+    expect(finished).toContainEqual({ path: '/works', status: 200, emitted: true, startedFor: '/works' })
+    expect(finished).toContainEqual({ path: '/throws', status: 402, emitted: true, error: 'Payment failed', startedFor: '/throws' })
+  })
 })

@@ -80,6 +80,16 @@ describe.sequential('Nitro v2 app with an evlog.config.ts', () => {
       enrichedBy: 'evlog.config.ts',
       method: 'GET',
       path: '/works',
+      startedFor: '/works',
     })
+  }, 15_000)
+
+  it('runs the request hooks of its plugins on success and on error', async () => {
+    const failed = await fetch(new URL('/fails', baseURL), { signal: AbortSignal.timeout(8_000) })
+    expect(failed.status).toBe(409)
+
+    const finished = await (await fetch(new URL('/finished', baseURL), { signal: AbortSignal.timeout(8_000) })).json()
+    expect(finished).toContainEqual({ path: '/works', status: 200, emitted: true, startedFor: '/works' })
+    expect(finished).toContainEqual({ path: '/fails', status: 409, emitted: true, error: 'conflict in route', startedFor: '/fails' })
   }, 15_000)
 })

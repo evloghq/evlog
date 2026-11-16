@@ -1066,7 +1066,7 @@ import { createDefaultEnrichers } from 'evlog/enrichers'
 app.use(evlog({ enrich: createDefaultEnrichers() }))
 ```
 
-With OpenTelemetry tracing, add `createOtelPlugin()` from `evlog/otel` to the middleware's `plugins`: it sets `traceId` and `spanId` from the span active when the request starts, and the OTLP drain sends them as the record's `trace_id` and `span_id`. It needs `@opentelemetry/api` 1.9 or later and does not run on Nuxt or Nitro. `createTraceContextEnricher()` never sets `spanId`; it records the caller's span from `traceparent` as `parentSpanId`.
+With OpenTelemetry tracing, add `createOtelPlugin()` from `evlog/otel` to the middleware's `plugins`: it sets `traceId` and `spanId` from the span active when the request starts, and the OTLP drain sends them as the record's `trace_id` and `span_id`. On Nuxt and Nitro, list it in `plugins` of `evlog.config.ts`. It needs `@opentelemetry/api` 1.9 or later. `createTraceContextEnricher()` never sets `spanId`; it records the caller's span from `traceparent` as `parentSpanId`.
 
 ```typescript
 import { createOtelPlugin } from 'evlog/otel'

@@ -54,6 +54,7 @@ async function emitWithTailSampling(
   event: HTTPEvent,
   status: number,
   ctx: Record<string, unknown>,
+  error?: Error,
 ): Promise<WideEvent | null> {
   const startTime = ctx._evlogStartTime as number | undefined
   const durationMs = startTime ? elapsedMs(startTime) : undefined
@@ -74,6 +75,17 @@ async function emitWithTailSampling(
 
   const emittedEvent = log.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
   ctx._evlogEmitted = true
+  if (runner.hasRequestLifecycle) {
+    runner.runOnRequestFinish({
+      logger: log,
+      request: { method: event.req.method, path: pathname, requestId: log.getContext().requestId as string | undefined },
+      headers: getSafeRequestHeaders(event),
+      event: emittedEvent,
+      status,
+      durationMs: durationMs ?? 0,
+      error,
+    })
+  }
   return emittedEvent
 }
 
@@ -255,16 +267,27 @@ export default definePlugin(async (nitroApp) => {
     // Store start time for duration calculation in tail sampling
     ctx._evlogStartTime = Date.now()
 
+    const requestId = resolveRequestId(event, ctx)
     const log = createRequestLogger({
       method: event.req.method,
       path: pathname,
-      requestId: resolveRequestId(event, ctx),
+      requestId,
     }, { _deferDrain: true })
 
     // Apply route-based service configuration if a matching route is found
     const routeService = getServiceForPath(pathname, evlogConfig?.routes)
     if (routeService) {
       log.set({ service: routeService })
+    }
+
+    const runner = getGlobalPluginRunner()
+    if (runner.hasExtendLogger) runner.applyExtendLogger(log)
+    if (runner.hasRequestLifecycle) {
+      runner.runOnRequestStart({
+        logger: log,
+        request: { method: event.req.method, path: pathname, requestId },
+        headers: getSafeRequestHeaders(event),
+      })
     }
 
     ctx.log = log
@@ -292,7 +315,7 @@ export default definePlugin(async (nitroApp) => {
     ctx._evlogEmitting = true
     try {
       const captured = ctx.nitro?.errors?.at(-1)?.error
-      if (captured) recordError(log, captured)
+      const recorded = captured ? recordError(log, captured) : undefined
 
       // Streaming responses (SSE, NDJSON, chunked) emit at header time: h3 v2's
       // `onResponse` hook cannot swap the outgoing response (`H3Event.res` is a
@@ -301,7 +324,7 @@ export default definePlugin(async (nitroApp) => {
       // original stream and break the response. Stream-lifetime metrics are not
       // observable from this hook.
       log.set({ status: res.status })
-      const emittedEvent = await emitWithTailSampling(hooks, log, event, res.status, ctx)
+      const emittedEvent = await emitWithTailSampling(hooks, log, event, res.status, ctx, recorded)
       await callEnrichAndDrain(hooks, emittedEvent, event, res)
     } finally {
       delete ctx._evlogEmitting
@@ -329,7 +352,7 @@ export default definePlugin(async (nitroApp) => {
       const errorStatus = extractErrorStatus(actualError)
       log.set({ status: errorStatus })
 
-      const emittedEvent = await emitWithTailSampling(hooks, log, e, errorStatus, ctx)
+      const emittedEvent = await emitWithTailSampling(hooks, log, e, errorStatus, ctx, actualError)
       if (emittedEvent) {
         void callEnrichAndDrain(hooks, emittedEvent, e, undefined, { deferDrain: true }).catch((err) => {
           console.error('[evlog] background enrich/drain failed:', err)
