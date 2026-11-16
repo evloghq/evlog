@@ -7,13 +7,8 @@ import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { trimTrailingSlashes } from '../utils'
 
 interface BaseAxiomConfig {
-  /** Axiom dataset name. */
   dataset: string
-  /**
-   * Axiom API key.
-   *
-   * @example `xaat-...`
-   */
+  /** @example `xaat-...` */
   apiKey: string
   /**
    * @deprecated Removed in evlog v3. Use `apiKey` instead.
@@ -120,11 +115,6 @@ export function createAxiomDrain(overrides?: Partial<AxiomConfig>) {
 /** Axiom ingests at most 10,000 events per batch: larger batches are split. */
 const AXIOM_MAX_EVENTS_PER_REQUEST = 10_000
 
-/**
- * Encode a batch of wide events into the Axiom ingest request. Shared by
- * {@link createAxiomDrain} and {@link sendBatchToAxiom} so both paths build
- * the same URL, headers and body.
- */
 function encodeAxiomRequest(events: WideEvent[], config: AxiomConfig): HttpDrainRequest {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -134,9 +124,6 @@ function encodeAxiomRequest(events: WideEvent[], config: AxiomConfig): HttpDrain
   return { url: resolveIngestUrl(config), headers, body: JSON.stringify(events) }
 }
 
-/**
- * Send a single event to Axiom.
- */
 export async function sendToAxiom(event: WideEvent, config: AxiomConfig): Promise<void> {
   await sendBatchToAxiom([event], config)
 }

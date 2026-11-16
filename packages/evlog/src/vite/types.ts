@@ -31,7 +31,6 @@ export interface EvlogViteOptions {
   pretty?: boolean
   /** Suppress console output @default false */
   silent?: boolean
-  /** Sampling configuration */
   sampling?: SamplingConfig
   /** Minimum severity for the global `log` API (not request wide events) @default 'debug' */
   minLevel?: LogLevel
@@ -43,6 +42,5 @@ export interface EvlogViteOptions {
   strip?: LogLevel[]
   /** Inject source file:line into log calls. When 'dev', active only during development. @default false */
   sourceLocation?: boolean | 'dev'
-  /** Client-side logging configuration */
   client?: ClientOptions
 }

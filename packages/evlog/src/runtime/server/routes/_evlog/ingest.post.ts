@@ -63,7 +63,6 @@ async function readJsonBody(event: IngestEvent): Promise<unknown> {
   }
 }
 
-// ISO 8601 datetime pattern (e.g., 2024-01-31T14:00:00.000Z)
 const ISO_8601_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/
 
 function isValidISOTimestamp(value: string): boolean {
@@ -85,7 +84,7 @@ function validatePayload(body: unknown): IngestPayload {
   let timestamp: string
   if (typeof rawTimestamp === 'number') {
     const minTimestamp = new Date('2000-01-01').getTime()
-    const maxTimestamp = Date.now() + 24 * 60 * 60 * 1000 // 1 day in the future
+    const maxTimestamp = Date.now() + 24 * 60 * 60 * 1000
     if (rawTimestamp < minTimestamp || rawTimestamp > maxTimestamp) {
       throw createError({ statusCode: 400, message: 'Invalid timestamp: value out of reasonable range' })
     }

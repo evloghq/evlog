@@ -199,7 +199,6 @@ export function createFsDrain(overrides?: Partial<FsConfig>) {
   })
 }
 
-/** Options accepted by {@link readFsLogs}. */
 export interface ReadFsLogsOptions {
   /** Directory to read from. Default: `.evlog/logs` */
   dir?: string
@@ -207,13 +206,11 @@ export interface ReadFsLogsOptions {
   since?: Date | string
   /** Only yield events with `event.timestamp <= until`. */
   until?: Date | string
-  /** Filter by event level. */
   level?: LogLevel | LogLevel[]
   /** Custom predicate — return `false` to skip the event. */
   filter?: (event: WideEvent) => boolean
 }
 
-/** Options accepted by {@link tailFsLogs}. */
 export interface TailFsLogsOptions extends ReadFsLogsOptions {
   /**
    * Polling interval (ms) used to detect new bytes / new files.

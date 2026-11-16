@@ -191,7 +191,6 @@ Object.defineProperty(EvlogError.prototype, evlogErrorBrand, {
 /**
  * Create a structured error with context for debugging and user-facing messages.
  *
- * @param options - Error message string or full options object
  * @returns EvlogError with HTTP metadata (`status`, `statusText`) and `data`; also includes `statusCode` and `statusMessage` for legacy compatibility
  *
  * @example

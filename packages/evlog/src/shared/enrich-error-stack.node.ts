@@ -1,4 +1,3 @@
-/** Options for {@link enrichErrorStackForDev}. */
 export interface EnrichErrorStackOptions {
   /** When false, skip Nitro source-map stack enrichment. @default true in dev when pretty is enabled */
   pretty?: boolean

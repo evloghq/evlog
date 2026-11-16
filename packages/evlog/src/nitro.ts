@@ -17,9 +17,6 @@ export interface NitroModuleOptions {
    */
   enabled?: boolean
 
-  /**
-   * Environment context overrides.
-   */
   env?: Partial<EnvironmentContext>
 
   /**
@@ -62,9 +59,6 @@ export interface NitroModuleOptions {
    */
   routes?: Record<string, RouteConfig>
 
-  /**
-   * Sampling configuration for filtering logs.
-   */
   sampling?: SamplingConfig
 
   /**

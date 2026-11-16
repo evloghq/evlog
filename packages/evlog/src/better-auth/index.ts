@@ -63,9 +63,6 @@ export interface AuthSessionData {
   createdAt?: string
 }
 
-/**
- * Options for `identifyUser`.
- */
 export interface IdentifyOptions {
   /**
    * Whether to mask the user email (e.g. `h***@domain.com`).
@@ -99,9 +96,6 @@ export interface IdentifyOptions {
   extend?: (session: { user: Record<string, unknown>, session: Record<string, unknown> }) => Record<string, unknown> | undefined
 }
 
-/**
- * Options for `createAuthMiddleware`.
- */
 export interface AuthMiddlewareOptions extends IdentifyOptions {
   /**
    * Route patterns to skip session resolution (glob).
@@ -124,9 +118,6 @@ export interface AuthMiddlewareOptions extends IdentifyOptions {
   onAnonymous?: (log: RequestLogger) => void | Promise<void>
 }
 
-/**
- * Options for `createAuthIdentifier`.
- */
 export type AuthIdentifierOptions = AuthMiddlewareOptions
 
 const DEFAULT_USER_FIELDS = ['id', 'name', 'email', 'image', 'emailVerified', 'createdAt']

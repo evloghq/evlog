@@ -263,9 +263,7 @@ export interface TailSamplingContext {
   status?: number
   /** Request duration in milliseconds (raw number) */
   duration?: number
-  /** Request path */
   path?: string
-  /** HTTP method */
   method?: string
   /** Full accumulated context from the request logger */
   context: Record<string, unknown>
@@ -283,7 +281,6 @@ export interface TailSamplingContext {
 export interface EnrichContext {
   /** The emitted wide event (mutable). */
   event: WideEvent
-  /** Request metadata (if available) */
   request?: {
     method?: string
     path: string
@@ -291,7 +288,6 @@ export interface EnrichContext {
   }
   /** Safe HTTP request headers (sensitive headers filtered out) */
   headers?: Record<string, string>
-  /** Optional response metadata */
   response?: {
     status?: number
     headers?: Record<string, string>
@@ -303,9 +299,7 @@ export interface EnrichContext {
  * Contains the complete wide event and request metadata for external transport.
  */
 export interface DrainContext {
-  /** The complete wide event to drain */
   event: WideEvent
-  /** Request metadata (if available) */
   request?: {
     method?: string
     path?: string
@@ -315,9 +309,6 @@ export interface DrainContext {
   headers?: Record<string, string>
 }
 
-/**
- * Sampling configuration for filtering logs
- */
 export interface SamplingConfig {
   /**
    * Sampling rates per log level (head sampling).
@@ -361,9 +352,6 @@ export interface SamplingConfig {
   keep?: TailSamplingCondition[]
 }
 
-/**
- * Route-based service configuration
- */
 export interface RouteConfig {
   /** Service name to use for routes matching this pattern */
   service: string
@@ -375,7 +363,6 @@ export interface RouteConfig {
 export interface EnvironmentContext {
   /** Service name (auto-detected from package.json or configurable) */
   service: string
-  /** Environment: 'development', 'production', 'test', etc. */
   environment: 'development' | 'production' | 'test' | string
   /** Application version (auto-detected from package.json) */
   version?: string
@@ -385,9 +372,6 @@ export interface EnvironmentContext {
   region?: string
 }
 
-/**
- * Logger configuration options
- */
 export interface LoggerConfig {
   /**
    * Enable or disable all logging globally.
@@ -395,7 +379,6 @@ export interface LoggerConfig {
    * @default true
    */
   enabled?: boolean
-  /** Environment context overrides */
   env?: Partial<EnvironmentContext>
   /** Enable pretty printing (auto-detected: true in dev, false in prod) */
   pretty?: boolean
@@ -404,7 +387,6 @@ export interface LoggerConfig {
    * @default 'evlog' when pretty in development
    */
   dev?: DevTerminalInput
-  /** Sampling configuration for filtering logs */
   sampling?: SamplingConfig
   /**
    * Minimum severity for the global `log` API (tagged and object form).
@@ -664,9 +646,6 @@ export interface BaseWideEvent {
   audit?: AuditFields
 }
 
-/**
- * Wide event with arbitrary additional fields
- */
 export type WideEvent = BaseWideEvent & Record<string, unknown>
 
 /**
@@ -693,9 +672,6 @@ export interface InternalFields {
   _parentRequestId?: string
 }
 
-/**
- * Request-scoped log entry captured during a request lifecycle.
- */
 export interface RequestLogEntry {
   level: 'info' | 'warn' | 'fatal' | 'debug' | 'trace'
   message: string
@@ -838,9 +814,6 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    */
   emit: (overrides?: FieldContext<T> & { _forceKeep?: boolean, _durationMs?: number }) => WideEvent | null
 
-  /**
-   * Get the current accumulated context
-   */
   getContext: () => FieldContext<T> & Record<string, unknown>
 
   /**
@@ -903,8 +876,6 @@ export interface AuditLoggerMethod {
 }
 
 /**
- * Log level type.
- *
  * Severity order: `trace` and `debug` < `info` < `warn` < `error` < `fatal`.
  */
 export type LogLevel = 'info' | 'error' | 'warn' | 'debug' | 'fatal' | 'trace'
@@ -1039,9 +1010,6 @@ export type AuditAction = {
   [K in keyof RegisteredAuditCatalogs]: ExtractCatalogActions<RegisteredAuditCatalogs[K]>
 }[keyof RegisteredAuditCatalogs]
 
-/**
- * Error options for creating structured errors
- */
 export interface ErrorOptions {
   /** What actually happened */
   message: string
@@ -1063,7 +1031,6 @@ export interface ErrorOptions {
   fix?: string
   /** Link to documentation or more information */
   link?: string
-  /** The original error that caused this */
   cause?: Error
   /**
    * Extra payload returned to the client, merged into the response body's
@@ -1091,9 +1058,6 @@ export type EvlogErrorData = Record<string, unknown> & {
   link?: string
 }
 
-/**
- * Options for creating a request logger
- */
 export interface RequestLoggerOptions {
   method?: string
   path?: string

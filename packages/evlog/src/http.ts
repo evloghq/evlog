@@ -17,7 +17,6 @@ export interface HttpDrainConfig {
 }
 
 export interface HttpLogDrainOptions {
-  /** HTTP drain configuration (endpoint is required) */
   drain: HttpDrainConfig
   /** Pipeline configuration overrides */
   pipeline?: DrainPipelineOptions<DrainContext>

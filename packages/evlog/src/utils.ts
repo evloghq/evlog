@@ -182,9 +182,6 @@ export function hasMessageSpecifiers(format: string): boolean {
  * arguments are appended space-separated, and a message without arguments is
  * returned unchanged. Objects and arrays render as JSON instead of node's
  * `util.inspect` to keep the formatter free of bundle weight.
- *
- * @param format - Message possibly containing format specifiers
- * @param args - Values for the specifiers
  */
 export function formatMessage(format: string, args: unknown[]): string {
   if (args.length === 0) return format

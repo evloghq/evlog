@@ -69,7 +69,6 @@ async function sendToServer(event: Record<string, unknown>): Promise<void> {
   }
 }
 
-/** The fields every client event starts with, ahead of the logged fields. */
 function eventHead(level: LogLevel) {
   return { timestamp: isoNow(), level, service: clientService, ...identityContext }
 }

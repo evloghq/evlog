@@ -17,7 +17,7 @@ export function registerWideEventPublisher(fn: WideEventPublisher | null): void 
   publisher = fn
 }
 
-/** Whether a publisher is registered. @internal */
+/** @internal */
 export function hasWideEventPublisher(): boolean {
   return publisher !== null
 }

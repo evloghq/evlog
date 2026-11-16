@@ -2031,7 +2031,6 @@ function acceptsV26Events(): boolean {
   }
 }
 
-/** Options for {@link defineEvlogInstrumentation}. */
 export interface EvlogEveInstrumentationOptions {
   /** Overrides `ai.telemetry.functionId` on spans. Defaults to the agent name. */
   functionId?: string

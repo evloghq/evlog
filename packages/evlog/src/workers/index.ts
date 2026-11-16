@@ -12,9 +12,6 @@ export interface WorkerExecutionContext {
   waitUntil(promise: Promise<unknown>): void
 }
 
-/**
- * Options for createWorkersLogger
- */
 export interface WorkersLoggerOptions {
   /** Override the request ID (default: cf-ray header) */
   requestId?: string
