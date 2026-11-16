@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isValidRefName, pushBrokerPolicy, validatePushBranch } from './push'
+import { isValidRefName, validatePushBranch } from './push'
 
 describe('isValidRefName', () => {
   it('accepts branch names and commit shas', () => {
@@ -54,27 +54,5 @@ describe('validatePushBranch', () => {
     expect(validatePushBranch('a//b')).toMatch(/not a valid branch name/)
     expect(validatePushBranch('trailing/')).toMatch(/not a valid branch name/)
     expect(validatePushBranch('')).toMatch(/not a valid branch name/)
-  })
-})
-
-describe('pushBrokerPolicy', () => {
-  it('brokers a basic x-access-token header for github.com only', () => {
-    const policy = pushBrokerPolicy('tok_123')
-    expect(policy).toEqual({
-      allow: {
-        'github.com': [
-          {
-            transform: [
-              {
-                headers: {
-                  Authorization: `Basic ${Buffer.from('x-access-token:tok_123').toString('base64')}`,
-                },
-              },
-            ],
-          },
-        ],
-        '*': [],
-      },
-    })
   })
 })

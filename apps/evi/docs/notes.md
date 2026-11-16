@@ -112,14 +112,23 @@ them, only mentions and DMs reach the agent.
 **`main` requires signed commits, and the sandbox has no key to sign with.**
 A `git push` from the sandbox lands unsigned commits, and GitHub then blocks
 the PR, squash merge included. So `git__gh` refuses `git push`, and
-`git__push` recreates each commit with the GraphQL `createCommitOnBranch`,
-which GitHub signs as the App, and moves the local branch onto the result.
-That mutation takes file contents without a mode, so the push refuses
-symlinks, submodules, executable bits and merges. Each mutation moves the
-branch on GitHub at once, so when one fails the push puts the branch back
-where it was, and running it again starts from the same state. The rollback
-goes through `updateRefs` with the last head the push wrote as `beforeOid`,
-so a commit someone else pushed in between stays.
+`git__push` publishes each commit with eve's `gh-signed-commit` (installed by
+`installCodeTooling` in `agent/sandbox.ts`, run through `executeGitHubShell`),
+which goes through GitHub's API, so GitHub signs it as the App. That script
+publishes the index against HEAD as one commit, so the push replays the
+branch one commit at a time from a scratch worktree, then moves the local
+branch onto the result. The API takes file contents without a mode, and the
+script refuses an index with nothing staged, so the push refuses symlinks,
+submodules, executable bits, merges and empty commits before anything reaches
+GitHub. When any step fails, the push stops without moving the local branch
+onto what it published, because a commit can land and its reply still be lost.
+The next push reads the branch from GitHub and takes over the commits there
+that match the local ones in tree and headline: it rebuilds the rest of the
+local branch on them, same files and messages, before publishing it. Anything
+else on the branch is another writer's, and the push refuses instead of
+building on it. The script builds on whatever head it reads, so after each
+publish the push checks the new commit's parent and stops if the branch moved.
+It never rewrites the branch on GitHub.
 
 **Vercel evaluates schedule cron in UTC.** `0 5 * * *` fires 06:00 London in
 summer (BST) and drifts to 05:00 in winter (GMT). `eve dev` never fires crons;

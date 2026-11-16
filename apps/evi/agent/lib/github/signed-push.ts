@@ -1,33 +1,49 @@
+import { randomUUID } from 'node:crypto'
+import { posix } from 'node:path'
+import type { GitHubConfig, GitHubShellInput, GitHubShellOutput } from 'eve/extensions/git/sandbox'
+import type { SandboxNetworkPolicy, SandboxSession } from 'eve/sandbox'
 import { eviErrors } from '../errors'
-import { type Repository, repositorySlug } from '../repo'
+import { cloneUrl, type Repository, repositorySlug } from '../repo'
+import { canAccessAdminTools } from '../trust'
 import { runOutput } from '../workspace'
+import { GITHUB_CONNECTOR } from './credentials'
 
-const GITHUB_API = 'https://api.github.com'
 const SHA = /^[0-9a-f]{40}$/
-// createCommitOnBranch takes file contents and no mode, so it writes regular files only.
+// gh-signed-commit sends file contents without a mode, so it carries regular files only.
 const REGULAR_FILE = '100644'
 const NO_FILE = '000000'
 
-interface GitSandbox {
-  run: (input: { command: string }) => PromiseLike<{ exitCode: number, stdout?: unknown, stderr?: unknown }>
+type GitSandbox = Pick<SandboxSession, 'run'>
+
+/** A local branch of the checkout at `dir`, pushed to the same branch name on `repository`. */
+export interface Push {
+  readonly dir: string
+  readonly repository: Repository
+  readonly branch: string
 }
 
-/** One local commit in the shape createCommitOnBranch takes: whole files in base64, deletions by path. */
-export interface CommitChanges {
-  readonly message: string
-  readonly additions: ReadonlyArray<{ path: string, contents: string }>
-  readonly deletions: ReadonlyArray<{ path: string }>
-}
+/** Runs one `git` or `gh-signed-commit` command with a GitHub token leased for the pushed repository. */
+export type GitHubCommand = (input: Omit<GitHubShellInput, 'repository'> & { workingDirectory: string }) => Promise<GitHubShellOutput>
 
 /**
- * What a branch push recreates on GitHub: `base` is the commit GitHub already has
- * under the first one, `head` the local branch tip the commits were read from.
+ * How `git__push` leases GitHub tokens to eve's `executeGitHubShell`, through
+ * the firewall of `sandbox`. The tool already gated the session; `authorize`
+ * repeats that gate because it is the only check eve itself applies before a
+ * token reaches the sandbox.
  */
-export interface BranchCommits {
-  readonly base: string
-  readonly head: string
-  readonly branchExists: boolean
-  readonly commits: readonly CommitChanges[]
+export function signedPushGitHub(sandbox: { setNetworkPolicy: (policy: SandboxNetworkPolicy) => Promise<void> }): GitHubConfig {
+  return {
+    connector: GITHUB_CONNECTOR,
+    principalType: 'app',
+    permissions: ['contents:write'],
+    authorize: ({ auth }) => canAccessAdminTools(auth),
+    // A lease replaces the whole network policy, so general egress stays open next to it.
+    broker: (_session, rules) => sandbox.setNetworkPolicy(rules === null ? 'allow-all' : { allow: { ...rules, '*': [] } }),
+  }
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll('\'', '\'\\\'\'')}'`
 }
 
 async function git(sandbox: GitSandbox, dir: string, args: string): Promise<string> {
@@ -38,168 +54,146 @@ async function git(sandbox: GitSandbox, dir: string, args: string): Promise<stri
   return String(result.stdout ?? '')
 }
 
+async function github(gh: GitHubCommand, command: string, input: Omit<Parameters<GitHubCommand>[0], 'command'>): Promise<string> {
+  const result = await gh({ command, ...input })
+  if (result.exitCode !== 0) {
+    throw eviErrors.GIT_COMMAND_FAILED({ command: command.split(' ')[0] ?? 'git', exitCode: result.exitCode, message: `${command.split(' ')[0]} exited ${result.exitCode}: ${runOutput(result)}` })
+  }
+  return result.stdout
+}
+
 function shas(output: string): string[] {
   return output.split('\n').map(line => line.trim()).filter(line => SHA.test(line))
 }
 
 /**
- * Read the commits `branch` has that GitHub lacks: those after `remoteHead`, or
- * those on no remote-tracking ref when the branch is new on GitHub. Refuses
- * what createCommitOnBranch cannot reproduce exactly (merges, symlinks,
- * submodules, executable bits), so the signed commits carry the local tree.
+ * Refuses what gh-signed-commit cannot reproduce (merges, empty commits,
+ * symlinks, submodules, executable bits) before anything reaches GitHub, so a refused
+ * branch never lands half pushed.
  */
-export async function collectBranchCommits(sandbox: GitSandbox, dir: string, branch: string, remoteHead: string | null): Promise<BranchCommits> {
-  const head = (await git(sandbox, dir, `rev-parse --verify 'refs/heads/${branch}^{commit}'`)).trim()
-  // The head reaches the command that runs with the brokered credential, so it has to be a sha.
-  if (!SHA.test(head)) {
-    throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} does not resolve to a commit.` })
-  }
-  if (remoteHead !== null) {
-    const contained = await sandbox.run({ command: `git -C ${dir} merge-base --is-ancestor ${remoteHead} ${head}` })
-    if (contained.exitCode !== 0) {
-      throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} on GitHub is at ${remoteHead.slice(0, 8)}, which the local branch does not contain. Rebuild the work on top of it, or push it under a new branch name.` })
-    }
-  }
-  const range = remoteHead === null ? `${head} --not --remotes` : `${remoteHead}..${head}`
+async function assertReproducible(sandbox: GitSandbox, dir: string, branch: string, range: string): Promise<void> {
   if (shas(await git(sandbox, dir, `rev-list --min-parents=2 ${range}`)).length > 0) {
     throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} contains a merge commit, which cannot be pushed as signed commits. Rebase it onto the base branch instead.` })
   }
+  for (const line of (await git(sandbox, dir, `log --format='%H %T %P' ${range}`)).split('\n')) {
+    const [sha, tree, parent] = line.trim().split(' ')
+    if (sha === undefined || tree === undefined || parent === undefined) continue
+    if ((await git(sandbox, dir, `rev-parse ${parent}^{tree}`)).trim() === tree) {
+      throw eviErrors.GIT_PUSH_REFUSED({ message: `${sha.slice(0, 8)} on ${branch} changes no files, which a signed push cannot publish. Squash it into a neighbouring commit or drop it.` })
+    }
+  }
+  const raw = await git(sandbox, dir, `log --format= --raw --no-renames ${range}`)
+  for (const line of raw.split('\n')) {
+    const match = /^:(\d{6}) (\d{6}) \S+ \S+ (\w)\t(.*)$/.exec(line)
+    if (match === null) continue
+    const [, oldMode, newMode, status, path] = match
+    if (status === 'D') continue
+    if (newMode !== REGULAR_FILE || (oldMode !== NO_FILE && oldMode !== REGULAR_FILE)) {
+      throw eviErrors.GIT_PUSH_REFUSED({ message: `${path} is not a regular file (mode ${oldMode} -> ${newMode}), which a signed push cannot carry. Leave symlinks, submodules and executable bits out of the branch.` })
+    }
+  }
+}
+
+/** The tree and headline of `sha`: what a signed replay of a commit keeps from it. */
+async function snapshot(sandbox: GitSandbox, dir: string, sha: string): Promise<string> {
+  const [tree = '', headline = ''] = (await git(sandbox, dir, `log -1 --format=%T%n%B ${sha}`)).split('\n')
+  return `${tree} ${headline.trim()}`
+}
+
+/**
+ * Takes over the commits an earlier push left on GitHub without moving the
+ * local branch onto them: a publish failed after others landed, or a reply was
+ * lost after its commit landed. Each commit GitHub has past the fork point must
+ * match the local commit in the same position. Rebuilds the rest of the local
+ * branch on the last of them and returns the new head, or null when GitHub's
+ * branch holds anything else: someone else wrote to it.
+ */
+async function adopt(sandbox: GitSandbox, gh: GitHubCommand, { dir, repository, branch }: Push, { head, remoteHead }: { head: string, remoteHead: string }): Promise<string | null> {
+  await github(gh, `git fetch ${cloneUrl(repository)} refs/heads/${branch}`, { description: `Read what reached ${branch} on GitHub`, workingDirectory: dir })
+  const fork = await sandbox.run({ command: `git -C ${dir} merge-base ${remoteHead} ${head}` })
+  if (fork.exitCode !== 0) return null
+  const base = String(fork.stdout ?? '').trim()
+  // The rebuild below gives each commit one parent, so a local merge must be refused before it, not after.
+  await assertReproducible(sandbox, dir, branch, `${base}..${head}`)
+  const theirs = shas(await git(sandbox, dir, `rev-list --reverse ${base}..${remoteHead}`))
+  const ours = shas(await git(sandbox, dir, `rev-list --reverse ${base}..${head}`))
+  if (theirs.length > ours.length) return null
+  for (const [index, sha] of theirs.entries()) {
+    const [published, local] = await Promise.all([snapshot(sandbox, dir, sha), snapshot(sandbox, dir, ours[index]!)])
+    if (published !== local) return null
+  }
+  let tip = remoteHead
+  for (const sha of ours.slice(theirs.length)) {
+    tip = (await git(sandbox, dir, `log -1 --format=%B ${sha} | git -C ${dir} commit-tree ${sha}^{tree} -p ${tip}`)).trim()
+  }
+  await git(sandbox, dir, `update-ref 'refs/heads/${branch}' ${tip} ${head}`)
+  return tip
+}
+
+/**
+ * Pushes the commits of local `branch` that GitHub lacks, one
+ * `gh-signed-commit` per commit, so GitHub signs each one as the App: same
+ * files and messages, new shas. A `git push` from the sandbox has no key to
+ * sign with, and `main` requires signed commits. Each commit is replayed from
+ * a scratch worktree, because gh-signed-commit publishes the index against
+ * HEAD. Moves the local branch onto the pushed head and returns it. A push
+ * that fails partway does not move the local branch onto what it published;
+ * the next one adopts what reached GitHub.
+ */
+export async function pushSignedBranch(sandbox: GitSandbox, gh: GitHubCommand, { dir, repository, branch }: Push): Promise<{ sha: string, commits: number }> {
+  let head = (await git(sandbox, dir, `rev-parse --verify 'refs/heads/${branch}^{commit}'`)).trim()
+  // The URL is spelled out, never `origin`: remote config inside the sandbox is model-writable.
+  const url = cloneUrl(repository)
+  const listed = await github(gh, `git ls-remote ${url} refs/heads/${branch}`, { description: `Read the head of ${branch} on GitHub`, workingDirectory: dir })
+  const remoteHead = shas(listed.split(/\s/).join('\n'))[0] ?? null
+  if (remoteHead !== null) {
+    const contained = await sandbox.run({ command: `git -C ${dir} merge-base --is-ancestor ${remoteHead} ${head}` })
+    if (contained.exitCode !== 0) {
+      const adopted = await adopt(sandbox, gh, { dir, repository, branch }, { head, remoteHead })
+      if (adopted === null) {
+        throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} on GitHub is at ${remoteHead.slice(0, 8)}, which the local branch does not contain. Rebuild the work on top of it, or push it under a new branch name.` })
+      }
+      head = adopted
+    }
+  }
+  const range = remoteHead === null ? `${head} --not --remotes` : `${remoteHead}..${head}`
+  await assertReproducible(sandbox, dir, branch, range)
   const order = shas(await git(sandbox, dir, `rev-list --reverse ${range}`))
   const [first] = order
   const base = remoteHead ?? (first === undefined ? head : (await git(sandbox, dir, `rev-parse ${first}^`)).trim())
-  const commits: CommitChanges[] = []
-  for (const sha of order) {
-    commits.push(await readCommit(sandbox, dir, sha))
+  if (remoteHead === null) {
+    // gh-signed-commit would branch from the tip of the default branch, which may have moved since this branch forked.
+    await github(gh, `git push ${url} ${base}:refs/heads/${branch}`, { description: `Create ${branch} on GitHub at its base commit`, workingDirectory: dir })
   }
-  return { base, head, branchExists: remoteHead !== null, commits }
-}
+  if (order.length === 0) return { sha: base, commits: 0 }
 
-async function readCommit(sandbox: GitSandbox, dir: string, sha: string): Promise<CommitChanges> {
-  const message = await git(sandbox, dir, `log -1 --format=%B ${sha}`)
-  // `-z` keeps paths verbatim, and blobs are read by id, so no path ever reaches the command line.
-  const fields = (await git(sandbox, dir, `diff-tree -r -z --no-renames --raw ${sha}^ ${sha}`)).split('\0')
-  const additions: Array<{ path: string, contents: string }> = []
-  const deletions: Array<{ path: string }> = []
-  for (let i = 0; i + 1 < fields.length; i += 2) {
-    const [oldMode, newMode, , blob, status] = fields[i]!.replace(/^\s*:/, '').split(' ')
-    const path = fields[i + 1]!
-    if (status === 'D') {
-      deletions.push({ path })
-      continue
-    }
-    if (newMode !== REGULAR_FILE || (oldMode !== NO_FILE && oldMode !== REGULAR_FILE)) {
-      throw eviErrors.GIT_PUSH_REFUSED({ message: `${path} in ${sha.slice(0, 8)} is not a regular file (mode ${newMode}), which a signed push cannot carry. Leave symlinks, submodules and executable bits out of the branch.` })
-    }
-    // The pipe exits with base64's status, so the blob is checked on its own first.
-    await git(sandbox, dir, `cat-file -e ${blob}`)
-    additions.push({ path, contents: (await git(sandbox, dir, `cat-file blob ${blob} | base64 -w0`)).trim() })
-  }
-  return { message, additions, deletions }
-}
-
-function headers(token: string): Record<string, string> {
-  return {
-    'Accept': 'application/vnd.github+json',
-    'Authorization': `Bearer ${token}`,
-    'X-GitHub-Api-Version': '2022-11-28',
-  }
-}
-
-/** The head of `branch` on GitHub, or null when GitHub has no such branch. */
-export async function remoteBranchHead(token: string, repository: Repository, branch: string): Promise<string | null> {
-  const response = await fetch(`${GITHUB_API}/repos/${repositorySlug(repository)}/git/ref/heads/${branch}`, { headers: headers(token) })
-  if (response.status === 404) return null
-  if (!response.ok) {
-    throw eviErrors.GITHUB_REQUEST_FAILED({ request: 'branch lookup', responseStatus: response.status, internal: { body: await response.text() } })
-  }
-  const ref = await response.json() as { object: { sha: string } }
-  // The sha reaches a sandbox command line, so it has to be a sha.
-  if (!SHA.test(ref.object.sha)) {
-    throw eviErrors.GITHUB_REQUEST_FAILED({ request: 'branch lookup', responseStatus: response.status })
-  }
-  return ref.object.sha
-}
-
-const CREATE_COMMIT = 'mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }'
-
-/**
- * Recreate `commits` on `branch` through GitHub's createCommitOnBranch, which
- * signs each commit as the App; a `git push` from the sandbox has no key to sign
- * with. Creates the branch at `base` first unless it exists. Returns the new head.
- *
- * Each mutation moves the branch on GitHub at once. When one fails, the branch is
- * put back where it was (deleted if this call created it), so the local branch
- * still builds on GitHub's and the same push can run again. The restore only
- * applies while the branch is still at the last commit this push wrote, so a
- * commit someone else added since is never dropped.
- */
-export async function pushSignedCommits(token: string, repository: Repository, branch: string, { base, branchExists, commits }: BranchCommits): Promise<string> {
-  const slug = repositorySlug(repository)
-  if (!branchExists) {
-    const created = await fetch(`${GITHUB_API}/repos/${slug}/git/refs`, {
-      method: 'POST',
-      headers: headers(token),
-      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: base }),
-    })
-    if (!created.ok) {
-      throw eviErrors.GITHUB_REQUEST_FAILED({ request: 'branch creation', responseStatus: created.status, internal: { body: await created.text() } })
-    }
-  }
-  let head = base
+  const worktree = posix.join(posix.dirname(dir), `.evi-push-${randomUUID()}`)
+  await git(sandbox, dir, `worktree add --quiet --detach --no-checkout ${worktree} ${base}`)
   try {
-    for (const commit of commits) {
-      const [headline = '', ...rest] = commit.message.trim().split('\n')
+    for (const [index, sha] of order.entries()) {
+      await git(sandbox, worktree, `read-tree -u --reset ${sha}`)
+      const [headline = '', ...rest] = (await git(sandbox, dir, `log -1 --format=%B ${sha}`)).trim().split('\n')
       const body = rest.join('\n').trim()
-      const response = await fetch(`${GITHUB_API}/graphql`, {
-        method: 'POST',
-        headers: headers(token),
-        body: JSON.stringify({
-          query: CREATE_COMMIT,
-          variables: {
-            input: {
-              branch: { repositoryNameWithOwner: slug, branchName: branch },
-              expectedHeadOid: head,
-              message: body ? { headline, body } : { headline },
-              fileChanges: { additions: commit.additions, deletions: commit.deletions },
-            },
-          },
-        }),
-      })
-      const text = await response.text()
-      const oid = response.ok ? (JSON.parse(text) as { data?: { createCommitOnBranch?: { commit?: { oid?: string } } } }).data?.createCommitOnBranch?.commit?.oid : undefined
-      if (oid === undefined || !SHA.test(oid)) {
-        throw eviErrors.GITHUB_REQUEST_FAILED({ request: 'commit creation', responseStatus: response.status, internal: { body: text } })
+      const args = ['gh-signed-commit', '--repo', repositorySlug(repository), '--branch', branch, '-m', headline, ...(body ? ['-b', body] : [])]
+      const parent = (await git(sandbox, worktree, 'rev-parse HEAD')).trim()
+      const result = await gh({ command: args.map(shellQuote).join(' '), description: `Publish ${sha.slice(0, 8)} on ${branch} as a signed commit`, workingDirectory: worktree })
+      if (result.exitCode !== 0) {
+        throw eviErrors.GIT_COMMAND_FAILED({ command: 'gh-signed-commit', exitCode: result.exitCode, message: `gh-signed-commit exited ${result.exitCode}: ${runOutput(result)}. ${index} of ${order.length} commits reached GitHub before this one, which may have landed too. The local branch was not moved onto what reached GitHub; git__push again takes it over and publishes the rest.` })
       }
-      head = oid
+      // gh-signed-commit builds on whatever head it reads from GitHub, so a commit another writer landed first sits underneath.
+      const landedOn = (await git(sandbox, worktree, 'rev-parse HEAD^')).trim()
+      if (landedOn !== parent) {
+        throw eviErrors.GIT_PUSH_REFUSED({ message: `${branch} on GitHub moved while this push ran: ${sha.slice(0, 8)} landed on ${landedOn.slice(0, 8)} instead of ${parent.slice(0, 8)}. The push stopped there without moving the local branch onto it. Check the branch on GitHub before pushing again.` })
+      }
     }
-  } catch (error) {
-    if (!branchExists || head !== base) await restoreBranch(token, repository, branch, { from: head, to: branchExists ? base : null })
-    throw error
+    const pushed = (await git(sandbox, worktree, 'rev-parse HEAD')).trim()
+    const [pushedTree, localTree] = await Promise.all([git(sandbox, dir, `rev-parse ${pushed}^{tree}`), git(sandbox, dir, `rev-parse ${head}^{tree}`)])
+    if (pushedTree.trim() !== localTree.trim()) {
+      throw eviErrors.GIT_COMMAND_FAILED({ command: 'gh-signed-commit', exitCode: 0, message: `Pushed ${branch} to ${pushed}, but its files differ from the local branch, which was left at ${head}.` })
+    }
+    await git(sandbox, dir, `update-ref 'refs/heads/${branch}' ${pushed} ${head}`)
+    return { sha: pushed, commits: order.length }
+  } finally {
+    await sandbox.run({ command: `git -C ${dir} worktree remove --force ${worktree}` })
   }
-  return head
-}
-
-const REPOSITORY_ID = 'query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }'
-const UPDATE_REFS = 'mutation($input: UpdateRefsInput!) { updateRefs(input: $input) { clientMutationId } }'
-const NO_COMMIT = '0'.repeat(40)
-
-async function graphql<T>(token: string, request: string, query: string, variables: Record<string, unknown>): Promise<T> {
-  const response = await fetch(`${GITHUB_API}/graphql`, { method: 'POST', headers: headers(token), body: JSON.stringify({ query, variables }) })
-  const text = await response.text()
-  const payload = response.ok ? JSON.parse(text) as { data?: T, errors?: unknown[] } : {}
-  if (payload.data === undefined || payload.data === null || payload.errors !== undefined) {
-    throw eviErrors.GITHUB_REQUEST_FAILED({ request, responseStatus: response.status, internal: { body: text } })
-  }
-  return payload.data
-}
-
-/**
- * Move `branch` from `from` back to `to`, or delete it when `to` is null. GitHub
- * refuses the update when the branch no longer points at `from`.
- */
-async function restoreBranch(token: string, repository: Repository, branch: string, { from, to }: { from: string, to: string | null }): Promise<void> {
-  const { repository: target } = await graphql<{ repository: { id: string } }>(token, 'branch restore', REPOSITORY_ID, { owner: repository.owner, name: repository.repo })
-  await graphql(token, 'branch restore', UPDATE_REFS, {
-    input: { repositoryId: target.id, refUpdates: [{ name: `refs/heads/${branch}`, beforeOid: from, afterOid: to ?? NO_COMMIT, force: true }] },
-  })
 }
