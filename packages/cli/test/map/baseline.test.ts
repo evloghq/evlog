@@ -111,7 +111,7 @@ describe('compareToBaseline', () => {
     expect(hasRegressed(comparison)).toBe(false)
   })
 
-  it('compares an entry point that moved file with the lowest-scoring one that has its method and path', () => {
+  it('compares an entry point that moved file with one that has its method and path', () => {
     const before = mapOf([route('/checkout', { 'wide-event': { status: 'pass' } }, 'unique')])
     const twin = { ...route('/checkout', { 'wide-event': { status: 'pass' } }, 'twin', 100), file: 'server/api/v2/checkout.ts' }
     const moved = { ...route('/checkout', { 'wide-event': { status: 'fail' } }, 'moved', 45), file: 'server/routes/checkout.ts' }
@@ -121,6 +121,33 @@ describe('compareToBaseline', () => {
 
     expect(comparison.regressions).toEqual([expect.objectContaining({ file: 'server/routes/checkout.ts', check: 'wide-event', to: 'fail' })])
     expect(comparison.removed).toEqual([])
+    expect(comparison.added.map(route => route.file)).toEqual(['server/api/v2/checkout.ts'])
+    expect(hasRegressed(comparison)).toBe(true)
+  })
+
+  it('picks, among the candidates for a moved entry point, the one that regressed the most checks', () => {
+    const checks = { 'wide-event': { status: 'pass' }, 'structured-errors': { status: 'fail' } } as const
+    const before = mapOf([route('/checkout', checks, 'unique', 80)])
+    const twin = { ...route('/checkout', checks, 'twin', 80), file: 'server/api/v2/checkout.ts' }
+    const moved = {
+      ...route('/checkout', { 'wide-event': { status: 'fail' }, 'structured-errors': { status: 'pass' } }, 'moved', 85),
+      file: 'server/routes/checkout.ts',
+    }
+
+    const comparison = compareToBaseline(before, mapOf([twin, moved], 82), SOURCE)
+
+    expect(comparison.regressions).toEqual([expect.objectContaining({ file: 'server/routes/checkout.ts', check: 'wide-event', to: 'fail' })])
+    expect(comparison.added.map(route => route.file)).toEqual(['server/api/v2/checkout.ts'])
+    expect(hasRegressed(comparison)).toBe(true)
+  })
+
+  it('picks the lowest-scoring candidate when none regressed a check', () => {
+    const before = mapOf([route('/checkout', { 'wide-event': { status: 'pass' } }, 'unique')])
+    const twin = { ...route('/checkout', { 'wide-event': { status: 'pass' } }, 'twin', 100), file: 'server/api/v2/checkout.ts' }
+    const moved = { ...route('/checkout', { 'wide-event': { status: 'pass' } }, 'moved', 70), file: 'server/routes/checkout.ts' }
+
+    const comparison = compareToBaseline(before, mapOf([twin, moved], 85), SOURCE)
+
     expect(comparison.added.map(route => route.file)).toEqual(['server/api/v2/checkout.ts'])
     expect(hasRegressed(comparison)).toBe(true)
   })
