@@ -372,6 +372,20 @@ describe('built-in smart masking', () => {
     })
   })
 
+  it('masks a card joined by a hyphen to other text', () => {
+    const source = {
+      prefixed: 'card-4111111111111111',
+      suffixed: '4111111111111111-expires',
+      grouped: 'ref-4111-1111-1111-1111-a',
+    }
+    const event = redactEvent(source, defined(resolveRedactConfig({ builtins: ['creditCard'] }), 'redact config'))
+    expect(event).toEqual({
+      prefixed: 'card-****1111',
+      suffixed: '****1111-expires',
+      grouped: 'ref-****1111-a',
+    })
+  })
+
   it('masks email addresses keeping first char and TLD', () => {
     let event: Record<string, unknown> = {
       a: 'alice@example.com',
