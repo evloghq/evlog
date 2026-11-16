@@ -15,6 +15,8 @@ export default definePlugin((nitroApp) => {
       requestMethod: ctx.request?.method,
       hasEnrichment: 'customEnrichment' in ctx.event,
       enrichmentValue: (ctx.event as { customEnrichment?: unknown }).customEnrichment,
+      status: ctx.event.status,
+      stream: (ctx.event as { stream?: unknown }).stream,
     }))
   })
 })
