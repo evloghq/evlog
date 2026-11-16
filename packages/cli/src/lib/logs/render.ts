@@ -16,6 +16,11 @@ function str(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
+/** A field as a column: text as it is, a number or a boolean spelled out, anything else left empty. */
+function column(value: unknown): string {
+  return typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : ''
+}
+
 const CONTROL_CHAR = /[\x00-\x08\x0A-\x1F\x7F-\x9F]/g
 
 /**
@@ -98,7 +103,7 @@ export type Sourced = WideEvent & { [SOURCE]?: string }
 export function formatLine(style: Style, event: Sourced): string {
   const status = typeof field(event, 'status') === 'number' ? field(event, 'status') as number : undefined
   const method = str(field(event, 'method'))
-  const path = printable(str(field(event, 'path')) ?? str(field(event, 'operation')) ?? event.service)
+  const path = printable(str(field(event, 'path')) ?? str(field(event, 'operation')) ?? column(event.service))
   const where = method ? `${printable(method).padEnd(6)} ${path}` : `       ${path}`
   const summarized = summary(event)
   const text = printable(summarized.text)
@@ -107,8 +112,8 @@ export function formatLine(style: Style, event: Sourced): string {
     style.paint('dim', clock(event.timestamp)),
     ...(source ? [style.paint('cyan', source.padEnd(12))] : []),
     where.padEnd(44),
-    style.paint(statusColor(status, event.level), status !== undefined ? String(status) : printable(event.level).padEnd(3)),
-    style.paint('dim', printable(event.duration ?? '').padStart(7)),
+    style.paint(statusColor(status, event.level), status !== undefined ? String(status) : printable(column(event.level)).padEnd(3)),
+    style.paint('dim', printable(column(event.duration)).padStart(7)),
     summarized.color ? style.paint(summarized.color, text) : text,
   ]
   return columns.join('  ').trimEnd()

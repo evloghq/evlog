@@ -66,3 +66,22 @@ export function checkFlags(rawArgs: readonly string[], args: ArgsDef, bare: read
 
   return checked
 }
+
+/**
+ * Every value given to a flag that may repeat, in the order written. citty
+ * keeps the last one only.
+ *
+ * Call it on arguments {@link checkFlags} accepted: the flag is then followed
+ * by its value or carries it after `=`.
+ */
+export function flagValues(rawArgs: readonly string[], name: string): string[] {
+  const flag = `--${name}`
+  const end = rawArgs.indexOf('--')
+  const values: string[] = []
+  for (let index = 0; index < (end === -1 ? rawArgs.length : end); index++) {
+    const arg = rawArgs[index]!
+    if (arg === flag) values.push(rawArgs[++index]!)
+    else if (arg.startsWith(`${flag}=`)) values.push(arg.slice(flag.length + 1))
+  }
+  return values
+}
