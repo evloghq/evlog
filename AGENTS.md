@@ -94,7 +94,7 @@ skills/                     Published skills (analyze-logs, build-audit-logs, re
 - **Bump type:** `patch` for fixes, `minor` for features, `major` for breaking changes.
 - **Description:** write from the consumer's perspective: what changed and how to use it. See existing changesets in `.changeset/` for tone and level of detail.
 
-A PR without a changeset for a user-facing change will not be merged. Changes confined to `apps/*` or `examples/*`, docs included, never need one. The test is the consumer, not the path: a diff under `packages/evlog/src/` with no observable change gets no changeset.
+Changes confined to `apps/*` or `examples/*`, docs included, never need one. The test is the consumer, not the path: a diff under `packages/evlog/src/` with no observable change gets no changeset.
 
 ### Commits & PR titles
 
@@ -149,15 +149,9 @@ A task is complete when **all** of the following pass:
 5. New exports are registered in `package.json#exports`, `package.json#typesVersions`, and `tsdown.config.ts`
 6. If adapter/enricher/integration: the matching `.agents/skills/create-*/SKILL.md` was followed
 7. Any skill (internal `.agents/skills/` or published `skills/`) documenting the changed behavior was updated in the same PR
-8. A changeset is included for any user-facing change (`pnpm changeset`)
+8. A changeset is included when [Changesets](#changesets) calls for one
 
 ## Boundaries
-
-**Always do:**
-- Run lint, typecheck, and test before reporting done
-- Follow existing code patterns: read neighboring files before writing new ones
-- Use the skills at `.agents/skills/` for new adapters, enrichers, or integrations
-- Add a changeset (`pnpm changeset`) for every user-facing change: features, bug fixes, breaking changes
 
 **Ask first:**
 - Adding new dependencies: note `pnpm-workspace.yaml` sets `minimumReleaseAge: 2880`: a package published less than 48h ago fails to install unless added to `minimumReleaseAgeExclude`
@@ -199,13 +193,7 @@ Default: anything that stays on the local clone is fine, anything that touches t
 - Write a changelog entry, release note, or commit message **body** with multi-paragraph narrative. The changeset is the source of truth; commit subjects stay single-line, PR bodies stay short
 - Add a `Co-authored-by`, `Signed-off-by`, "Generated with…", "🤖", or any signature/attribution that names an agent, model, or tool: **the work is the maintainer's, full stop**
 
-## When Stuck
-- Unsure about architecture → read the relevant SKILL.md or ask
-- Unclear requirements → ask a clarifying question before making large speculative changes
-
-## Feedback & Self-Maintenance
-
-**You are expected to submit feedback.** Report DX friction, documentation gaps, or anything that made your task harder than it should be, mid-work rather than at the end. When in doubt, report it; no feedback being submitted is itself a problem.
+## Keeping this file true
 
 **This file is living documentation, so keep it true.** If you catch it contradicting the repo (a command that doesn't exist, a path that moved, a described workflow that isn't real), flag it immediately and propose the fix, even if it's unrelated to your task. Update it when you encounter:
 - A recurring mistake or easy-to-get-wrong pattern
