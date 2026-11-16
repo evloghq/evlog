@@ -97,7 +97,7 @@ Before opening the PR, read the changed pages together: state the reader questio
 
 ### 7. Open the pull request
 
-Commit with a conventional subject naming the group, push with `git__gh`, and open a normal, ready PR with `github__createPullRequest`. Read CI, fix required failures, then request `hugorcd` as reviewer. If the readiness gate cannot be completed, report the blocker instead of opening a draft.
+Commit with a conventional subject naming the group, push with `git__push`, and open a normal, ready PR with `github__createPullRequest`. Read CI, fix required failures, then request `hugorcd` as reviewer. If the readiness gate cannot be completed, report the blocker instead of opening a draft.
 
 **The title is validated by CI and a wrong scope means the PR cannot merge.** The accepted list is `scopes:` in `.github/workflows/semantic-pull-request.yml`. Read it rather than guessing, and note what is not in it:
 

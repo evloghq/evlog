@@ -135,12 +135,13 @@ require it on every non-draft PR.
 Everything else keeps a real approval even for admin: `createIssue`, `closeIssue`,
 `deleteIssueComment`, `deletePullRequestComment`, `createPullRequest`,
 `updatePullRequest`, `createPullRequestReview`. Code itself never moves through
-the API: it ships from the sandbox via `git__gh`, eve's git extension, whose
-`authorize` (`agent/lib/github/gh.ts`) runs a command only for sessions that
-pass `canAccessAdminTools` in `agent/lib/trust.ts`: maintainers, plus schedule
-sessions, whose runs push feature branches to deliver their PRs. It accepts
-clones, fetches and feature-branch pushes, and refuses any push to `main` or
-`master` for every caller.
+the `github__*` tools: it ships from the sandbox via `git__push`, which is mounted on sessions
+that pass `canAccessAdminTools` in `agent/lib/trust.ts`: maintainers, plus
+schedule sessions, whose runs push feature branches to deliver their PRs. It
+refuses `main` and `master` for every caller. `git__gh`, eve's git extension,
+clones and fetches for the same sessions; its `authorize`
+(`agent/lib/github/gh.ts`) refuses `git push`, so no unsigned commit leaves the
+sandbox.
 
 Release writes are not on the list at all: `AGENTS.md` forbids an agent from
 creating one, so the tool set stops at reading them.

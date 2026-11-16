@@ -3,39 +3,14 @@ import type { SandboxSession } from 'eve/sandbox'
 import type { VercelSandboxSession } from 'eve/sandbox/vercel'
 import { canAccessAdminTools } from '../trust'
 
-const PROTECTED_BRANCHES = new Set(['main', 'master'])
-
 /** Fetching git data writes nothing on GitHub. */
 const GIT_READS = new Set(['clone', 'fetch', 'pull', 'ls-remote'])
 
-/** `git push` flags that cannot widen what a push reaches: no deletes, tags, mirrors or every branch at once. */
-const PUSH_FLAGS = /^(?:-u|--set-upstream|-f|--force|--force-with-lease(?:=.*)?|--no-verify|-q|--quiet|-v|--verbose|-n|--dry-run|--porcelain)$/
-
-/** The branch a refspec writes, or null when it deletes, globs, or names anything but a branch. */
-function pushedBranch(refspec: string): string | null {
-  const [source, destination = source] = refspec.replace(/^\+/, '').split(':')
-  if (!source || refspec.includes('*')) return null
-  const branch = destination.replace(/^refs\/heads\//, '')
-  if (branch === 'HEAD' || branch === '@' || branch.startsWith('refs/')) return null
-  return branch
-}
-
-/** Every refspec names a branch outside main and master. `git push` without one would push whatever is checked out. */
-function isFeaturePush(args: readonly string[]): boolean {
-  const positional = args.filter(arg => !arg.startsWith('-'))
-  if (args.some(arg => arg.startsWith('-') && !PUSH_FLAGS.test(arg))) return false
-  const refspecs = positional.slice(1)
-  if (refspecs.length === 0) return false
-  return refspecs.every((refspec) => {
-    const branch = pushedBranch(refspec)
-    return branch !== null && !PROTECTED_BRANCHES.has(branch)
-  })
-}
-
 /**
  * The `git__gh` access policy, eve's only gate on it. Maintainer and schedule
- * turns may clone, fetch and push feature branches; every other GitHub write
- * goes through the `github__*` tools and their approvals.
+ * turns may clone and fetch. Nothing pushes through it: a `git push` from the
+ * sandbox lands unsigned commits, so branches ship through `git__push`, and
+ * every other GitHub write through the `github__*` tools and their approvals.
  */
 export function authorizeGitHubCommand({ argv, auth }: Pick<GitHubAppAuthorizeRequest, 'argv' | 'auth'>): boolean {
   if (!canAccessAdminTools(auth)) return false
@@ -44,10 +19,8 @@ export function authorizeGitHubCommand({ argv, auth }: Pick<GitHubAppAuthorizeRe
   if (program !== 'git') return false
   let index = 0
   while (rest[index] === '-C') index += 2
-  const [command, ...args] = rest.slice(index)
-  if (command === undefined || command.startsWith('-')) return false
-  if (GIT_READS.has(command)) return true
-  return command === 'push' && isFeaturePush(args)
+  const command = rest[index]
+  return command !== undefined && GIT_READS.has(command)
 }
 
 /**

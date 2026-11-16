@@ -20,7 +20,8 @@ export function parseRepository(slug: string): Repository | null {
 /**
  * The repository this deployment is for: `EVI_REPOSITORY` as an `owner/repo`
  * slug, the evlog repository when unset. It is the sandbox template clone,
- * and the default for the GitHub tools. A GitHub thread on another repository still escalates there,
+ * the default for the GitHub tools, and where `git__push` lands unless told
+ * otherwise. A GitHub thread on another repository still escalates there,
  * through `repositoryOf`.
  */
 export function homeRepository(): Repository {

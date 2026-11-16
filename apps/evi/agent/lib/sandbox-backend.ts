@@ -16,3 +16,8 @@ export function createSandboxEnvironment(deployedOnVercel: boolean, prepare: Pre
     snapshotExpiration: 14 * 24 * 60 * 60 * 1000,
   })
 }
+
+/** Only Vercel Sandbox rewrites request headers at its firewall, which is how a token reaches git without entering the sandbox. */
+export function isVercelEnvironment(environment: SandboxEnvironment): environment is VercelEnvironment {
+  return environment.provider === 'vercel'
+}

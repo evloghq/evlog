@@ -24,16 +24,17 @@ on every call as `providerOptions.gateway.sessionId`, but `/v1/report` ignores a
 not at all.
 
 Tool executes enrich the same event with their outcome, in the pattern
-`tools/capture.ts` sets: one namespace per domain, holding counts, reason codes,
+`tools/git.ts` set: one namespace per domain, holding counts, reason codes,
 and identifiers Evi authored. Never raw error strings, tool payloads, or
 untrusted URLs, so the metadata-only PostHog policy holds. The namespaces:
+`git.{branch,pushed,sha,commits,reason}`,
 `capture.{published,viewport,target,beforeHost,afterHost,reason}`,
 `blob.{uploaded,bytes,reason}`, `turbo.{remoteCache,reason}`,
 `vercel.{env,key,project,target,reason,status}`,
 `gateway.report.{mode,groupBy,matchedRows}`,
 `content.{scanned,candidates,eligible,targets,group,surface,reason}`,
 `image.{host,fetched,bytes,mediaType,reason}`. A content pass that held everything or
-a capture that was refused is chartable from the turn event alone. Tool executes
+a push that was refused is chartable from the turn event alone. Tool executes
 are the one place `useLogger()` is contractually bound (see the caller gap
 below); hooks and the subagents stay uninstrumented, and the two pieces of
 work that run outside a turn emit their own events (below).

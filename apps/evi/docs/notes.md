@@ -59,7 +59,7 @@ it, `org` was ignored and the default installation answered for every account.
 The channel takes one credential, the home account's. Since
 `@github-tools/eve-extension` 0.13 the `github__*` tools mint for the
 installation that owns each call's target repository, per its README, and
-`git__gh` mints for the `repository` each command declares.
+`git__gh` and `git__push` mint for the `repository` each call declares.
 
 **iMessage attachments never reach the model.** The Photon adapter's chat
 mapping keeps name/mimeType/size, and eve's `messageToUserContent` only reads
@@ -111,14 +111,15 @@ them, only mentions and DMs reach the agent.
 
 **`main` requires signed commits, and the sandbox has no key to sign with.**
 A `git push` from the sandbox lands unsigned commits, and GitHub then blocks
-the PR, squash merge included. `git__push` recreates each commit with the
-GraphQL `createCommitOnBranch`, which GitHub signs as the App, and moves the
-local branch onto the result. That mutation takes file contents without a
-mode, so the push refuses symlinks, submodules, executable bits and merges. Each
-mutation moves the branch on GitHub at once, so when one fails the push puts
-the branch back where it was, and running it again starts from the same state.
-The rollback goes through `updateRefs` with the last head the push wrote as
-`beforeOid`, so a commit someone else pushed in between stays.
+the PR, squash merge included. So `git__gh` refuses `git push`, and
+`git__push` recreates each commit with the GraphQL `createCommitOnBranch`,
+which GitHub signs as the App, and moves the local branch onto the result.
+That mutation takes file contents without a mode, so the push refuses
+symlinks, submodules, executable bits and merges. Each mutation moves the
+branch on GitHub at once, so when one fails the push puts the branch back
+where it was, and running it again starts from the same state. The rollback
+goes through `updateRefs` with the last head the push wrote as `beforeOid`,
+so a commit someone else pushed in between stays.
 
 **Vercel evaluates schedule cron in UTC.** `0 5 * * *` fires 06:00 London in
 summer (BST) and drifts to 05:00 in winter (GMT). `eve dev` never fires crons;

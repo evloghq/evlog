@@ -10,7 +10,7 @@ import { isAutonomous, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'
  * `preset: 'auto'` lists only the tools a session's first request needs, and
  * defers the rest behind `eve__search`. These writes stay out of reach whatever
  * the routing picks: merges, releases (AGENTS.md forbids an agent creating
- * one), branch and file writes (code ships through `git__gh` from the
+ * one), branch and file writes (code ships through `git__push` from the
  * sandbox), CI control, deletions, gists and reactions.
  */
 const EXCLUDED_WRITES = [

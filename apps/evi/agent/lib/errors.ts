@@ -13,12 +13,19 @@ export const eviErrors = defineErrorCatalog('evi', {
   },
   INPUT_REFUSED: { status: 400, message: 'The tool input was refused.' },
 
+  GITHUB_NOT_INSTALLED: {
+    status: 403,
+    message: ({ owner, repository }: { owner: string, repository: string }) =>
+      `evlogai is not installed on ${owner}, so ${repository} is out of reach.`,
+    fix: 'Install the App on that account first.',
+  },
   GITHUB_NO_INSTALLATION_TOKEN: { message: 'The GitHub connector exposes no installation token.' },
   // Template params never reuse an override key (`status`, `message`, `fix`, ...): the factory peels those off first.
   GITHUB_REQUEST_FAILED: {
     status: 502,
     message: ({ request, responseStatus }: { request: string, responseStatus: number }) => `GitHub ${request} failed (${responseStatus})`,
   },
+  GIT_PUSH_REFUSED: { status: 403, message: 'The branch may not be pushed.' },
   GIT_COMMAND_FAILED: {
     message: ({ command, exitCode }: { command: string, exitCode: number }) => `git ${command} exited ${exitCode}`,
   },
