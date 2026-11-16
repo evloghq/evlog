@@ -14,7 +14,7 @@ const appAuth: SessionAuthContext = {
 }
 
 function scheduleArgs() {
-  const send = vi.fn().mockResolvedValue({ id: 'sess_123' })
+  const send = vi.fn().mockResolvedValue({ sessionId: 'sess_123', deliveryId: 'dlv_123' })
   const to = vi.fn().mockReturnValue({ send })
   const waitUntil = vi.fn()
   return { args: { to, waitUntil, appAuth } as unknown as ScheduleHandlerArgs, send, to, waitUntil }

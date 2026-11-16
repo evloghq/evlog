@@ -18,8 +18,8 @@ export function maintainerRun(channel: SlackChannel, label: string, task: string
         .then(
           // A send resolves once the session accepts it, not once the turn
           // runs, so the cron invocation records the handoff either way.
-          (session) => {
-            log.set({ accepted: true, session: session.id })
+          (delivery) => {
+            log.set({ accepted: true, session: delivery.sessionId })
             log.emit()
           },
           (error) => {

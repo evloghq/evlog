@@ -14,7 +14,7 @@ export default defineEval({
     const turn = await t.send(reviewFixture(WRITTEN))
     await expectReviewedSnapshot(t, turn.session, WRITTEN)
     t.succeeded()
-    t.calledSubagent('content_review')
+    t.calledAgent('content_review')
     t.notCalledTool('write_file')
     expectNoSubagent(t, 'content_rewrite')
     expectVerdictIn(t, turn.session, ['pass', 'minor'])

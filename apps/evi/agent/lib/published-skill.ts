@@ -26,5 +26,5 @@ export function publishedSkill(name: string): SkillDefinition {
         return [relative(dir, path), readFileSync(path, 'utf8')]
       }),
   )
-  return { description, license, metadata, markdown: raw.slice(end + 4).trimStart(), files }
+  return { description, license, metadata, content: raw.slice(end + 4).trimStart(), files }
 }

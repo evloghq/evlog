@@ -17,11 +17,8 @@ Start with \`listLabels\` and prefer labels that already exist — reuse the exa
 Write one reply, and it is the comment: the channel posts it verbatim on the issue. Address it to the reporter — thank them, give the grounded answer or the repro request, add useful hints, and offer next steps. Never describe how this turn was produced, and never mention drafts, approval, or channel mechanics. This turn may create or apply labels, open a doc-gap issue, and assign Hugo, and nothing else.`
 
 /** Injected only on unattended first-responder turns; interactive sessions never carry it. */
-export default defineDynamic({
-  events: {
-    'turn.started': (_event, ctx) =>
-      isAutonomous(ctx.session.auth.current)
-        ? defineInstructions({ content: FIRST_RESPONDER })
-        : null,
-  },
-})
+export default defineDynamic(ctx =>
+  isAutonomous(ctx.session.auth.current)
+    ? defineInstructions({ content: FIRST_RESPONDER })
+    : null,
+)

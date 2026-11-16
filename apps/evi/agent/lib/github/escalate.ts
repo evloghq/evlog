@@ -18,8 +18,8 @@ interface ChannelStateSlice {
 /**
  * A first-responder session is the only GitHub dispatch with no triggering
  * comment: it starts from the `issues` webhook, while every interactive
- * session starts from a mention comment. `session.failed` handlers receive no
- * session auth, so this state shape is how they recognize an autonomous run.
+ * session starts from a mention comment. A failed session may have no turn
+ * auth to read, so `session.ended` recognizes an autonomous run by this shape.
  */
 export function isAutonomousTriageState(state: ChannelStateSlice): boolean {
   return state.issueNumber !== null && state.triggeringCommentId === null

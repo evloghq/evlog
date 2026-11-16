@@ -9,8 +9,8 @@ export default defineEval({
   tags: ['fast'],
   async test(t) {
     const turn = await t.send('Add the "bug" label to issue #506.')
-    t.parked()
-    turn.session.requireInputRequest({ toolName: 'github__addLabels' })
+    t.awaitingInput()
+    turn.session.requireInteraction({ toolName: 'github__addLabels' })
     t.calledTool('github__addLabels', { status: 'pending' })
   },
 })
