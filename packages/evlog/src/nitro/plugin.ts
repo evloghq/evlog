@@ -129,7 +129,6 @@ export default defineNitroPlugin(async (nitroApp) => {
     // without throwing.  Filtering is enforced at emit time instead.
     e.context._evlogShouldEmit = shouldLog(e.path, evlogConfig?.include, evlogConfig?.exclude)
 
-    // Successful client transport batches are quiet; failures still emit.
     e.context._evlogQuietOnSuccess = transportEndpoint !== undefined && e.path.split('?')[0] === transportEndpoint
 
     // Store start time for duration calculation in tail sampling
@@ -137,7 +136,6 @@ export default defineNitroPlugin(async (nitroApp) => {
 
     const requestLog = createDeferredRequestLogger(e)
 
-    // Apply route-based service configuration if a matching route is found
     const routeService = getServiceForPath(e.path, evlogConfig?.routes)
     if (routeService) {
       requestLog.set({ service: routeService })

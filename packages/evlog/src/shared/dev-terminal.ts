@@ -14,26 +14,21 @@ export interface DevPrettyErrorConfig {
   detail?: DevPrettyErrorDetail
 }
 
-/** Resolved pretty-error settings used at runtime. */
 export type ResolvedPrettyError = Required<DevPrettyErrorConfig>
 
-/** Resolved dev terminal object (alternative to preset strings). */
 export interface DevTerminalConfigObject {
   /** Show Nitro `[request error]` + Youch in the terminal. @default false when pretty in dev. */
   frameworkOverlay?: boolean
   prettyError?: DevPrettyErrorConfig
 }
 
-/** User-facing dev terminal config: preset string or explicit object. */
 export type DevTerminalInput = DevTerminalPreset | DevTerminalConfigObject
 
-/** Resolved dev terminal settings used at runtime. */
 export interface ResolvedDevTerminal {
   frameworkOverlay: boolean
   prettyError: ResolvedPrettyError
 }
 
-/** Config surface accepted by {@link resolveDevTerminal}. */
 export interface DevTerminalResolveInput {
   pretty?: boolean
   dev?: DevTerminalInput
@@ -61,9 +56,6 @@ function finalizePrettyError(
   return { snippet, stackDepth, compact, detail }
 }
 
-/**
- * Resolve dev terminal settings from `dev` presets or explicit objects.
- */
 export function resolveDevTerminal(input: DevTerminalResolveInput = {}): ResolvedDevTerminal {
   const pretty = input.pretty ?? isDev()
   const inDev = isDev()

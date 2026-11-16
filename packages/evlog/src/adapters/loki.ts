@@ -5,7 +5,6 @@ import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { trimTrailingSlashes } from '../utils'
 
-/** Default Loki push path appended to {@link LokiConfig.endpoint}. */
 const LOKI_PUSH_PATH = '/loki/api/v1/push'
 
 /**
@@ -161,10 +160,6 @@ function buildHeaders(config: LokiConfig): Record<string, string> {
   return headers
 }
 
-/**
- * Encode a batch of wide events into the Loki push request. Shared by
- * {@link createLokiDrain} and {@link sendBatchToLoki}.
- */
 function encodeLokiRequest(events: WideEvent[], config: LokiConfig): HttpDrainRequest {
   return {
     url: resolveLokiPushUrl(config.endpoint),
@@ -215,9 +210,6 @@ export function createLokiDrain(overrides?: Partial<LokiConfig>) {
   })
 }
 
-/**
- * Send a single wide event to Loki.
- */
 export async function sendToLoki(event: WideEvent, config: LokiConfig): Promise<void> {
   await sendBatchToLoki([event], config)
 }

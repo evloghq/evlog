@@ -71,7 +71,6 @@ export interface EvlogConfig extends BaseEvlogOptions {
   environment?: string
   /** Full environment context override (advanced). */
   env?: Partial<EnvironmentContext>
-  /** Enable or disable all logging globally. */
   enabled?: boolean
   /** Auto-detected from `NODE_ENV` when omitted. */
   pretty?: boolean
@@ -87,9 +86,7 @@ export interface EvlogConfig extends BaseEvlogOptions {
   stringify?: boolean
   /** Minimum severity for the global `log` API. */
   minLevel?: LoggerConfig['minLevel']
-  /** `evlog map` settings. */
   map?: EvlogMapConfig
-  /** `evlog logs` settings. */
   logs?: EvlogLogsConfig
 }
 

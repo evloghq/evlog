@@ -3,9 +3,6 @@ import type { ConfigField } from '../shared/config'
 import { resolveAdapterConfig } from '../shared/config'
 import { defineDrain } from '../shared/drain'
 
-/**
- * Configuration for the in-memory drain.
- */
 export interface MemoryConfig {
   /** Named store key. Multiple drains sharing the same key share the same buffer. Default: `'default'` */
   store: string
@@ -98,7 +95,6 @@ export function createMemoryDrain(overrides?: Partial<MemoryConfig>) {
   })
 }
 
-/** Options accepted by {@link readMemoryLogs}. */
 export interface ReadMemoryLogsOptions {
   /** Named store to read from. Default: `'default'` */
   store?: string
@@ -106,7 +102,6 @@ export interface ReadMemoryLogsOptions {
   since?: Date | string
   /** Only include events with `timestamp <= until`. */
   until?: Date | string
-  /** Filter by log level. */
   level?: LogLevel | LogLevel[]
   /** Custom predicate — return `false` to skip the event. */
   filter?: (event: WideEvent) => boolean

@@ -9,7 +9,6 @@ import { OTEL_SEVERITY_NUMBER } from '../shared/severity'
 import { EVLOG_VERSION } from '../shared/http'
 
 export interface SentryConfig {
-  /** Sentry DSN */
   dsn: string
   /** Environment override (defaults to event.environment) */
   environment?: string
@@ -30,13 +29,11 @@ export interface SentryConfig {
   issues?: boolean
 }
 
-/** Sentry Log attribute value with type annotation */
 export interface SentryAttributeValue {
   value: string | number | boolean
   type: 'string' | 'integer' | 'double' | 'boolean'
 }
 
-/** Sentry Structured Log payload */
 export interface SentryLog {
   timestamp: number
   trace_id: string
@@ -405,7 +402,6 @@ function getSentryEnvelopeRequest(config: SentryConfig, body: string): HttpDrain
   }
 }
 
-/** Encode serialized structured logs into one Sentry envelope request. */
 function encodeSentryRequest(logs: string[], config: SentryConfig): HttpDrainRequest {
   return getSentryEnvelopeRequest(config, buildEnvelopeBody(logs, config.dsn))
 }

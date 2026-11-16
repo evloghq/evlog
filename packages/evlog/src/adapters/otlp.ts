@@ -20,7 +20,6 @@ import { OTEL_SEVERITY_NUMBER, OTEL_SEVERITY_TEXT } from '../shared/severity'
  */
 export type OTLPRecordShape = 'json' | 'compact'
 
-/** OTLP HTTP transport encoding. */
 export type OTLPProtocol = 'http/json' | 'http/protobuf'
 
 export interface OTLPConfig {
@@ -33,7 +32,6 @@ export interface OTLPConfig {
   recordShape?: OTLPRecordShape
   /** Override service name (defaults to event.service) */
   serviceName?: string
-  /** Additional resource attributes */
   resourceAttributes?: Record<string, string | number | boolean>
   /**
    * Also emit OpenTelemetry semantic convention attributes (`http.request.method`,
@@ -61,7 +59,6 @@ export interface OTLPConfig {
   retries?: number
 }
 
-/** OTLP Log Record structure */
 export interface OTLPLogRecord {
   timeUnixNano: string
   severityNumber: number
@@ -75,7 +72,6 @@ export interface OTLPLogRecord {
   spanId?: string
 }
 
-/** OTLP Resource structure */
 interface OTLPResource {
   attributes: Array<{
     key: string
@@ -83,7 +79,6 @@ interface OTLPResource {
   }>
 }
 
-/** OTLP Scope structure */
 interface OTLPScope {
   name: string
   version?: string
@@ -140,8 +135,6 @@ function toTraceContextId(value: unknown, pattern: RegExp): string | undefined {
   return value.toLowerCase()
 }
 
-// Re-exposed under a local name to keep call-sites tight while delegating to
-// the shared OTLP attribute encoder in `evlog/toolkit`.
 const toAttributeValue = toOtlpAttributeValue
 
 /**
@@ -168,7 +161,6 @@ function collectAttributes(
   }
 }
 
-/** A nested plain object as an OTLP key-value list; anything else through the shared encoder. */
 function toNestedAttributeValue(value: unknown): OtlpAttributeValue {
   if (!isPlainObject(value) || Object.keys(value).length === 0) return toAttributeValue(value)
   const values: Array<{ key: string, value: OtlpAttributeValue }> = []
@@ -221,15 +213,12 @@ function pushSemanticConventionAttributes(event: Record<string, unknown>, attrib
   }
 }
 
-/** Options for {@link toOTLPLogRecord}. */
 export interface OTLPLogRecordOptions {
   /** @see {@link OTLPConfig.semanticConventions} */
   semanticConventions?: boolean
 }
 
 /**
- * Convert an evlog WideEvent to an OTLP LogRecord.
- *
  * @param shape See {@link OTLPRecordShape}. Defaults to `'json'`.
  */
 export function toOTLPLogRecord(event: WideEvent, shape: OTLPRecordShape = 'json', options: OTLPLogRecordOptions = {}): OTLPLogRecord {
@@ -378,7 +367,6 @@ export function createOTLPDrain(overrides?: Partial<OTLPConfig>) {
     resolve: async () => {
       const config: Partial<ResolvedOTLPConfig> = await resolveAdapterConfig<OTLPConfig>('otlp', OTLP_FIELDS, overrides)
 
-      // OTLP-specific: resolve headers from env if not provided via config
       if (!config.headers) {
         config.headers = getHeadersFromEnv()
       }
@@ -407,10 +395,6 @@ export function createOTLPDrain(overrides?: Partial<OTLPConfig>) {
   })
 }
 
-/**
- * Encode a batch of wide events into the OTLP/HTTP logs request. Shared by
- * {@link createOTLPDrain} and {@link sendBatchToOTLP}.
- */
 function encodeOTLPRequest(events: WideEvent[], config: ResolvedOTLPConfig): HttpDrainRequest {
   const payload = buildOTLPPayload(events, config)
   return {
@@ -447,8 +431,6 @@ function buildOTLPPayload(events: WideEvent[], config: ResolvedOTLPConfig): OTLP
 }
 
 /**
- * Send a single event to an OTLP endpoint.
- *
  * @example
  * ```ts
  * await sendToOTLP(event, {
@@ -461,8 +443,6 @@ export async function sendToOTLP(event: WideEvent, config: OTLPConfig): Promise<
 }
 
 /**
- * Send a batch of events to an OTLP endpoint.
- *
  * @example
  * ```ts
  * await sendBatchToOTLP(events, {

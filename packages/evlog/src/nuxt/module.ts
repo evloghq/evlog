@@ -24,7 +24,6 @@ import { name, version } from '../../package.json'
 import { warnDeprecated } from '../shared/deprecate'
 
 interface ModuleAxiomBaseConfig {
-  /** Axiom dataset name */
   dataset: string
   /** Axiom API token (evlog field `apiKey`) */
   apiKey?: string
@@ -66,9 +65,6 @@ export interface ModuleOptions {
    */
   enabled?: boolean
 
-  /**
-   * Environment context overrides.
-   */
   env?: Partial<EnvironmentContext>
 
   /**
@@ -80,7 +76,6 @@ export interface ModuleOptions {
   console?: boolean
 
   /**
-   * Enable pretty printing.
    * @default true in development, false in production
    */
   pretty?: boolean
@@ -230,7 +225,6 @@ export interface ModuleOptions {
     endpoint: string
     /** Override service name (defaults to event.service) */
     serviceName?: string
-    /** Additional resource attributes */
     resourceAttributes?: Record<string, string | number | boolean>
     /** Custom headers (e.g., for authentication) */
     headers?: Record<string, string>
@@ -271,7 +265,6 @@ export interface ModuleOptions {
    * ```
    */
   sentry?: {
-    /** Sentry DSN */
     dsn: string
     /** Environment override (defaults to event.environment) */
     environment?: string
@@ -376,8 +369,6 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
 
     nuxt.options.runtimeConfig.evlog = options
 
-    // Register custom error handler for proper EvlogError serialization
-    // Only set if not already configured to avoid overwriting user's custom handler
     // Mirror standalone Nitro modules: serialize evlog options into __EVLOG_CONFIG so
     // resolveEvlogConfigForNitroPlugin() picks them up in dev (Nitro worker threads
     // often cannot resolve useRuntimeConfig().evlog via dynamic import reliably).

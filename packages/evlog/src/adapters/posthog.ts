@@ -80,7 +80,6 @@ export interface PostHogConfig {
  */
 export type PostHogEventsConfig = PostHogConfig
 
-/** PostHog event structure for the batch API */
 export interface PostHogEvent {
   event: string
   distinct_id: string
@@ -296,10 +295,7 @@ export async function sendBatchToPostHogEvents(events: WideEvent[], config: Post
   }
 }
 
-/**
- * Encode serialized PostHog events into one custom-events `/batch/` request.
- * `prefix` is the body up to the opening bracket of `batch`.
- */
+/** `prefix` is the body up to the opening bracket of `batch`. */
 function encodePostHogEventsRequest(prefix: string, entries: string[], config: PostHogConfig): HttpDrainRequest {
   return {
     url: `${resolveHost(config)}/batch/`,

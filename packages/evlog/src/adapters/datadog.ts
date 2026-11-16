@@ -143,9 +143,6 @@ export function toDatadogLog(event: WideEvent): Record<string, unknown> {
   }
 }
 
-/**
- * Resolve the Logs intake URL from configuration.
- */
 export function resolveDatadogIntakeUrl(config: Pick<DatadogConfig, 'site' | 'intakeUrl'>): string {
   if (config.intakeUrl) {
     return trimTrailingSlashes(config.intakeUrl)
@@ -194,7 +191,6 @@ export function createDatadogDrain(overrides?: Partial<DatadogConfig>) {
 const DATADOG_MAX_ENTRIES_PER_REQUEST = 1000
 const DATADOG_MAX_PAYLOAD_BYTES = 5_000_000
 
-/** Encode serialized Datadog logs into one Logs intake request. */
 function encodeDatadogRequest(logs: string[], config: DatadogConfig): HttpDrainRequest {
   return {
     url: resolveDatadogIntakeUrl(config),
@@ -207,9 +203,6 @@ function encodeDatadogRequest(logs: string[], config: DatadogConfig): HttpDrainR
   }
 }
 
-/**
- * Send a single wide event to Datadog.
- */
 export async function sendToDatadog(event: WideEvent, config: DatadogConfig): Promise<void> {
   await sendBatchToDatadog([event], config)
 }

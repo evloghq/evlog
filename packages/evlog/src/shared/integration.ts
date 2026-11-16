@@ -7,7 +7,6 @@ import { extractSafeHeaders, extractSafeNodeHeaders } from './headers'
 import type { BaseEvlogOptions, MiddlewareLoggerOptions, MiddlewareLoggerResult } from './middleware'
 import { createMiddlewareLogger } from './middleware'
 
-/** Request shape extracted from a framework context. */
 export interface ExtractedRequest {
   method: string
   path: string
@@ -59,7 +58,6 @@ interface StoragelessFrameworkIntegrationSpec<TCtx> extends FrameworkIntegration
  */
 export type FrameworkIntegrationSpec<TCtx> = StorageFrameworkIntegrationSpec<TCtx> | StoragelessFrameworkIntegrationSpec<TCtx>
 
-/** Result returned by {@link FrameworkIntegrationHelpers.start}. */
 export interface FrameworkRequestHandle extends MiddlewareLoggerResult {
   middlewareOptions: MiddlewareLoggerOptions
   /**
@@ -69,7 +67,6 @@ export interface FrameworkRequestHandle extends MiddlewareLoggerResult {
   runWith: <T>(fn: () => T | Promise<T>) => Promise<T>
 }
 
-/** Helpers returned by {@link defineFrameworkIntegration}. */
 export interface FrameworkIntegrationHelpers<TCtx> {
   start: (ctx: TCtx, options?: BaseEvlogOptions) => FrameworkRequestHandle
 }

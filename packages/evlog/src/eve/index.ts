@@ -890,7 +890,6 @@ function flushEveMetadata(state: TurnState): void {
   }
 }
 
-/** Wide-event view of the eve instance and the parent session, when there is one. */
 /**
  * Who triggered this turn, from the caller principal eve resolved at dispatch.
  *
@@ -909,6 +908,7 @@ function buildCaller(ctx: HookContext): Record<string, string> | null {
   }
 }
 
+/** Wide-event view of the eve instance and the parent session, when there is one. */
 function buildLineage(sessionId: string, ctx: HookContext): Record<string, unknown> {
   const eve: Record<string, unknown> = {}
   const runtime = sessionRuntimes().get(sessionId)
@@ -2031,7 +2031,6 @@ function acceptsV26Events(): boolean {
   }
 }
 
-/** Options for {@link defineEvlogInstrumentation}. */
 export interface EvlogEveInstrumentationOptions {
   /** Overrides `ai.telemetry.functionId` on spans. Defaults to the agent name. */
   functionId?: string

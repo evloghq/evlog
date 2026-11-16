@@ -30,7 +30,6 @@ export interface PrettyErrorTreeEntry {
   children?: string[]
 }
 
-/** Normalized error fields extracted from wide-event `error` context. */
 export interface NormalizedErrorContext {
   message: string
   name?: string
@@ -54,7 +53,6 @@ export interface StackFrame {
   isApp: boolean
 }
 
-/** Options for {@link buildErrorEntries}. */
 export type PrettyErrorOptions = Partial<ResolvedPrettyError> & {
   /** Project root for relative paths in snippets. @default process.cwd() */
   cwd?: string
@@ -93,9 +91,6 @@ function extractGuidance(data: Record<string, unknown>): Pick<NormalizedErrorCon
   }
 }
 
-/**
- * Extract structured error fields from a wide-event `error` value.
- */
 export function normalizeErrorContext(error: unknown): NormalizedErrorContext | null {
   if (error === null || error === undefined) return null
 
@@ -354,9 +349,6 @@ function formatGuidanceLine(label: string, text: string, labelColor: string): st
   return lines
 }
 
-/**
- * Build pretty-print tree entries for a wide-event `error` field.
- */
 export function buildErrorEntries(
   error: unknown,
   options: PrettyErrorOptions = {},

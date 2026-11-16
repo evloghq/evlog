@@ -17,8 +17,6 @@ export interface ForkLifecycle {
 }
 
 /**
- * Options for {@link forkBackgroundLogger}.
- *
  * @beta Part of `evlog/toolkit`
  */
 export interface ForkBackgroundLoggerOptions {

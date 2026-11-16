@@ -1,7 +1,3 @@
-/**
- * Helpers for building / mutating wide events from inside enrichers and adapters.
- */
-
 import type { WideEvent } from '../types'
 
 /**

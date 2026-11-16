@@ -4,7 +4,6 @@ import { isAbsolute, relative } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { isFrameworkRuntimePath } from './pretty-error'
 
-/** Parsed stack frame from Next.js `parseStack`. */
 interface NextParsedFrame {
   file: string | null
   line1: number | null

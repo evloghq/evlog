@@ -4,9 +4,7 @@ import type { FieldContext, ServerEvent } from '../../types'
 /**
  * Returns the request logger attached to the given server event.
  *
- * @param event - The current server event containing the context with the logger.
  * @param service - Optional service name to override the default service.
- * @returns The request-scoped logger.
  * @throws Error if the logger is not initialized on the event context.
  *
  * @example

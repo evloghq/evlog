@@ -20,7 +20,6 @@ export interface BaseEvlogOptions {
   include?: string[]
   /** Route glob patterns to exclude. Takes precedence over `include`. */
   exclude?: string[]
-  /** Per-route service overrides. */
   routes?: Record<string, RouteConfig>
   /** Drain callback invoked with every emitted event. */
   drain?: (ctx: DrainContext) => void | Promise<void>

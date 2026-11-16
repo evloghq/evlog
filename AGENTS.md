@@ -58,7 +58,7 @@ skills/                     Published skills (analyze-logs, build-audit-logs, re
 ## Conventions
 
 - All code in TypeScript. Follow existing patterns in `packages/evlog/src/`.
-- JSDoc on all public APIs.
+- JSDoc on exported public APIs only, and only for what the signature cannot say: behavior, defaults (`@default`), units, an `@example`. Internal and non-exported symbols get none unless they carry a constraint, under the comment rules below. A JSDoc that restates the name or the type is slop.
 - HTML comments in Vue templates are fine when they explain something the markup cannot say, such as a precise layout decision. Comments that only name a section or element (`<!-- Hero -->`, `<!-- Row summary -->`) are not: component and element names already carry that.
 - `README.md` at root is a **symlink** to `packages/evlog/README.md`. Edit the source directly.
 - `evlog/toolkit` is the public entrypoint for `src/shared/`. Never use `evlog/shared`.
@@ -144,7 +144,7 @@ A task is complete when **all** of the following pass:
 1. `pnpm run lint`, `pnpm run typecheck`, `pnpm run test` exit 0
 2. The change has a matching test (bug fix → failing regression first, then the fix)
 3. `pnpm test:coverage` stays above the configured thresholds; if you changed a public export, the `pnpm api:snapshot` diff was reviewed
-4. New public APIs have JSDoc
+4. New public APIs have JSDoc that says what the signature cannot
 5. New exports are registered in `package.json#exports`, `package.json#typesVersions`, and `tsdown.config.ts`
 6. If adapter/enricher/integration: the matching `.agents/skills/create-*/SKILL.md` was followed
 7. Any skill (internal `.agents/skills/` or published `skills/`) documenting the changed behavior was updated in the same PR

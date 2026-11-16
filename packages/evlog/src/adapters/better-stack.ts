@@ -103,7 +103,6 @@ export function createBetterStackDrain(overrides?: Partial<BetterStackConfig>) {
 /** Better Stack accepts at most 10 MiB per request: larger batches are split. */
 const BETTER_STACK_MAX_REQUEST_BYTES = 10 * 1024 * 1024
 
-/** Encode serialized Better Stack events into one ingest request. */
 function encodeBetterStackRequest(entries: string[], config: BetterStackConfig): HttpDrainRequest {
   return {
     url: trimTrailingSlashes(config.endpoint ?? 'https://in.logs.betterstack.com'),
@@ -115,9 +114,6 @@ function encodeBetterStackRequest(entries: string[], config: BetterStackConfig):
   }
 }
 
-/**
- * Send a single event to Better Stack.
- */
 export async function sendToBetterStack(event: WideEvent, config: BetterStackConfig): Promise<void> {
   await sendBatchToBetterStack([event], config)
 }

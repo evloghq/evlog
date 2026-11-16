@@ -590,8 +590,6 @@ function cloneForRedaction(event: Record<string, unknown>): Record<string, unkno
  * 2. **Masker-based**: built-in patterns with smart partial masking (e.g. `****1111`).
  * 3. **Pattern-based**: custom RegExp patterns on string values replaced with `replacement`.
  *
- * @param event - The wide event object (not mutated).
- * @param config - Redaction configuration.
  * @returns A redacted deep clone of `event`.
  */
 export function redactEvent(event: Record<string, unknown>, config: RedactConfig): Record<string, unknown> {
