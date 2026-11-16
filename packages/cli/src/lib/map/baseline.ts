@@ -176,8 +176,10 @@ function regressedChecks(before: RouteEntry, after: RouteEntry): number {
  * or stops sharing the method and path, so what the ids leave unpaired is
  * paired by method, path and file. One that also moved file is paired with
  * an entry point left with its method and path. Nothing says which of them it
- * became, so it is the one that regressed the most checks, then the
- * lowest-scoring: the gate would rather fail a move than pass a regression.
+ * became, so the pairs are taken across all of them, the one that regressed
+ * the most checks first, then the one that lost the most score: the gate
+ * would rather fail a move than pass a regression, whatever order the
+ * baseline lists them in.
  */
 function pairRoutes(baseline: readonly RouteEntry[], current: readonly RouteEntry[]): Map<RouteEntry, RouteEntry> {
   const currentById = new Map(current.map(route => [route.id, route]))
@@ -189,13 +191,17 @@ function pairRoutes(baseline: readonly RouteEntry[], current: readonly RouteEntr
 
   const paired = new Set(pairs.values())
   const unpaired = new Set(current.filter(route => !paired.has(route)))
+  const lostScore = (pair: { before: RouteEntry, after: RouteEntry }) => pair.before.score - pair.after.score
   const pairWorst = (matches: (before: RouteEntry, route: RouteEntry) => boolean) => {
-    for (const before of baseline) {
-      if (pairs.has(before)) continue
-      const [after] = [...unpaired]
-        .filter(route => matches(before, route))
-        .sort((a, b) => regressedChecks(before, b) - regressedChecks(before, a) || a.score - b.score)
-      if (!after) continue
+    const left = [...unpaired]
+    const candidates = baseline
+      .filter(before => !pairs.has(before))
+      .flatMap(before => left
+        .filter(after => matches(before, after))
+        .map(after => ({ before, after, regressed: regressedChecks(before, after) })))
+      .sort((a, b) => b.regressed - a.regressed || lostScore(b) - lostScore(a))
+    for (const { before, after } of candidates) {
+      if (pairs.has(before) || !unpaired.has(after)) continue
       pairs.set(before, after)
       unpaired.delete(after)
     }
