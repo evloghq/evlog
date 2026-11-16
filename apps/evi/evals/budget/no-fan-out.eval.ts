@@ -10,7 +10,7 @@ export default defineEval({
   async test(t) {
     await t.send('What does the redact option do in evlog?')
     t.succeeded()
-    t.noFailedActions()
+    t.noFailedCalls()
     t.maxToolCalls(6)
     t.notCalledTool('github__searchCode')
   },

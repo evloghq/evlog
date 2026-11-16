@@ -8,9 +8,9 @@
  *
  *   pnpm run sandbox:seed
  */
+import { initLogger, createRequestLogger } from 'evlog'
 import { createLokiDrain } from 'evlog/loki'
 import { createClickHouseDrain } from 'evlog/clickhouse'
-import { initLogger, createRequestLogger } from 'evlog'
 
 const LOKI = process.env.LOKI_ENDPOINT ?? 'http://localhost:3100'
 const CLICKHOUSE = process.env.CLICKHOUSE_ENDPOINT ?? 'http://localhost:8123'

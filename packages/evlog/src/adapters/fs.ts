@@ -112,11 +112,7 @@ function parseLogFilename(filename: string): { date: string; index: number } {
 
 async function cleanupOldFiles(dir: string, maxFiles: number): Promise<void> {
   const files = await readdir(dir)
-  const jsonlFiles = files.filter(f => f.endsWith('.jsonl')).sort((a, b) => {
-    const pa = parseLogFilename(a)
-    const pb = parseLogFilename(b)
-    return pa.date.localeCompare(pb.date) || pa.index - pb.index
-  })
+  const jsonlFiles = files.filter(f => f.endsWith('.jsonl')).sort(compareLogFiles)
 
   if (jsonlFiles.length <= maxFiles) return
 
@@ -208,7 +204,6 @@ export function createFsDrain(overrides?: Partial<FsConfig>) {
   })
 }
 
-/** Options accepted by {@link readFsLogs}. */
 export interface ReadFsLogsOptions {
   /** Directory to read from. Default: `.evlog/logs` */
   dir?: string
@@ -216,13 +211,11 @@ export interface ReadFsLogsOptions {
   since?: Date | string
   /** Only yield events with `event.timestamp <= until`. */
   until?: Date | string
-  /** Filter by event level. */
   level?: LogLevel | LogLevel[]
   /** Custom predicate — return `false` to skip the event. */
   filter?: (event: WideEvent) => boolean
 }
 
-/** Options accepted by {@link tailFsLogs}. */
 export interface TailFsLogsOptions extends ReadFsLogsOptions {
   /**
    * Polling interval (ms) used to detect new bytes / new files.
@@ -237,11 +230,6 @@ export interface TailFsLogsOptions extends ReadFsLogsOptions {
   fromEnd?: boolean
   /** Stop tailing when this signal aborts. */
   signal?: AbortSignal
-}
-
-interface ParsedFilename {
-  date: string
-  index: number
 }
 
 function isLogFilename(filename: string): boolean {

@@ -85,11 +85,21 @@ export interface Where {
 
 const WHERE = /^(!?)([\w.$-]+)(?:(>=|<=|!=|=|>|<|~)(.*))?$/s
 
+/**
+ * The number a piece of text spells exactly. Leading zeros, an exponent, or
+ * more digits than a double holds make it an id, a code or a label, and those
+ * compare as text.
+ */
+function exactNumber(text: string): number | undefined {
+  if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) return undefined
+  const number = Number(text)
+  return text.includes('.') || Number.isSafeInteger(number) ? number : undefined
+}
+
 function coerce(raw: string): string | number | boolean {
   if (raw === 'true') return true
   if (raw === 'false') return false
-  const number = Number(raw)
-  return raw.trim() !== '' && !Number.isNaN(number) ? number : raw
+  return exactNumber(raw) ?? raw
 }
 
 /**
@@ -139,18 +149,21 @@ export function matchesWhere(event: WideEvent, where: Where): boolean {
   /* A numeric field does not always arrive as a number — a header, an env var
      or a hand-written payload carries it as text, and `"10000" > "5000"` is
      false lexicographically. Against a numeric clause, read it as the number
-     it is rather than silently answering the wrong question. */
-  const number = typeof actual === 'number'
-    ? actual
-    : typeof actual === 'string' && actual.trim() !== '' ? Number(actual) : Number.NaN
-  if (typeof expected === 'number' && !Number.isNaN(number)) {
-    switch (where.op) {
-      case '=': return number === expected
-      case '!=': return number !== expected
-      case '>': return number > expected
-      case '>=': return number >= expected
-      case '<': return number < expected
-      case '<=': return number <= expected
+     it is rather than silently answering the wrong question. Text that is not
+     a number has no order against one: `"n/a" > 5000` is false both ways. */
+  if (typeof expected === 'number') {
+    const number = typeof actual === 'number' ? actual : typeof actual === 'string' ? exactNumber(actual) : undefined
+    if (number === undefined) {
+      if (where.op !== '=' && where.op !== '!=') return false
+    } else {
+      switch (where.op) {
+        case '=': return number === expected
+        case '!=': return number !== expected
+        case '>': return number > expected
+        case '>=': return number >= expected
+        case '<': return number < expected
+        case '<=': return number <= expected
+      }
     }
   }
   const left = typeof actual === 'object' ? JSON.stringify(actual) : String(actual)

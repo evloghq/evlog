@@ -1,8 +1,9 @@
 import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
+import { chunkSerialized } from '../shared/chunk'
 import type { HttpDrainRequest } from '../shared/drain'
-import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { trimTrailingSlashes } from '../utils'
 
 export interface BetterStackConfig {
@@ -25,11 +26,28 @@ const BETTER_STACK_FIELDS: ConfigField<BetterStackConfig>[] = [
 
 /**
  * Transform an evlog wide event into a Better Stack event.
- * Maps `timestamp` to `dt` (Better Stack's expected field).
+ * Maps `timestamp` to `dt` (Better Stack's expected field) and, when the event has
+ * no `message`, adds the console headline as one, because Live tail headlines a
+ * line with `message` and builds `_pattern` from it.
  */
 export function toBetterStackEvent(event: WideEvent): Record<string, unknown> {
   const { timestamp, ...rest } = event
-  return { ...rest, dt: timestamp }
+  const message = rest.message === undefined ? formatBetterStackMessage(event) : ''
+  return message ? { ...rest, message, dt: timestamp } : { ...rest, dt: timestamp }
+}
+
+/**
+ * The headline the pretty console prints for the event, `POST /api/checkout 402 in 104ms`,
+ * followed by the error message. Empty when the event carries none of them.
+ */
+function formatBetterStackMessage(event: WideEvent): string {
+  const parts: string[] = []
+  if (event.method && event.path) parts.push(`${event.method} ${event.path}`)
+  if (event.status) parts.push(String(event.status))
+  if (event.duration) parts.push(`in ${event.duration}`)
+  const error = event.error as { message?: unknown } | undefined
+  if (typeof error?.message === 'string' && error.message) parts.push(error.message)
+  return parts.join(' ')
 }
 
 /**
@@ -49,7 +67,7 @@ export function toBetterStackEvent(event: WideEvent): Record<string, unknown> {
  * ```
  */
 export function createBetterStackDrain(overrides?: Partial<BetterStackConfig>) {
-  return defineHttpDrain<BetterStackConfig>({
+  return defineDrain<BetterStackConfig>({
     name: 'better-stack',
     resolve: async () => {
       const config = await resolveAdapterConfig<BetterStackConfig>('betterStack', BETTER_STACK_FIELDS, overrides) as BetterStackConfig
@@ -59,42 +77,39 @@ export function createBetterStackDrain(overrides?: Partial<BetterStackConfig>) {
       }
       return config
     },
-    label: 'Better Stack',
-    encode: encodeBetterStackRequest,
+    send: sendBatchToBetterStack,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToBetterStack(events, { ...config, retries: config.retries ?? 0 }),
   })
 }
 
-/**
- * Encode a batch of wide events into the Better Stack ingest request. Shared by
- * {@link createBetterStackDrain} and {@link sendBatchToBetterStack}.
- */
-function encodeBetterStackRequest(events: WideEvent[], config: BetterStackConfig): HttpDrainRequest {
+/** Better Stack accepts at most 10 MiB per request: larger batches are split. */
+const BETTER_STACK_MAX_REQUEST_BYTES = 10 * 1024 * 1024
+
+function encodeBetterStackRequest(entries: string[], config: BetterStackConfig): HttpDrainRequest {
   return {
     url: trimTrailingSlashes(config.endpoint ?? 'https://in.logs.betterstack.com'),
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify(events.map(toBetterStackEvent)),
+    body: `[${entries.join(',')}]`,
   }
 }
 
-/**
- * Send a single event to Better Stack.
- */
 export async function sendToBetterStack(event: WideEvent, config: BetterStackConfig): Promise<void> {
   await sendBatchToBetterStack([event], config)
 }
 
 /**
- * Send a batch of events to Better Stack.
+ * Send a batch of events to Better Stack, split into requests of at most 10 MiB.
  */
 export async function sendBatchToBetterStack(events: WideEvent[], config: BetterStackConfig): Promise<void> {
   if (!(config.apiKey)) throw new Error('[evlog/better-stack] Missing apiKey')
-  await sendEncodedDrainRequest(encodeBetterStackRequest(events, config), {
-    label: 'Better Stack',
-    source: 'better-stack',
-    timeout: config.timeout,
-    retries: config.retries,
-  })
+  const options = { label: 'Better Stack', source: 'better-stack', timeout: config.timeout, retries: config.retries }
+  const entries = events.map(event => JSON.stringify(toBetterStackEvent(event)))
+  const chunks = entries.length > 0 ? chunkSerialized(entries, Infinity, BETTER_STACK_MAX_REQUEST_BYTES - 2) : [entries]
+  for (const chunk of chunks) {
+    await sendEncodedDrainRequest(encodeBetterStackRequest(chunk, config), options)
+  }
 }

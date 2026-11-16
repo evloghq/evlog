@@ -1,5 +1,5 @@
 import { createContext } from 'react-router'
-import type { AuditableLogger } from '../audit'
+import type { ForkableLogger } from '../audit'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
 import { createLoggerStorage } from '../shared/storage'
@@ -23,7 +23,7 @@ const { storage, useLogger } = createLoggerStorage(
  * }
  * ```
  */
-export const loggerContext = createContext<AuditableLogger>()
+export const loggerContext = createContext<ForkableLogger>()
 
 export type EvlogReactRouterOptions = BaseEvlogOptions
 
@@ -66,9 +66,10 @@ export function evlog(options: EvlogReactRouterOptions = {}) {
     ctx: ReactRouterContext,
     next: () => Promise<Response>,
   ): Promise<Response> => {
-    const { finish, finishResponse, skipped, runWith } = integration.start(ctx, options)
+    const { logger, finish, finishResponse, skipped, runWith } = integration.start(ctx, options)
 
     if (skipped) {
+      ctx.context.set(loggerContext, logger)
       return next()
     }
 

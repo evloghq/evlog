@@ -4,7 +4,7 @@
 // (nitropack dev loads plugins outside the bundle via Worker threads).
 import { defineNitroPlugin } from 'nitropack/runtime/internal/plugin'
 import type { NitroApp } from 'nitropack/types'
-import { createRequestLogger, getGlobalPluginRunner, initLogger, isEnabled } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
@@ -107,6 +107,9 @@ export default defineNitroPlugin(async (nitroApp) => {
     minLevel: evlogConfig?.minLevel,
     stringify: evlogConfig?.stringify,
     redact,
+    // Nitro does not await plugins, so a plugin that ran before this one settled
+    // may already have set a drain; `initLogger` would clear it.
+    drain: getGlobalDrain(),
     plugins: evlogFileConfigPlugins(),
     _suppressDrainWarning: true,
   })
@@ -145,7 +148,6 @@ export default defineNitroPlugin(async (nitroApp) => {
     // without throwing.  Filtering is enforced at emit time instead.
     e.context._evlogShouldEmit = shouldLog(e.path, evlogConfig?.include, evlogConfig?.exclude)
 
-    // Successful client transport batches are quiet; failures still emit.
     e.context._evlogQuietOnSuccess = transportEndpoint !== undefined && e.path.split('?')[0] === transportEndpoint
 
     // Store start time for duration calculation in tail sampling
@@ -153,7 +155,6 @@ export default defineNitroPlugin(async (nitroApp) => {
 
     const requestLog = createDeferredRequestLogger(e)
 
-    // Apply route-based service configuration if a matching route is found
     const routeService = getServiceForPath(e.path, evlogConfig?.routes)
     if (routeService) {
       requestLog.set({ service: routeService })

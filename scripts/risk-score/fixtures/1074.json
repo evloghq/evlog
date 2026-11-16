@@ -1,0 +1,48 @@
+{
+ "number": 1074,
+ "title": "fix(evi): repair the eval suite and cut the always-on prompt by 60%",
+ "author": {
+  "login": "HugoRCD",
+  "fork": false,
+  "association": "MEMBER"
+ },
+ "files": [
+  {
+   "filename": "apps/evi/AGENTS.md",
+   "status": "modified",
+   "additions": 28,
+   "deletions": 5
+  },
+  {
+   "filename": "apps/evi/agent/instructions.md",
+   "status": "modified",
+   "additions": 53,
+   "deletions": 163
+  },
+  {
+   "filename": "apps/evi/evals/budget/no-fan-out.eval.ts",
+   "status": "modified",
+   "additions": 8,
+   "deletions": 1
+  },
+  {
+   "filename": "apps/evi/evals/contributing/pr-body-concise.eval.ts",
+   "status": "added",
+   "additions": 41,
+   "deletions": 0
+  },
+  {
+   "filename": "apps/evi/evals/depth/follow-up-reuses-context.eval.ts",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "filename": "apps/evi/evals/evals.config.ts",
+   "status": "modified",
+   "additions": 3,
+   "deletions": 1
+  }
+ ],
+ "manifests": {}
+}

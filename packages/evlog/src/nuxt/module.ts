@@ -15,6 +15,7 @@ import type { Nitro, NitroConfig } from 'nitropack'
 import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from '../types'
 import type { DevTerminalInput } from '../shared/dev-terminal'
 import { prependNitroErrorHandler, serializeBundledEvlogConfig } from '../nitro'
+import { getNitroVersionSafe } from '../shared/nitroVersion'
 import { prepareRedactForBridge } from '../redact'
 import { findEvlogConfigFile, registerEvlogConfigPlugin } from '../shared/configPlugin'
 import { createStripPlugin } from '../vite/strip'
@@ -22,11 +23,10 @@ import { createSourceLocationPlugin } from '../vite/source-location'
 import { name, version } from '../../package.json'
 
 interface ModuleAxiomBaseConfig {
-  /** Axiom dataset name */
   dataset: string
   /** Axiom API token (evlog field `apiKey`) */
   apiKey?: string
-  /** Organization ID (required for Personal Access Tokens) */
+  /** Organization ID, sent as `X-Axiom-Org-Id`. Not needed with an API token, the only token type Axiom documents for ingest. */
   orgId?: string
   /** Request timeout in milliseconds. Default: 5000 */
   timeout?: number
@@ -60,9 +60,6 @@ export interface ModuleOptions {
    */
   enabled?: boolean
 
-  /**
-   * Environment context overrides.
-   */
   env?: Partial<EnvironmentContext>
 
   /**
@@ -74,7 +71,6 @@ export interface ModuleOptions {
   console?: boolean
 
   /**
-   * Enable pretty printing.
    * @default true in development, false in production
    */
   pretty?: boolean
@@ -224,7 +220,6 @@ export interface ModuleOptions {
     endpoint: string
     /** Override service name (defaults to event.service) */
     serviceName?: string
-    /** Additional resource attributes */
     resourceAttributes?: Record<string, string | number | boolean>
     /** Custom headers (e.g., for authentication) */
     headers?: Record<string, string>
@@ -265,7 +260,6 @@ export interface ModuleOptions {
    * ```
    */
   sentry?: {
-    /** Sentry DSN */
     dsn: string
     /** Environment override (defaults to event.environment) */
     environment?: string
@@ -329,6 +323,7 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
   defaults: {},
   setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
+    const isNitroV3 = getNitroVersionSafe(nuxt) === 3
 
     const transportEnabled = options.transport?.enabled ?? false
     const transportEndpoint = options.transport?.endpoint ?? '/api/_evlog/ingest'
@@ -365,14 +360,14 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
 
     nuxt.options.runtimeConfig.evlog = options
 
-    // Register custom error handler for proper EvlogError serialization
-    // Only set if not already configured to avoid overwriting user's custom handler
     // Mirror standalone Nitro modules: serialize evlog options into __EVLOG_CONFIG so
     // resolveEvlogConfigForNitroPlugin() picks them up in dev (Nitro worker threads
     // often cannot resolve useRuntimeConfig().evlog via dynamic import reliably).
     // @ts-expect-error nitro:config hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:config', (nitroConfig: NitroConfig) => {
-      const evlogHandler = resolver.resolve('../nitro/v2/errorHandler').replace(/\\/g, '/')
+      const evlogHandler = resolver.resolve(
+        isNitroV3 ? '../nitro/errorHandler' : '../nitro/v2/errorHandler',
+      ).replace(/\\/g, '/')
       // Nitro's DeepPartial config types array entries as possibly undefined; the helper expects string paths.
       nitroConfig.errorHandler = prependNitroErrorHandler(
         nitroConfig.errorHandler as string | string[] | undefined,
@@ -419,7 +414,7 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
       })
     }
 
-    addServerPlugin(resolver.resolve('../nitro/v2/plugin'))
+    addServerPlugin(resolver.resolve(isNitroV3 ? '../nitro/plugin' : '../nitro/v2/plugin'))
     addServerPlugin(resolver.resolve('../runtime/server/public-config'))
     // @ts-expect-error nitro:init hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:init', (nitro: Nitro) => {

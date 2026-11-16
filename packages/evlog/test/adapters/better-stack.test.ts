@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { sendBatchToBetterStack, sendToBetterStack, toBetterStackEvent, createBetterStackDrain } from '../../src/adapters/better-stack'
 import { enableDeprecationWarnings } from '../helpers/deprecations'
+import { getFetchCall } from '../helpers/fetch'
 
 describe('better-stack adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -43,6 +44,30 @@ describe('better-stack adapter', () => {
       expect(result.environment).toBe('test')
       expect(result.action).toBe('test-action')
       expect(result.userId).toBe('123')
+    })
+
+    it('headlines a request event like the pretty console, then the error message', () => {
+      const event = createTestEvent({
+        level: 'error',
+        method: 'POST',
+        path: '/api/checkout',
+        status: 402,
+        duration: '104ms',
+        durationMs: 104,
+        error: { name: 'EvlogError', message: 'Payment failed', status: 402 },
+      })
+
+      expect(toBetterStackEvent(event).message).toBe('POST /api/checkout 402 in 104ms Payment failed')
+    })
+
+    it('adds no message when the event has nothing to headline', () => {
+      expect(toBetterStackEvent(createTestEvent({ action: 'sync' }))).not.toHaveProperty('message')
+    })
+
+    it('keeps a message the event already carries', () => {
+      const event = createTestEvent({ tag: 'auth', message: 'User logged in', path: '/login' })
+
+      expect(toBetterStackEvent(event).message).toBe('User logged in')
     })
   })
 
@@ -144,6 +169,16 @@ describe('better-stack adapter', () => {
   })
 
   describe('sendBatchToBetterStack', () => {
+    it('splits a batch above 10 MiB into several requests', async () => {
+      const events = Array.from({ length: 3 }, (_, index) => createTestEvent({ requestId: String(index), payload: 'x'.repeat(4 * 1024 * 1024) }))
+
+      await sendBatchToBetterStack(events, { apiKey: 'test-key' })
+
+      const bodies = await Promise.all(Array.from({ length: fetchSpy.mock.calls.length }, (_, index) => new Response(getFetchCall(fetchSpy, index).init.body).text()))
+      expect(bodies.map(body => JSON.parse(body).length)).toEqual([2, 1])
+      for (const body of bodies) expect(new TextEncoder().encode(body).byteLength).toBeLessThanOrEqual(10 * 1024 * 1024)
+    })
+
     it('sends multiple events in a single request', async () => {
       const events = [
         createTestEvent({ requestId: '1' }),

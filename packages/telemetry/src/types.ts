@@ -56,7 +56,7 @@ export interface RunEvent {
  * Structural on purpose — citty's `ArgsDef` satisfies it, and so does any other
  * parser's definition, without `@evlog/telemetry` taking a dependency on one.
  */
-export type FlagDefinitions = Record<string, { default?: unknown } | undefined>
+export type FlagDefinitions = Record<string, { type?: string, default?: unknown } | undefined>
 
 /** Allowlisted string flag values declared via `collect.flags`. */
 export type CollectFlags = Record<string, readonly string[]>
@@ -85,6 +85,12 @@ export interface TelemetryOptions<
 > {
   /** Telemetry tool name, e.g. `evlog-cli`. Used for config dir and disclosure. */
   name: string
+  /**
+   * The command people type to run the tool, when it is not `name`: `evlog`
+   * for the tool `evlog-cli`. The first-run notice prints it in
+   * `<bin> telemetry disable`.
+   */
+  bin?: string
   /** Tool version string. */
   version: string
   /**
@@ -98,6 +104,21 @@ export interface TelemetryOptions<
   collect?: CollectConfig<TFlags, TFields>
   /** Hard cap (ms) for {@link TelemetryHandle.flush}. Default: 500. */
   flushTimeoutMs?: number
+  /**
+   * Idle time after a successful flush before {@link TelemetryHandle.run} POSTs again.
+   * `run()` still writes every event to disk; it POSTs when this window has
+   * elapsed, or sooner when the outbox has reached {@link TelemetryOptions.flushThreshold}.
+   * {@link TelemetryHandle.flush} sends immediately.
+   * Default: 15 minutes (60 minutes when `std-env` reports CI).
+   * Override with `EVLOG_TELEMETRY_FLUSH_INTERVAL_MS` (`0` POSTs on every run).
+   */
+  flushIntervalMs?: number
+  /**
+   * Outbox size that forces a flush from {@link TelemetryHandle.run} even inside
+   * the coalescing window. Default: 20. Capped at 50 (ingest `maxBatchSize`).
+   * Override with `EVLOG_TELEMETRY_FLUSH_THRESHOLD`.
+   */
+  flushThreshold?: number
   /** Max outbox file size in bytes before oldest events are dropped. Default: 1 MiB. */
   maxBufferBytes?: number
   /** Max age (ms) for buffered events. Default: 30 days. */
@@ -143,12 +164,15 @@ export interface TelemetryHandle<
     fn: () => T | Promise<T>,
     opts?: {
       flags?: Record<string, unknown>
-      /** Declared args for `flags`, so defaults are not reported as choices. */
+      /**
+       * Declared args for `flags`. With them, only declared flags are
+       * recorded, and defaults are not reported as choices.
+       */
       args?: FlagDefinitions
       systemCustom?: Record<string, string>
     },
   ) => Promise<T>
-  /** Flush buffered events within the hard cap. Never throws. */
+  /** Flush buffered events now, ignoring the coalescing window. Never throws. */
   flush: () => Promise<void>
   /** Whether telemetry is active (consent granted). */
   enabled: boolean
@@ -163,4 +187,6 @@ export interface TelemetryHandle<
 export interface RunContext {
   custom: Record<string, boolean | number | string>
   collect?: CollectConfig
+  /** Set by {@link telemetry.fail}: the run failed without throwing. */
+  failure?: { code?: string }
 }

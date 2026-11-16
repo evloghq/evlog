@@ -1,5 +1,5 @@
 /** `GET /api/telemetry/stats` — protected. Aggregates for the dashboard's KPI cards and charts. */
-export default defineEventHandler(async (event): Promise<StatsResponse> => {
+export default defineEventHandler(async (event): Promise<CursorStamped<StatsResponse>> => {
   await requireDashboardSession(event)
   const log = useLogger(event)
 

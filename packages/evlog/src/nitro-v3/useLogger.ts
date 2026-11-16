@@ -5,9 +5,7 @@ import type { FieldContext } from '../types'
 /**
  * Returns the request logger attached to the given Nitro v3 HTTP event.
  *
- * @param event - The current HTTPEvent from Nitro v3.
  * @param service - Optional service name to override the default service.
- * @returns The request-scoped logger.
  * @throws Error if the logger is not initialized on the event context.
  *
  * @example

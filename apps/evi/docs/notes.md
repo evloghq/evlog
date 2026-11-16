@@ -13,9 +13,12 @@ How the eve runtime behaves under this agent: channels, tools, skills, models, s
 silently. `agent/lib/channel.ts` normalizes it; both the workspace instruction
 and the spend tags go through it.
 
-**The built-in tools are not counted by `eve info`.** It reports authored tools
-only, so `Tools 0` still means `bash`, `read_file`, `write_file`, `glob`, `grep`,
-`web_fetch`, `todo` and `load_skill` are all present.
+**`eve info` counts only static tools.** It lists eve's defaults (`bash`,
+`read_file`, `write_file`, `edit_file`, `web_fetch`, `web_search`, `agent`) and
+the static files in `agent/tools/`, but not the tools built with `defineDynamic`
+(`git`, `capture`, `blob`, `images`, `turbo`, `ai-gateway`, `set-vercel-env`),
+which eve resolves again before every model call. Skills load through
+`eve__skill`, which eve adds on its own.
 
 **Only the GitHub channel checks out the repository.** It happens before the
 first model call, at the triggering ref, incrementally across turns, and only on
@@ -38,8 +41,8 @@ and the continuation token carries only `repositoryId`. So `ctx.channel.metadata
 is empty in dynamic tools and instruction fragments on a GitHub turn, and the
 thread's `owner`/`repo` reach only the channel's own event handlers through
 `channel.state`. That is why escalation follows the thread (`repositoryOf(state)`)
-while `git__checkout`, `git__push` and the `github__*` defaults follow
-`EVI_REPOSITORY` and take an explicit repository otherwise. The upstream ask is a `metadata` projection of
+while the `github__*` defaults follow `EVI_REPOSITORY` and take an explicit
+repository otherwise. The upstream ask is a `metadata` projection of
 `{ owner, repo, installationId }` on the GitHub channel; with it, `repositoryOf`
 narrows `ctx.channel` through `isChannel` and the explicit inputs go away.
 
@@ -49,14 +52,14 @@ detail: an explicit `installationId` first, then `org` (or the owner of a
 qualified repository), then the connector's default. `installationParams` in
 `lib/github/credentials.ts` names the repository owner, so anyone who installs
 the App is covered with nothing to register, and `repositories` narrows the
-git tools' token to the one repository. A missing installation is
+escalation token to the one repository. A missing installation is
 `ConnectorInstallationRequiredError`, never a fallback to another account.
 This selection order landed in the Connect API with vercel/api#93139; before
 it, `org` was ignored and the default installation answered for every account.
-The `github__*` extension and the channel take one credential, the home
-account's; on a repository elsewhere the extension's write tools,
-`createPullRequest` first, answer 403. The upstream ask is a per-call
-`installationId` resolver on `@github-tools/eve-extension`.
+The channel takes one credential, the home account's. Since
+`@github-tools/eve-extension` 0.13 the `github__*` tools mint for the
+installation that owns each call's target repository, per its README, and
+`git__gh` and `git__push` mint for the `repository` each call declares.
 
 **iMessage attachments never reach the model.** The Photon adapter's chat
 mapping keeps name/mimeType/size, and eve's `messageToUserContent` only reads
@@ -72,27 +75,18 @@ DeepSeek V4 Flash advertises only `high` and `xhigh`. Setting `low` or `medium`
 is accepted without an error.
 
 **Session limits default to 40M input tokens and no output cap**, so nothing bounds the output one runaway session can generate. Evi keeps the 40M input cap and sets
-1M output. Output counts reasoning, and at each model step eve gives the
-children an even split of the parent's remaining window, so a 250k cap kept
-stopping a content pass that spent about 460k reasoning tokens across its
-reviewers: children got windows of about 14k and asked for approval in a
-thread nobody was watching. Approving grants a fresh window of the same size, so the
+1M output, both in `limits.sessionUsage`. Output counts reasoning, and a
+subagent checks its own usage against the root agent's caps while its usage
+also counts in the parent's, so a content pass that spends about 460k
+reasoning tokens across its reviewers stays under both. Before eve 1.0 each
+child got an even split of the parent's remaining window instead, and a 250k
+cap left reviewers with about 14k each, asking for approval in a thread
+nobody was watching. Approving grants a fresh window of the same size, so the
 cap sets the prompt cadence, not the total spend.
 
 **Eval runs leak sessions.** The mechanism, and what to change about it, is in [observability.md](./observability.md).
 
 **`sessionEvent` has never been observed firing.** Why, and how to confirm it, is in [observability.md](./observability.md).
-
-### Dynamic tools: executes stay inline
-
-eve's bundler transform registers a dynamic tool's `execute` as a durable step
-function only when the function sits inline in the resolver body. A tool map
-built by a factory (`return myTools()`) type-checks and works on a fresh
-session, then fails on any resumed session with `references step function
-"..." which is not registered`. An implicit arrow return (`() => ({ ... })`)
-defeats the transform the same way; the resolver needs a block body with an
-explicit `return`. Every `agent/tools/*.ts` dynamic file therefore defines
-its tools inline in a single block-bodied `turn.started` resolver.
 
 ## Schedules
 
@@ -114,6 +108,18 @@ it, so the workspace is the allowlist. Replies in a thread Evi owns need the
 connector's trigger to subscribe `message.channels` with `channels:history`
 (plus `message.groups` and `groups:history` for a private channel); without
 them, only mentions and DMs reach the agent.
+
+**`main` requires signed commits, and the sandbox has no key to sign with.**
+A `git push` from the sandbox lands unsigned commits, and GitHub then blocks
+the PR, squash merge included. So `git__gh` refuses `git push`, and
+`git__push` recreates each commit with the GraphQL `createCommitOnBranch`,
+which GitHub signs as the App, and moves the local branch onto the result.
+That mutation takes file contents without a mode, so the push refuses
+symlinks, submodules, executable bits and merges. Each mutation moves the
+branch on GitHub at once, so when one fails the push puts the branch back
+where it was, and running it again starts from the same state. The rollback
+goes through `updateRefs` with the last head the push wrote as `beforeOid`,
+so a commit someone else pushed in between stays.
 
 **Vercel evaluates schedule cron in UTC.** `0 5 * * *` fires 06:00 London in
 summer (BST) and drifts to 05:00 in winter (GMT). `eve dev` never fires crons;

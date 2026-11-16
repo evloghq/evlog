@@ -13,7 +13,7 @@ export interface GitHubActionsTelemetryOptions<
 
 /**
  * Thin helper for GitHub Actions — enriches with action metadata from env only.
- * Never reads repository content.
+ * Never reads repository content. Each `run()` flushes the outbox before returning.
  */
 export function createGitHubActionsTelemetry<
   TFlags extends CollectFlags = {},
@@ -35,14 +35,19 @@ export function createGitHubActionsTelemetry<
     flush() {
       return base.flush()
     },
-    run(command, fn, opts) {
-      return base.run(command, fn, {
-        ...opts,
-        systemCustom: {
-          ghaAction: action,
-          ghaEvent: eventType,
-        },
-      })
+    // Runners discard the outbox when the job ends, so the coalescing window would never elapse.
+    async run(command, fn, opts) {
+      try {
+        return await base.run(command, fn, {
+          ...opts,
+          systemCustom: {
+            ghaAction: action,
+            ghaEvent: eventType,
+          },
+        })
+      } finally {
+        await base.flush()
+      }
     },
   }
 }

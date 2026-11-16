@@ -41,6 +41,7 @@ vi.mock('@nuxt/kit', () => ({
   addVitePlugin,
   createResolver,
   defineNuxtModule: (definition: { setup: (options: unknown, nuxt: unknown) => unknown }) => definition,
+  getNitroVersion: vi.fn(),
 }))
 
 function makeFakeNuxt() {

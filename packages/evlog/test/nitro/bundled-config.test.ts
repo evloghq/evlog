@@ -16,6 +16,7 @@ vi.mock('@nuxt/kit', () => ({
   addVitePlugin: vi.fn(),
   createResolver: vi.fn(() => ({ resolve: (path: string) => path })),
   defineNuxtModule: (definition: { setup: (options: unknown, nuxt: unknown) => unknown }) => definition,
+  getNitroVersion: vi.fn(),
 }))
 
 const SILENT_WARNING = 'silent mode is enabled but no drain is configured'

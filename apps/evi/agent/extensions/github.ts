@@ -7,63 +7,43 @@ import { homeRepository } from '../lib/repo'
 import { isAutonomous, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'
 
 /**
- * Every tool here is carried in the prompt on every turn, whatever the turn is
- * about, so the list stays at what the agent's instructions and skills actually
- * reach for. A capability that reads well on paper and is never called is paid
- * for on every request; add one back when a run needs it, not in anticipation.
+ * `preset: 'auto'` lists only the tools a session's first request needs, and
+ * defers the rest behind `eve__search`. These writes stay out of reach whatever
+ * the routing picks: merges, releases (AGENTS.md forbids an agent creating
+ * one), branch and file writes (code ships through `git__push` from the
+ * sandbox), CI control, deletions, gists and reactions.
  */
-const TOOLS = [
-  // Repository and code
-  'getRepository',
-  'getRepositoryTree',
-  'getFileContent',
-  'searchCode',
-  'getBlame',
-  'listCommits',
-
-  // Issues
-  'searchIssues',
-  'listIssues',
-  'getIssueContext',
-  'listIssueComments',
-  'createIssue',
-  'updateIssue',
-  'closeIssue',
-  'addIssueComment',
-  'updateIssueComment',
-
-  // Triage
-  'listLabels',
-  'createLabel',
-  'updateLabel',
-  'addLabels',
-  'removeLabel',
-  'addAssignees',
-  'removeAssignees',
-
-  // Pull requests
-  'listPullRequests',
-  'getPullRequestContext',
-  'listPullRequestFiles',
-  'listPullRequestReviews',
-  'createPullRequest',
-  'updatePullRequest',
-  'addPullRequestComment',
-  'updatePullRequestComment',
-  'createPullRequestReview',
-  'requestReviewers',
-
-  // Discussions
-  'listDiscussions',
-  'getDiscussion',
-  'addDiscussionComment',
-
-  // Releases, read only: AGENTS.md forbids agents from creating one
-  'listReleases',
-
-  // CI, read only — diagnose a red build, never restart or cancel one
-  'listCheckRuns',
-  'getCiFailureContext',
+const EXCLUDED_WRITES = [
+  'mergePullRequest',
+  'enablePullRequestAutoMerge',
+  'disablePullRequestAutoMerge',
+  'updatePullRequestBranch',
+  'createRelease',
+  'updateRelease',
+  'deleteRelease',
+  'createBranch',
+  'deleteBranch',
+  'createOrUpdateFile',
+  'editFiles',
+  'createRepository',
+  'forkRepository',
+  'triggerWorkflow',
+  'rerunWorkflowRun',
+  'cancelWorkflowRun',
+  'createCommitStatus',
+  'deleteIssueComment',
+  'deletePullRequestComment',
+  'deleteLabel',
+  'addSubIssue',
+  'replyToReviewComment',
+  'resolveReviewThread',
+  'addCommentReaction',
+  'addIssueReaction',
+  'markNotificationRead',
+  'createGist',
+  'updateGist',
+  'deleteGist',
+  'createGistComment',
 ] as const
 
 /**
@@ -96,9 +76,11 @@ function assignPolicy(ctx: ApprovalContext): ApprovalStatus {
 export default githubExtension({
   connector: GITHUB_CONNECTOR,
   context: homeRepository(),
-  include: [...TOOLS],
-  // Omitted write tools keep the default always(): closeIssue, createPullRequestReview.
-  // Connect scopes are derived from `include` (createLabel → issues:write) in sdk ≥ 1.11.1.
+  preset: 'auto',
+  exclude: [...EXCLUDED_WRITES],
+  // A person's own GitHub access bounds what their turn does; schedules and autonomous triage run as the App.
+  actAs: 'caller',
+  // Write tools without a policy keep the default always(): closeIssue, createPullRequestReview.
   requireApproval: {
     // Reversible and harmless on every kind of run; a card here only slows the PR flow down.
     requestReviewers: (): ApprovalStatus => 'not-applicable',

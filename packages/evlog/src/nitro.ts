@@ -16,9 +16,6 @@ export interface NitroModuleOptions {
    */
   enabled?: boolean
 
-  /**
-   * Environment context overrides.
-   */
   env?: Partial<EnvironmentContext>
 
   /**
@@ -61,9 +58,6 @@ export interface NitroModuleOptions {
    */
   routes?: Record<string, RouteConfig>
 
-  /**
-   * Sampling configuration for filtering logs.
-   */
   sampling?: SamplingConfig
 
   /**
@@ -223,13 +217,13 @@ export function serializeBundledEvlogConfig(options: object | undefined): string
   return JSON.stringify({ ...options, _suppressDrainWarning: true })
 }
 
+let cachedConfigKey: string | undefined
+let cachedSuppressOverlay: boolean | undefined
+
 /**
  * Whether the Nitro dev Youch overlay should be suppressed for this process.
  * @internal
  */
-let cachedConfigKey: string | undefined
-let cachedSuppressOverlay: boolean | undefined
-
 export function shouldSuppressNitroDevOverlay(): boolean {
   const config = readEvlogConfigSync()
   const key = config ? JSON.stringify(config) : ''

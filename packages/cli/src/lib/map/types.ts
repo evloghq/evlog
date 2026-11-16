@@ -187,6 +187,8 @@ export interface ScanResult {
   suggestions: ProjectSuggestion[]
   /** Problems found while scanning — a disable comment naming an unknown check. */
   warnings: string[]
+  /** Files with a syntax error, whose entry points could not be read. `map.ignore` leaves them out. */
+  unparsed: { file: string, errors: string[] }[]
   /** Entry points `evlog.config` left out through `map.ignore`. */
   ignored: number
   summary: {

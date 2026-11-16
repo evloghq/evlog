@@ -61,7 +61,6 @@ const CLICKHOUSE_FIELDS: ConfigField<ClickHouseConfig>[] = [
   { key: 'retries' },
 ]
 
-/** Read a string field off an event, or `undefined` when absent/not a string. */
 function readString(event: WideEvent, key: string): string | undefined {
   const value = (event as Record<string, unknown>)[key]
   return typeof value === 'string' ? value : undefined
@@ -161,10 +160,6 @@ function buildHeaders(config: ClickHouseConfig): Record<string, string> {
   return headers
 }
 
-/**
- * Encode a batch of wide events into the ClickHouse insert request. Shared by
- * {@link createClickHouseDrain} and {@link sendBatchToClickHouse}.
- */
 function encodeClickHouseRequest(events: WideEvent[], config: ClickHouseConfig): HttpDrainRequest {
   return {
     url: resolveClickHouseUrl(config),
@@ -216,9 +211,6 @@ export function createClickHouseDrain(overrides?: Partial<ClickHouseConfig>) {
   })
 }
 
-/**
- * Insert a single wide event into ClickHouse.
- */
 export async function sendToClickHouse(event: WideEvent, config: ClickHouseConfig): Promise<void> {
   await sendBatchToClickHouse([event], config)
 }

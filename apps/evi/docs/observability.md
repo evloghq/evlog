@@ -27,7 +27,7 @@ Tool executes enrich the same event with their outcome, in the pattern
 `tools/git.ts` set: one namespace per domain, holding counts, reason codes,
 and identifiers Evi authored. Never raw error strings, tool payloads, or
 untrusted URLs, so the metadata-only PostHog policy holds. The namespaces:
-`git.{branch,pushed,sha,reason,exitCode}`, `git.checkout.{repository,done,sha,reason,exitCode}`, `git.install.{repository,done,reason,exitCode}`,
+`git.{branch,pushed,sha,commits,reason}`,
 `capture.{published,viewport,target,beforeHost,afterHost,reason}`,
 `blob.{uploaded,bytes,reason}`, `turbo.{remoteCache,reason}`,
 `vercel.{env,key,project,target,reason,status}`,
@@ -43,7 +43,7 @@ work that run outside a turn emit their own events (below).
 
 Every failure Evi authors comes from the catalog in `agent/lib/errors.ts`
 (`defineErrorCatalog('evi', …)`), so a `reason` field is always a catalog code
-(`evi.GITHUB_NOT_INSTALLED`, `evi.GIT_COMMAND_FAILED`, …) and never an ad-hoc
+(`evi.BLOB_TOKEN_MISSING`, `evi.GIT_COMMAND_FAILED`, …) and never an ad-hoc
 string. A tool refuses through `refusal(eviErrors.X(...))`, which returns
 `{ success: false, code, error }`: the model reads `error` (message plus the
 entry's `fix`), the turn event records `code` under the tool's namespace.
@@ -55,8 +55,8 @@ never the error object. One more rule the types do not enforce: a templated
 param must not be named like an override (`status`, `message`, `fix`, ...),
 because the factory strips those before templating.
 
-What the catalog does not do today: reach eve's failure events. `turn.failed`
-carries the code of the harness failure that ended the turn
+What the catalog does not do today: reach eve's failure events. A failed
+`turn.settled` carries the code of the harness failure that ended the turn
 (`MODEL_CALL_FAILED`, `EVENT_HANDLER_FAILED`, …), and a tool that throws is
 reduced to `error.message` on its way to the model and to `ai.tools[].error`
 (`createRuntimeToolResultFromToolError` in eve's harness). So a thrown catalog
@@ -104,7 +104,7 @@ itself and eve keeps traces local.
 ## Not yet verified
 
 `sessionEvent: true` is set but has never been observed firing. It emits on
-`session.completed` / `session.failed`, and the eval runner leaves sessions open
+`session.ended`, and the eval runner leaves sessions open
 by design, so 17 turn events across a full suite produced zero rollups. It is
 configured, not confirmed. Check it against a real GitHub thread that ends.
 
@@ -153,13 +153,13 @@ has no tiers, so on a cache-heavy agent it overstates by an order of magnitude.
 Either eve exposing the market cost per step, or evlog pricing
 `cacheReadTokens` and tiers, would make the turn event a cost source again.
 
-### eve: preserve a thrown error's `code` on tool results and `turn.failed`
+### eve: preserve a thrown error's `code` on tool results and failed turns
 
 A tool that throws an error carrying `code` (evlog's `EvlogError`, any
 `Error` subclass with the field) loses it at the harness boundary:
 `createRuntimeToolResultFromToolError` keeps `message` only, and
-`turn.failed` carries the harness's own code. Keeping `code` on the runtime
-tool result (and `details.code` on the failure events) would let `evlog/eve`
+a failed `turn.settled` carries the harness's own code. Keeping `code` on the runtime
+tool result (and as the `error.code` of the failure events) would let `evlog/eve`
 record it on `ai.tools[]`, and let a channel's failure comment print the
 application's code rather than `EVENT_HANDLER_FAILED`. Until then, Evi's
 catalog is visible through refusal results and `reason` fields only.

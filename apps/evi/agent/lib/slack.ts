@@ -11,7 +11,7 @@ export const { EVI_SLACK_CHANNEL_ID } = process.env
  * thread root, so every run gets its own thread and its own session, and the
  * channel view reads as one card per run.
  */
-export function scheduleAnchor(label: string, now = new Date()): SlackInitialMessage {
+export function scheduleAnchor(label: string, now = new Date()) {
   const stamp = `${now.toISOString().slice(0, 16).replace('T', ' ')} UTC`
   return {
     card: Card({
@@ -20,7 +20,7 @@ export function scheduleAnchor(label: string, now = new Date()): SlackInitialMes
       children: [CardText('Running now. The result follows in this thread.', { style: 'muted' })],
     }),
     fallbackText: `${label}: scheduled run, ${stamp}`,
-  }
+  } satisfies SlackInitialMessage
 }
 
 /** Where a scheduled run lands. Throws when the channel is not configured, so a misconfigured deploy fails at cron time rather than posting nowhere. */

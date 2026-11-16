@@ -92,4 +92,10 @@ describe.sequential('Nitro v2 app with an evlog.config.ts', () => {
     expect(finished).toContainEqual({ path: '/works', status: 200, emitted: true, startedFor: '/works' })
     expect(finished).toContainEqual({ path: '/fails', status: 409, emitted: true, error: 'conflict in route', startedFor: '/fails' })
   }, 15_000)
+
+  it('keeps a drain another plugin set with initLogger during startup', async () => {
+    const res = await fetch(new URL('/global-drain', baseURL), { signal: AbortSignal.timeout(8_000) })
+
+    expect(await res.json()).toEqual({ tasks: ['cleanup'] })
+  }, 15_000)
 })

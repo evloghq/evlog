@@ -148,6 +148,25 @@ describe('parsing', () => {
     expect(matchesWhere(e, parseWhere('label=5'))).toBe(false)
   })
 
+  it('reads only text that spells a number exactly as a number', () => {
+    const e = event({ user: { id: '1234567890123456800' }, zip: '00123', amount: 'n/a', price: '5000.50' })
+    /* Past what a double holds, two different ids would compare equal. */
+    expect(matchesWhere(e, parseWhere('user.id=1234567890123456789'))).toBe(false)
+    expect(matchesWhere(e, parseWhere('user.id=1234567890123456800'))).toBe(true)
+    expect(matchesWhere(e, parseWhere('zip=123'))).toBe(false)
+    expect(matchesWhere(e, parseWhere('zip=00123'))).toBe(true)
+    expect(matchesWhere(e, parseWhere('price>5000.5'))).toBe(false)
+    expect(matchesWhere(e, parseWhere('price>=5000.50'))).toBe(true)
+  })
+
+  it('never orders text that is not a number against a number', () => {
+    const e = event({ amount: 'n/a' })
+    expect(matchesWhere(e, parseWhere('amount>5000'))).toBe(false)
+    expect(matchesWhere(e, parseWhere('amount<5000'))).toBe(false)
+    expect(matchesWhere(e, parseWhere('amount!=5000'))).toBe(true)
+    expect(matchesWhere(e, parseWhere('amount=5000'))).toBe(false)
+  })
+
   it('takes several --where clauses and requires all of them', () => {
     const query = buildQuery({ where: ['status=200', 'durationMs>50'] })
     expect(query.where).toHaveLength(2)
@@ -416,6 +435,38 @@ describe('rendering', () => {
   })
 })
 
+describe('events that do not have the usual shape', () => {
+  const style = createStyle(fakeContext('/tmp'))
+  const odd = [
+    { timestamp: '2026-10-01T11:00:00.000Z', level: 'info', duration: 12, status: 200, path: '/api/items', method: 'GET' },
+    { timestamp: '2026-10-01T11:00:00.000Z' },
+    { level: 7, service: 3, method: 5, path: 9, duration: { ms: 1 } },
+  ] as unknown as WideEvent[]
+
+  it('prints one line for each', () => {
+    expect(formatLine(style, odd[0]!)).toContain('GET    /api/items')
+    expect(formatLine(style, odd[0]!)).toMatch(/ {5}12$/)
+    expect(odd.map(e => formatLine(style, e).includes('\n'))).toEqual([false, false, false])
+  })
+
+  it('prints each in full', () => {
+    for (const e of odd) expect(formatEvent(style, e)).toEqual(expect.any(String))
+  })
+
+  it('prints every view of a log that holds them', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-logs-odd-'))
+    tempDirs.push(cwd)
+    await writeFile(join(cwd, 'package.json'), '{"name":"odd"}')
+    await mkdir(join(cwd, '.evlog', 'logs'), { recursive: true })
+    await writeFile(join(cwd, '.evlog', 'logs', '2026-10-01.jsonl'), `${odd.map(e => JSON.stringify(e)).join('\n')}\n`)
+
+    for (const what of [undefined, 'errors', 'slow', 'stats']) {
+      const result = await runLogs(fakeContext(cwd), { what }, { now: NOW })
+      expect(formatLogsReport(fakeContext(cwd), result)).toEqual(expect.any(String))
+    }
+  })
+})
+
 describe('control characters in logged values', () => {
   // The only escape sequences the CLI writes itself are SGR colour codes.
   const ownColors = /\x1B\[[0-9;]*m/g
@@ -530,6 +581,36 @@ describe('logs command', () => {
     expect(payload.events).toBeUndefined()
     expect(payload.stats.total).toBe(5)
     expect(payload.stats.byStatus).toEqual({ '2xx': 4, '4xx': 1 })
+  })
+
+  it('applies every --where given, in either spelling', async () => {
+    const cwd = await makeSink()
+    const out = captureStdout()
+    await runCommand(logs, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--where', 'status=200', '--where=path=/api/items'] })
+    const payload = JSON.parse(out.join('')) as { matched: number, events: Array<{ requestId: string }> }
+    /* Four events have the status and two the path: one has both. */
+    expect(payload.matched).toBe(1)
+    expect(payload.events.map(e => e.requestId)).toEqual(['aaaaaaaa-0000-4000-8000-000000000001'])
+  })
+
+  it('refuses a bad clause even when a later one is valid', async () => {
+    const cwd = await makeSink()
+    const out = captureStdout()
+    await runCommand(logs, { rawArgs: ['--cwd', cwd, '--json', '--no-header', '--where', 'a>>1', '--where', 'status=500'] })
+    expect(JSON.parse(out.join('')).error.code).toBe('cli.LOGS_INVALID_WHERE')
+    expect(process.exitCode).toBe(2)
+  })
+
+  it('--json carries an event whose duration is a number as it was written', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-logs-odd-'))
+    tempDirs.push(cwd)
+    await writeFile(join(cwd, 'package.json'), '{"name":"odd"}')
+    await mkdir(join(cwd, '.evlog', 'logs'), { recursive: true })
+    await writeFile(join(cwd, '.evlog', 'logs', '2026-10-01.jsonl'), `${JSON.stringify({ timestamp: '2026-10-01T11:00:00.000Z', level: 'info', path: '/a', duration: 12 })}\n`)
+    const out = captureStdout()
+    await runCommand(logs, { rawArgs: ['--cwd', cwd, '--json', '--no-header'] })
+    expect(JSON.parse(out.join('')).events).toEqual([{ timestamp: '2026-10-01T11:00:00.000Z', level: 'info', path: '/a', duration: 12 }])
+    expect(process.exitCode).toBeUndefined()
   })
 
   it('no sink is a failure with the fix', async () => {

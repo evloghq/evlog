@@ -3,7 +3,7 @@ import type { WideEvent } from '../../src/types'
 import { createPostHogDrain, sendBatchToPostHog, sendBatchToPostHogEvents, sendToPostHog, sendToPostHogEvents, toPostHogEvent } from '../../src/adapters/posthog'
 import type { OTLPExportLogsRequest } from '../../src/adapters/otlp'
 import { sendBatchToOTLP } from '../../src/adapters/otlp'
-import { getFetchJson } from '../helpers/fetch'
+import { getFetchCall, getFetchJson } from '../helpers/fetch'
 import { defined } from '../helpers/defined'
 
 describe('posthog adapter', () => {
@@ -580,6 +580,19 @@ describe('posthog adapter', () => {
   })
 
   describe('sendBatchToPostHogEvents', () => {
+    it('splits a batch above 20 MB into several requests', async () => {
+      const events = Array.from({ length: 3 }, (_, index) => createTestEvent({ requestId: String(index), payload: 'x'.repeat(8_000_000) }))
+
+      await sendBatchToPostHogEvents(events, { apiKey: 'phc_test' })
+
+      const bodies = await Promise.all(Array.from({ length: fetchSpy.mock.calls.length }, (_, index) => new Response(getFetchCall(fetchSpy, index).init.body).text()))
+      expect(bodies.map(body => JSON.parse(body).batch.length)).toEqual([2, 1])
+      for (const body of bodies) {
+        expect(JSON.parse(body).api_key).toBe('phc_test')
+        expect(new TextEncoder().encode(body).byteLength).toBeLessThan(20_000_000)
+      }
+    })
+
     it('sends multiple events in a single request', async () => {
       const events = [
         createTestEvent({ requestId: '1' }),

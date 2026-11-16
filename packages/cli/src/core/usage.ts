@@ -3,9 +3,26 @@ import { formatBanner } from './brand'
 import { createContext } from './context'
 import { createStyle, writeHuman } from './output'
 
-async function resolve<T>(value: T | (() => T | Promise<T>) | Promise<T> | undefined): Promise<T | undefined> {
+export async function resolve<T>(value: T | (() => T | Promise<T>) | Promise<T> | undefined): Promise<T | undefined> {
   if (typeof value === 'function') return await (value as () => T | Promise<T>)()
   return await value
+}
+
+/**
+ * The command `rawArgs` leads to and its parent, the pair {@link showUsage}
+ * takes: `map --help` is `map` under the root, an unknown name stays on the
+ * command that did not know it.
+ */
+export async function resolveCommand(
+  cmd: CommandDef<any>,
+  rawArgs: string[],
+  parent?: CommandDef<any>,
+): Promise<[CommandDef<any>, CommandDef<any> | undefined]> {
+  const subCommands = await resolve(cmd.subCommands)
+  const index = rawArgs.findIndex(arg => !arg.startsWith('-'))
+  const sub = index === -1 ? undefined : subCommands?.[rawArgs[index]!]
+  if (!sub) return [cmd, parent]
+  return resolveCommand(await resolve(sub as Resolvable<CommandDef<any>>) as CommandDef<any>, rawArgs.slice(index + 1), cmd)
 }
 
 interface Row {

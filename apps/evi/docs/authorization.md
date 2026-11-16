@@ -6,8 +6,10 @@ Design note, in two halves. What runs today: a principal gate (`isMaintainer` in
 and `writePolicy` in `agent/lib/github/label-approval.ts`, which auto-approves
 maintainers, asks everyone else, and denies autonomous turns outright. What is
 still a proposal: the `tier` / `threadTier` attribute the rest of this page
-builds on. Evi is still gated to a single user (`onComment` rejects everyone
-but `hugorcd`), and the tier attribute has to land before that gate comes off.
+builds on. A comment reaches Evi only from someone with Maintain or Admin on
+the thread's repository (`respondTo: 'maintainers'` on the channel), and with
+`actAs: 'caller'` their calls run as the App only where that role allows. The
+tier attribute has to land before that gate widens.
 It is not a prerequisite for the autonomous hooks: `onIssue` is already wired,
 and `writePolicy` covers those turns.
 
@@ -19,9 +21,9 @@ omitted writes, `closeIssue` and `createPullRequestReview`, fall back to the
 SDK's `always()` default. On Slack or the web that is a real control.
 On GitHub it is not, for three compounding reasons:
 
-1. **There is no approval card.** Per eve's GitHub channel docs, an
-   `input.requested` event "is posted as a comment prompt, and the user's reply
-   comment maps back to the pending input request." It is a comment.
+1. **There is no approval card.** Per eve's GitHub channel docs, "an approval
+   or question posts as a comment. The user answers it with a reply comment."
+   It is a comment.
 2. **Whoever replies first answers it.** The binding mechanism exists upstream:
    eve captures the requester's auth on the pending request and exports
    `ApprovalResponsePolicy`, which decides whether the responder may settle the
@@ -80,7 +82,7 @@ return { auth: { ...auth, attributes: { ...auth.attributes, tier } } }
 ## Enforce with the approval predicate, used as a policy
 
 `requireApproval` accepts a per-tool predicate receiving
-`{ session, toolName, toolInput, approvedTools, callId }`. Two of its return
+`{ session, toolName, toolInput, callId }`. Two of its return
 values resolve without a human:
 
 - `'not-applicable'`: runs immediately, no prompt
@@ -133,10 +135,13 @@ require it on every non-draft PR.
 Everything else keeps a real approval even for admin: `createIssue`, `closeIssue`,
 `deleteIssueComment`, `deletePullRequestComment`, `createPullRequest`,
 `updatePullRequest`, `createPullRequestReview`. Code itself never moves through
-the API: it ships from the sandbox via `git__push`, which is mounted on sessions
+the `github__*` tools: it ships from the sandbox via `git__push`, which is mounted on sessions
 that pass `canAccessAdminTools` in `agent/lib/trust.ts`: maintainers, plus
 schedule sessions, whose runs push feature branches to deliver their PRs. It
-refuses `main` and `master` for every caller.
+refuses `main` and `master` for every caller. `git__gh`, eve's git extension,
+clones and fetches for the same sessions; its `authorize`
+(`agent/lib/github/gh.ts`) refuses `git push`, so no unsigned commit leaves the
+sandbox.
 
 Release writes are not on the list at all: `AGENTS.md` forbids an agent from
 creating one, so the tool set stops at reading them.

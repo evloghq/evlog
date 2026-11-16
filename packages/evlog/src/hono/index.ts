@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono'
-import type { AuditableLogger } from '../audit'
+import type { ForkableLogger } from '../audit'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
 import { createLoggerStorage } from '../shared/storage'
@@ -50,7 +50,7 @@ export { useLogger }
  * })
  * ```
  */
-export type EvlogVariables = { Variables: { log: AuditableLogger } }
+export type EvlogVariables = { Variables: { log: ForkableLogger } }
 
 const integration = defineFrameworkIntegration<Context>({
   name: 'hono',
@@ -100,6 +100,7 @@ export function evlog(options: EvlogHonoOptions = {}): MiddlewareHandler {
   return async (c, next) => {
     const { skipped, logger, finish, finishResponse, runWith } = integration.start(c, options)
     if (skipped) {
+      c.set('log', logger)
       await next()
       return
     }

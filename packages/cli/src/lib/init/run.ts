@@ -1,8 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import { runDoctor } from '../../commands/doctor'
 import type { CliContext } from '../../core/context'
 import { planAgents } from '../agents/plan'
+import { dropSkillsPointer } from '../agents/run'
 import { findInstalledSkills, runSkills, skillsCommand } from '../agents/skills'
 import type { CliDebug } from '../debug'
 import { createNoopCliDebug } from '../debug'
@@ -35,6 +34,7 @@ import {
 } from './prompts'
 import type { InitAnswers } from './prompts'
 import { droppedExtras, resolveAnswers } from './resolve'
+import { writeActions } from './write'
 import { recordInitAnswers } from './telemetry'
 
 export interface InstallOutcome {
@@ -390,10 +390,7 @@ export async function runInit(
 
   if (!dryRun) {
     await log.step('write', async () => {
-      for (const action of plan.actions) {
-        await mkdir(dirname(action.path), { recursive: true })
-        await writeFile(action.path, action.contents, 'utf8')
-      }
+      await writeActions(plan.actions)
       return plan.actions.length
     })
   }
@@ -413,7 +410,14 @@ export async function runInit(
         r => ({ installed: r.ok }),
       )
       agentGuide.status = outcome.ok ? 'installed' : 'failed'
-      if (!outcome.ok) agentGuide.error = outcome.error
+      if (!outcome.ok) {
+        agentGuide.error = outcome.error
+        await log.step('rewriteBlock', () => dropSkillsPointer({
+          root: project.packageDir,
+          projectName: project.packageName ?? 'This project',
+          framework: answers.framework,
+        }))
+      }
     }
   }
 

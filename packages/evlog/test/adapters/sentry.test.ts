@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { defined } from '../helpers/defined'
+import { getFetchCall } from '../helpers/fetch'
 import { EVLOG_VERSION } from '../../src/shared/http'
 import { sendBatchToSentry, sendToSentry, toSentryErrorEvent, toSentryLog, createSentryDrain } from '../../src/adapters/sentry'
 
@@ -161,6 +162,19 @@ describe('sentry adapter', () => {
       expect(result.span_id).toBe('b'.repeat(16))
     })
 
+    it('sets the reserved user.id attribute from the wide event user', () => {
+      const withUserId = toSentryLog(createTestEvent({ userId: 'u_1' }), { dsn: 'https://public@o0.ingest.sentry.io/123' })
+      expect(withUserId.attributes?.['user.id']).toEqual({ value: 'u_1', type: 'string' })
+
+      const withUserObject = toSentryLog(createTestEvent({ user: { id: 'u_2' } }), { dsn: 'https://public@o0.ingest.sentry.io/123' })
+      expect(withUserObject.attributes?.['user.id']).toEqual({ value: 'u_2', type: 'string' })
+    })
+
+    it('omits user.id when the event has no user', () => {
+      const result = toSentryLog(createTestEvent(), { dsn: 'https://public@o0.ingest.sentry.io/123' })
+      expect(result.attributes).not.toHaveProperty('user.id')
+    })
+
     it('omits span_id when the event has no span', () => {
       const result = toSentryLog(createTestEvent(), { dsn: 'https://public@o0.ingest.sentry.io/123' })
 
@@ -248,6 +262,18 @@ describe('sentry adapter', () => {
       expect(log.timestamp).toBeGreaterThan(0)
     })
 
+    it('marks the log item container as version 2, as the official SDK does', async () => {
+      await sendToSentry(createTestEvent({ level: 'info', message: 'hello' }), {
+        dsn: 'https://public@o123.ingest.sentry.io/456',
+      })
+
+      const [, options] = fetchSpy.mock.calls[0] as [string, RequestInit]
+      const lines = (options.body as string).split('\n').filter(line => line.length > 0)
+      const itemPayload = JSON.parse(lines[2])
+
+      expect(itemPayload.version).toBe(2)
+    })
+
     it('identifies the SDK in the envelope header', async () => {
       await sendToSentry(createTestEvent({ level: 'info' }), {
         dsn: 'https://public@o123.ingest.sentry.io/456',
@@ -308,6 +334,19 @@ describe('sentry adapter', () => {
         return JSON.parse(lines[1]).item_count
       })
       expect(counts).toEqual([100, 100, 50])
+    })
+
+    it('splits logs whose item payload would exceed 1 MiB into several envelopes', async () => {
+      const events = Array.from({ length: 3 }, (_, index) => createTestEvent({ requestId: String(index), payload: 'x'.repeat(400_000) }))
+
+      await sendBatchToSentry(events, {
+        dsn: 'https://public@o123.ingest.sentry.io/456',
+      })
+
+      const bodies = await Promise.all(Array.from({ length: fetchSpy.mock.calls.length }, (_, index) => new Response(getFetchCall(fetchSpy, index).init.body).text()))
+      const payloads = bodies.map(body => defined(body.split('\n')[2], 'log item payload'))
+      expect(payloads.map(payload => JSON.parse(payload).items.length)).toEqual([2, 1])
+      for (const payload of payloads) expect(new TextEncoder().encode(payload).byteLength).toBeLessThanOrEqual(1024 * 1024)
     })
 
     it('does not send request for empty events array', async () => {

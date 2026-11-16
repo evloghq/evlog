@@ -160,7 +160,7 @@ export default defineEvlogCommand('init', {
         jsonMode: args.json,
         json: { workspace: true, apps: results.map((result, index) => ({ app: selected[index]!.label, ...toJson(result) })) },
       })
-      if (results.some(result => result.install.status === 'failed')) ui.exit(EXIT_FAIL)
+      if (results.some(stepFailed)) ui.exit(EXIT_FAIL)
       return
     }
 
@@ -179,11 +179,16 @@ export default defineEvlogCommand('init', {
       human: result.interactive ? undefined : formatInitReport(cli, result),
     })
 
-    if (result.install.status === 'failed') {
+    if (stepFailed(result)) {
       ui.exit(EXIT_FAIL)
     }
   },
 })
+
+/** The files are written either way: what failed is a command the run shelled out to. */
+function stepFailed(result: InitResult): boolean {
+  return result.install.status === 'failed' || result.agentGuide?.status === 'failed'
+}
 
 function toJson(result: InitResult): Record<string, unknown> {
   return {

@@ -16,7 +16,6 @@ export interface SazabiConfig {
   endpoint: string
   /** Passed through to the OTLP encoder; maps to `service.name`. */
   serviceName?: string
-  /** Additional OTLP resource attributes. */
   resourceAttributes?: Record<string, string | number | boolean>
   /** Request timeout in milliseconds. Default: 5000 */
   timeout?: number
@@ -101,7 +100,7 @@ export function createSazabiDrain(overrides?: Partial<SazabiConfig>) {
       }
       return config as SazabiConfig
     },
-    send: (events, config) => sendBatchToOTLP(events, toSazabiOTLPConfig(config)),
+    send: sendBatchToSazabi,
   })
 }
 

@@ -15,11 +15,25 @@ One row per drain adapter that talks to a third-party API. The row names the aut
 | `otlp.ts`, `otlp-protobuf.ts` | https://opentelemetry.io/docs/specs/otlp/ | `open-telemetry/opentelemetry-js` (`@opentelemetry/exporter-logs-otlp-http`) | `experimental/packages/exporter-logs-otlp-http/src/platform/node/OTLPLogExporter.ts`, `experimental/packages/otlp-exporter-base/src/configuration/otlp-http-configuration.ts` | the first run pins the files | unset |
 | `posthog.ts` | https://posthog.com/docs/api/capture | `PostHog/posthog-js` (`posthog-node`) | `packages/node/src/client.ts`, `packages/core/src/posthog-core.ts` | the first run pins the files | unset |
 | `sazabi.ts` | https://docs.sazabi.com (OTLP/HTTP log streams) | none: OTLP/HTTP through evlog's own encoder (`otlp.ts`) | `packages/evlog/src/adapters/otlp.ts` | none: no client of its own | unset |
-| `sentry.ts` | https://develop.sentry.dev/sdk/data-model/envelopes/ | `getsentry/sentry-javascript` (`@sentry/core`) | `packages/core/src/logs/envelope.ts`, `packages/core/src/logs/internal.ts`, `packages/core/src/envelope.ts`, `packages/core/src/transports/base.ts` | the first run pins the files | unset |
+| `sentry.ts` | https://develop.sentry.dev/sdk/data-model/envelopes/ | `getsentry/sentry-javascript` (`@sentry/core`) | `packages/core/src/logs/envelope.ts`, `packages/core/src/logs/internal.ts`, `packages/core/src/envelope.ts`, `packages/core/src/transports/base.ts` | the first run pins the files | `@sentry/core 11.12.0 @ 1e767d22` |
 
 `Aligned to` is the client's published version and the evlog commit that last matched it, written as `@sentry/core 11.2.0 @ 5e0d543`. `unset` means no run has compared the two yet; the first run over that adapter writes the first pin and files every mismatch and gap it finds along the way.
 
 First in line, when several rows tie on `Aligned to`: `sentry.ts`, `datadog.ts`, `posthog.ts`, `otlp.ts`. These are the providers most evlog users drain to, and the ones whose products offer the most beyond storing a log line. Every other tie goes by table order.
+
+## Per-request limits enforced
+
+Each adapter splits a batch with `chunkSerialized` (`packages/evlog/src/shared/chunk.ts`) so every request stays under the provider's documented caps. A run that finds a cap changed upstream updates the constant and this table in the same PR.
+
+| Adapter | Entries per request | Bytes per request | Source |
+| --- | --- | --- | --- |
+| `datadog.ts` | 1000 | 5 MB uncompressed | `@datadog/datadog-api-client` 1.64.0, `LogsApi.js`, `submitLog` doc comment |
+| `sentry.ts` (logs) | 100 | 1 MiB per log item payload | Relay `max_log_size` item limit; Sentry log protocol for the count |
+| `axiom.ts` | 10,000 | none documented for `/ingest` | https://axiom.co/docs/reference/limits |
+| `better-stack.ts` | none | 10 MiB | https://betterstack.com/docs/logs/ingesting-data/http/logs/ |
+| `posthog.ts` (`mode: 'events'`) | none | under 20 MB | https://posthog.com/docs/api/capture |
+
+`loki.ts`, `clickhouse.ts`, `otlp.ts`, `hyperdx.ts`, `sazabi.ts`, and PostHog logs mode (OTLP) have no cap enforced yet: their limits depend on the server or collector configuration, not on a single documented value.
 
 ## What a comparison covers
 

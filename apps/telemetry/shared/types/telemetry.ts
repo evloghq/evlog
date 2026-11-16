@@ -263,6 +263,15 @@ export interface RunsCursor {
   latestAt: string | null
 }
 
+/**
+ * A memoized aggregate tagged with the `runs` cursor (`max(id)`) it was
+ * computed at. The server memo can serve a response that predates the latest
+ * event, so a client compares this, not the probed cursor, to know what it has.
+ */
+export type CursorStamped<T> = T & {
+  cursorId: number
+}
+
 /** Environment snapshot captured alongside a run — see `@evlog/telemetry`'s `EnvInfo`. */
 export interface RunEnvInfo {
   node: string

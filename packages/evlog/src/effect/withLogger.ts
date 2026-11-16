@@ -10,7 +10,6 @@ import type { EvlogLogger, Unit } from './unit'
 import { recordCause } from './cause'
 import { TraceState, provideUnit, traceFields } from './unit'
 
-/** Options for {@link withLogger}. */
 export interface WithLoggerOptions extends Pick<BaseEvlogOptions, 'drain' | 'enrich' | 'keep' | 'redact' | 'plugins' | 'waitUntil'> {
   /** Fields the wide event starts with. */
   fields?: Record<string, unknown>

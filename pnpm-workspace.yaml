@@ -28,15 +28,15 @@ overrides:
   # that shamefullyHoist then refuses to hoist, breaking apps/playground.
   # A second vue copy leaves the Vercel bundle without vue/server-renderer,
   # so every request reaching the docs SSR function exits 1.
-  vue: 3.5.44
+  vue: 3.5.45
   '@types/react': 19.3.0
-  tsdown@0.22.8>rolldown: 1.2.16
+  tsdown@0.22.8>rolldown: 1.3.0
   minimark: 0.2.0
   '@nuxtjs/mcp-toolkit': ^0.24.3
   # One `ai` copy for the whole tree. eve 0.12 needs 7 from the example
   # package, and docus 5.13 compiles against `isStepCount` which 6 does not
   # export.
-  ai: ^7.0.159
+  ai: ^7.0.172
   # Nuxt 4.x requires @unhead/vue ^3.1.8 internally; some deps (e.g. @nuxt/ui)
   # declare a permissive `^2.0.5 || ^3.0.0` peer range that lets pnpm resolve
   # a stale v2, breaking Nuxt's `legacyPlugins` import at build time.
@@ -44,6 +44,27 @@ overrides:
   # body-parser DoS on trailing bytes after a compressed body (GHSA-27r3-jxmh-p828).
   body-parser@1: ^1.20.9
   body-parser@2: ^2.4.0
+  # Security fixes for transitive deps whose parents pin a vulnerable version
+  # exactly. Each one stays within the pinned major; drop it once the parent
+  # ships the fix.
+  vinxi>h3: ^1.15.11
+  eve>undici: ^8.12.3
+  '@vercel/cli-config>zod': ^4.6.6
+  '@agent-browser/eve>zod': ^4.6.6
+  satori>fflate: ^0.7.5
+  typed-rest-client>qs: ^6.16.1
+  # Same purpose, but these cross the major (or 0.x minor) their dependents
+  # declare: re-check them when those dependents are bumped.
+  fontless>esbuild: ^0.28.1
+  '@esbuild-kit/core-utils>esbuild': ^0.28.2
+  '@sveltejs/kit@2': ^3.1.1
+  katex@<0.18.2: ^0.18.2
+  '@vercel/nft>glob': ^14.0.2
+  '@nuxt/content>minimatch': ^11.0.1
+  '@typescript-eslint/typescript-estree>minimatch': ^11.0.1
+  readdir-glob>minimatch: ^11.0.1
+  '@stryker-mutator/core>minimatch': ^11.0.1
+  zod@3: ^4.6.6
 
 minimumReleaseAge: 2880
 
@@ -81,3 +102,5 @@ minimumReleaseAgeExclude:
   - workflow
   # Renovate security update: @sveltejs/kit@3.0.0
   - "@sveltejs/kit@3.0.0"
+  # Renovate security update: esbuild@0.28.2
+  - esbuild@0.28.2

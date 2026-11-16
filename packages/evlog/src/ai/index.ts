@@ -52,9 +52,6 @@ export type EvlogTelemetry = {
 /** @internal Concrete integration class — both v6 and v7 hook names. */
 interface EvlogTelemetryIntegration extends EvlogTelemetry {}
 
-/**
- * Fine-grained control over tool call input capture.
- */
 export interface ToolInputsOptions {
   /**
    * Max character length for the stringified input JSON.
@@ -93,9 +90,6 @@ export interface ModelCost {
   output: number
 }
 
-/**
- * Options for `createAILogger` and `createAIMiddleware`.
- */
 export interface AILoggerOptions {
   /**
    * When enabled, `toolCalls` contains `{ name, input }` objects instead of plain tool name strings.
@@ -147,9 +141,6 @@ export interface AILoggerOptions {
   cost?: Record<string, ModelCost>
 }
 
-/**
- * Per-step token usage breakdown for multi-step agent runs.
- */
 export interface AIStepUsage {
   model: string
   inputTokens: number

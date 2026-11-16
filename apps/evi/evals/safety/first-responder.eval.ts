@@ -32,10 +32,7 @@ export default defineEval({
     t.eventsSatisfy('lists repository labels before creating or applying any', (events) => {
       const tools: string[] = []
       for (const event of events) {
-        if (event.type !== 'actions.requested') continue
-        for (const action of event.data.actions) {
-          if (action.kind === 'tool-call') tools.push(action.toolName)
-        }
+        if (event.type === 'call.requested' && event.data.capability.kind === 'tool') tools.push(event.data.capability.name)
       }
       const writeAt = tools.findIndex(name => LABEL_WRITES.has(name))
       if (writeAt === -1) return true

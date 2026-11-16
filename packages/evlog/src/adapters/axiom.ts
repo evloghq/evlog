@@ -2,19 +2,14 @@ import type { WideEvent } from '../types'
 import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
-import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { trimTrailingSlashes } from '../utils'
 
 interface BaseAxiomConfig {
-  /** Axiom dataset name. */
   dataset: string
-  /**
-   * Axiom API key.
-   *
-   * @example `xaat-...`
-   */
+  /** @example `xaat-...` */
   apiKey: string
-  /** Organization ID (required for Personal Access Tokens). */
+  /** Organization ID, sent as `X-Axiom-Org-Id`. Not needed with an API token, the only token type Axiom documents for ingest. */
   orgId?: string
   /** Request timeout in milliseconds. Default: 5000 */
   timeout?: number
@@ -76,7 +71,7 @@ const AXIOM_FIELDS: ConfigField<ResolvedAxiomConfig>[] = [
  * ```
  */
 export function createAxiomDrain(overrides?: Partial<AxiomConfig>) {
-  return defineHttpDrain<AxiomConfig>({
+  return defineDrain<AxiomConfig>({
     name: 'axiom',
     resolve: async () => {
       const config = await resolveAdapterConfig<ResolvedAxiomConfig>(
@@ -94,17 +89,15 @@ export function createAxiomDrain(overrides?: Partial<AxiomConfig>) {
       }
       return config as AxiomConfig
     },
-    label: 'Axiom',
-    encode: encodeAxiomRequest,
-    onResponse: logIngestWarnings,
+    send: sendBatchToAxiom,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToAxiom(events, { ...config, retries: config.retries ?? 0 }),
   })
 }
 
-/**
- * Encode a batch of wide events into the Axiom ingest request. Shared by
- * {@link createAxiomDrain} and {@link sendBatchToAxiom} so both paths build
- * the same URL, headers and body.
- */
+/** Axiom ingests at most 10,000 events per batch: larger batches are split. */
+const AXIOM_MAX_EVENTS_PER_REQUEST = 10_000
+
 function encodeAxiomRequest(events: WideEvent[], config: AxiomConfig): HttpDrainRequest {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -114,27 +107,23 @@ function encodeAxiomRequest(events: WideEvent[], config: AxiomConfig): HttpDrain
   return { url: resolveIngestUrl(config), headers, body: JSON.stringify(events) }
 }
 
-/**
- * Send a single event to Axiom.
- */
 export async function sendToAxiom(event: WideEvent, config: AxiomConfig): Promise<void> {
   await sendBatchToAxiom([event], config)
 }
 
 /**
- * Send a batch of events to Axiom.
+ * Send a batch of events to Axiom, one request per 10,000 events.
  */
 export async function sendBatchToAxiom(events: WideEvent[], config: AxiomConfig): Promise<void> {
   if (!(config.apiKey)) {
     throw new Error('[evlog/axiom] Missing apiKey')
   }
-  await sendEncodedDrainRequest(encodeAxiomRequest(events, config), {
-    label: 'Axiom',
-    source: 'axiom',
-    timeout: config.timeout,
-    retries: config.retries,
-    onResponse: logIngestWarnings,
-  })
+  const options = { label: 'Axiom', source: 'axiom', timeout: config.timeout, retries: config.retries, onResponse: logIngestWarnings }
+  let start = 0
+  do {
+    await sendEncodedDrainRequest(encodeAxiomRequest(events.slice(start, start + AXIOM_MAX_EVENTS_PER_REQUEST), config), options)
+    start += AXIOM_MAX_EVENTS_PER_REQUEST
+  } while (start < events.length)
 }
 
 interface AxiomIngestResponse {

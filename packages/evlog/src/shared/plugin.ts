@@ -1,6 +1,5 @@
 import type { DrainContext, EnrichContext, EnvironmentContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
 
-/** Context passed to {@link EvlogPlugin.setup} when the plugin is registered. */
 export interface PluginSetupContext {
   env: EnvironmentContext
 }

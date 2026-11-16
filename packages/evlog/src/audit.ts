@@ -12,11 +12,6 @@ export { defineAuditAction, type AuditInput, type DefineAuditActionOptions, type
  */
 export const AUDIT_SCHEMA_VERSION = 1
 
-/**
- * @internal Stable JSON stringification with deterministic key order.
- * Used by `idempotencyKey` and `hash-chain` so the same logical event always
- * produces the same digest, regardless of how object keys were added.
- */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   if (Object.prototype.toString.call(value) !== '[object Object]') return false
@@ -24,6 +19,11 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || value.constructor === Object
 }
 
+/**
+ * @internal Stable JSON stringification with deterministic key order.
+ * Used by `idempotencyKey` and `hash-chain` so the same logical event always
+ * produces the same digest, regardless of how object keys were added.
+ */
 function stableStringify(value: unknown, ancestors = new WeakSet<object>()): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   // Track only the current recursion path: shared (diamond) references are fine, true cycles are not.
@@ -162,6 +162,12 @@ function markForceKeep<T extends object>(logger: RequestLogger<T>): void {
  * Logger augmented with `.audit()` / `.audit.deny()` helpers.
  */
 export type AuditableLogger<T extends object = Record<string, unknown>> = RequestLogger<T> & { audit: AuditMethod<T> }
+
+/**
+ * Request logger that a framework integration hands to route code (`c.get('log')`,
+ * `req.log`, `context.log`, …). {@link RequestLogger.fork} is always present on it.
+ */
+export type ForkableLogger<T extends object = Record<string, unknown>> = AuditableLogger<T> & Required<Pick<RequestLogger<T>, 'fork'>>
 
 /** Method shape attached to {@link AuditableLogger}. */
 export interface AuditMethod<T extends object = Record<string, unknown>> {

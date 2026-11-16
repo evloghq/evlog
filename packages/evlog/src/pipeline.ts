@@ -35,6 +35,18 @@ export interface PipelineDrainFn<T> {
 }
 
 /**
+ * Unref a timer on runtimes that support it (Node, Bun) so an idle flush
+ * scheduling timer never holds the process open. Buffered events are delivered
+ * on shutdown via the documented `flush()` contract, not by keeping timers
+ * alive. Retry backoff timers are intentionally left ref'd: an in-flight batch
+ * is active work, and an unref'd timer awaited by `flush()` would let the
+ * process exit mid-retry.
+ */
+function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
+  (timer as { unref?: () => void }).unref?.()
+}
+
+/**
  * Create a drain pipeline that batches events, retries on failure, and manages buffer overflow.
  *
  * Returns a higher-order function: pass your drain adapter to get a hook-compatible function.
@@ -59,18 +71,6 @@ export interface PipelineDrainFn<T> {
  * nitroApp.hooks.hook('close', () => drain.flush())
  * ```
  */
-/**
- * Unref a timer on runtimes that support it (Node, Bun) so an idle flush
- * scheduling timer never holds the process open. Buffered events are delivered
- * on shutdown via the documented `flush()` contract, not by keeping timers
- * alive. Retry backoff timers are intentionally left ref'd: an in-flight batch
- * is active work, and an unref'd timer awaited by `flush()` would let the
- * process exit mid-retry.
- */
-function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
-  (timer as { unref?: () => void }).unref?.()
-}
-
 export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<T>): (drain: (batch: T[]) => void | Promise<void>) => PipelineDrainFn<T> {
   const batchSize = options?.batch?.size ?? 50
   const intervalMs = options?.batch?.intervalMs ?? 5000

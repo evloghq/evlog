@@ -7,7 +7,7 @@ describe('publishedSkill', () => {
     expect(skill.description).toMatch(/^Review code for logging patterns/)
     expect(skill.license).toBe('MIT')
     expect(skill.metadata).toEqual({ author: 'HugoRCD', version: expect.any(String) })
-    expect(skill.markdown.startsWith('# Review logging patterns')).toBe(true)
+    expect(skill.content.startsWith('# Review logging patterns')).toBe(true)
     expect(Object.keys(skill.files!)).toContain('references/code-review.md')
   })
 

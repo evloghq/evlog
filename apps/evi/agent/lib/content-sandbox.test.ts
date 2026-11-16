@@ -1,5 +1,5 @@
 import { defineParentSandbox } from 'eve/sandbox'
-import { isDisabledToolSentinel } from 'eve/tools'
+import { disableTool } from 'eve/tools'
 import { describe, expect, it } from 'vitest'
 import reviewerSandbox from '../subagents/content_review/sandbox/sandbox'
 import reviewerShell from '../subagents/content_review/tools/bash'
@@ -22,6 +22,6 @@ describe.each([
 
 it('keeps shell execution and file writes out of both content agents', () => {
   for (const tool of [reviewerShell, reviewerWrite, rewriterShell, rewriterWrite]) {
-    expect(isDisabledToolSentinel(tool)).toBe(true)
+    expect(tool).toEqual(disableTool())
   }
 })

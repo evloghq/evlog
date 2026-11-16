@@ -1,5 +1,5 @@
 import { ORPCError, type Context, type MiddlewareOptions, type MiddlewareResult } from '@orpc/server'
-import type { AuditableLogger } from '../audit'
+import type { ForkableLogger } from '../audit'
 import { EvlogError } from '../error'
 import { parseError } from '../runtime/utils/parseError'
 import { defineFrameworkIntegration } from '../shared/integration'
@@ -33,7 +33,7 @@ export { useLogger }
  * ```
  */
 export interface EvlogOrpcContext {
-  log: AuditableLogger
+  log: ForkableLogger
 }
 
 /**

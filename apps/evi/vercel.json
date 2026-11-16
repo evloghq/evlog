@@ -1,4 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh evi"
+  "installCommand": "pnpm install --filter evi...",
+  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh evi",
+  "git": {
+    "deploymentEnabled": {
+      "changeset-release/**": false,
+      "renovate/**": false
+    }
+  }
 }

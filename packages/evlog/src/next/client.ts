@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import type { LogLevel, TransportConfig } from '../types'
-import { initLog, log, setIdentity, clearIdentity } from '../runtime/client/log'
+import { initLog } from '../runtime/client/log'
 
 export { log, setIdentity, clearIdentity, setMinLevel } from '../runtime/client/log'
 

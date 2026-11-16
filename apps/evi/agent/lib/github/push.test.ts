@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isValidRefName, mintInstallationToken, pushBrokerPolicy, validatePushBranch } from './push'
+import { isValidRefName, pushBrokerPolicy, validatePushBranch } from './push'
 
 describe('isValidRefName', () => {
   it('accepts branch names and commit shas', () => {
@@ -48,7 +48,7 @@ describe('validatePushBranch', () => {
 
   it('refuses names that could escape the command line or the ref namespace', () => {
     expect(validatePushBranch('fix; rm -rf /')).toMatch(/not a valid branch name/)
-    expect(validatePushBranch("fix'`x")).toMatch(/not a valid branch name/)
+    expect(validatePushBranch('fix\'`x')).toMatch(/not a valid branch name/)
     expect(validatePushBranch('-leading-dash')).toMatch(/not a valid branch name/)
     expect(validatePushBranch('a..b')).toMatch(/not a valid branch name/)
     expect(validatePushBranch('a//b')).toMatch(/not a valid branch name/)
@@ -76,16 +76,5 @@ describe('pushBrokerPolicy', () => {
         '*': [],
       },
     })
-  })
-})
-
-describe('mintInstallationToken', () => {
-  it('returns a static token as-is and resolves a lazy one', async () => {
-    await expect(mintInstallationToken({ installationToken: 'tok' })).resolves.toBe('tok')
-    await expect(mintInstallationToken({ installationToken: async () => 'lazy' })).resolves.toBe('lazy')
-  })
-
-  it('throws when the connector exposes no token', async () => {
-    await expect(mintInstallationToken({})).rejects.toThrow('no installation token')
   })
 })

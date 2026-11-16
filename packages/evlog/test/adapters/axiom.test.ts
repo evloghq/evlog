@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { sendBatchToAxiom, sendToAxiom, createAxiomDrain } from '../../src/adapters/axiom'
 import { enableDeprecationWarnings } from '../helpers/deprecations'
+import { getFetchJson } from '../helpers/fetch'
 
 describe('axiom adapter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
@@ -213,6 +214,15 @@ describe('axiom adapter', () => {
   })
 
   describe('sendBatchToAxiom', () => {
+    it('splits more than 10,000 events into several requests', async () => {
+      const events = Array.from({ length: 10_001 }, (_, index) => createTestEvent({ requestId: String(index) }))
+
+      await sendBatchToAxiom(events, { dataset: 'my-dataset', apiKey: 'test-token' })
+
+      const sizes = Array.from({ length: fetchSpy.mock.calls.length }, (_, index) => getFetchJson<unknown[]>(fetchSpy, index).length)
+      expect(sizes).toEqual([10_000, 1])
+    })
+
     it('sends multiple events in a single request', async () => {
       const events = [
         createTestEvent({ requestId: '1' }),

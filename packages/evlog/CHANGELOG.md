@@ -220,6 +220,12 @@
 
 - [#860](https://github.com/evloghq/evlog/pull/860) [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21) Thanks [@evlogai](https://github.com/apps/evlogai)! - The published packages no longer ship `.map` files. They pointed to `src/`, which is not part of the package, so they only added to the install size. `evlog` drops from 330 files (about 2.0 MB unpacked) to 178 files (about 865 KB). No runtime or API change.
 
+## 2.35.1
+
+### Patch Changes
+
+- [#1007](https://github.com/evloghq/evlog/pull/1007) [`b9a6239`](https://github.com/evloghq/evlog/commit/b9a6239d6196b2db647ea86adbac2ef0a27aa380) Thanks [@danielroe](https://github.com/danielroe)! - Register the Nitro v3 error handler and plugin in the Nuxt module when running on Nitro 3, so error responses keep their status code and JSON content type under Nuxt 5.
+
 ## 2.35.0
 
 ### Minor Changes

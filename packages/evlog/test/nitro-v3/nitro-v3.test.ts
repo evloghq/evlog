@@ -316,6 +316,12 @@ describe.sequential('Nitro v3 Server with evlog', () => {
     }
   })
 
+  it('keeps a drain another plugin set with initLogger during startup', async () => {
+    const res = await server.fetch(new Request(new URL('/global-drain', server.url)))
+
+    expect(await res.json()).toEqual({ tasks: ['cleanup'] })
+  })
+
   it('preserves data and message from a deliberate HTTPError', async () => {
     const res = await server.fetch(new Request(new URL('/throws-h3-data', server.url)))
 

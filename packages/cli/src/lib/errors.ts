@@ -41,6 +41,20 @@ export const cliErrors = defineErrorCatalog('cli', {
     fix: 'Run your package manager install step',
     tags: ['doctor', 'evlog'],
   },
+  UNKNOWN_FLAG: {
+    status: 400,
+    message: ({ flag }: { flag: string }) => `Unknown flag ${flag}`,
+    why: 'The command does not declare this flag, and running without it would skip the gate or the option it was meant to set',
+    fix: 'Check the spelling against the command\'s --help',
+    tags: ['cli', 'usage'],
+  },
+  FLAG_NEEDS_VALUE: {
+    status: 400,
+    message: ({ flag }: { flag: string }) => `${flag} needs a value`,
+    why: 'The flag was last or followed by another flag, and reading it as unset would run the command without the option',
+    fix: 'Pass a value after it, or write --flag=value when the value starts with a dash',
+    tags: ['cli', 'usage'],
+  },
   COMMAND_FAILED: {
     status: 500,
     message: 'CLI command failed',
@@ -169,6 +183,22 @@ export const cliErrors = defineErrorCatalog('cli', {
     link: 'https://evlog.dev/cli/agents',
     tags: ['agents'],
   },
+  AGENTS_MARKERS_UNPAIRED: {
+    status: 400,
+    message: 'The evlog markers in AGENTS.md are not one start and end pair',
+    why: 'The block is rewritten between <!-- evlog:start --> and <!-- evlog:end -->, each alone on its line. With one missing, repeated or out of order, a rewrite would delete text that is yours',
+    fix: 'Restore the pair around the evlog section, or delete the leftover marker with the old section, then run the command again',
+    link: 'https://evlog.dev/cli/agents',
+    tags: ['agents'],
+  },
+  WRITE_FAILED: {
+    status: 500,
+    message: ({ file, reason, written }: { file: string, reason: string, written: readonly string[] }) =>
+      `Could not write ${file} (${reason}). ${written.length > 0 ? `Written before it: ${written.join(', ')}` : 'No file was written before it'}`,
+    why: 'The run stops at the first file it cannot write, so the files planned after it were not attempted',
+    fix: 'Check the path and its permissions, then run the command again. Files already in place are left as they are',
+    tags: ['init', 'agents'],
+  },
   MAP_BASELINE_NOT_FOUND: {
     status: 404,
     message: ({ source }: { source: string }) =>
@@ -195,6 +225,15 @@ export const cliErrors = defineErrorCatalog('cli', {
     fix: 'Commit one from the base branch: evlog map && git add -f evlog.map.json',
     link: 'https://evlog.dev/cli/ci',
     tags: ['map', 'baseline'],
+  },
+  MAP_PARSE_FAILED: {
+    status: 422,
+    message: ({ file, error, more }: { file: string, error: string, more: number }) =>
+      `${file} failed to parse: ${error}${more > 0 ? `, and ${more} more file${more === 1 ? '' : 's'}` : ''}`,
+    why: 'A gate cannot pass a tree it could not read: the entry points in that file are not in the score or in the comparison',
+    fix: 'Fix the file, or list it under map.ignore in evlog.config if it is not app code',
+    link: 'https://evlog.dev/cli/ci',
+    tags: ['map'],
   },
   MAP_BASELINE_INVALID: {
     status: 400,
@@ -397,6 +436,40 @@ export const cliErrors = defineErrorCatalog('cli', {
     tags: ['upgrade'],
   },
 })
+
+/* Errors about how the command was invoked rather than about the project. */
+const USAGE_ERRORS = new Set<string>([
+  cliErrors.UNKNOWN_FLAG,
+  cliErrors.FLAG_NEEDS_VALUE,
+  cliErrors.MAP_INVALID_FRAMEWORK,
+  cliErrors.MAP_INVALID_MIN_SCORE,
+  cliErrors.MAP_INVALID_FORMAT,
+  cliErrors.MAP_INVALID_LIMIT,
+  cliErrors.MAP_FORMAT_CONFLICT,
+  cliErrors.MAP_BASELINE_VERSION_MISMATCH,
+  cliErrors.INIT_INVALID_FRAMEWORK,
+  cliErrors.INIT_INVALID_ENRICHER,
+  cliErrors.INIT_INVALID_SAMPLING,
+  cliErrors.INIT_INVALID_DRAIN,
+  cliErrors.INIT_INVALID_EXTRA,
+  cliErrors.INIT_NO_APPS,
+  cliErrors.AGENTS_INVALID_SOURCE,
+  cliErrors.AGENTS_INVALID_SKILL,
+  cliErrors.LOGS_INVALID_TIME,
+  cliErrors.LOGS_INVALID_LEVEL,
+  cliErrors.LOGS_INVALID_STATUS,
+  cliErrors.LOGS_INVALID_DURATION,
+  cliErrors.LOGS_INVALID_WHERE,
+  cliErrors.LOGS_INVALID_LIMIT,
+].map(entry => entry.code))
+
+/**
+ * Whether an error is a usage error, which exits 2 where a failed check exits 1:
+ * the project did not fail anything, the invocation could not be read.
+ */
+export function isUsageError(error: { code?: string }): boolean {
+  return error.code !== undefined && USAGE_ERRORS.has(error.code)
+}
 
 declare module 'evlog' {
   interface RegisteredErrorCatalogs {

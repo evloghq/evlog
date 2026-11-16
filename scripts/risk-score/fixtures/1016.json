@@ -1,0 +1,205 @@
+{
+ "number": 1016,
+ "title": "chore(repo): version packages",
+ "author": {
+  "login": "github-actions[bot]",
+  "fork": false,
+  "association": "CONTRIBUTOR"
+ },
+ "files": [
+  {
+   "filename": ".changeset/adapter-request-limits.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 13,
+   "patch": "@@ -1,13 +0,0 @@\n----\n-\"evlog\": patch\n----\n-\n-Split adapter batches at each provider's documented per-request limits. A batch above a limit was sent as one request and rejected (usually `413`), and the pipeline dropped it. It is now sent as several requests that each fit:\n-\n-- Datadog: 1000 entries and 5 MB uncompressed per request (the byte cap is new).\n-- Sentry: 100 logs and 1 MiB of log payload per envelope (the byte cap is new).\n-- Axiom: 10,000 events per request.\n-- Better Stack: 10 MiB per request.\n-- PostHog `mode: 'events'`: request bodies under 20 MB on `/batch/`.\n-\n-Batches within the limits send the same single request as before. Retry behavior is unchanged: the drain path keeps its default retries and the pipeline path sends one attempt unless `retries` is set. A single event larger than the limit is still sent on its own, so the provider decides what to do with it."
+  },
+  {
+   "filename": ".changeset/better-stack-message.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-\"evlog\": minor\n----\n-\n-The Better Stack adapter now sends a `message`, as Better Stack's own `@logtail/node` client does. Live tail headlines a line with it and Better Stack builds `_pattern` from it, so request events now group by route. An event without `message` gets the headline the pretty console prints, followed by the error message, for example `POST /api/checkout 402 in 104ms Payment failed`. An event with nothing to headline gets no `message`. A `message` already on the event, from a tagged log or `log.set({ message })`, is sent unchanged."
+  },
+  {
+   "filename": ".changeset/cli-usage-errors-exit-2.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 7,
+   "patch": "@@ -1,7 +0,0 @@\n----\n-'@evlog/cli': patch\n----\n-\n-Every command now stops on a flag it does not declare, and on a value flag passed with no value, with exit code 2. `evlog map --min-scor 90` used to run with no gate and exit 0, and `evlog init --dryrun` wrote files. A flag written before the command name is checked too: `evlog --dry-run init` used to run `init` for real. A script that carries a mistyped flag today starts failing: fix the spelling.\n-\n-The other usage errors exit 2 as well, as the README documents: an unknown command, an invalid `--min-score`, `--framework`, `--format` or `--limit`, and `evlog map <entry>` for an entry point that does not exist. An empty `--min-score`, which is what an unset shell variable expands to, is one of them. A bare `--baseline` no longer takes the flag after it as its value: `evlog map --baseline --min-score 80` and `evlog map --baseline --cwd apps/web` read both flags. A `map` error is printed as JSON under `--format json`, as it already was under `--json`."
+  },
+  {
+   "filename": ".changeset/eve-v27-events.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 7,
+   "patch": "@@ -1,7 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-`defineEvlogHook()` from `evlog/eve` now reads the v27 session events of eve 0.84 and later, eve 1.0 included. Before, it listened for the v26 names, which those versions refuse, so `eve build` failed with `Hook \"hooks/evlog.ts\" handles \"message.received\" was removed in session stream version 27`. The hook now registers the v26 names only on eve 0.83 and earlier. A turn now ends on `turn.settled` and a session on `session.ended`. Token usage comes from `usage.recorded`, tool calls from `call.requested` and `call.settled`, approvals and sign-ins from `interaction.opened` and `interaction.settled`, and the user message from `delivery.consumed`. The v26 events of eve 0.30 to 0.83 keep working.\n-\n-eve 0.84 moved AI SDK runtime context from the `step.started` instrumentation event to OTel integrations, so `defineEvlogInstrumentation()` only applies before 0.84. On 0.84 and later, add `agent/instrumentation/evlog.ts` exporting `otelIntegration({ runtimeContext: evlogRuntimeContext })`, with `otelIntegration` from `eve/instrumentation/otel`. `evlogRuntimeContext` accepts that input, and returns nothing for a model attempt outside a turn instead of throwing."
+  },
+  {
+   "filename": ".changeset/faster-redaction.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-Redaction is 2 to 3.7 times faster on typical wide events. A built-in pattern now runs on a string only when the string can match it (long enough, and holding the characters the pattern needs), and plain JSON-shaped events are copied without `structuredClone`. Events holding a `Date`, a `Map`, a class instance or a shared reference still go through `structuredClone`. Redacted output is unchanged."
+  },
+  {
+   "filename": ".changeset/fastify-request-evlog.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': minor\n----\n-\n-`evlog/fastify` attaches the request logger to `request.evlog`, typed as `ForkableLogger`, so `request.evlog.set()`, `.fork()` and `.audit()` type-check. Fastify types `request.log` as its own logger, and a module augmentation cannot change the type of an existing property: `request.log.set()` failed with TS2339 even though it worked at runtime, and with `skipLibCheck: false` the published declarations reported TS2717. `request.log` still holds the evlog logger at runtime, so existing code keeps working. On a route that `include` or `exclude` filters out, or with `enabled: false`, `request.evlog` accepts every call and emits nothing. On `@nestjs/platform-fastify`, `evlog/nestjs` sets `request.evlog` the same way."
+  },
+  {
+   "filename": ".changeset/forkable-request-logger.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-Type `log.fork()` as always present on the request logger that an integration attaches: `c.get('log')` on Hono, `req.log` on Express and NestJS, `log` in Elysia handlers, `context.get(loggerContext)` on React Router and `context.log` on oRPC. Before, `fork` was optional there, so `c.get('log').fork(...)` failed a strict type check and needed `fork!` or `fork?.`. The new `ForkableLogger` type from `evlog` describes this logger, for example in SvelteKit's `App.Locals`. `useLogger()` still returns `AuditableLogger` with an optional `fork`, because inside `log.fork()` work it returns the forked logger, which has no `fork`."
+  },
+  {
+   "filename": ".changeset/map-unread-entry-points.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 12,
+   "patch": "@@ -1,12 +0,0 @@\n----\n-'@evlog/cli': patch\n----\n-\n-`evlog map` no longer scores a tree it only partly read.\n-\n-- A file with a syntax error, or one the scan cannot read, used to lose its routes, which raised the score. The report now warns `<file> failed to parse` and counts the file as one failing entry point. With `--min-score`, `map.minScore` or `--baseline`, the run stops with `cli.MAP_PARSE_FAILED`, exits 1, and leaves `evlog.map.json` as it was. List the file under `map.ignore` when it is not app code.\n-- Directories named `build`, `dist` and `coverage` are skipped at the project root only, so `server/api/build/index.get.ts` is scanned.\n-- Two entry points with the same method and path, such as `get('/')` in two routers, get distinct ids. `--baseline` reported regressions on an unchanged tree when they shared one. The id of every other entry point is unchanged, so a committed map stays comparable, and an entry point is still compared with itself when a second one with its method and path appears or goes. If it also moved to another file in that change, it is compared with the entry point that has its method and path and lost the most checks, then the lowest-scoring one.\n-- `.js`, `.mjs` and `.cjs` files are parsed with JSX, so a Next.js `page.js` is checked instead of reported as `n/a`.\n-\n-The first and the last of these can change a verdict on code you did not touch, so the rule-set version moves to 2. `--baseline` against a map written by an earlier CLI exits 2 with the version mismatch: run `evlog map` once and commit the new `evlog.map.json`."
+  },
+  {
+   "filename": ".changeset/misplaced-jsdoc.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-`createDrainPipeline` from `evlog/pipeline`, and the `AuditActor` and `AuditFields` types from `evlog`, show their documentation again in the published types and in editor hovers. Each doc block sat directly on top of another one, so TypeScript attached it to nothing. `createDrainPipeline` gets its description and usage example back, `AuditActor` the meaning of each actor field, and `AuditFields` the description of each reserved audit field."
+  },
+  {
+   "filename": ".changeset/nitro-keep-global-drain.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-The Nitro plugin (`evlog/nitro` and `evlog/nitro/v3`, so the Nuxt module too) no longer clears a drain that another Nitro plugin set with `initLogger({ drain })`. Nitro does not await plugins, so evlog's plugin finished after a synchronous plugin and reset the global drain. Request events still reached `evlog:drain` hooks, but standalone loggers (`createLogger`, or `createRequestLogger` in a scheduled task or queue worker) drained nowhere. The drain registered before evlog's plugin settles is now kept."
+  },
+  {
+   "filename": ".changeset/nitro-peer-261103-rc.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-Widen the optional `nitro` peer range so that `nitro@3.0.261103-rc` and stable Nitro 3 releases such as `nitro@3.0.0` install without a peer conflict. Before, npm failed with ERESOLVE and pnpm printed a peer warning when a project used either with evlog 2.x."
+  },
+  {
+   "filename": ".changeset/noop-logger-fork.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-`log.fork(label, fn)` now runs `fn` on a request that evlog does not log. Before, on an Elysia route that `exclude` or `include` filters out, or with `enabled: false`, `log` had no `fork`, so `log.fork!(...)` threw `log.fork is not a function` and the route answered 500. The work runs and emits no event. With `waitUntil`, evlog registers the work there, as it does on a logged request. If the work throws, evlog reports the error with `console.error` and `log.fork()` still resolves."
+  },
+  {
+   "filename": ".changeset/parse-error-own-guidance.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-`parseError()` now keeps the `why`, `fix` and `link` an `Error` carries as its own properties. An error class that sets `fix` on itself and also has a `data` property, even `undefined`, used to come back with `fix: undefined`. Guidance found in the payload still wins."
+  },
+  {
+   "filename": ".changeset/sentry-log-user-id.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-\"evlog\": patch\n----\n-\n-Sentry logs now carry the reserved `user.id` attribute when the wide event has a user, the same attribute the official Sentry SDK sets from its user scope. The log item container also carries `version: 2`, as the Sentry logs protocol recommends. Before, the id only appeared under the `userId` key."
+  },
+  {
+   "filename": ".changeset/skipped-request-logger.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'evlog': patch\n----\n-\n-On Hono, React Router and SvelteKit, a request that evlog does not log now gets a logger that accepts every call and emits nothing, on `c.get('log')`, `context.get(loggerContext)` and `event.locals.log`. This covers a route that `include` or `exclude` filters out, and every route after `initLogger({ enabled: false })`. Before, nothing was attached: `c.get('log').set(...)` threw a `TypeError`, the documented Hono `onError` handler threw as well so the request got no response, and `context.get(loggerContext)` threw in React Router loaders. `log.fork()` still runs its work on these requests. `useLogger()` still throws on them."
+  },
+  {
+   "filename": ".changeset/telemetry-coalesced-flush.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 5,
+   "patch": "@@ -1,5 +0,0 @@\n----\n-'@evlog/telemetry': minor\n----\n-\n-`run()` writes every event to the on-disk outbox and POSTs only when the last successful flush is older than 15 minutes (60 minutes in CI) or 20 events have queued, capped at 50 per POST. Failed uploads stay on disk for the next command. `flush()` still sends immediately. Override the window with `flushIntervalMs` or `EVLOG_TELEMETRY_FLUSH_INTERVAL_MS`. `createGitHubActionsTelemetry()` keeps flushing after every `run()`, since runners discard the outbox when the job ends."
+  },
+  {
+   "filename": ".changeset/telemetry-handled-failures.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 8,
+   "patch": "@@ -1,8 +0,0 @@\n----\n-'@evlog/telemetry': patch\n-'@evlog/cli': patch\n----\n-\n-New `telemetry.fail(code?)` for a command that handles its own failure: it prints the error, sets an exit code and returns, so the run used to be recorded as `outcome: \"success\"`. Call it where the error is handled and the event carries `outcome: \"error\"` with `code` as its `errorCode`.\n-\n-The evlog CLI calls it for every error it reports, so `evlog logs` with no log directory, `evlog config` on an invalid file and a mistyped flag are sent as errors with their `cli.*` code. A failed `--min-score` or `--baseline` gate stays a successful run with `mapGateFailed: true`."
+  },
+  {
+   "filename": ".changeset/telemetry-keeps-its-promises.md",
+   "status": "removed",
+   "additions": 0,
+   "deletions": 14,
+   "patch": "@@ -1,14 +0,0 @@\n----\n-'@evlog/telemetry': patch\n-'@evlog/cli': patch\n----\n-\n-Telemetry now does what its docs say.\n-\n-- The run that opts out is no longer queued: `telemetry disable`, or `disableTelemetry()` called inside a run, used to purge the outbox and then write its own event to it. `disableTelemetry()` turns off every handle created for the tool, and a `flush()` already sending stops at the batch in flight.\n-- `EVLOG_TELEMETRY_DEBUG=1` prints each run's event as the run ends and makes no request. The event is not queued either. It used to print at the next flush, and that flush sent the events.\n-- An endpoint that never answers no longer keeps the process alive for ten seconds. The drain closes its connection at the 400 ms timeout. It no longer follows redirects, so `endpoint` has to be the final URL.\n-- `DO_NOT_TRACK=true`, `yes` and `on` opt out like `1`, and `EVLOG_TELEMETRY=false`, `no` and `off` like `0`.\n-- `withTelemetry()` records only the flags a command declares. An undeclared flag used to be sent by name, and a positional as `<set>`.\n-- New `bin` option: the command people type, when it is not `name`. The first-run notice prints `<bin> telemetry disable`, so the evlog CLI's notice now says `evlog telemetry disable`, not `evlog-cli telemetry disable`.\n-- `evlog telemetry status` lists the allowlisted `init*`, `map*` and `logs*` values. The fields `evlog logs` records are documented."
+  },
+  {
+   "filename": "packages/cli/CHANGELOG.md",
+   "status": "modified",
+   "additions": 34,
+   "deletions": 0
+  },
+  {
+   "filename": "packages/cli/package.json",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "filename": "packages/evlog/CHANGELOG.md",
+   "status": "modified",
+   "additions": 42,
+   "deletions": 0
+  },
+  {
+   "filename": "packages/evlog/package.json",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "filename": "packages/telemetry/CHANGELOG.md",
+   "status": "modified",
+   "additions": 22,
+   "deletions": 0
+  },
+  {
+   "filename": "packages/telemetry/package.json",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  }
+ ],
+ "manifests": {
+  "packages/cli/package.json": {
+   "base": {
+    "name": "@evlog/cli",
+    "version": "0.11.2"
+   },
+   "head": {
+    "name": "@evlog/cli",
+    "version": "0.11.3"
+   }
+  },
+  "packages/evlog/package.json": {
+   "base": {
+    "name": "evlog",
+    "version": "2.35.1"
+   },
+   "head": {
+    "name": "evlog",
+    "version": "2.36.0"
+   }
+  },
+  "packages/telemetry/package.json": {
+   "base": {
+    "name": "@evlog/telemetry",
+    "version": "0.3.5"
+   },
+   "head": {
+    "name": "@evlog/telemetry",
+    "version": "0.4.0"
+   }
+  }
+ }
+}

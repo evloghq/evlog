@@ -164,7 +164,6 @@ Object.defineProperty(EvlogError.prototype, evlogErrorBrand, {
 /**
  * Create a structured error with context for debugging and user-facing messages.
  *
- * @param options - Error message string or full options object
  * @returns The error to throw, log or reject with. `status` is set only when you pass one; an HTTP boundary answers 500 without it.
  *
  * @example

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const props = withDefaults(defineProps<{
-  /** Whether the 5s poll is currently firing (user toggle + tab visible). */
+  /** Whether live refresh is on (user toggle + tab visible, not suspended). */
   live: boolean
   /** The last poll failed — dashboard data may be stale despite still polling. */
   hasError?: boolean

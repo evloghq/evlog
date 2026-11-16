@@ -15,7 +15,7 @@ This is a hypothetical writing task unrelated to evlog. Do not retrieve anything
 
     t.succeeded()
     t.check(
-      turn.message ?? '',
+      turn.reply ?? '',
       satisfies(reply => ELI5_DISCLOSURE.test(String(reply)), 'reply ends with a collapsed ELI5 disclosure'),
     )
   },

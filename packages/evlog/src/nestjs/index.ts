@@ -3,7 +3,8 @@ import type { Request } from 'express'
 import type { DynamicModule, MiddlewareConsumer, NestModule, Provider } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify'
-import type { AuditableLogger } from '../audit'
+import type { ForkableLogger } from '../audit'
+import { noopLogger } from '../logger'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
 import { bindNodeResponseLifecycle } from '../shared/nodeResponse'
@@ -29,22 +30,32 @@ export interface EvlogModuleAsyncOptions {
 
 declare module 'http' {
   interface IncomingMessage {
-    log?: AuditableLogger
+    log?: ForkableLogger
   }
 }
 
 declare module 'express-serve-static-core' {
   interface Request {
-    log?: AuditableLogger
+    log?: ForkableLogger
   }
 }
 
 declare module 'fastify' {
   interface FastifyRequest {
-    // @ts-expect-error intentionally overrides Fastify's built-in pino logger with evlog's AuditableLogger
-    log: AuditableLogger
+    /**
+     * The evlog request logger on `@nestjs/platform-fastify`, the same one
+     * `useLogger()` returns. On a route the middleware skips, it accepts every
+     * call and emits nothing.
+     */
+    evlog: ForkableLogger
   }
 }
+
+/**
+ * The logger the middleware attached, by raw request. On a route it skips,
+ * `@fastify/middie` leaves Fastify's own logger on the raw request's `log`.
+ */
+const attachedLoggers = new WeakMap<object, ForkableLogger>()
 
 const integration = defineFrameworkIntegration<Request>({
   name: 'nestjs',
@@ -56,6 +67,7 @@ const integration = defineFrameworkIntegration<Request>({
   }),
   attachLogger: (req, logger) => {
     req.log = logger
+    attachedLoggers.set(req, logger)
   },
   storage,
 })
@@ -78,8 +90,9 @@ function createEvlogMiddleware(getOptions: () => EvlogNestJSOptions) {
 /**
  * On `@nestjs/platform-fastify`, Nest middleware runs through `@fastify/middie`
  * on the raw `IncomingMessage`, while handlers receive a `FastifyRequest` whose
- * `log` is Fastify's own logger. A `preHandler` hook copies the evlog logger
- * across before guards, interceptors, pipes, and controllers run.
+ * `log` is Fastify's own logger. A `preHandler` hook copies the evlog logger to
+ * `request.evlog` and `request.log` before guards, interceptors, pipes, and
+ * controllers run.
  */
 const fastifyRequestLogProvider: Provider = {
   provide: 'EVLOG_FASTIFY_REQUEST_LOG',
@@ -89,9 +102,11 @@ const fastifyRequestLogProvider: Provider = {
       // `httpAdapter` is unset in standalone application contexts.
       if (host.httpAdapter?.getType() !== 'fastify') return
       host.httpAdapter.getInstance<FastifyInstance>().addHook('preHandler', (request, _reply, done) => {
+        const logger = attachedLoggers.get(request.raw)
+        request.evlog = logger ?? noopLogger
         // The evlog logger is a superset of Fastify's logger at runtime; the types do not
         // overlap (no child/level/silent), so the handoff is an explicit cast.
-        if (request.raw.log) request.log = request.raw.log as unknown as FastifyBaseLogger
+        if (logger) request.log = logger as unknown as FastifyBaseLogger
         done()
       })
     },

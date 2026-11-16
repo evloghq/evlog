@@ -1,0 +1,102 @@
+{
+ "number": 1052,
+ "title": "feat(telemetry): coalesce outbox flushes",
+ "author": {
+  "login": "HugoRCD",
+  "fork": false,
+  "association": "MEMBER"
+ },
+ "files": [
+  {
+   "filename": ".changeset/telemetry-coalesced-flush.md",
+   "status": "added",
+   "additions": 5,
+   "deletions": 0,
+   "patch": "@@ -0,0 +1,5 @@\n+---\n+'@evlog/telemetry': minor\n+---\n+\n+`run()` writes every event to the on-disk outbox and POSTs only when the last successful flush is older than 15 minutes (60 minutes in CI) or 20 events have queued, capped at 50 per POST. Failed uploads stay on disk for the next command. `flush()` still sends immediately. Override the window with `flushIntervalMs` or `EVLOG_TELEMETRY_FLUSH_INTERVAL_MS`. `createGitHubActionsTelemetry()` keeps flushing after every `run()`, since runners discard the outbox when the job ends."
+  },
+  {
+   "filename": "apps/docs/content/3.cli/7.telemetry.md",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "filename": "apps/docs/content/5.use-cases/4.telemetry/01.overview.md",
+   "status": "modified",
+   "additions": 3,
+   "deletions": 3
+  },
+  {
+   "filename": "apps/docs/content/5.use-cases/4.telemetry/02.setup.md",
+   "status": "modified",
+   "additions": 5,
+   "deletions": 3
+  },
+  {
+   "filename": "apps/docs/content/5.use-cases/4.telemetry/03.ingest.md",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "filename": "apps/docs/content/5.use-cases/4.telemetry/04.reference.md",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "filename": "packages/telemetry/README.md",
+   "status": "modified",
+   "additions": 1,
+   "deletions": 1
+  },
+  {
+   "filename": "packages/telemetry/src/create.ts",
+   "status": "modified",
+   "additions": 34,
+   "deletions": 8,
+   "patch": "@@ -1,5 +1,6 @@\n import { mkdir, writeFile } from 'node:fs/promises'\n import { join } from 'node:path'\n+import { isCI } from 'std-env'\n import { readPreferenceSync, resolveConsent, writePreference, purgeOutbox } from './consent'\n import {\n   composeDrains,\n@@ -10,6 +11,12 @@ import {\n   type TelemetryDrain,\n } from './drain'\n import { buildEnvInfo, resolveMachineId } from './enrich'\n+import {\n+  MAX_FLUSH_BATCH,\n+  resolveFlushIntervalMs,\n+  resolveFlushThreshold,\n+  shouldFlushOutbox,\n+} from './flush-policy'\n import { computeRunIdempotencyKey } from './idempotency'\n import { TelemetryOutbox } from './outbox'\n import { sanitizeCustom, sanitizeFlags, sanitizeSystemCustom } from './sanitize'\n@@ -83,7 +90,6 @@ class InternalTelemetry<\n   async init(): Promise<void> {\n     if (!this._enabled) return\n     this.machineId = await resolveMachineId(this.options.name)\n-    await this.flushBacklog()\n   }\n \n   async run<T>(\n@@ -124,16 +130,21 @@ class InternalTelemetry<\n         timestamp,\n       })\n       await this.record(event)\n-      await this.flush()\n+      if (await this.shouldFlush()) await this.deliver(false)\n     }\n   }\n \n   async flush(): Promise<void> {\n+    await this.deliver(true)\n+  }\n+\n+  /** `drainAll` sends batch after batch until the outbox is empty; a `run()` sends one batch per command. */\n+  private async deliver(drainAll: boolean): Promise<void> {\n     if (!this._enabled) return\n     const timeoutMs = this.options.flushTimeoutMs ?? 500\n     try {\n       await Promise.race([\n-        this.flushBacklog(),\n+        this.flushBacklog(drainAll),\n         new Promise<void>(resolve => {\n           const t = setTimeout(resolve, timeoutMs)\n           ;(t as { unref?: () => void }).unref?.()\n@@ -144,12 +155,27 @@ class InternalTelemetry<\n     }\n   }\n \n-  private async flushBacklog(): Promise<void> {\n+  private async shouldFlush(): Promise<boolean> {\n+    const { count, oldestStoredAt } = await this.outbox.inspect()\n+    const lastFlushAt = await this.outbox.readLastFlushAt()\n+    return shouldFlushOutbox({\n+      pending: count,\n+      lastFlushAt,\n+      oldestStoredAt,\n+      now: Date.now(),\n+      intervalMs: resolveFlushIntervalMs(this.options.flushIntervalMs, isCI),\n+      threshold: resolveFlushThreshold(this.options.flushThreshold),\n+    })\n+  }\n+\n+  private async flushBacklog(drainAll: boolean): Promise<void> {\n     const pending = await this.outbox.readAll()\n-    if (pending.length === 0) return\n-    const ok = await this.drain(pending)\n-    if (ok) {\n-      await this.outbox.removeDelivered(new Set(pending.map(e => e.idempotencyKey)))\n+    for (let start = 0; start < pending.length; start += MAX_FLUSH_BATCH) {\n+      const batch = pending.slice(start, start + MAX_FLUSH_BATCH)\n+      if (!await this.drain(batch)) return\n+      await this.outbox.removeDelivered(new Set(batch.map(e => e.idempotencyKey)))\n+      await this.outbox.markFlushed()\n+      if (!drainAll) return\n     }\n   }\n "
+  },
+  {
+   "filename": "packages/telemetry/src/flush-policy.ts",
+   "status": "added",
+   "additions": 66,
+   "deletions": 0,
+   "patch": "@@ -0,0 +1,66 @@\n+/** Matches `parseIngestBody` default `maxBatchSize`. */\n+export const MAX_FLUSH_BATCH = 50\n+\n+/** Default outbox size that forces a flush inside the coalescing window. */\n+export const DEFAULT_FLUSH_THRESHOLD = 20\n+\n+/** Default minimum time between successful HTTP flushes. */\n+export const DEFAULT_FLUSH_INTERVAL_MS = 15 * 60 * 1000\n+\n+/** Coalescing window in CI, where commands are frequent. */\n+export const CI_FLUSH_INTERVAL_MS = 60 * 60 * 1000\n+\n+const INTERVAL_ENV = 'EVLOG_TELEMETRY_FLUSH_INTERVAL_MS'\n+const THRESHOLD_ENV = 'EVLOG_TELEMETRY_FLUSH_THRESHOLD'\n+\n+function readEnvNumber(env: NodeJS.Dict<string>, key: string): number | undefined {\n+  const raw = env[key]\n+  if (raw === undefined || raw.trim() === '') return undefined\n+  const n = Number(raw)\n+  if (!Number.isFinite(n)) return undefined\n+  return n\n+}\n+\n+/**\n+ * Resolve the coalescing window: env → option → 60 minutes in CI, else 15 minutes.\n+ * `0` means every `run()` POSTs.\n+ */\n+export function resolveFlushIntervalMs(\n+  option?: number,\n+  ci = false,\n+  env: NodeJS.Dict<string> = process.env,\n+): number {\n+  const fromEnv = readEnvNumber(env, INTERVAL_ENV)\n+  if (fromEnv !== undefined && fromEnv >= 0) return fromEnv\n+  if (option !== undefined && Number.isFinite(option) && option >= 0) return option\n+  return ci ? CI_FLUSH_INTERVAL_MS : DEFAULT_FLUSH_INTERVAL_MS\n+}\n+\n+/**\n+ * Resolve the outbox size that forces a flush: env → option → 20, capped at {@link MAX_FLUSH_BATCH}.\n+ */\n+export function resolveFlushThreshold(\n+  option?: number,\n+  env: NodeJS.Dict<string> = process.env,\n+): number {\n+  const fromEnv = readEnvNumber(env, THRESHOLD_ENV)\n+  const raw = fromEnv ?? option\n+  if (raw === undefined || !Number.isFinite(raw) || raw < 1) return DEFAULT_FLUSH_THRESHOLD\n+  return Math.min(Math.trunc(raw), MAX_FLUSH_BATCH)\n+}\n+\n+/** Whether `run()` should POST after appending this event. */\n+export function shouldFlushOutbox(input: {\n+  pending: number\n+  lastFlushAt?: number\n+  oldestStoredAt?: number\n+  now: number\n+  intervalMs: number\n+  threshold: number\n+}): boolean {\n+  if (input.pending <= 0) return false\n+  if (input.pending >= input.threshold) return true\n+  const anchor = input.lastFlushAt ?? input.oldestStoredAt\n+  if (anchor === undefined) return true\n+  return input.now - anchor >= input.intervalMs\n+}"
+  },
+  {
+   "filename": "packages/telemetry/src/github-actions.ts",
+   "status": "modified",
+   "additions": 14,
+   "deletions": 9,
+   "patch": "@@ -13,7 +13,7 @@ export interface GitHubActionsTelemetryOptions<\n \n /**\n  * Thin helper for GitHub Actions — enriches with action metadata from env only.\n- * Never reads repository content.\n+ * Never reads repository content. Each `run()` flushes the outbox before returning.\n  */\n export function createGitHubActionsTelemetry<\n   TFlags extends CollectFlags = {},\n@@ -35,14 +35,19 @@ export function createGitHubActionsTelemetry<\n     flush() {\n       return base.flush()\n     },\n-    run(command, fn, opts) {\n-      return base.run(command, fn, {\n-        ...opts,\n-        systemCustom: {\n-          ghaAction: action,\n-          ghaEvent: eventType,\n-        },\n-      })\n+    // Runners discard the outbox when the job ends, so the coalescing window would never elapse.\n+    async run(command, fn, opts) {\n+      try {\n+        return await base.run(command, fn, {\n+          ...opts,\n+          systemCustom: {\n+            ghaAction: action,\n+            ghaEvent: eventType,\n+          },\n+        })\n+      } finally {\n+        await base.flush()\n+      }\n     },\n   }\n }"
+  },
+  {
+   "filename": "packages/telemetry/src/outbox.ts",
+   "status": "modified",
+   "additions": 50,
+   "deletions": 16,
+   "patch": "@@ -54,6 +54,7 @@ function sleep(ms: number): Promise<void> {\n export class TelemetryOutbox {\n   private readonly dir: string\n   private readonly outboxPath: string\n+  private readonly lastFlushPath: string\n   private readonly lockPath: string\n   private readonly maxBytes: number\n   private readonly maxAgeMs: number\n@@ -63,6 +64,7 @@ export class TelemetryOutbox {\n   constructor(opts: OutboxOptions) {\n     this.dir = getTelemetryDir(opts.toolName)\n     this.outboxPath = join(this.dir, 'outbox.ndjson')\n+    this.lastFlushPath = join(this.dir, 'last-flush')\n     this.lockPath = join(this.dir, 'outbox.lock')\n     this.maxBytes = opts.maxBufferBytes ?? DEFAULT_MAX_BYTES\n     this.maxAgeMs = opts.maxEventAgeMs ?? DEFAULT_MAX_AGE_MS\n@@ -85,27 +87,34 @@ export class TelemetryOutbox {\n \n   /** Read all valid events in order. Corrupt lines skipped. */\n   async readAll(): Promise<RunEvent[]> {\n-    let raw: string\n+    return (await this.parseStored()).map(s => s.event)\n+  }\n+\n+  /** Count and oldest `storedAt` of valid events. */\n+  async inspect(): Promise<{ count: number, oldestStoredAt?: number }> {\n+    const stored = await this.parseStored()\n+    return { count: stored.length, oldestStoredAt: stored[0]?.storedAt }\n+  }\n+\n+  /** Epoch ms of the last successful flush, if any. */\n+  async readLastFlushAt(): Promise<number | undefined> {\n     try {\n-      raw = await readFile(this.outboxPath, 'utf-8')\n+      const n = Number((await readFile(this.lastFlushPath, 'utf-8')).trim())\n+      if (!Number.isFinite(n) || n <= 0) return undefined\n+      return n\n     } catch {\n-      return []\n+      return undefined\n     }\n+  }\n \n-    const events: RunEvent[] = []\n-    const now = Date.now()\n-    for (const line of raw.split('\\n')) {\n-      if (!line.trim()) continue\n-      try {\n-        const stored = JSON.parse(line) as StoredEvent\n-        if (stored?.event?.event !== 'run') continue\n-        if (now - stored.storedAt > this.maxAgeMs) continue\n-        events.push(stored.event)\n-      } catch {\n-        // skip corrupt\n-      }\n+  /** Persist a successful flush timestamp. Never throws. */\n+  async markFlushed(at = Date.now()): Promise<void> {\n+    try {\n+      await mkdir(this.dir, { recursive: true })\n+      await writeFile(this.lastFlushPath, String(at), 'utf-8')\n+    } catch {\n+      // never harm the host\n     }\n-    return events\n   }\n \n   /** Remove delivered events by rewriting the outbox. */\n@@ -150,12 +159,37 @@ export class TelemetryOutbox {\n     try {\n       await this.withLock(async () => {\n         await unlink(this.outboxPath).catch(() => {})\n+        await unlink(this.lastFlushPath).catch(() => {})\n       })\n     } catch {\n       // absent is fine\n     }\n   }\n \n+  private async parseStored(): Promise<StoredEvent[]> {\n+    let raw: string\n+    try {\n+      raw = await readFile(this.outboxPath, 'utf-8')\n+    } catch {\n+      return []\n+    }\n+\n+    const stored: StoredEvent[] = []\n+    const now = Date.now()\n+    for (const line of raw.split('\\n')) {\n+      if (!line.trim()) continue\n+      try {\n+        const item = JSON.parse(line) as StoredEvent\n+        if (item?.event?.event !== 'run') continue\n+        if (now - item.storedAt > this.maxAgeMs) continue\n+        stored.push(item)\n+      } catch {\n+        // skip corrupt\n+      }\n+    }\n+    return stored\n+  }\n+\n   private async enforceBoundsInLock(): Promise<void> {\n     try {\n       const fileStat = await stat(this.outboxPath)"
+  },
+  {
+   "filename": "packages/telemetry/src/types.ts",
+   "status": "modified",
+   "additions": 16,
+   "deletions": 1,
+   "patch": "@@ -98,6 +98,21 @@ export interface TelemetryOptions<\n   collect?: CollectConfig<TFlags, TFields>\n   /** Hard cap (ms) for {@link TelemetryHandle.flush}. Default: 500. */\n   flushTimeoutMs?: number\n+  /**\n+   * Idle time after a successful flush before {@link TelemetryHandle.run} POSTs again.\n+   * `run()` still writes every event to disk; it POSTs when this window has\n+   * elapsed, or sooner when the outbox has reached {@link TelemetryOptions.flushThreshold}.\n+   * {@link TelemetryHandle.flush} sends immediately.\n+   * Default: 15 minutes (60 minutes when `std-env` reports CI).\n+   * Override with `EVLOG_TELEMETRY_FLUSH_INTERVAL_MS` (`0` POSTs on every run).\n+   */\n+  flushIntervalMs?: number\n+  /**\n+   * Outbox size that forces a flush from {@link TelemetryHandle.run} even inside\n+   * the coalescing window. Default: 20. Capped at 50 (ingest `maxBatchSize`).\n+   * Override with `EVLOG_TELEMETRY_FLUSH_THRESHOLD`.\n+   */\n+  flushThreshold?: number\n   /** Max outbox file size in bytes before oldest events are dropped. Default: 1 MiB. */\n   maxBufferBytes?: number\n   /** Max age (ms) for buffered events. Default: 30 days. */\n@@ -148,7 +163,7 @@ export interface TelemetryHandle<\n       systemCustom?: Record<string, string>\n     },\n   ) => Promise<T>\n-  /** Flush buffered events within the hard cap. Never throws. */\n+  /** Flush buffered events now, ignoring the coalescing window. Never throws. */\n   flush: () => Promise<void>\n   /** Whether telemetry is active (consent granted). */\n   enabled: boolean"
+  },
+  {
+   "filename": "packages/telemetry/test/github-actions.test.ts",
+   "status": "modified",
+   "additions": 12,
+   "deletions": 0
+  },
+  {
+   "filename": "packages/telemetry/test/telemetry.test.ts",
+   "status": "modified",
+   "additions": 240,
+   "deletions": 1
+  }
+ ],
+ "manifests": {}
+}

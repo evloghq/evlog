@@ -28,7 +28,7 @@ export default slackChannel({
     if (ctx.isBotMentioned() || !(await ctx.isSubscribed())) return null
     return admitMaintainer(ctx, message)
   },
-  onInputResponse(ctx) {
+  onAnswers(ctx) {
     return isMaintainer(ctx.defaultAuth) ? { auth: ctx.defaultAuth } : null
   },
 })

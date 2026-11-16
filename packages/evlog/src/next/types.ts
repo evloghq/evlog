@@ -8,13 +8,9 @@ export interface NextEvlogOptions extends BaseEvlogOptions {
    */
   service?: string
 
-  /**
-   * Environment context overrides.
-   */
   env?: Partial<EnvironmentContext>
 
   /**
-   * Enable pretty printing.
    * @default true in development, false in production
    */
   pretty?: boolean
@@ -25,9 +21,6 @@ export interface NextEvlogOptions extends BaseEvlogOptions {
    */
   enabled?: boolean
 
-  /**
-   * Sampling configuration for filtering logs.
-   */
   sampling?: SamplingConfig
 
   /**

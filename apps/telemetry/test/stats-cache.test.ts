@@ -70,9 +70,30 @@ describe('getCachedStatsForFilter', () => {
     expect(statsCalls).toBe(1)
   })
 
-  it('recomputes after the max age even with no new events — the window slides', async () => {
+  it('stamps each response with the cursor it was computed at', async () => {
+    await expect(getCachedStatsForFilter(FILTER)).resolves.toMatchObject({ call: 1, cursorId: 1 })
+
+    vi.advanceTimersByTime(1000)
+    cursorId = 2
+    // Served from under the floor: the stamp still says 1, so a client that
+    // probed 2 knows this response does not include the new event yet.
+    await expect(getCachedStatsForFilter(FILTER)).resolves.toMatchObject({ call: 1, cursorId: 1 })
+
+    vi.advanceTimersByTime(5000)
+    await expect(getCachedStatsForFilter(FILTER)).resolves.toMatchObject({ call: 2, cursorId: 2 })
+  })
+
+  it('reuses a result for a few minutes while the cursor is unchanged', async () => {
     await getCachedStatsForFilter(FILTER)
-    vi.advanceTimersByTime(61_000)
+    vi.advanceTimersByTime(4 * 60_000)
+    await getCachedStatsForFilter(FILTER)
+
+    expect(statsCalls).toBe(1)
+  })
+
+  it('recomputes after the max age even with no new events: the window slides', async () => {
+    await getCachedStatsForFilter(FILTER)
+    vi.advanceTimersByTime(5 * 60_000 + 1000)
     await getCachedStatsForFilter(FILTER)
 
     expect(statsCalls).toBe(2)

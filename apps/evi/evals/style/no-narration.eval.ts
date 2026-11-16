@@ -14,7 +14,7 @@ export default defineEval({
     const turn = await t.send('Does evlog support sampling?')
     t.succeeded()
     t.check(
-      turn.message ?? '',
+      turn.reply ?? '',
       satisfies(reply => !NARRATION.test(String(reply)), 'reply does not open by narrating retrieval'),
     )
   },

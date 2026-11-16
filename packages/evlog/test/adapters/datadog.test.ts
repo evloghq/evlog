@@ -12,6 +12,7 @@ import {
   toDatadogLog,
   createDatadogDrain,
 } from '../../src/adapters/datadog'
+import { getFetchCall } from '../helpers/fetch'
 
 describe('datadog adapter', () => {
   /** Request bodies are gzipped: inflate before parsing. */
@@ -338,6 +339,16 @@ describe('datadog adapter', () => {
         return readBody(options).length
       })
       expect(sizes).toEqual([1000, 500])
+    })
+
+    it('splits a batch above 5 MB uncompressed into several requests', async () => {
+      const events = Array.from({ length: 3 }, (_, index) => createTestEvent({ requestId: String(index), payload: 'x'.repeat(2_000_000) }))
+
+      await sendBatchToDatadog(events, { apiKey: 'test-key' })
+
+      const bodies = await Promise.all(Array.from({ length: fetchSpy.mock.calls.length }, async (_, index) => gunzipSync(new Uint8Array(await new Response(getFetchCall(fetchSpy, index).init.body).arrayBuffer()))))
+      expect(bodies.map(body => JSON.parse(body.toString('utf8')).length)).toEqual([2, 1])
+      for (const body of bodies) expect(body.byteLength).toBeLessThanOrEqual(5_000_000)
     })
 
     it('sends multiple events in one request', async () => {

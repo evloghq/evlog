@@ -1,121 +1,36 @@
+import { EvlogError } from 'evlog'
 import { useLogger } from 'evlog/eve'
-import type { DynamicResolveContext } from 'eve/tools'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { eviErrors, refusal, type ToolRefusal } from '../lib/errors'
 import { repositoryToken } from '../lib/github/credentials'
-import { isValidRefName, pushBrokerPolicy, validatePushBranch } from '../lib/github/push'
+import { pushBrokerPolicy, validatePushBranch } from '../lib/github/push'
+import { collectBranchCommits, pushSignedCommits, remoteBranchHead } from '../lib/github/signed-push'
 import { cloneUrl, homeRepository, parseRepository, type Repository, repositorySlug } from '../lib/repo'
+import { isVercelEnvironment } from '../lib/sandbox-backend'
 import { canAccessAdminTools } from '../lib/trust'
-import { checkoutDir, installCommand, REPO_DIR, runOutput } from '../lib/workspace'
+import { checkoutDir, REPO_DIR, runOutput } from '../lib/workspace'
 import { environment } from '../sandbox'
 
-function notAllowed(tool: string) {
-  return refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool, message: 'Only maintainer and schedule-app sessions may use git over the network.' }))
-}
-
-function notSlug(input: string) {
-  return refusal(eviErrors.INPUT_REFUSED({ message: `"${input}" is not an owner/repo slug.` }))
-}
-
-function notInstalled(repository: Repository) {
-  return refusal(eviErrors.GITHUB_NOT_INSTALLED({ owner: repository.owner, repository: repositorySlug(repository) }))
-}
-
-// Executes stay inline in the resolver (docs/notes.md).
-// Maintainer and schedule-app turns ship code; nothing else reaches git over the network.
-const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
+// Maintainer and schedule-app turns ship code; nothing else pushes.
+export default defineDynamic((ctx) => {
   if (!canAccessAdminTools(ctx.session.auth.current)) return null
   const home = repositorySlug(homeRepository())
   return {
-    git__checkout: defineTool({
-      description: `Clone a repository the GitHub App is installed on into the sandbox, at /workspace/<owner>/<repo>, and install its dependencies with the package manager its lockfile names, so you can read, run and change it there. ${home} is already checked out at ${REPO_DIR} and never needs this. Pass \`ref\` to land on a branch or commit instead of the default branch. Nothing is cached for this checkout: checks run cold, so say so when you report them. The credential is brokered at the sandbox firewall and never enters the sandbox.`,
-      inputSchema: z.object({
-        repository: z.string().min(1).describe('owner/repo to clone'),
-        ref: z.string().optional().describe('Branch or commit to check out'),
-      }),
-      async execute(input, toolCtx) {
-        if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAllowed('git__checkout')
-        const log = useLogger(toolCtx)
-        const repository = parseRepository(input.repository)
-        if (repository === null) return notSlug(input.repository)
-        if (input.ref !== undefined && !isValidRefName(input.ref)) {
-          return refusal(eviErrors.INPUT_REFUSED({ message: `"${input.ref}" is not a valid ref.` }))
-        }
-        const slug = repositorySlug(repository)
-        const token = await repositoryToken(repository)
-        if (token === null) {
-          const refused = notInstalled(repository)
-          log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code } } })
-          return refused
-        }
-        const dir = checkoutDir(repository)
-        const sandbox = await toolCtx.getSandbox(environment)
-        await sandbox.setNetworkPolicy(pushBrokerPolicy(token))
-        try {
-          const clone = await sandbox.run({ command: `test -d ${dir}/.git || (mkdir -p ${dir} && git clone --depth 50 ${cloneUrl(repository)} ${dir})` })
-          if (clone.exitCode !== 0) {
-            const refused = refusal(eviErrors.GIT_COMMAND_FAILED({ command: 'clone', exitCode: clone.exitCode, message: `git clone exited ${clone.exitCode}: ${runOutput(clone)}` }))
-            log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code, exitCode: clone.exitCode } } })
-            return refused
-          }
-          if (input.ref !== undefined) {
-            const checkout = await sandbox.run({ command: `git -C ${dir} fetch --depth 50 origin '${input.ref}' && git -C ${dir} checkout --detach FETCH_HEAD` })
-            if (checkout.exitCode !== 0) {
-              const refused = refusal(eviErrors.GIT_COMMAND_FAILED({ command: 'checkout', exitCode: checkout.exitCode, message: `git checkout exited ${checkout.exitCode}: ${runOutput(checkout)}` }))
-              log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code, exitCode: checkout.exitCode } } })
-              return refused
-            }
-          }
-          const head = await sandbox.run({ command: `git -C ${dir} rev-parse --verify HEAD` })
-          if (head.exitCode !== 0) {
-            const refused = refusal(eviErrors.GIT_NO_COMMITS({ repository: slug }))
-            log.set({ git: { checkout: { repository: slug, done: false, reason: refused.code } } })
-            return refused
-          }
-          const sha = String(head.stdout).trim()
-          log.set({ git: { checkout: { repository: slug, done: true, sha } } })
-          return { success: true as const, repository: slug, path: dir, sha }
-        } finally {
-          await sandbox.setNetworkPolicy('allow-all')
-        }
-      },
-    }),
-    git__install: defineTool({
-      description: `Install the dependencies of a git__checkout directory with the package manager its lockfile names (pnpm, yarn, npm or bun), frozen to the lockfile. Run it once after the checkout and before any check; ${REPO_DIR} already has its dependencies.`,
-      inputSchema: z.object({
-        repository: z.string().min(1).describe('owner/repo already checked out'),
-      }),
-      async execute(input, toolCtx) {
-        if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAllowed('git__install')
-        const log = useLogger(toolCtx)
-        const repository = parseRepository(input.repository)
-        if (repository === null) return notSlug(input.repository)
-        const slug = repositorySlug(repository)
-        const dir = checkoutDir(repository)
-        const sandbox = await toolCtx.getSandbox()
-        const install = await sandbox.run({ command: installCommand(dir) })
-        if (install.exitCode !== 0) {
-          const refused = refusal(eviErrors.INSTALL_FAILED({ exitCode: install.exitCode, message: `install exited ${install.exitCode}: ${runOutput(install)}` }))
-          log.set({ git: { install: { repository: slug, done: false, reason: refused.code, exitCode: install.exitCode } } })
-          return refused
-        }
-        log.set({ git: { install: { repository: slug, done: true } } })
-        return { success: true as const, repository: slug, path: dir }
-      },
-    }),
     git__push: defineTool({
-      description: `Push a local branch to GitHub: to ${home} from ${REPO_DIR}, or to the repository named in \`repository\` from its git__checkout directory. The branch must already exist locally with the work committed and the checks run; main and master are refused. The credential is brokered at the sandbox firewall and never enters the sandbox. After a successful push, open the pull request with github__createPullRequest.`,
+      description: `Push a local branch to GitHub: to ${home} from ${REPO_DIR}, or to the repository named in \`repository\` from its clone at /workspace/<owner>/<repo>. The branch must already exist locally with the work committed and the checks run; main and master are refused. Each new commit is recreated on GitHub so that GitHub signs it, then the local branch is moved onto those commits: same files and messages, new shas. That push takes regular files only: merge commits, symlinks, submodules and executable bits are refused, and so is a branch on GitHub that the local one does not build on. The credential never enters the sandbox. After a successful push, open the pull request with github__createPullRequest.`,
       inputSchema: z.object({
         branch: z.string().min(1).describe('Branch name to push, e.g. fix/pipeline-flush'),
         repository: z.string().optional().describe(`owner/repo to push to; defaults to ${home}`),
       }),
       async execute(input, toolCtx) {
-        if (!canAccessAdminTools(toolCtx.session.auth.current)) return notAllowed('git__push')
         const log = useLogger(toolCtx)
         const refuse = (refused: ToolRefusal) => {
           log.set({ git: { branch: input.branch, pushed: false, reason: refused.code } })
           return refused
+        }
+        if (!canAccessAdminTools(toolCtx.session.auth.current)) {
+          return refuse(refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool: 'git__push', message: 'Only maintainer and schedule-app sessions may push.' })))
         }
         const reason = validatePushBranch(input.branch)
         if (reason) return refuse(refusal(eviErrors.GIT_PUSH_REFUSED({ message: reason })))
@@ -124,39 +39,48 @@ const resolveGitTools = (_event: unknown, ctx: DynamicResolveContext) => {
           repository = homeRepository()
         } else {
           const parsed = parseRepository(input.repository)
-          if (parsed === null) return refuse(notSlug(input.repository))
+          if (parsed === null) return refuse(refusal(eviErrors.INPUT_REFUSED({ message: `"${input.repository}" is not an owner/repo slug.` })))
           repository = parsed
         }
+        if (!isVercelEnvironment(environment)) {
+          return refuse(refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool: 'git__push', message: 'git__push needs the Vercel Sandbox firewall to broker the GitHub token, and this sandbox is local Docker. Run it on a deployment.' })))
+        }
         const token = await repositoryToken(repository)
-        if (token === null) return refuse(notInstalled(repository))
+        if (token === null) return refuse(refusal(eviErrors.GITHUB_NOT_INSTALLED({ owner: repository.owner, repository: repositorySlug(repository) })))
         const dir = checkoutDir(repository)
         const sandbox = await toolCtx.getSandbox(environment)
+        let sha: string
+        let localHead: string
+        let commits: number
+        try {
+          const remoteHead = await remoteBranchHead(token, repository, input.branch)
+          const branch = await collectBranchCommits(sandbox, dir, input.branch, remoteHead)
+          sha = await pushSignedCommits(token, repository, input.branch, branch)
+          localHead = branch.head
+          commits = branch.commits.length
+        } catch (error) {
+          if (!EvlogError.isEvlogError(error) || error.code === undefined) throw error
+          return refuse(refusal(error))
+        }
         await sandbox.setNetworkPolicy(pushBrokerPolicy(token))
         try {
           // The URL is spelled out, never `origin`: remote config inside the
           // sandbox is model-writable and must not redirect the brokered credential.
-          const push = await sandbox.run({
-            command: `git -C ${dir} push ${cloneUrl(repository)} 'refs/heads/${input.branch}:refs/heads/${input.branch}'`,
+          // update-ref takes the head the commits were read from, so a commit added since stays.
+          const align = await sandbox.run({
+            command: `git -C ${dir} fetch ${cloneUrl(repository)} 'refs/heads/${input.branch}' && test "$(git -C ${dir} rev-parse FETCH_HEAD^{tree})" = "$(git -C ${dir} rev-parse '${input.branch}^{tree}')" && git -C ${dir} update-ref 'refs/heads/${input.branch}' ${sha} ${localHead}`,
           })
-          if (push.exitCode !== 0) {
-            const refused = refusal(eviErrors.GIT_COMMAND_FAILED({ command: 'push', exitCode: push.exitCode, message: `git push exited ${push.exitCode}: ${runOutput(push)}` }))
-            log.set({ git: { branch: input.branch, pushed: false, reason: refused.code, exitCode: push.exitCode } })
+          if (align.exitCode !== 0) {
+            const refused = refusal(eviErrors.GIT_COMMAND_FAILED({ command: 'fetch', exitCode: align.exitCode, message: `Pushed ${input.branch} to ${sha}, but the local branch could not be moved onto it, or its files differ: ${runOutput(align)}` }))
+            log.set({ git: { branch: input.branch, pushed: true, sha, commits, reason: refused.code } })
             return refused
           }
-          const head = await sandbox.run({ command: `git -C ${dir} rev-parse '${input.branch}'` })
-          const sha = String(head.stdout).trim()
-          log.set({ git: { branch: input.branch, pushed: true, sha } })
-          return { success: true as const, branch: input.branch, sha, repository: repositorySlug(repository) }
         } finally {
           await sandbox.setNetworkPolicy('allow-all')
         }
+        log.set({ git: { branch: input.branch, pushed: true, sha, commits } })
+        return { success: true as const, branch: input.branch, sha, repository: repositorySlug(repository) }
       },
     }),
   }
-}
-
-export default defineDynamic({
-  events: {
-    'turn.started': resolveGitTools,
-  },
 })

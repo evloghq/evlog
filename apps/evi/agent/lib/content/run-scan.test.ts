@@ -26,7 +26,7 @@ it('aborts and cleans up even if the backend never delivers its exit event', asy
   const result = expect(runContentScan(sandbox, { text: 'Draft.' }, 30)).rejects.toThrow('exceeded 30ms')
   await vi.advanceTimersByTimeAsync(30)
   await result
-  expect(sandbox.run.mock.calls[0][0].abortSignal.aborted).toBe(true)
+  expect(sandbox.run.mock.calls[0][0].signal.aborted).toBe(true)
   expect(sandbox.removePath).toHaveBeenCalledWith(expect.objectContaining({ path: sandbox.writeTextFile.mock.calls[0][0].path }))
 })
 
@@ -74,5 +74,5 @@ it('bounds cleanup when the sandbox file API stops responding', async () => {
   const result = expect(runContentScan(sandbox, { text: 'Draft.' })).rejects.toThrow('exceeded 5000ms')
   await vi.advanceTimersByTimeAsync(5000)
   await result
-  expect(sandbox.removePath.mock.calls[0][0].abortSignal.aborted).toBe(true)
+  expect(sandbox.removePath.mock.calls[0][0].signal.aborted).toBe(true)
 })

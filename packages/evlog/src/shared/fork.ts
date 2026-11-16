@@ -17,8 +17,6 @@ export interface ForkLifecycle {
 }
 
 /**
- * Options for {@link forkBackgroundLogger}.
- *
  * @beta Part of `evlog/toolkit`
  */
 export interface ForkBackgroundLoggerOptions {
@@ -31,15 +29,16 @@ export interface ForkBackgroundLoggerOptions {
 }
 
 /**
- * Attach {@link RequestLogger.fork} to a request logger. Replaces any existing `fork`.
+ * Attach {@link RequestLogger.fork} to a request logger and return it. Replaces any existing `fork`.
  */
-export function attachForkToLogger(
+export function attachForkToLogger<TLogger extends RequestLogger>(
   storage: AsyncLocalStorage<RequestLogger>,
-  parent: RequestLogger,
+  parent: TLogger,
   middlewareOptions: MiddlewareLoggerOptions,
   lifecycle?: ForkLifecycle,
-): void {
-  parent.fork = (label, fn) => forkBackgroundLogger({ storage, parent, middlewareOptions, label, fn, lifecycle })
+): TLogger & Required<Pick<RequestLogger, 'fork'>> {
+  const fork: NonNullable<RequestLogger['fork']> = (label, fn) => forkBackgroundLogger({ storage, parent, middlewareOptions, label, fn, lifecycle })
+  return Object.assign(parent, { fork })
 }
 
 /**

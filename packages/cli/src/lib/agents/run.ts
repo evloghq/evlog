@@ -1,10 +1,9 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import { telemetry } from '@evlog/telemetry'
 import type { CliContext } from '../../core/context'
 import type { CliDebug } from '../debug'
 import { createNoopCliDebug } from '../debug'
 import type { FileAction } from '../init/wiring'
+import { writeActions } from '../init/write'
 import {
   canPrompt,
   closeAgents,
@@ -21,6 +20,7 @@ import type { Framework } from '../map/types'
 import { resolveProject } from '../project'
 import type { ProjectInfo } from '../project'
 import { planAgents } from './plan'
+import type { AgentsPlanInput } from './plan'
 import { findInstalledSkills, runSkills, skillsCommand } from './skills'
 
 export interface AgentsOptions {
@@ -162,10 +162,7 @@ export async function runAgents(
 
   if (!dryRun) {
     await log.step('write', async () => {
-      for (const action of plan.actions) {
-        await mkdir(dirname(action.path), { recursive: true })
-        await writeFile(action.path, action.contents, 'utf8')
-      }
+      await writeActions(plan.actions)
       return plan.actions.length
     })
   }
@@ -187,22 +184,12 @@ export async function runAgents(
       : { status: 'failed', command: command.display, found: [], dirs: [], error: outcome.error }
   }
 
-  /* The block was written before the install, so it could stand whatever the
-     subprocess did — which means it promises a skill that is now known not to
-     exist. Rewrite it rather than leave an agent chasing a missing file. */
   if (skills.status === 'failed' && !dryRun) {
-    const corrected = planAgents({
+    await log.step('rewriteBlock', () => dropSkillsPointer({
       root: project.packageDir,
       projectName: project.packageName ?? 'This project',
       framework,
-      hasSkills: false,
-    })
-    await log.step('rewriteBlock', async () => {
-      for (const action of corrected.actions) {
-        await writeFile(action.path, action.contents, 'utf8')
-      }
-      return corrected.actions.length
-    })
+    }))
   }
 
   if (interactive) {
@@ -223,6 +210,19 @@ export async function runAgents(
 
   recordAgentsRun(result)
   return result
+}
+
+/**
+ * Rewrite the block after a failed skills install.
+ *
+ * The block is written before the install so it stands whatever the
+ * subprocess does, which means on failure it points at a skill that is known
+ * not to exist.
+ */
+export async function dropSkillsPointer(input: Omit<AgentsPlanInput, 'hasSkills'>): Promise<number> {
+  const corrected = planAgents({ ...input, hasSkills: false })
+  await writeActions(corrected.actions)
+  return corrected.actions.length
 }
 
 function cancelled(input: {

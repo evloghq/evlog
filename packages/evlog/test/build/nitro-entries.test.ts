@@ -66,10 +66,10 @@ describe('Nitro entries', () => {
     }
   })
 
-  it.skipIf(!distExists)('the Nuxt module registers the nitropack plugin and error handler', () => {
+  it.skipIf(!distExists)('the Nuxt module registers the plugin and error handler of each Nitro major', () => {
     const source = readFileSync(join(distDir, 'nuxt/module.mjs'), 'utf8')
-    const nitroPaths = [...source.matchAll(/resolve\(["'](\.\.\/nitro\/[^"']+)["']\)/g)].map(match => match[1])
-    expect(nitroPaths.sort()).toEqual(['../nitro/v2/errorHandler', '../nitro/v2/plugin'])
+    const nitroPaths = [...source.matchAll(/["'](\.\.\/nitro\/[^"']+)["']/g)].map(match => match[1])
+    expect(nitroPaths.sort()).toEqual(['../nitro/errorHandler', '../nitro/plugin', '../nitro/v2/errorHandler', '../nitro/v2/plugin'])
     for (const path of nitroPaths) expect(existsSync(resolve(distDir, 'nuxt', `${path}.mjs`))).toBe(true)
   })
 })

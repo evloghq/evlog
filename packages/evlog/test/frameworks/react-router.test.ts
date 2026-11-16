@@ -120,19 +120,20 @@ describe('evlog/react-router', () => {
     ).rejects.toThrow('unexpected')
   })
 
-  it('skips routes not matching include patterns', async () => {
+  it('gives routes not matching include patterns a logger that does nothing', async () => {
     const { drain } = createPipelineSpies()
     const middleware = evlog({ include: ['/api/**'], drain })
     const context = createMockContext()
-    const next = vi.fn(() => okResponse())
+    const next = vi.fn(() => {
+      context.get(loggerContext).set({ probe: true })
+      return okResponse()
+    })
 
     await middleware({ request: createRequest('/health'), context }, next)
 
     expect(next).toHaveBeenCalledOnce()
     expect(drain).not.toHaveBeenCalled()
-    // Real RouterContextProvider throws on missing keys (no default registered),
-    // so we verify the skip via the drain spy and the absence of a context set.
-    expect(() => context.get(loggerContext)).toThrow()
+    expect(context.get(loggerContext).getContext()).toEqual({})
   })
 
   it('logs routes matching include patterns', async () => {
@@ -162,17 +163,35 @@ describe('evlog/react-router', () => {
     assertHttpEventEmitted(drain, { path: '/api/checkout', method: 'POST' })
   })
 
-  it('excludes routes matching exclude patterns', async () => {
+  it('gives routes matching exclude patterns a logger that does nothing', async () => {
     const { drain } = createPipelineSpies()
     const middleware = evlog({ exclude: ['/_internal/**'], drain })
     const context = createMockContext()
-    const next = vi.fn(() => okResponse())
+    const next = vi.fn(() => {
+      context.get(loggerContext).set({ probe: true })
+      return okResponse()
+    })
 
     await middleware({ request: createRequest('/_internal/probe'), context }, next)
 
     expect(next).toHaveBeenCalledOnce()
     expect(drain).not.toHaveBeenCalled()
-    expect(() => context.get(loggerContext)).toThrow()
+    expect(context.get(loggerContext).getContext()).toEqual({})
+  })
+
+  it('gives loaders a logger that does nothing with enabled: false', async () => {
+    initLogger({ enabled: false })
+    const middleware = evlog()
+    const context = createMockContext()
+    const next = vi.fn(() => {
+      context.get(loggerContext).set({ user: { id: 'u_1' } })
+      return okResponse()
+    })
+
+    const response = await middleware({ request: createRequest('/orders'), context }, next)
+
+    expect(response.status).toBe(200)
+    expect(context.get(loggerContext).getContext()).toEqual({})
   })
 
   describe('drain / enrich / keep', () => {

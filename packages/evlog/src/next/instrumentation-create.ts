@@ -44,13 +44,11 @@ export interface InstrumentationOptions {
   enabled?: boolean
   /** Service name for all logged events. */
   service?: string
-  /** Environment context overrides. */
   env?: Partial<EnvironmentContext>
-  /** Enable pretty printing. @default true in development */
+  /** @default true in development */
   pretty?: boolean
   /** Suppress built-in console output. @default false */
   silent?: boolean
-  /** Sampling configuration for filtering logs. */
   sampling?: SamplingConfig
   /** Minimum severity for the global `log` API. @default 'debug' */
   minLevel?: LogLevel

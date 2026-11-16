@@ -9,6 +9,7 @@ import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
 import { loadCliConfig } from '../lib/config'
 import { cliErrors } from '../lib/errors'
+import { flagValues } from '../lib/flags'
 import { buildQuery, computeStats, select } from '../lib/logs/query'
 import type { LogsArgs, LogsQuery } from '../lib/logs/query'
 import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'
@@ -224,6 +225,34 @@ async function followUrl(url: string, shown: WideEvent[], inRange: (event: WideE
 }
 
 /**
+ * What `evlog logs` reports: how the reader was used, never what it read.
+ *
+ * The view is one of this CLI's own ids; the rest is counts and booleans. No
+ * event, field name, filter value, path or URL.
+ */
+function logsTelemetryFields(
+  result: Pick<LogsResult, 'matched' | 'sources'> & { query: Pick<LogsResult['query'], 'view' | 'where'> },
+  run: { follow: boolean, url: boolean },
+): Record<string, boolean | number | string> {
+  return {
+    logsView: result.query.view,
+    logsFollow: run.follow,
+    logsEvents: result.matched,
+    logsWhere: result.query.where.length,
+    logsSources: result.sources.length,
+    logsUrl: run.url,
+  }
+}
+
+/** Every field {@link logsTelemetryFields} can emit — used to keep the ingest allowlist in step. */
+export function logsTelemetryFieldNames(): string[] {
+  return Object.keys(logsTelemetryFields(
+    { query: { view: 'recent', where: [] }, matched: 0, sources: [] },
+    { follow: false, url: false },
+  ))
+}
+
+/**
  * `evlog logs` — the wide events the app wrote, from the terminal.
  * Logic lives in {@link runLogs}; this file owns the citty surface.
  */
@@ -243,7 +272,7 @@ export default defineEvlogCommand('logs', {
     dir: { type: 'string', description: 'Log directory (default: the project\'s .evlog/logs, or every app\'s in a workspace)' },
     url: { type: 'string', description: 'Read the memory drain\'s dev endpoint instead of files (a JSON array of events)' },
   },
-  async run({ args, cli, ui }) {
+  async run({ args, rawArgs, cli, ui }) {
     const style = createStyle(cli)
     const controller = new AbortController()
     const stop = (): void => controller.abort()
@@ -251,7 +280,7 @@ export default defineEvlogCommand('logs', {
 
     let result: LogsResult
     try {
-      result = await runLogs(cli, args as LogsArgs, {
+      result = await runLogs(cli, { ...(args as LogsArgs), where: flagValues(rawArgs, 'where') }, {
         dir: args.dir,
         url: args.url,
         follow: args.follow,
@@ -264,6 +293,7 @@ export default defineEvlogCommand('logs', {
       })
     } catch (error) {
       if (error instanceof EvlogError) {
+        telemetry.fail(error.code)
         ui.done({
           jsonMode: args.json,
           json: { error: { code: error.code, message: error.message, why: error.why, fix: error.fix } },
@@ -278,14 +308,7 @@ export default defineEvlogCommand('logs', {
       process.off('SIGINT', stop)
     }
 
-    telemetry.set({
-      logsView: result.query.view,
-      logsFollow: args.follow === true,
-      logsEvents: result.matched,
-      logsWhere: result.query.where.length,
-      logsSources: result.sources.length,
-      logsUrl: args.url !== undefined,
-    } as unknown as Record<string, boolean | number>)
+    telemetry.set(logsTelemetryFields(result, { follow: args.follow === true, url: args.url !== undefined }) as unknown as Record<string, boolean | number>)
 
     /* While following, the one-shot part was already streamed line by line
        before the tail started, so the report is only for the one-shot run. */
@@ -299,7 +322,7 @@ export default defineEvlogCommand('logs', {
         matched: result.matched,
         ...(result.query.view === 'stats' ? { stats: computeStats(result.all) } : { events: result.events }),
       },
-      human: formatLogsReport(cli, result),
+      human: args.json ? undefined : formatLogsReport(cli, result),
     })
   },
 })

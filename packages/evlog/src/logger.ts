@@ -1,4 +1,4 @@
-import type { AuditableLogger, AuditInput, AuditMethod } from './audit'
+import type { AuditableLogger, AuditInput, AuditMethod, ForkableLogger } from './audit'
 import type { DrainContext, EnvironmentContext, FieldContext, Log, LogLevel, LoggerConfig, RequestLogEntry, RequestLogger, RequestLoggerOptions, TailSamplingContext, WideEvent } from './types'
 import { buildAuditFields, consumeAuditForceKeep, finalizeAudit } from './audit'
 import { markGloballyRedacted, redactEvent, resolveRedactConfig } from './redact'
@@ -154,7 +154,7 @@ const state = globalConfig
  * second `initLogger()` without a `drain` clears the drain for every copy.
  * Integrations that initialize implicitly must therefore check
  * {@link isLoggerLocked} / {@link isLoggerInitialized} first, as `next/handler`
- * and `eve` do.
+ * and `eve` do, or pass {@link getGlobalDrain} through, as the Nitro plugins do.
  */
 export function initLogger(config: LoggerConfig = {}): void {
   state.enabled = config.enabled ?? true
@@ -201,9 +201,6 @@ export function getGlobalPluginRunner(): PluginRunner {
   return state.pluginRunner
 }
 
-/**
- * Check if logging is globally enabled.
- */
 export function isEnabled(): boolean {
   return state.enabled
 }
@@ -256,14 +253,12 @@ export function shouldSample(level: LogLevel): boolean {
     return level !== 'trace' // No sampling configured, log everything except trace
   }
 
-  // Error defaults to 100% and trace to 0% unless explicitly set
   const percentage = level === 'error' && rates.error === undefined
     ? 100
     : level === 'trace' && rates.trace === undefined
       ? 0
       : rates[level] ?? 100
 
-  // 0% = never log, 100% = always log
   if (percentage <= 0) return false
   if (percentage >= 100) return true
 
@@ -559,7 +554,6 @@ function asCapturedLines(value: unknown): string[] | undefined {
 function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
   const entries: TreeEntry[] = []
 
-  // Header
   const headerParts: string[] = []
   if (ai.model) {
     let m = String(ai.model)
@@ -574,7 +568,6 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
   if (steps !== undefined && steps > 1) headerParts.push(`${steps} steps`)
   entries.push({ key: 'ai', value: headerParts.join(' · ') })
 
-  // Tokens
   const inputTokens = asNumber(ai.inputTokens)
   const outputTokens = asNumber(ai.outputTokens)
   const totalTokens = asNumber(ai.totalTokens)
@@ -589,7 +582,6 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
     entries.push({ key: 'ai.tokens', value: tokLine })
   }
 
-  // Streaming
   const msFirst = asNumber(ai.msToFirstChunk)
   const msFinish = asNumber(ai.msToFinish)
   const tps = asNumber(ai.tokensPerSecond)
@@ -602,13 +594,11 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
     entries.push({ key: 'ai.streaming', value: streamLine })
   }
 
-  // Cost
   const estimatedCost = asNumber(ai.estimatedCost)
   if (estimatedCost !== undefined) {
     entries.push({ key: 'ai.cost', value: formatCost(estimatedCost) })
   }
 
-  // Total duration
   const totalDurationMs = asNumber(ai.totalDurationMs)
   if (totalDurationMs !== undefined) {
     entries.push({ key: 'ai.totalDuration', value: formatDuration(totalDurationMs) })
@@ -648,7 +638,6 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
     }
   }
 
-  // Steps
   const stepsUsage = Array.isArray(ai.stepsUsage)
     ? ai.stepsUsage.filter(isPlainObject)
     : undefined
@@ -674,7 +663,6 @@ function buildAIEntries(ai: Record<string, unknown>): TreeEntry[] {
   const outputLines = asCapturedLines(ai.output)
   if (outputLines) entries.push({ key: 'ai.output', value: '', children: outputLines })
 
-  // Embedding
   const embedding = isPlainObject(ai.embedding) ? ai.embedding : undefined
   if (embedding) {
     const parts: string[] = []
@@ -900,8 +888,12 @@ export { _log as log }
 export default _log
 
 const noopAudit = Object.assign(() => {}, { deny: () => {} }) as AuditMethod
-/** @internal Accepts every call and emits nothing; reused wherever logging must not fail the caller. */
-export const noopLogger: AuditableLogger = {
+/**
+ * @internal Accepts every call and emits nothing; reused wherever logging must not fail the caller.
+ * `fork` still runs `fn`, because the work belongs to the caller, not to the log. With no wide
+ * event to record a failure, `fork` reports it on the console and resolves, as `log.fork()` never rejects.
+ */
+export const noopLogger: ForkableLogger = {
   set() {},
   setLevel() {},
   error() {},
@@ -915,6 +907,11 @@ export const noopLogger: AuditableLogger = {
   },
   getContext() {
     return {}
+  },
+  fork(label, fn) {
+    return Promise.resolve().then(fn).then(() => {}, (err: unknown) => {
+      console.error(`[evlog] log.fork() work "${label}" failed:`, err)
+    })
   },
   audit: noopAudit,
 }
@@ -1220,9 +1217,6 @@ export function createRequestLogger<T extends object = Record<string, unknown>>(
   })
 }
 
-/**
- * Get the current environment context.
- */
 export function getEnvironment(): EnvironmentContext {
   return { ...state.env }
 }

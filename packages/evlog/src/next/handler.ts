@@ -148,7 +148,6 @@ export function createWithEvlog(options: NextEvlogOptions) {
         return await handler(...args) as Awaited<TReturn>
       }
 
-      // Extract request info from first argument if it's a Request
       const [firstArg] = args
       const isRequest = firstArg instanceof Request
       const request = isRequest ? firstArg : undefined
@@ -168,7 +167,6 @@ export function createWithEvlog(options: NextEvlogOptions) {
         return await handler(...args) as Awaited<TReturn>
       }
 
-      // Apply start time from middleware if present
       if (request) {
         const startHeader = request.headers.get('x-evlog-start')
         if (startHeader) {
