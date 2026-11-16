@@ -59,15 +59,25 @@ const MAX_SAMPLE_CALLS = 100_000
 /** Hang / ReDoS backstop on the long input. Linear work of a ~64k string stays well under this; a quadratic scan does not. */
 const LINEAR_TIME_BUDGET_MS = 2_000
 
-/** Average ms per call, repeating `fn` until {@link MIN_SAMPLE_MS} has elapsed. */
+/**
+ * CPU time this process has used, in ms. Wall time also counts the time the
+ * scheduler hands the core to other processes, which on a loaded machine hits
+ * a long call far more often than a short one and skews the ratio.
+ */
+function cpuMs(): number {
+  const { user, system } = process.cpuUsage()
+  return (user + system) / 1_000
+}
+
+/** Average CPU ms per call, repeating `fn` until {@link MIN_SAMPLE_MS} has elapsed. */
 function perCallMs(fn: () => unknown): number {
-  const start = performance.now()
+  const start = cpuMs()
   let calls = 0
   let elapsed = 0
   do {
     fn()
     calls++
-    elapsed = performance.now() - start
+    elapsed = cpuMs() - start
   } while (elapsed < MIN_SAMPLE_MS && calls < MAX_SAMPLE_CALLS)
   return elapsed / calls
 }
@@ -85,9 +95,10 @@ function fastestPerCallMs(fn: () => unknown, runs = 3): number {
 /**
  * Assert `fn` stays linear in input length. `build(n)` returns the adversarial
  * input at scale `n`; both sizes must have the same shape, which a prefix of
- * the long input does not guarantee. Times `build(1)` and `build(8)`, each as
- * the fastest per-call average. The longer run may be at most 24x the shorter;
- * a 2 s cap on the long run catches a hang that is already slow at scale 1.
+ * the long input does not guarantee. Times `build(1)` and `build(8)` in process
+ * CPU time, each as the fastest per-call average. The longer run may be at most
+ * 24x the shorter; a 2 s cap on the long run catches a hang that is already
+ * slow at scale 1.
  *
  * @example
  * ```ts
