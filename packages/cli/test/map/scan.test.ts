@@ -450,3 +450,55 @@ describe('entry points a scan must not lose', () => {
     expect(result.map.routes.find(route => route.path === '/ok')!.id).toBe(routeId({ framework: 'express', kind: 'api', method: 'GET', path: '/ok' }))
   })
 })
+
+describe('the event an entry point carries', () => {
+  let root: string
+  let result: ScanResult
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'evlog-cli-event-'))
+    const files: Record<string, string> = {
+      'package.json': JSON.stringify({ name: 'shop', dependencies: { evlog: '^2.0.0', nuxt: '^4.0.0' } }),
+      'server/api/checkout.post.ts': [
+        'export default defineEventHandler(async (event) => {',
+        '  const log = useLogger(event)',
+        '  const cache = new Map()',
+        '  cache.set(\'k\', 1)',
+        '  log.set({ user: { id: 1, plan: \'pro\' }, cart: { items: 3 }, ...extra, [dynamic]: 1 })',
+        '  log.set({ user: { id: 1 }, total: 42 })',
+        '  log.set({ order: { id: 1, payment: { method: \'card\' } as const } } as Context)',
+        '  log.set({ shipping: { zone: \'eu\' } } satisfies Context)',
+        '  log.audit({ action: \'checkout.completed\', actor: { type: \'user\', id: 1 } })',
+        '  log.audit({ action: kind })',
+        '  log.audit({ [action]: \'refund.issued\' })',
+        '  log.audit({ action: \'order.refunded\' } as const)',
+        '  log.audit({ action: \'order.cancelled\' as const } satisfies AuditInput)',
+        '  return { ok: true }',
+        '})',
+      ].join('\n'),
+      'server/api/health.get.ts': 'export default defineEventHandler(() => ({ ok: true }))',
+    }
+    for (const [path, source] of Object.entries(files)) {
+      const file = join(root, path)
+      await mkdir(dirname(file), { recursive: true })
+      await writeFile(file, source, 'utf8')
+    }
+    result = await scan(await ctx(root, 'nuxt'))
+  })
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('lists the dotted paths log.set() writes, once each, and the literal audit actions', () => {
+    const checkout = result.map.routes.find(r => r.path === '/api/checkout')
+    expect(checkout?.event).toEqual({
+      fields: ['user.id', 'user.plan', 'cart.items', 'total', 'order.id', 'order.payment.method', 'shipping.zone'],
+      audit: ['checkout.completed', 'order.refunded', 'order.cancelled'],
+    })
+  })
+
+  it('leaves the event out of an entry point that sets nothing', () => {
+    expect(result.map.routes.find(r => r.path === '/api/health')).not.toHaveProperty('event')
+  })
+})
