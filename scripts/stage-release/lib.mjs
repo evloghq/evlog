@@ -58,8 +58,9 @@ export function missingDependencies(pkg, packages, published) {
  * Sort each public package into what this run does with it.
  *
  * - `release`: on npm but not tagged, so it was approved after an earlier run stopped waiting.
- * - `stage`: not on npm and no run staged it, or the run was started by hand.
- * - `waiting`: not on npm, and an earlier run staged it.
+ * - `stage`: not on npm and no run staged it.
+ * - `waiting`: not on npm, and an earlier run staged it. npm refuses a second stage of a
+ *   version while one is pending, so it is not staged again, even by a run started by hand.
  *
  * A version on npm with its tag is left out.
  *
@@ -68,9 +69,8 @@ export function missingDependencies(pkg, packages, published) {
  * @param {Set<string>} state.published `name@version` of the versions already on npm
  * @param {Set<string>} state.tagged `name@version` of the versions with a release tag
  * @param {Set<string>} state.staged `name@version` of the versions with a `staged/` tag
- * @param {boolean} state.manual the run was started by hand, which stages a rejected version again
  */
-export function plan(packages, { published, tagged, staged, manual }) {
+export function plan(packages, { published, tagged, staged }) {
   const out = { release: [], stage: [], waiting: [] }
   for (const pkg of packages) {
     const id = idOf(pkg)
@@ -78,7 +78,7 @@ export function plan(packages, { published, tagged, staged, manual }) {
       if (!tagged.has(id)) out.release.push(pkg)
       continue
     }
-    out[manual || !staged.has(id) ? 'stage' : 'waiting'].push(pkg)
+    out[staged.has(id) ? 'waiting' : 'stage'].push(pkg)
   }
   return out
 }
@@ -167,7 +167,7 @@ export function approvalSummary({ staged, waiting, blocked, branch, windowMinute
       '',
       ...waiting.map(pkg => `- \`${idOf(pkg)}\``),
       '',
-      `An earlier run staged these. Approve them, then run ${rerun} to tag them and create their GitHub releases. To stage a rejected version again, run the same command.`,
+      `An earlier run staged these. Approve them, then run ${rerun} to tag them and create their GitHub releases. To stage a rejected version again, delete its staged tag (\`git push origin :refs/tags/staged/<name>@<version>\`), then run the same command.`,
       '',
     )
   }
