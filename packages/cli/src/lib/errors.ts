@@ -183,6 +183,22 @@ export const cliErrors = defineErrorCatalog('cli', {
     link: 'https://evlog.dev/cli/agents',
     tags: ['agents'],
   },
+  AGENTS_MARKERS_UNPAIRED: {
+    status: 400,
+    message: 'The evlog markers in AGENTS.md are not one start and end pair',
+    why: 'The block is rewritten between <!-- evlog:start --> and <!-- evlog:end -->, each alone on its line. With one missing, repeated or out of order, a rewrite would delete text that is yours',
+    fix: 'Restore the pair around the evlog section, or delete the leftover marker with the old section, then run the command again',
+    link: 'https://evlog.dev/cli/agents',
+    tags: ['agents'],
+  },
+  WRITE_FAILED: {
+    status: 500,
+    message: ({ file, reason, written }: { file: string, reason: string, written: readonly string[] }) =>
+      `Could not write ${file} (${reason}). ${written.length > 0 ? `Written before it: ${written.join(', ')}` : 'No file was written before it'}`,
+    why: 'The run stops at the first file it cannot write, so the files planned after it were not attempted',
+    fix: 'Check the path and its permissions, then run the command again. Files already in place are left as they are',
+    tags: ['init', 'agents'],
+  },
   MAP_BASELINE_NOT_FOUND: {
     status: 404,
     message: ({ source }: { source: string }) =>

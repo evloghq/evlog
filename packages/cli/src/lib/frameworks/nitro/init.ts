@@ -1,5 +1,5 @@
 import { join, relative } from 'node:path'
-import { addImport, appendProperty, appendToArray, applySplices, arrayMentions, findConfigObject, getProperty, hasImportFrom, hasProperty, readConfig } from '../../init/edit'
+import { addImport, appendProperty, appendToArray, applySplices, arrayMentions, findConfigObject, getProperty, hasDefaultImport, hasProperty, readConfig } from '../../init/edit'
 import type { ArrayNode, ObjectNode, Splice } from '../../init/edit'
 import type { WiringInput, WiringPlan } from '../../init/wiring'
 import { configCandidates, firstExisting } from '../../init/wiring'
@@ -81,7 +81,7 @@ export default function planNitro(input: WiringInput): WiringPlan {
     needsImport = true
   }
 
-  if (needsImport && !hasImportFrom(config.program, specifier)) {
+  if (needsImport && !hasDefaultImport(config.program, specifier, 'evlog')) {
     splices.push(addImport(config.source, config.program, `import evlog from '${specifier}'`))
   }
 

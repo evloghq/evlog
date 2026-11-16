@@ -143,7 +143,7 @@ function uniqueKey(key: string, used: Set<string>): string {
 export function auditActionName(gap: AuditGap): string {
   const segments = gap.path
     .split('/')
-    .filter(segment => segment.length > 0 && segment !== 'api' && !segment.startsWith(':') && !segment.startsWith('['))
+    .filter(segment => segment.length > 0 && segment !== 'api' && !segment.startsWith(':') && !segment.startsWith('[') && !segment.includes('*'))
   const resource = segments.slice(-2).join('.') || 'resource'
   const verb = VERBS[gap.method ?? ''] ?? 'accessed'
   return `${resource}.${verb}`

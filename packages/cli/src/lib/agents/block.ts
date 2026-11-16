@@ -1,3 +1,4 @@
+import { cliErrors } from '../errors'
 import { getFramework } from '../frameworks'
 import type { Framework } from '../frameworks'
 
@@ -81,22 +82,55 @@ export function renderBlock(input: BlockInput): string {
   ].join('\n')
 }
 
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/
+
+/**
+ * Where each marker stands alone on its line, outside fenced code. A marker
+ * quoted in a sentence or shown in an example is the author's text.
+ */
+function findMarkers(source: string): { starts: number[], ends: number[] } {
+  const starts: number[] = []
+  const ends: number[] = []
+  let fence: string | undefined
+  let offset = 0
+  for (const line of source.split('\n')) {
+    const edge = FENCE.exec(line.trimEnd())
+    if (fence) {
+      if (edge && edge[1]![0] === fence[0] && edge[1]!.length >= fence.length && edge[2]!.trim() === '') fence = undefined
+    } else if (edge) {
+      [, fence] = edge
+    } else if (line.trim() === MARKER_START) {
+      starts.push(offset + line.indexOf(MARKER_START))
+    } else if (line.trim() === MARKER_END) {
+      ends.push(offset + line.indexOf(MARKER_END))
+    }
+    offset += line.length + 1
+  }
+  return { starts, ends }
+}
+
 /**
  * Put `block` into `source`, replacing an existing one.
  *
  * Returns `null` when the file already says exactly this, which is what makes a
  * second run a no-op rather than a no-op-shaped rewrite.
+ *
+ * @throws `cli.AGENTS_MARKERS_UNPAIRED` when the markers are not one start
+ * followed by one end: any rewrite would then delete or duplicate text.
  */
 export function upsertBlock(source: string, block: string): string | null {
-  const start = source.indexOf(MARKER_START)
-  const end = source.indexOf(MARKER_END)
+  const { starts, ends } = findMarkers(source)
 
-  if (start === -1 || end === -1 || end < start) {
+  if (starts.length === 0 && ends.length === 0) {
     const separator = source.length === 0 || source.endsWith('\n\n') ? '' : source.endsWith('\n') ? '\n' : '\n\n'
     return `${source}${separator}${block}`
   }
 
-  const next = `${source.slice(0, start)}${block.trimEnd()}${source.slice(end + MARKER_END.length)}`
+  const [start] = starts
+  const [end] = ends
+  if (starts.length !== 1 || ends.length !== 1 || end! < start!) throw cliErrors.AGENTS_MARKERS_UNPAIRED()
+
+  const next = `${source.slice(0, start)}${block.trimEnd()}${source.slice(end! + MARKER_END.length)}`
   return next === source ? null : next
 }
 
