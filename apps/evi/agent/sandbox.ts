@@ -5,7 +5,7 @@ import type { SandboxSession } from 'eve/sandbox'
 import { browserSandbox } from './lib/capture'
 import { cloneUrl, homeRepository } from './lib/repo'
 import { createSandboxEnvironment } from './lib/sandbox-backend'
-import { agentBrowserInstallOptions, workspaceBootstrapCommand } from './lib/workspace-bootstrap'
+import { agentBrowserInstallOptions, cacheWarmupCommand, failedWarmupChecks, workspaceBootstrapCommand } from './lib/workspace-bootstrap'
 
 /**
  * Kept for its diff engine, not for capture: capture__before_after owns
@@ -36,7 +36,9 @@ async function prepareSandbox(sandbox: SandboxSession) {
   // of CPU on every template rebuild. Best-effort: a red check on main (a
   // timing test on a busy builder) must not block deploying the agent.
   if (process.env.VERCEL) {
-    await sandbox.run({ command: 'cd repo && { pnpm run lint; pnpm run typecheck; pnpm run test; } || true' })
+    const warmup = await sandbox.run({ command: cacheWarmupCommand })
+    const failed = failedWarmupChecks(String(warmup.stdout))
+    if (failed.length > 0) console.warn(`Turbo cache warm-up: ${failed.join(', ')} failed on main; sessions run those tasks uncached.`)
   }
   // Commits authored in the sandbox belong to the bot, on every channel.
   await sandbox.run({ command: 'git config --global user.name "evlogai[bot]" && git config --global user.email "evlogai[bot]@users.noreply.github.com"' })
