@@ -30,13 +30,13 @@ overrides:
   # so every request reaching the docs SSR function exits 1.
   vue: 3.5.45
   '@types/react': 19.3.0
-  tsdown@0.22.8>rolldown: 1.3.0
+  tsdown@0.22.8>rolldown: 1.3.2
   minimark: 0.2.0
   '@nuxtjs/mcp-toolkit': ^0.24.3
   # One `ai` copy for the whole tree. eve 0.12 needs 7 from the example
   # package, and docus 5.13 compiles against `isStepCount` which 6 does not
   # export.
-  ai: ^7.0.172
+  ai: ^7.0.173
   # Nuxt 4.x requires @unhead/vue ^3.1.8 internally; some deps (e.g. @nuxt/ui)
   # declare a permissive `^2.0.5 || ^3.0.0` peer range that lets pnpm resolve
   # a stale v2, breaking Nuxt's `legacyPlugins` import at build time.
@@ -45,23 +45,23 @@ overrides:
   # exactly. Each one stays within the pinned major; drop it once the parent
   # ships the fix.
   vinxi>h3: ^1.15.11
-  eve>undici: ^8.12.3
-  '@vercel/cli-config>zod': ^4.6.6
-  '@agent-browser/eve>zod': ^4.6.6
-  satori>fflate: ^0.7.5
-  typed-rest-client>qs: ^6.16.1
+  eve>undici: ^8.12.4
+  '@vercel/cli-config>zod': ^4.6.7
+  '@agent-browser/eve>zod': ^4.6.7
+  satori>fflate: ^0.8.3
+  typed-rest-client>qs: ^6.17.1
   # Same purpose, but these cross the major (or 0.x minor) their dependents
   # declare: re-check them when those dependents are bumped.
-  fontless>esbuild: ^0.28.1
+  fontless>esbuild: ^0.28.2
   '@esbuild-kit/core-utils>esbuild': ^0.28.2
-  '@sveltejs/kit@2': ^3.1.1
-  katex@<0.18.2: ^0.18.2
-  '@vercel/nft>glob': ^14.0.2
-  '@nuxt/content>minimatch': ^11.0.1
-  '@typescript-eslint/typescript-estree>minimatch': ^11.0.1
-  readdir-glob>minimatch: ^11.0.1
-  '@stryker-mutator/core>minimatch': ^11.0.1
-  zod@3: ^4.6.6
+  '@sveltejs/kit@2': ^3.2.0
+  katex@<0.18.2: ^0.19.1
+  '@vercel/nft>glob': ^14.0.6
+  '@nuxt/content>minimatch': ^11.0.8
+  '@typescript-eslint/typescript-estree>minimatch': ^11.0.8
+  readdir-glob>minimatch: ^11.0.8
+  '@stryker-mutator/core>minimatch': ^11.0.8
+  zod@3: ^4.6.7
 
 minimumReleaseAge: 2880
 

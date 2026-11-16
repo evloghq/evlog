@@ -16,7 +16,7 @@
     "@nuxt/icon": "^2.6.2",
     "@nuxt/ui": "^4.12.0",
     "@nuxtjs/color-mode": "^4.1.0",
-    "better-auth": "^1.7.18",
+    "better-auth": "^1.7.25",
     "better-sqlite3": "^12.11.1",
     "evlog": "workspace:*",
     "nuxt": "^4.6.4",

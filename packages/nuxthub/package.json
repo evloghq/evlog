@@ -43,7 +43,7 @@
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare"
   },
   "devDependencies": {
-    "@nuxt/module-builder": "^1.0.3",
+    "@nuxt/module-builder": "^1.0.4",
     "evlog": "workspace:*",
     "typescript": "^6.0.3"
   },
