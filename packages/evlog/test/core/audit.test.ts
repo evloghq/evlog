@@ -235,6 +235,128 @@ describe('auditDiff()', () => {
       { op: 'add', path: '/b', value: 2 },
     ]))
   })
+
+  it('replaces a changed Date and ignores a Date with the same timestamp', () => {
+    expect(auditDiff(
+      { expiresAt: new Date('2026-01-01T00:00:00.000Z') },
+      { expiresAt: new Date('2027-01-01T00:00:00.000Z') },
+    ).patch).toEqual([{ op: 'replace', path: '/expiresAt', value: new Date('2027-01-01T00:00:00.000Z') }])
+    expect(auditDiff(
+      { expiresAt: new Date('2026-01-01T00:00:00.000Z') },
+      { expiresAt: new Date('2026-01-01T00:00:00.000Z') },
+    ).patch).toEqual([])
+  })
+
+  it('replaces changed Set, Map and RegExp values and ignores equal ones', () => {
+    expect(auditDiff({ tags: new Set(['a']) }, { tags: new Set(['a', 'b']) }).patch)
+      .toEqual([{ op: 'replace', path: '/tags', value: new Set(['a', 'b']) }])
+    expect(auditDiff({ tags: new Set(['a']) }, { tags: new Set(['a']) }).patch).toEqual([])
+    expect(auditDiff({ m: new Map([['k', 1]]) }, { m: new Map([['k', 2]]) }).patch)
+      .toEqual([{ op: 'replace', path: '/m', value: new Map([['k', 2]]) }])
+    expect(auditDiff({ m: new Map([['k', 1]]) }, { m: new Map([['k', 1]]) }).patch).toEqual([])
+    expect(auditDiff({ re: /a/g }, { re: /a/i }).patch).toEqual([{ op: 'replace', path: '/re', value: /a/i }])
+    expect(auditDiff({ re: /a/g }, { re: /a/g }).patch).toEqual([])
+  })
+
+  it('replaces a value whose type changes between a Date and a plain object', () => {
+    expect(auditDiff({ at: new Date(0) }, { at: {} }).patch).toEqual([{ op: 'replace', path: '/at', value: {} }])
+  })
+
+  it('still diffs class instances key by key', () => {
+    class Entity {
+      constructor(public name: string, public age: number) {}
+    }
+    expect(auditDiff(new Entity('a', 1), new Entity('a', 2)).patch).toEqual([{ op: 'replace', path: '/age', value: 2 }])
+  })
+
+  it('redacts a changed Map stored under a redacted path', () => {
+    const diff = auditDiff(
+      { credentials: new Map([['token', 'old']]) },
+      { credentials: new Map([['token', 'secret']]) },
+      { redactPaths: ['credentials'] },
+    )
+    expect(diff.patch).toEqual([{ op: 'replace', path: '/credentials', value: '[REDACTED]' }])
+  })
+
+  it('redacts fields of a class instance that replaces a Date', () => {
+    class Login {
+      constructor(public user: string, public password: string) {}
+    }
+    const diff = auditDiff({ at: new Date(0) }, { at: new Login('u', 'hunter2') }, { redactPaths: ['password'] })
+    expect(diff.patch).toEqual([{ op: 'replace', path: '/at', value: { user: 'u', password: '[REDACTED]' } }])
+  })
+
+  it('compares self-referential Maps without overflowing the stack', () => {
+    const a = new Map<string, unknown>([['k', 1]])
+    a.set('self', a)
+    const b = new Map<string, unknown>([['k', 1]])
+    b.set('self', b)
+    expect(auditDiff({ m: a }, { m: b }).patch).toEqual([])
+
+    const c = new Map<string, unknown>([['k', 2]])
+    c.set('self', c)
+    expect(auditDiff({ m: a }, { m: c }).patch).toEqual([{ op: 'replace', path: '/m', value: c }])
+  })
+
+  it('returns a patch for an added self-referential class instance', () => {
+    class Node {
+      self: Node = this
+      constructor(public password: string) {}
+    }
+    const diff = auditDiff(undefined, new Node('hunter2'), { redactPaths: ['password'] })
+    expect(diff.patch).toEqual([{ op: 'add', path: '', value: { self: '[Circular]', password: '[REDACTED]' } }])
+  })
+
+  it('diffs self-referential objects without overflowing the stack', () => {
+    const a: Record<string, unknown> = { n: 1 }
+    a.self = a
+    const b: Record<string, unknown> = { n: 2 }
+    b.self = b
+    expect(auditDiff(a, b).patch).toEqual([{ op: 'replace', path: '/n', value: 2 }])
+  })
+
+  it('redacts fields of objects that carry a Symbol.toStringTag', () => {
+    const tagged = auditDiff(undefined, { password: 'secret', [Symbol.toStringTag]: 'Login' }, { redactPaths: ['password'] })
+    expect(tagged.patch).toEqual([{ op: 'add', path: '', value: { password: '[REDACTED]' } }])
+
+    class Login {
+      constructor(public user: string, public password: string) {}
+      get [Symbol.toStringTag]() {
+        return 'Login' 
+      }
+    }
+    const instance = auditDiff({ at: new Date(0) }, { at: new Login('u', 'hunter2') }, { redactPaths: ['password'] })
+    expect(instance.patch).toEqual([{ op: 'replace', path: '/at', value: { user: 'u', password: '[REDACTED]' } }])
+
+    const changed = auditDiff({ login: new Login('u', 'old') }, { login: new Login('u', 'new') }, { redactPaths: ['password'] })
+    expect(changed.patch).toEqual([{ op: 'replace', path: '/login/password', value: '[REDACTED]' }])
+  })
+
+  it('escapes "/" and "~" in JSON Pointer paths', () => {
+    const doc = { 'a/b': 1, 'a': { b: 1 } }
+    expect(auditDiff(doc, { 'a/b': 2, 'a': { b: 1 } }).patch).toEqual([{ op: 'replace', path: '/a~1b', value: 2 }])
+    expect(auditDiff(doc, { 'a/b': 1, 'a': { b: 2 } }).patch).toEqual([{ op: 'replace', path: '/a/b', value: 2 }])
+    expect(auditDiff({ 'a~b': 1 }, { 'a~b': 2 }).patch).toEqual([{ op: 'replace', path: '/a~0b', value: 2 }])
+    expect(auditDiff({ '~1': 1 }, { '~1': 2 }).patch).toEqual([{ op: 'replace', path: '/~01', value: 2 }])
+  })
+
+  it('uses an empty path for root operations', () => {
+    expect(auditDiff({ a: 1 }, null).patch).toEqual([{ op: 'replace', path: '', value: null }])
+    expect(auditDiff({ a: 1 }, undefined).patch).toEqual([{ op: 'remove', path: '' }])
+    expect(auditDiff(undefined, { a: 1 }).patch).toEqual([{ op: 'add', path: '', value: { a: 1 } }])
+  })
+
+  it('redacts keys that contain "/" or "~"', () => {
+    const diff = auditDiff(
+      { 'creds/v1': { 'pass~word': 'old' } },
+      { 'creds/v1': { 'pass~word': 'new' } },
+      { redactPaths: ['creds/v1.pass~word'] },
+    )
+    expect(diff.patch).toEqual([{ op: 'replace', path: '/creds~1v1/pass~0word', value: '[REDACTED]' }])
+
+    const added = auditDiff({}, { 'creds/v1': { 'pass~word': 'new', 'user': 'u' } }, { redactPaths: ['creds/v1.pass~word'] })
+    expect(added.patch).toEqual([{ op: 'add', path: '/creds~1v1', value: { 'pass~word': '[REDACTED]', 'user': 'u' } }])
+  })
 })
 
 describe('defineAuditAction()', () => {
