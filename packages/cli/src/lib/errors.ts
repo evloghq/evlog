@@ -9,15 +9,6 @@ import { FRAMEWORK_IDS, INIT_FRAMEWORK_IDS } from './frameworks'
  * so a failed doctor check carries why / fix / link without throwing.
  */
 export const cliErrors = defineErrorCatalog('cli', {
-  NODE_TOO_OLD: {
-    status: 400,
-    message: ({ version, min }: { version: string, min: number }) =>
-      `Node ${version} is too old (need >= ${min})`,
-    why: 'The evlog CLI requires a modern Node runtime',
-    fix: 'Upgrade Node to the latest LTS',
-    link: 'https://nodejs.org/',
-    tags: ['doctor', 'environment'],
-  },
   PROJECT_NO_PACKAGE: {
     status: 404,
     message: 'No package.json found',
