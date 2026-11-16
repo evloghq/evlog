@@ -298,8 +298,12 @@ export const builtinPatterns = {
   },
   /** Credit card numbers → ****1111 (PCI DSS: last 4 allowed) */
   creditCard: {
-    pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
-    mask: (m: string) => `****${m.replace(/[\s-]/g, '').slice(-4)}`,
+    // A whole UUID is matched first and kept, so its digit groups never read as a card.
+    // Its edges are any non-hex character, so `_` next to it (`id_<uuid>_v2`) still counts.
+    // A card may not end inside a whole UUID (`2026-0001-<uuid>`), or it would take the
+    // UUID's first groups before the UUID alternative reaches them.
+    pattern: /(?<![\dA-Fa-f])[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}(?![\dA-Fa-f])|\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b(?<!(?<![\dA-Fa-f])(?=[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}(?![\dA-Fa-f]))[\dA-Fa-f-]{1,35})/g,
+    mask: (m: string) => m.length === 36 ? m : `****${m.replace(/[\s-]/g, '').slice(-4)}`,
   },
   /** Email addresses → a***@***.com */
   email: {
