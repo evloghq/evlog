@@ -1,20 +1,6 @@
 import { defineEval } from 'eve/evals'
 import { includes, satisfies } from 'eve/evals/expect'
-
-/**
- * Prose words a reviewer reads before the proof: the draft is unwrapped from
- * an outer markdown fence when the reply quotes it whole, then inner fenced
- * blocks and the ELI5 disclosure are left out.
- */
-function proseWords(reply: string) {
-  // Greedy: a draft quoted in a three-backtick fence closes on its last fence line.
-  const wrapped = reply.match(/(`{3,})(?:md|markdown)\n([\s\S]*)\n\1/)
-  const body = wrapped ? wrapped[2] : reply
-  const prose = body
-    .replace(/(`{3,})[\s\S]*?\1/g, '')
-    .replace(/<details>[\s\S]*?<\/details>/g, '')
-  return prose.split(/\s+/).filter(Boolean).length
-}
+import { proseWords } from './prose-words'
 
 export default defineEval({
   // #1061 (+39/-4) shipped eight sections and ~600 words; the failing
