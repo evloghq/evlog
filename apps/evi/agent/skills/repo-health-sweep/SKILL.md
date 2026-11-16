@@ -87,7 +87,7 @@ The ledger is three kinds of file in `apps/evi/agent/ledgers/`. Context cost dep
 | `repo-health-sweep-rejected.jsonl` | One JSON object per rejected finding | Searched with `rg`, never read in full, new lines appended |
 | `archive/YYYY-MM.md` | Append-only history, one section per run | Opened only for a specific detail, never by default |
 
-Read the compact file from the checkout in step 1 before choosing cohorts. The previous run's ledger pull request may still be open, so its changes are not on `main` yet: search for an open pull request titled `docs(evi): record repo health sweep run` and, when there is one, read the compact file from that branch's head instead.
+Read the compact file from the checkout in step 1 before choosing cohorts. The previous run's ledger update may still sit in an open pull request, so its changes are not on `main` yet: search open pull requests with `github__searchIssues` for the body line `Records the repo health sweep run of` and, when one is open, read the compact file from that branch's head instead.
 
 The compact file records, per area: the revision and date of its last review and the outcome in a few words, with a pointer to the archive entry. It also records:
 
@@ -172,9 +172,9 @@ The unit of delivery is a batch from `pullRequestBatches`: every confirmed candi
 - required changesets, skill updates, API snapshot review, and visual evidence are present;
 - the pull request body shows the change (a snippet, captured output, or capture, not prose alone) and states the problem, preserved behavior, verification, and the reviewed revision.
 
-Immediately before pushing or opening the pull request, run `git merge-base HEAD <reviewed-revision>` and require the output to equal the full reviewed SHA. Inspect `git diff <reviewed-revision>...HEAD` and require it to contain only the batch's verified candidates. If either check fails, do not deliver the branch; restart it from the reviewed revision.
+Immediately before pushing or opening the pull request, run `git merge-base HEAD <reviewed-revision>` and require the output to equal the full reviewed SHA. Inspect `git diff <reviewed-revision>...HEAD` and require it to contain only the batch's verified candidates, plus the ledger files under `apps/evi/agent/ledgers/` when the branch carries the run's ledger update. If either check fails, do not deliver the branch; restart it from the reviewed revision.
 
-Open a normal, ready pull request, not a draft. Title it by kind and area (`refactor(core): drop paraphrasing comments in shared/`, `docs(evi): clarify the sweep delivery rules`). The body lists each candidate with its before and after. Read CI once it settles and fix any failure before requesting review from `hugorcd`. If the branch cannot meet the readiness gate, do not open a half-finished pull request. Keep the result as a blocker or proposal in the report.
+Open a normal, ready pull request, not a draft. Title it by kind and area (`refactor(core): drop paraphrasing comments in shared/`, `docs(evi): clarify the sweep delivery rules`). The body lists each candidate with its before and after. Read CI once it settles and fix any failure. Request review from `hugorcd` only once the run's ledger commit is pushed, below, and CI on the pull request's final head has passed. If the branch cannot meet the readiness gate, do not open a half-finished pull request. Keep the result as a blocker or proposal in the report.
 
 Open at most three pull requests per run. One batch per pull request; never mix kinds or directories. Batches past the cap go to the compact ledger as next cohorts.
 
@@ -190,7 +190,15 @@ Write the full run report as a Linear document. Then record the run in the ledge
 2. **Append** the recorded `archive-section.md` to `archive/YYYY-MM.md` with a shell append (`cat <record>/archive-section.md >> archive/YYYY-MM.md`), creating the file with its header when the month is new. Then add, below it, only what happened after the tool returned: the parent-verification result and destination of each confirmed finding, and links to the report and every pull request the run opened. Never retype the recorded part, and never edit an earlier section.
 3. **Append** the recorded `rejected.jsonl` the same way (`cat <record>/rejected.jsonl >> repo-health-sweep-rejected.jsonl`). A finding parent verification rejected gets one more line in the same shape, written from the evidence you just reproduced. Never edit or delete an existing line.
 
-The ledger change is its own pull request, not a batch. Branch from current `origin/main`, or from the open previous ledger pull request's head when there is one, so the rewrite builds on it. Change only the ledger files above, and title it `docs(evi): record repo health sweep run YYYY-MM-DD`. It needs no changeset, does not count toward the three-pull-request cap, and is exempt from the reviewed-revision checks above, which guard the batches. Open it ready and request review from `hugorcd` once CI passes. Post one line per artifact in the schedule thread, with links inline.
+The ledger update rides in a pull request the run already opened whenever there is one. Write it after the batch pull requests are open, since the archive section links them, as one commit titled `docs(evi): record repo health sweep run YYYY-MM-DD` that changes only the ledger files above. Its home is, in this order:
+
+1. An open pull request that still carries an earlier run's ledger update, found by the search in step 2. Commit on its head, so this run's rewrite builds on the unmerged one and two open pull requests never rewrite the same file.
+2. Otherwise, the first batch pull request this run opens. Put the line `Records the repo health sweep run of YYYY-MM-DD.` in its body above the ELI5 when you open it, so the next run's search finds it.
+3. Otherwise, when the run opened no pull request, a ready pull request with only the ledger commit, branched from current `origin/main`, titled like the commit, with the same line in its body. It needs no changeset and does not count toward the three-pull-request cap.
+
+Then read CI on every pull request this run opened or pushed to, fix any failure, and request review from `hugorcd` on each once its final head passes.
+
+Post one line per artifact in the schedule thread, with links inline.
 
 Use this order in the final response:
 
