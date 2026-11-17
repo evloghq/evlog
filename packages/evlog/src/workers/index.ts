@@ -130,11 +130,11 @@ export type EvlogWorkersOptions = BaseEvlogOptions
 
 /**
  * The request logger {@link withEvlog} passes to the handler. Workers has no
- * `useLogger()`, so `log.fork()` hands the child logger to `fn` instead.
+ * `useLogger()`, so `log.fork()` hands the forked logger to `fn` instead.
  */
 export type WorkersRequestLogger = AuditableLogger & {
   /**
-   * Run background work under a child logger that emits its own wide event,
+   * Run background work under a forked logger that emits its own wide event,
    * with `operation` set to `label` and `_parentRequestId` to this request's id.
    * The returned promise is registered with `ctx.waitUntil`, resolves once the
    * child has drained, and never rejects.

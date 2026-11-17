@@ -14,4 +14,4 @@ export default withEvlog(async (request, env, ctx, log) => {
 })
 ```
 
-The toolkit's `forkBackgroundLogger` now runs without `storage`, for an integration without `AsyncLocalStorage`, and passes the child logger to `fn` in every case.
+The toolkit's `forkBackgroundLogger` now runs without `storage`, for an integration without `AsyncLocalStorage`, and passes the forked logger to `fn` in every case.
