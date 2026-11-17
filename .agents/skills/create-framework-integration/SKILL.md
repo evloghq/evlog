@@ -22,7 +22,7 @@ Every framework integration must expose:
 
 1. `evlog()` middleware/plugin accepting the full `BaseEvlogOptions` (`drain`, `enrich`, `keep`, `include`, `exclude`, `routes`, `plugins`)
 2. `useLogger()` (ALS-backed). Two sanctioned exceptions: Workers (ALS needs a compat flag there; `defineWorkerFetch` attaches the logger instead) and Effect (the logger is the `EvlogLogger` service in the Effect context)
-3. `log.fork()` support (automatic when `storage` is provided to the manifest)
+3. `log.fork()` support (automatic when `storage` is provided to the manifest). Without storage, build it with `forkBackgroundLogger({ parent, middlewareOptions, label, fn })` and type `fn` to take the child logger, as `evlog/workers` does
 4. The framework-native accessor (`c.get('log')`, `req.log`, `event.locals.log`, …)
 
 `references/contract.md` lists what every shipped integration exposes against this contract, with its known gaps. A new integration adds a row there and a matching `describe` in `packages/evlog/test/frameworks/contract.test-d.ts`, which fails to type-check until it does.
