@@ -9,9 +9,13 @@
  * Required env vars:
  *   - SENTRY_DSN
  */
+import { Effect } from 'effect'
 import { expect, vi } from 'vitest'
-import { sendBatchToSentry, toSentryLog } from '../../src/adapters/sentry'
-import { describeIfEnv, itWithCorrelationId, makeEvent, readEnv } from './_shared'
+import { createSentryDrain, sendBatchToSentry, toSentryLog } from '../../src/adapters/sentry'
+import { EvlogLogger, withLogger } from '../../src/effect/index'
+import { initLogger } from '../../src/logger'
+import type { WideEvent } from '../../src/types'
+import { describeIfEnv, itWithCorrelationId, makeEvent, makeTags, readEnv, recordFetch } from './_shared'
 
 describeIfEnv('sentry e2e (smoke)', ['SENTRY_DSN'], () => {
   const dsn = readEnv('SENTRY_DSN')!
@@ -64,6 +68,49 @@ describeIfEnv('sentry e2e (smoke)', ['SENTRY_DSN'], () => {
     } finally {
       consoleSpy.mockRestore()
     }
+  }, 30_000)
+
+  itWithCorrelationId('a failed evlog/effect unit sends its issue and log with the wide event trace id', async () => {
+    initLogger({ env: { service: 'evlog-e2e', environment: 'test' }, silent: true })
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const sentry = createSentryDrain({ dsn, issues: true })
+    const tags = makeTags('sentry-effect-trace')
+    let wide: WideEvent | undefined
+
+    const failingTurn = Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.set(tags)
+      return yield* Effect.fail(new Error('e2e effect unit failed'))
+    })
+
+    const recorder = recordFetch()
+    try {
+      await Effect.runPromiseExit(failingTurn.pipe(withLogger('turn', {
+        drain: async (ctx) => {
+          wide = ctx.event
+          await sentry(ctx)
+        },
+      })))
+      expect(consoleSpy).not.toHaveBeenCalled()
+    } finally {
+      recorder.restore()
+      consoleSpy.mockRestore()
+    }
+
+    const items = recorder.requests.map((request) => {
+      const [, header, payload] = String(request.body).split('\n')
+      return { status: request.status, type: JSON.parse(header!).type as string, payload: JSON.parse(payload!) }
+    })
+    expect(items.map(item => [item.type, item.status])).toEqual([['log', 200], ['event', 200]])
+
+    const traceId = wide?.traceId
+    expect(traceId).toMatch(/^[\da-f]{32}$/)
+    expect(wide?.e2e_correlation_id).toBe(tags.e2e_correlation_id)
+    const [log] = items[0]!.payload.items
+    const issue = items[1]!.payload
+    expect(log.trace_id).toBe(traceId)
+    expect(issue.contexts.trace).toMatchObject({ trace_id: traceId, span_id: wide?.spanId })
+    expect(issue.exception.values[0]).toMatchObject({ value: 'e2e effect unit failed' })
   }, 30_000)
 
   itWithCorrelationId('rejects an invalid DSN', async () => {
