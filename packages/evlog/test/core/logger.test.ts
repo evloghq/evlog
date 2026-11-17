@@ -540,6 +540,23 @@ describe('createLogger', () => {
     })
   })
 
+  it('replaces the fields of an earlier error() call and keeps the error fields set() added', () => {
+    const logger = createLogger()
+    logger.set({ error: { step: 'receipt' } })
+    logger.error(createError({ message: 'Receipt email not sent', code: 'RECEIPT_EMAIL_FAILED', fix: 'The receipt job retries it', cause: new Error('ETIMEDOUT') }))
+    logger.error(createError({ message: 'Stock sync failed', code: 'STOCK_SYNC_FAILED', why: 'Warehouse API returned 503' }))
+
+    const event = defined(logger.emit(), 'emitted event')
+    const { stack: _, ...error } = event.error as Record<string, unknown>
+    expect(error).toEqual({
+      step: 'receipt',
+      name: 'EvlogError',
+      message: 'Stock sync failed',
+      code: 'STOCK_SYNC_FAILED',
+      why: 'Warehouse API returned 503',
+    })
+  })
+
   it('does not write into a payload logged as context and then thrown as error data', () => {
     const data = { reason: 'refresh token rejected' }
     const logger = createLogger()
