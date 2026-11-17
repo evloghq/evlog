@@ -102,6 +102,7 @@ PR titles and commits follow [Conventional Commits](https://conventionalcommits.
 
 - **Subject must not start with an uppercase letter.** `feat: add stream server` ✓. `feat: Add stream server` ✗.
 - **Omit the scope when the change is cross-cutting** (touches multiple subsystems, or is repo-wide). Don't use `evlog` as a scope: the whole monorepo *is* evlog, so a no-scope title already means "evlog itself".
+- **Evi's commits may carry one co-author trailer:** `Co-authored-by: evlogai[bot] <313167257+evlogai[bot]@users.noreply.github.com>`, on commits Evi authors and nowhere else. It is the only attribution allowed. `Signed-off-by`, "Generated with…", and any other agent, model, or tool credit stay out; the maintainer remains the author of record.
 - **Use a scope only to point at one subsystem.** Adapters get their own scope (one per entrypoint, e.g. `axiom`, `datadog`, `fs`); framework integrations get the framework's name (`nuxt`, `next`, `hono`, ...); core internals (logger, pipeline, error, redact, catalog) go under `core`.
 - **When you add a new subsystem** (adapter, integration, top-level entrypoint), add its scope to **both** the workflow and the template. Keep both lists alphabetically sorted. Because title validation reads the base branch's scope list, either register the scope in a preceding PR or omit the scope from the subsystem PR title.
 
@@ -191,7 +192,7 @@ Default: anything that stays on the local clone is fine, anything that touches t
 - `gh pr close`, `gh pr review`, `gh issue create`, `gh issue edit`, `gh release create`
 - `gh pr merge` without an explicit instruction naming the PR (see above)
 - Write a changelog entry, release note, or commit message **body** with multi-paragraph narrative. The changeset is the source of truth; commit subjects stay single-line, PR bodies stay short
-- Add a `Co-authored-by`, `Signed-off-by`, "Generated with…", "🤖", or any signature/attribution that names an agent, model, or tool: **the work is the maintainer's, full stop**
+- Add a `Signed-off-by`, "Generated with…", "🤖", or any signature/attribution that names an agent, model, or tool, except the Evi co-author trailer allowed under Commits & PR titles: **the work is the maintainer's, full stop**
 
 ## Keeping this file true
 
