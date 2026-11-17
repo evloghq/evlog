@@ -26,9 +26,9 @@ const FIXTURES = join(ROOT, 'packages/cli/test/map/fixtures')
 const CLI = join(ROOT, 'packages/cli/bin/evlog.mjs')
 const EVLOG = join(ROOT, 'packages/evlog')
 
-/* `init` hands the skills install to `npx skills add`, a CLI with a higher Node
-   floor than this one. Under that floor the hand-off fails and `init` exits 1,
-   so a run there sets EVLOG_SANDBOX_NO_AGENTS=1 to leave it out. */
+/* `init` hands the skills install to `npx skills add`, which does not start on
+   every Node this CLI supports. Where it fails `init` exits 1, so a run there
+   sets EVLOG_SANDBOX_NO_AGENTS=1 to leave it out. */
 const initArgs = (...flags) => process.env.EVLOG_SANDBOX_NO_AGENTS === '1'
   ? ['init', '--no-agents', ...flags]
   : ['init', ...flags]
