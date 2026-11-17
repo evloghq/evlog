@@ -8,7 +8,7 @@ vi.mock('../../src/utils', async (importOriginal) => {
   }
 })
 
-import { createRequestLogger, initLogger, loadPrettyErrorFormatter, log } from '../../src/logger'
+import { createRequestLogger, initLogger, loadPrettyFormatters, log } from '../../src/logger'
 
 describe('browser pretty printing', () => {
   let logSpy: ReturnType<typeof vi.spyOn>
@@ -129,7 +129,7 @@ describe('browser pretty printing', () => {
   })
 
   it('keeps line breaks in field values and error messages', async () => {
-    await loadPrettyErrorFormatter()
+    await loadPrettyFormatters()
     const logger = createRequestLogger({ method: 'GET', path: '/x' })
     logger.set({ note: 'first\nsecond' })
     logger.error(new Error('bad\ninput'))
