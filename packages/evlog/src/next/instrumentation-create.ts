@@ -3,6 +3,7 @@ import type { DrainContext, EnvironmentContext, LogLevel, Log, RedactConfig, Sam
 import type {
   NextInstrumentationErrorContext,
   NextInstrumentationRequest,
+  NodeInstrumentationModule,
 } from './instrumentation-gate'
 
 type LoggerModule = typeof import('../logger')
@@ -60,15 +61,6 @@ export interface InstrumentationOptions {
   redact?: boolean | RedactConfig
   /** Capture stdout/stderr as structured log events (Node.js only). */
   captureOutput?: boolean | CaptureOutputOptions
-}
-
-interface InstrumentationResult {
-  register: () => void | Promise<void>
-  onRequestError: (
-    error: { digest?: string } & Error,
-    request: NextInstrumentationRequest,
-    context: NextInstrumentationErrorContext,
-  ) => void | Promise<void>
 }
 
 let patching = false
@@ -231,7 +223,7 @@ function applyCaptureOutput(config: CaptureOutputOptions, logApi: Log, silent: b
  * Load via dynamic `import()` from root `instrumentation.ts` (Node.js runtime only).
  * Load via dynamic `import()` from root `instrumentation.ts` with {@link defineNodeInstrumentation}.
  */
-export function createInstrumentation(options: InstrumentationOptions = {}): InstrumentationResult {
+export function createInstrumentation(options: InstrumentationOptions = {}): NodeInstrumentationModule {
   let registered = false
   let registerPromise: Promise<void> | undefined
   const captureOutputOptions = resolveCaptureOutputOptions(options.captureOutput)
@@ -274,8 +266,8 @@ export function createInstrumentation(options: InstrumentationOptions = {}): Ins
 
   function onRequestError(
     error: { digest?: string } & Error,
-    request: { path: string; method: string; headers: Record<string, string> },
-    context: { routerKind: string; routePath: string; routeType: string; renderSource: string },
+    request: NextInstrumentationRequest,
+    context: NextInstrumentationErrorContext,
   ): void | Promise<void> {
     return loadLogger().then(({ log }) => {
       log.error({
