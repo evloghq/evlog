@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import agents from '../src/commands/agents'
@@ -11,7 +11,7 @@ import { MARKER_END, MARKER_START, renderBlock, upsertBlock } from '../src/lib/a
 import { planAgents } from '../src/lib/agents/plan'
 import { formatAgentsReport } from '../src/lib/agents/report'
 import { agentsTelemetryFieldNames, runAgents } from '../src/lib/agents/run'
-import { EVLOG_SKILLS, findInstalledSkills, skillsCommand } from '../src/lib/agents/skills'
+import { EVLOG_SKILLS, findInstalledSkills, runSkills, skillsCommand } from '../src/lib/agents/skills'
 
 /**
  * Only the spawn is faked; everything else in the module stays real.
@@ -268,6 +268,29 @@ describe('skillsCommand', () => {
   it('accepts a self-hosted origin', () => {
     expect(skillsCommand({ interactive: true, source: 'http://localhost:3000' }).display)
       .toBe('npx --yes skills add http://localhost:3000 --agent universal --agent claude-code --global')
+  })
+})
+
+describe('runSkills', () => {
+  it('reports the line that says why npx failed, not the npm notice printed after it', async () => {
+    const stderr = [
+      'npm error network request to https://registry.npmjs.org/skills failed',
+      'npm notice',
+      'npm notice To update run: npm install -g npm@12.2.2',
+      'npm notice',
+    ]
+    /* `cmd.exe` does not run the extensionless script: without `npx.cmd` it
+       finds the real npx further down PATH and installs the skills for real. */
+    const dir = await project({
+      'npx': ['#!/bin/sh', ...stderr.map(line => `echo "${line}" >&2`), 'exit 1', ''].join('\n'),
+      'npx.cmd': ['@echo off', ...stderr.map(line => `>&2 echo ${line}`), 'exit /b 1', ''].join('\r\n'),
+    })
+    await chmod(join(dir, 'npx'), 0o755)
+    vi.stubEnv('PATH', `${dir}${delimiter}${process.env.PATH}`)
+
+    const outcome = await runSkills(skillsCommand({ interactive: false }), dir, false)
+
+    expect(outcome).toEqual({ ok: false, error: 'npm error network request to https://registry.npmjs.org/skills failed' })
   })
 })
 

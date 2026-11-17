@@ -150,8 +150,8 @@ jobs:
   # The same smoke where the Test job cannot reach: the oldest Node the CLI
   # declares in `engines`, and Windows.
   #
-  # `init` hands the skills install to `npx skills add`, which needs Node 22.20
-  # or later and crashes on 22.0.0, so that leg runs `init` with --no-agents.
+  # `init` hands the skills install to `npx skills add`, which does not start on
+  # Node 22.0 or 22.1, so that leg runs `init` with --no-agents.
   cli-compat:
     name: CLI smoke (${{ matrix.name }})
     if: github.event_name == 'pull_request'
