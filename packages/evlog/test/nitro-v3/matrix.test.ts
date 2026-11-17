@@ -13,7 +13,7 @@ describeBuiltAppMatrix({
       modules: [evlog({ ...options, silent: true })],
     })
     const devServer = createDevServer(nitro)
-    const server = devServer.listen({})
+    const server = devServer.listen({ port: 0, hostname: '127.0.0.1' })
     await prepare(nitro)
     const reloaded = new Promise<void>(resolve => nitro.hooks.hook('dev:reload', () => resolve()))
     await build(nitro)
