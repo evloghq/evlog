@@ -1,4 +1,4 @@
-import { registerPrettyErrorSnippetReader } from './pretty-error'
+import { registerPrettyErrorSnippetReader } from './stack-frames'
 
 /**
  * Register the disk-backed pretty-error snippet reader when Node built-ins are available.
