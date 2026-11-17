@@ -21,13 +21,14 @@ function launchers() {
 
 /* The project's own install wins over a hoisted one, so an app that pins the
    CLI in a monorepo runs that pin. The package exports a single entry, so its
-   root is found from there and the executable is read from its manifest. */
+   root is found from there and the executable is read from its manifest. A
+   package.json that does not parse ends the lookup from that place only. */
 function locate() {
   for (const from of [join(process.cwd(), 'package.json'), import.meta.url, ...launchers()]) {
     try {
       return dirname(dirname(createRequire(from).resolve(PACKAGE)))
     } catch (error) {
-      if (error.code !== 'MODULE_NOT_FOUND') throw error
+      if (error.code !== 'MODULE_NOT_FOUND' && error.code !== 'ERR_INVALID_PACKAGE_CONFIG') throw error
     }
   }
   return null

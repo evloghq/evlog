@@ -72,16 +72,17 @@ A pull request is not finished when it is open. Before you report it and request
 
 ## The PR body shows the change
 
-A body that only describes its change in prose is not finished, whatever kind of PR it carries. Show it:
+Every body has the shape in your instructions: **Why** (one or two sentences), **Proof**, **Risk** (one line), **Checks** (one line), then the ELI5 disclosure. Nothing else: no "Summary", "Changes", "Audited and not changed", or file lists the diff already shows. The Proof is:
 
-| Change | Evidence in the body |
+| Change | Proof |
 | --- | --- |
 | New or changed public API | A usage snippet, even for a one-line addition |
-| Bug fix | The input and output before and after, in a fenced or `diff` block |
+| Bug fix | The regression test failing before and passing after, or the input and output before and after, in a fenced or `diff` block |
 | CLI change | The real terminal output, captured while running it |
 | Anything rendered, docs edits included | A `before-after` capture |
+| Refactor, dedupe, removal | The focused test run on the changed files, as captured output |
 
-Prose alone is only for cases where none of these is possible, and the body says so plainly when that is the case. A snippet or captured output is evidence, not filler: the style rule keeps the prose short, not the proof.
+`createPullRequest` and `updatePullRequest` refuse a body with no fenced block, table or image outside the ELI5, a placeholder or TODO, more than 250 words of prose, a missing ELI5 disclosure, or an em dash. The refusal names the problem; fix that and call again. A snippet or captured output is evidence, not filler: the limit counts prose, not proof.
 
 ## Tests
 

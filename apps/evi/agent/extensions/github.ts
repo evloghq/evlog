@@ -2,6 +2,7 @@ import githubExtension from '@github-tools/eve-extension'
 import type { ApprovalContext, ApprovalStatus } from 'eve/tools/approval'
 import { GITHUB_CONNECTOR } from '../lib/github/credentials'
 import { createLabelPolicy, writePolicy } from '../lib/github/label-approval'
+import { outboundDenial } from '../lib/github/outbound'
 import { createPullRequestPolicy } from '../lib/github/pull-request-approval'
 import { homeRepository } from '../lib/repo'
 import { isAutonomous, MAINTAINER_GITHUB_LOGIN } from '../lib/trust'
@@ -73,6 +74,16 @@ function assignPolicy(ctx: ApprovalContext): ApprovalStatus {
   return policy(ctx)
 }
 
+type Policy = (ctx: ApprovalContext) => ApprovalStatus
+
+/** Refuses a write whose text breaks a mechanical rule, before any approval card. */
+function checked(next: Policy): Policy {
+  return (ctx) => {
+    const reason = outboundDenial(ctx.toolName, ctx.toolInput)
+    return reason ? { type: 'denied', reason } : next(ctx)
+  }
+}
+
 export default githubExtension({
   connector: GITHUB_CONNECTOR,
   context: homeRepository(),
@@ -80,24 +91,25 @@ export default githubExtension({
   exclude: [...EXCLUDED_WRITES],
   // A person's own GitHub access bounds what their turn does; schedules and autonomous triage run as the App.
   actAs: 'caller',
-  // Write tools without a policy keep the default always(): closeIssue, createPullRequestReview.
+  // Write tools without a policy keep the default always(): closeIssue.
   requireApproval: {
     // Reversible and harmless on every kind of run; a card here only slows the PR flow down.
     requestReviewers: (): ApprovalStatus => 'not-applicable',
-    createPullRequest: (ctx: ApprovalContext) => createPullRequestPolicy(ctx.session.auth.current, ctx.toolInput),
-    updatePullRequest: policy,
-    createIssue: autonomousWrite,
-    updateIssue: policy,
-    addIssueComment: policy,
-    updateIssueComment: policy,
-    addPullRequestComment: policy,
-    updatePullRequestComment: policy,
-    addDiscussionComment: policy,
+    createPullRequest: checked((ctx: ApprovalContext) => createPullRequestPolicy(ctx.session.auth.current, ctx.toolInput)),
+    updatePullRequest: checked(policy),
+    createIssue: checked(autonomousWrite),
+    updateIssue: checked(policy),
+    addIssueComment: checked(policy),
+    updateIssueComment: checked(policy),
+    addPullRequestComment: checked(policy),
+    updatePullRequestComment: checked(policy),
+    addDiscussionComment: checked(policy),
     addAssignees: assignPolicy,
     removeAssignees: policy,
     addLabels: autonomousWrite,
     removeLabel: policy,
     createLabel: (ctx: ApprovalContext) => createLabelPolicy(ctx.session.auth.current, ctx.toolInput),
     updateLabel: policy,
+    createPullRequestReview: checked(() => 'user-approval'),
   },
 })

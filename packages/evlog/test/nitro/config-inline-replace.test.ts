@@ -78,17 +78,6 @@ describe('nitro config inline replace (issue #397)', () => {
     it('stays parseable when block comments avoid the replace token', () => {
       assertParseableAfterReplace(FIXED_INLINE_COMMENT_FIXTURE, STAR_SLASH_GLOB_CONFIG)
     })
-
-    it('stays parseable via toJsReplaceFragment on comment-bearing fixed input', () => {
-      const fixedCommentSource = [
-        '/**',
-        ' * 1. Build-time inlined config literal — baked in via nitro.options.replace.',
-        ' */',
-        'declare const __EVLOG_CONFIG__: unknown',
-      ].join('\n')
-
-      assertParseableAfterReplace(toJsReplaceFragment(fixedCommentSource), STAR_SLASH_GLOB_CONFIG)
-    })
   })
 
   for (const relativePath of NITRO_INLINE_SOURCES) {

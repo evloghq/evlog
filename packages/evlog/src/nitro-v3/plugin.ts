@@ -1,6 +1,7 @@
 import { definePlugin } from 'nitro'
 import type { CaptureError } from 'nitro/types'
 import type { HTTPEvent } from 'nitro/h3'
+import * as h3 from 'nitro/h3'
 import { parseURL } from 'ufo'
 import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled, markWideEventDrainStarted, outputWideEvent } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
@@ -9,6 +10,7 @@ import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
 import { shouldLog, getServiceForPath, extractErrorStatus } from '../nitro'
 import { extendDeferredDrain } from '../nitro/deferred-drain'
 import { normalizeRedactConfig } from '../redact'
+import { shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import type { EnrichContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
@@ -97,7 +99,10 @@ function getSafeRequestHeaders(event: HTTPEvent): Record<string, string> {
   return filterSafeHeaders(headers)
 }
 
-function getSafeResponseHeaders(res: Response): Record<string, string> | undefined {
+/** The status and headers a response was sent with, read before the body is sent. */
+type SentResponse = Pick<Response, 'status' | 'headers'>
+
+function getSafeResponseHeaders(res: SentResponse): Record<string, string> | undefined {
   const headers: Record<string, string> = {}
   res.headers.forEach((value, key) => {
     headers[key] = value
@@ -108,7 +113,7 @@ function getSafeResponseHeaders(res: Response): Record<string, string> | undefin
 
 function buildHookContext(
   event: HTTPEvent,
-  res?: Response,
+  res?: SentResponse,
 ): Omit<EnrichContext, 'event'> {
   const { pathname } = parseURL(event.req.url)
   const responseHeaders = res ? getSafeResponseHeaders(res) : undefined
@@ -181,7 +186,7 @@ async function callEnrichAndDrain(
   hooks: Hooks,
   emittedEvent: WideEvent | null,
   event: HTTPEvent,
-  res?: Response,
+  res?: SentResponse,
   options?: { deferDrain?: boolean },
 ): Promise<void> {
   if (!emittedEvent) return
@@ -313,24 +318,31 @@ export default definePlugin(async (nitroApp) => {
     const log = ctx.log as RequestLogger | undefined
     if (!log) return
 
+    const captured = ctx.nitro?.errors?.at(-1)?.error
+    const recorded = captured ? recordError(log, captured) : undefined
+
     // Nitro does not await error hooks, so an earlier async hook can delay ours.
     ctx._evlogEmitting = true
-    try {
-      const captured = ctx.nitro?.errors?.at(-1)?.error
-      const recorded = captured ? recordError(log, captured) : undefined
-
-      // Streaming responses (SSE, NDJSON, chunked) emit at header time: h3 v2's
-      // `onResponse` hook cannot swap the outgoing response (`H3Event.res` is a
-      // getter-only accessor, and `toResponse` sends the original response no
-      // matter what the hook does), so wrapping the body here would only lock the
-      // original stream and break the response. Stream-lifetime metrics are not
-      // observable from this hook.
-      log.set({ status: res.status })
-      const emittedEvent = await emitWithTailSampling(hooks, log, event, res.status, ctx, recorded)
-      await callEnrichAndDrain(hooks, emittedEvent, event, res)
-    } finally {
-      delete ctx._evlogEmitting
+    const emit = async (sent: SentResponse) => {
+      try {
+        log.set({ status: sent.status })
+        const emittedEvent = await emitWithTailSampling(hooks, log, event, sent.status, ctx, recorded)
+        await callEnrichAndDrain(hooks, emittedEvent, event, sent)
+      } finally {
+        delete ctx._evlogEmitting
+      }
     }
+
+    // A streamed body emits once it ends or the client leaves; `_evlogEmitting` stays set so a
+    // mid-stream error is recorded, not emitted. h3 before 2.0.1 has no `onDispose`: header-time emit.
+    if ('onDispose' in h3 && shouldDeferEmitForResponse(res)) {
+      // srvx's Node response drops its status and headers once sent: copy them now.
+      const sent = { status: res.status, headers: new Headers(res.headers) }
+      h3.onDispose(event, () => emit(sent))
+      return
+    }
+
+    await emit(res)
   })
 
   hooks.hook('error', async (error, { event }) => {

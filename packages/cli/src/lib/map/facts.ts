@@ -96,6 +96,10 @@ export interface CallFact {
   start: number
   /** Keys of the first argument when it is an object literal. */
   props: ReadonlySet<string>
+  /** Leaf paths of the first argument's object literal, nested keys dotted: `user.id`. */
+  fields: readonly string[]
+  /** Top-level properties of the first argument whose value is a literal: `action` → `checkout.completed`. */
+  literals: ReadonlyMap<string, string>
 }
 
 /** `export { a as b } from './x'`, or `export * from './x'`. */
@@ -211,8 +215,9 @@ export function moduleKey(specifier: string): string {
 /** Properties whose literal values make one error distinguishable from another. */
 const ERROR_IDENTITY_KEYS = ['status', 'statusCode', 'code', 'message', 'why']
 
-function literalValue(node: Node | undefined): string | null {
-  if (!node) return null
+function literalValue(wrapped: Node | undefined): string | null {
+  if (!wrapped) return null
+  const node = unwrapChain(wrapped)
   if (node.type === 'Literal') {
     const { value } = node as { value: unknown }
     return value === null || value === undefined ? null : String(value)
@@ -229,9 +234,10 @@ function literalValue(node: Node | undefined): string | null {
 /** Literal properties of an object literal, by key. */
 function literalProps(node: Node | undefined): Map<string, string> {
   const props = new Map<string, string>()
-  if (!node || node.type !== 'ObjectExpression') return props
-  for (const prop of (node as { properties: Node[] }).properties) {
-    if (prop.type !== 'Property') continue
+  const object = node && unwrapChain(node)
+  if (!object || object.type !== 'ObjectExpression') return props
+  for (const prop of (object as { properties: Node[] }).properties) {
+    if (prop.type !== 'Property' || (prop as { computed?: boolean }).computed) continue
     const { key, value } = prop as { key: Node, value: Node }
     const name = key.type === 'Identifier'
       ? key.name
@@ -274,6 +280,28 @@ function objectKeys(node: Node | undefined): Set<string> {
     if (key.type === 'Literal') keys.add(String((key as { value: unknown }).value))
   }
   return keys
+}
+
+/**
+ * Leaf paths of an object literal: `{ user: { id }, cart: { items } }` reads
+ * as `user.id` and `cart.items`. A spread or a computed key has no name the
+ * source spells out, so it is skipped rather than guessed.
+ */
+function objectPaths(node: Node | undefined, prefix = ''): string[] {
+  const object = node && unwrapChain(node)
+  if (!object || object.type !== 'ObjectExpression') return []
+  const paths: string[] = []
+  for (const prop of (object as { properties: Node[] }).properties) {
+    if (prop.type !== 'Property' || (prop as { computed?: boolean }).computed) continue
+    const { key, value } = prop as { key: Node, value: Node }
+    const name = key.type === 'Identifier' ? key.name : key.type === 'Literal' ? String((key as { value: unknown }).value) : null
+    if (name === null) continue
+    const path = `${prefix}${name}`
+    const nested = objectPaths(value, `${path}.`)
+    if (nested.length > 0) paths.push(...nested)
+    else paths.push(path)
+  }
+  return paths
 }
 
 type CalleeShape = Pick<CallFact, 'name' | 'member' | 'receiver' | 'root' | 'chain' | 'factory'>
@@ -737,7 +765,7 @@ export function buildFileFacts(
         const [firstArgument] = (node as { arguments: Node[] }).arguments
         const { start } = (node as unknown as { start: number })
         const line = lines.lineAt(start)
-        calls.push({ ...described, line, start, props: objectKeys(firstArgument) })
+        calls.push({ ...described, line, start, props: objectKeys(firstArgument), fields: objectPaths(firstArgument), literals: literalProps(firstArgument) })
 
         /* `fetch(…).catch(…)` — the guard spans the call it is chained onto. */
         if (ERROR_GUARD_MEMBERS.includes(described.member)) guards.push(nodeRange(node))

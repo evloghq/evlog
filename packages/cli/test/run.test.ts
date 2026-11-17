@@ -60,13 +60,35 @@ describe('run', () => {
     expect(process.exitCode).not.toBe(2)
   })
 
-  it('prints the usage of the command --help was asked on and exits 0', async () => {
+  it('prints the usage of the command --help was asked on to stdout and exits 0', async () => {
+    const stdout = capture('stdout')
     const stderr = capture('stderr')
 
     await run(['map', '--min-score', '80', '--help'])
 
-    expect(stderr()).toContain('USAGE  evlog map')
+    expect(stdout()).toContain('USAGE  evlog map')
+    expect(stderr()).toBe('')
     expect(process.exitCode).toBeUndefined()
+  })
+
+  it('lists flags the way they are typed, with their short form', async () => {
+    const stdout = capture('stdout')
+
+    await run(['init', '--help'])
+
+    for (const flag of ['--no-header', '--prod-drain', '--dry-run', '-y, --yes']) expect(stdout()).toMatch(new RegExp(`│ ${flag} `))
+    expect(stdout()).not.toMatch(/--(noHeader|prodDrain|dryRun)/)
+  })
+
+  it('lists a positional as an argument, not as a flag', async () => {
+    const stdout = capture('stdout')
+
+    await run(['logs', '--help'])
+
+    expect(stdout()).toContain('USAGE  evlog logs [what] [options]')
+    expect(stdout()).toMatch(/ARGUMENTS\n\n {2}│ what {2,}`errors`, `slow`, `stats`, or a request id/)
+    expect(stdout()).toMatch(/│ -f, --follow /)
+    expect(stdout()).not.toContain('--what')
   })
 
   it('prints the version on --version', async () => {

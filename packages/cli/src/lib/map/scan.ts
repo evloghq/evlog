@@ -4,6 +4,7 @@ import { getFramework } from '../frameworks'
 import { glob } from '../glob'
 import { countSuppressed } from './directives'
 import { buildFileFacts } from './facts'
+import type { FileFacts } from './facts'
 import { createParseCache, parseFile } from './parse'
 import { collectProjectFacts, readPackageJson } from './project-facts'
 import type { ProjectFacts } from './project-facts'
@@ -14,6 +15,7 @@ import { classifyRouteObservability, gradeFromScore, hasScoredRoutes, scoreGloba
 import type {
   CheckId,
   CheckResult,
+  EventShape,
   MapFile,
   ProjectSuggestion,
   RawRouteEntry,
@@ -61,6 +63,7 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
     capabilities,
   })
 
+  const event = facts ? eventShape(facts) : undefined
   return {
     route: {
       ...raw,
@@ -68,10 +71,18 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
       checks,
       suggestions,
       sensitivity,
+      ...(event ? { event } : {}),
       score: scoreRoute(checks),
     },
     warnings,
   }
+}
+
+/** The fields and audit actions the handler's event carries, or nothing when it carries neither. */
+function eventShape(facts: FileFacts): EventShape | undefined {
+  const fields = [...new Set(facts.loggerCalls('set').flatMap(call => call.fields))]
+  const audit = facts.loggerCalls('audit').map(call => call.literals.get('action')).filter(action => action !== undefined)
+  return fields.length > 0 || audit.length > 0 ? { fields, audit: [...new Set(audit)] } : undefined
 }
 
 /** Extract entry points for `ctx.framework`, run the rules, and score them. */
