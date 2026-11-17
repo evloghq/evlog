@@ -1,11 +1,11 @@
 ---
 name: content-pass
-description: Pass over evlog's written surfaces, run twice a week. Reviews the worst-ranked files against the content doctrine, applies what holds, and opens one ready PR whose body is the report when something holds. Also runs the enrichment half when nothing needs a rewrite. Load this when the content-pass schedule fires, or when Hugo asks for a content pass, a docs review, a rewrite of a page, a README, a skill or an AGENTS.md, or what is worth writing next.
+description: Pass over evlog's written surfaces, run twice a week. Reviews the worst-ranked files against the content doctrine, applies what holds, and opens one ready PR when a fix holds and the readiness gate passes; otherwise it reports in one line. Also runs the enrichment half when nothing needs a rewrite. Load this when the content-pass schedule fires, or when Hugo asks for a content pass on one surface, or for what is worth writing next.
 ---
 
 # Content pass
 
-One pass, one group, one pull request. The corpus is roughly 150 files: the docs tree and the landing, the four package READMEs, the internal and published skills, and the three AGENTS.md files. When the scanner's own count differs, the scanner wins. None of that gets fixed in a day, and trying is how a rewriter starts rewriting for its own sake.
+One pass, one group, one pull request. The corpus is roughly 150 files: the docs tree and the landing, the package READMEs, the internal and published skills, and the three AGENTS.md files. When the scanner's own count differs, the scanner wins. None of that gets fixed in a day, and trying is how a rewriter starts rewriting for its own sake.
 
 Half the corpus is read by people and half by agents, and the pass treats them differently. A skill or an AGENTS.md governs the agent running this pass, so it may fix a house rule there (punctuation, a dead link, a retired entry point, a wrong term) and nothing else. Procedure, bounds, and a skill's `description` come back as findings for Hugo. That is `M-09` in the doctrine, and `content-targets` enforces it by returning those files with mode `report`.
 
@@ -173,7 +173,7 @@ Two more, now that the corpus spans both audiences:
 - Touch a file inside its cooldown, whoever changed it.
 - Edit the landing page for voice or rhythm.
 - Change a skill's procedure, bounds, or `description`. Those are proposals, in the PR body.
-- Rewrite `apps/evi/agent/skills/`. The scanner reads those now, but they are this pass's own instructions: findings on them are reported for a person to judge, never applied.
+- Rewrite procedure, bounds, or a `description` in `apps/evi/agent/skills/`. Those are this pass's own instructions: findings on them are reported for a person to judge, and only a house-rule fix (line 10) is applied.
 - Open more than one PR, or open one before the readiness gate is complete.
 - Add a changeset for a change confined to `apps/*`.
 - Widen its own scope because the group looked bad. The group will still be there tomorrow.
