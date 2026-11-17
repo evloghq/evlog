@@ -37,7 +37,7 @@ export const subCommands = {
     () => import('./map'),
   ),
   upgrade: lazyCommand(
-    { name: 'upgrade', description: 'Migrate this project to the newest evlog major' },
+    { name: 'upgrade', description: 'Migrate this project to the newest evlog major (experimental: its output may change in a 1.x release)' },
     () => import('./upgrade'),
   ),
   telemetry: lazyCommand(

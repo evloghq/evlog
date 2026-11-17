@@ -19,7 +19,7 @@ import type { CliUi } from './ui'
  */
 export const COMMON_ARGS = {
   json: { type: 'boolean', description: 'Machine-readable JSON on stdout' },
-  debug: { type: 'boolean', description: 'Emit a debug case file via evlog' },
+  debug: { type: 'boolean', description: 'Emit a debug case file via evlog (experimental: the case file format may change in a 1.x release)' },
   noHeader: { type: 'boolean', description: 'Skip the branded command header' },
   cwd: { type: 'string', description: 'Project directory (default: current)' },
 } as const satisfies ArgsDef
