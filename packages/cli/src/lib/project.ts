@@ -340,6 +340,7 @@ export function detectStack(pkg: PackageJson | null): string[] {
     ['express', 'express'],
     ['fastify', 'fastify'],
     ['@sveltejs/kit', 'sveltekit'],
+    ['effect', 'effect'],
     ['@evlog/nuxthub', 'nuxthub'],
     ['@evlog/telemetry', 'telemetry'],
   ]

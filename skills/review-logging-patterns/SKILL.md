@@ -1,6 +1,6 @@
 ---
 name: review-logging-patterns
-description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, and Fastify. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Effect, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
+description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify, and Effect. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Effect, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
 license: MIT
 metadata:
   author: HugoRCD
@@ -54,7 +54,7 @@ Docs: https://www.evlog.dev/use-cases/audit/overview
 npm install evlog
 ```
 
-## Use the CLI (recommended on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify)
+## Use the CLI (recommended on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify, Effect)
 
 The `evlog` executable ships with the `evlog` package: `pnpm evlog`, `npx evlog`, `bunx evlog`. It runs `@evlog/cli` when installed and fetches it on demand otherwise (no dependency added to the project), so it works on a project with nothing yet. Early but worth trying. It reads the project on disk (no traffic, no config needed). On the seven supported frameworks it covers the whole loop: **wire evlog in** (`init`), **score coverage** (`map`), **lock the score in CI** (`--min-score`, `--baseline`). If the CLI is unavailable, the framework has no adapter yet, or the user declines, continue with the manual sections below; the skill does not depend on it. **Ask before installing anything**.
 
@@ -75,7 +75,7 @@ npx evlog init --yes \
   --sampling medium
 ```
 
-Useful flags: `--framework` (override detection: `nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`), `--prodDrain` (comma-separated: `axiom`, `otlp`, `posthog`, `sentry`, `better-stack`, `datadog`, `hyperdx`, `sazabi`, `loki`, `clickhouse`), `--extras` (`enrichers`, `pipeline`, `sampling`, `vite`, `error-catalog`, `audit-catalog`, `ai`, `better-auth`), `--enrichers`, `--sampling` (traffic tier: `all`, `low`, `medium`, `high`, `very-high`), `--apps` (monorepo: which workspace packages), `--no-install`. Review the `--dry-run` output with the user before applying. Docs: https://www.evlog.dev/cli/init
+Useful flags: `--framework` (override detection: `nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`, `effect`), `--prodDrain` (comma-separated: `axiom`, `otlp`, `posthog`, `sentry`, `better-stack`, `datadog`, `hyperdx`, `sazabi`, `loki`, `clickhouse`), `--extras` (`enrichers`, `pipeline`, `sampling`, `vite`, `error-catalog`, `audit-catalog`, `ai`, `better-auth`), `--enrichers`, `--sampling` (traffic tier: `all`, `low`, `medium`, `high`, `very-high`), `--apps` (monorepo: which workspace packages), `--no-install`. Review the `--dry-run` output with the user before applying. Docs: https://www.evlog.dev/cli/init
 
 ### 2. Score: `evlog map`
 

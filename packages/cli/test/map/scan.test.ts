@@ -258,6 +258,72 @@ describe('hono checks', () => {
   })
 })
 
+describe('effect', () => {
+  const root = join(FIXTURES, 'effect-basic')
+  let result: ScanResult
+
+  beforeAll(async () => {
+    result = await scan(await ctx(root, 'effect'))
+  })
+
+  async function detectIn(dependencies: Record<string, string>): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'evlog-cli-effect-'))
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'app', dependencies }), 'utf8')
+    try {
+      return detectFramework(await resolveProject(dir)).framework
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('detects an Effect 4 app from its effect dependency', async () => {
+    expect(detectFramework(await resolveProject(root)).framework).toBe('effect')
+  })
+
+  it('leaves an Effect 3 app, which serves HTTP from @effect/platform, undetected', async () => {
+    await expect(detectIn({ 'effect': '^3.10.0', '@effect/platform': '^0.90.0' })).rejects.toMatchObject({ code: 'cli.MAP_FRAMEWORK_NOT_DETECTED', message: expect.stringContaining('fastify, effect') })
+  })
+
+  it('keeps the web framework of an app that also uses Effect', async () => {
+    expect(await detectIn({ effect: '^4.0.0', next: '^16.0.0' })).toBe('next')
+    expect(await detectIn({ effect: '^4.0.0', hono: '^4.0.0' })).toBe('hono')
+  })
+
+  it('reads HttpRouter.add and HttpRouter.route, with * as every method', () => {
+    const paths = result.map.routes.map(r => `${r.method ?? '*'} ${r.path} (${r.file})`).sort()
+    expect(paths).toEqual([
+      '* /ping (src/routes/health.ts)',
+      'GET /health (src/routes/health.ts)',
+      'GET /users/:id (src/routes/users.ts)',
+      'POST /checkout (src/routes/checkout.ts)',
+    ])
+  })
+
+  it('credits yield* EvlogLogger and yield* useLogger() as the request logger', () => {
+    const checkout = result.map.routes.find(r => r.path === '/checkout')
+    expect(checkout?.checks['wide-event']?.status).toBe('pass')
+    expect(checkout?.checks['context']?.status).toBe('pass')
+    expect(checkout?.checks['audit']?.status).toBe('pass')
+    expect(checkout?.score).toBe(100)
+
+    const user = result.map.routes.find(r => r.path === '/users/:id')
+    expect(user?.checks['wide-event']?.status).toBe('pass')
+    expect(user?.checks['context']?.status).toBe('pass')
+  })
+
+  it('reads a route without a logger as an event routerLayer emits with no context', async () => {
+    const adapter = await getFramework('effect').map()
+    expect(adapter.resolveRequestLogger?.(await ctx(root, 'effect'))).toBe('ambient')
+
+    const health = result.map.routes.find(r => r.path === '/health')
+    expect(health?.checks['wide-event']).toMatchObject({ status: 'fail', message: expect.stringContaining('only method, path and status') })
+  })
+
+  it('effect-basic map snapshot', () => {
+    expect(mapForSnapshot(result.map)).toMatchSnapshot()
+  })
+})
+
 /* The setup from EVL-659: a Next.js app in a pnpm workspace that only ever
    imports a shared `@acme/logger` package, with evlog installed in that package
    and not in the app. */

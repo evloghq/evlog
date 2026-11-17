@@ -1,3 +1,4 @@
+import { effect } from './effect'
 import { express } from './express'
 import { fastify } from './fastify'
 import { hono } from './hono'
@@ -18,7 +19,7 @@ export { defineFramework } from './types'
  * `Framework` type, `--framework` parsing and help text, detection, labels,
  * docs links, telemetry allowlists and error messages all derive from the list.
  */
-const DEFINITIONS = [nuxt, nitro, next, tanstackStart, hono, express, fastify] as const
+const DEFINITIONS = [nuxt, nitro, next, tanstackStart, hono, express, fastify, effect] as const
 
 /** Frameworks the CLI supports. */
 export type Framework = typeof DEFINITIONS[number]['id']

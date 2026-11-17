@@ -674,7 +674,18 @@ export function buildFileFacts(
         if (!declarator.init) break
 
         let init = unwrapChain(declarator.init)
-        if (init.type === 'AwaitExpression') init = unwrapChain((init as { argument: Node }).argument)
+        /* `yield*` is how an Effect generator reads a service or runs an effect. */
+        const delegated = init.type === 'YieldExpression' && (init as { delegate: boolean }).delegate
+        if (init.type === 'AwaitExpression' || delegated) init = unwrapChain((init as { argument: Node }).argument)
+
+        /* `const log = yield* EvlogLogger`: evlog/effect's logger is a service in the Effect context. */
+        if (delegated && init.type === 'Identifier' && (init as { name: string }).name === 'EvlogLogger') {
+          loggerCandidates.push({
+            binding: declarator.id.type === 'Identifier' ? declarator.id.name : null,
+            factory: 'EvlogLogger',
+            line: lines.lineAt((init as unknown as { start: number }).start),
+          })
+        }
 
         /* `const log = req.context.log` and `const { log } = req.context`: the
            logger comes off the request, not out of a factory. */

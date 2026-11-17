@@ -1,5 +1,185 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`effect > effect-basic map snapshot 1`] = `
+{
+  "cliVersion": "[REDACTED]",
+  "framework": "effect",
+  "generatedAt": "[REDACTED]",
+  "projectName": "effect-basic-fixture",
+  "routes": [
+    {
+      "checks": {
+        "audit": {
+          "status": "pass",
+        },
+        "context": {
+          "status": "pass",
+        },
+        "error-handling": {
+          "status": "n/a",
+        },
+        "structured-errors": {
+          "status": "n/a",
+        },
+        "wide-event": {
+          "status": "pass",
+        },
+      },
+      "file": "src/routes/checkout.ts",
+      "framework": "effect",
+      "handler": {
+        "column": 0,
+        "line": 5,
+      },
+      "id": "81d2cd284641",
+      "kind": "api",
+      "method": "POST",
+      "path": "/checkout",
+      "score": 100,
+      "sensitivity": {
+        "level": "high",
+        "reasons": [
+          "money: path says "checkout"",
+        ],
+      },
+      "suggestions": {},
+    },
+    {
+      "checks": {
+        "audit": {
+          "status": "n/a",
+        },
+        "context": {
+          "evidence": {
+            "file": "src/routes/health.ts",
+            "line": 4,
+            "snippet": undefined,
+          },
+          "message": "no log.set() context accumulation",
+          "status": "fail",
+        },
+        "error-handling": {
+          "status": "n/a",
+        },
+        "structured-errors": {
+          "status": "n/a",
+        },
+        "wide-event": {
+          "evidence": {
+            "file": "src/routes/health.ts",
+            "line": 4,
+            "snippet": undefined,
+          },
+          "message": "handler adds nothing to its request event — only method, path and status are recorded",
+          "status": "fail",
+        },
+      },
+      "file": "src/routes/health.ts",
+      "framework": "effect",
+      "handler": {
+        "column": 0,
+        "line": 4,
+      },
+      "id": "bbe532c90837",
+      "kind": "api",
+      "method": "GET",
+      "path": "/health",
+      "score": 45,
+      "sensitivity": {
+        "level": "none",
+        "reasons": [],
+      },
+      "suggestions": {},
+    },
+    {
+      "checks": {
+        "audit": {
+          "status": "n/a",
+        },
+        "context": {
+          "evidence": {
+            "file": "src/routes/health.ts",
+            "line": 5,
+            "snippet": undefined,
+          },
+          "message": "no log.set() context accumulation",
+          "status": "fail",
+        },
+        "error-handling": {
+          "status": "n/a",
+        },
+        "structured-errors": {
+          "status": "n/a",
+        },
+        "wide-event": {
+          "evidence": {
+            "file": "src/routes/health.ts",
+            "line": 5,
+            "snippet": undefined,
+          },
+          "message": "handler adds nothing to its request event — only method, path and status are recorded",
+          "status": "fail",
+        },
+      },
+      "file": "src/routes/health.ts",
+      "framework": "effect",
+      "handler": {
+        "column": 0,
+        "line": 5,
+      },
+      "id": "87023b77de1b",
+      "kind": "api",
+      "method": null,
+      "path": "/ping",
+      "score": 45,
+      "sensitivity": {
+        "level": "none",
+        "reasons": [],
+      },
+      "suggestions": {},
+    },
+    {
+      "checks": {
+        "audit": {
+          "status": "n/a",
+        },
+        "context": {
+          "status": "pass",
+        },
+        "error-handling": {
+          "status": "n/a",
+        },
+        "structured-errors": {
+          "status": "n/a",
+        },
+        "wide-event": {
+          "status": "pass",
+        },
+      },
+      "file": "src/routes/users.ts",
+      "framework": "effect",
+      "handler": {
+        "column": 0,
+        "line": 9,
+      },
+      "id": "69c6596aaed1",
+      "kind": "api",
+      "method": "GET",
+      "path": "/users/:id",
+      "score": 100,
+      "sensitivity": {
+        "level": "none",
+        "reasons": [],
+      },
+      "suggestions": {},
+    },
+  ],
+  "ruleSetVersion": 2,
+  "score": 78,
+  "version": 1,
+}
+`;
+
 exports[`full scan snapshots > hono-basic map snapshot 1`] = `
 {
   "cliVersion": "[REDACTED]",
