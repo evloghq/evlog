@@ -22,6 +22,7 @@ import {
   findEventViaDrain,
   waitForDrainCalls,
 } from '../helpers/framework'
+import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
 
 interface ProcedureContext extends EvlogOrpcContext {
   pingTrace?: { sawLogger: boolean, fromUseLogger: boolean }
@@ -462,4 +463,23 @@ describe('evlog/orpc', () => {
       expect(drain).toHaveBeenCalledOnce()
     })
   })
+})
+
+describeStandardHttpMatrix({
+  name: 'orpc',
+  mount(options) {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    const base = os.$context<EvlogOrpcContext>().use(evlog())
+    const handler = withEvlog(new RPCHandler({ users: base.route({ method: 'GET' }).handler(() => ({ users: [] })) }), options)
+    return Promise.resolve({
+      async fire({ method, path, headers }) {
+        const { response } = await handler.handle(new Request(`http://localhost${path}`, { method, headers }), { prefix: '/api' })
+        return { status: response?.status ?? 404 }
+      },
+      cleanup() {
+        vi.restoreAllMocks()
+        return Promise.resolve()
+      },
+    })
+  },
 })

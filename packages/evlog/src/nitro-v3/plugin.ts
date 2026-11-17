@@ -39,10 +39,9 @@ function getContext(event: HTTPEvent): Record<string, unknown> {
 }
 
 function resolveRequestId(event: HTTPEvent, ctx: Record<string, unknown>): string {
-  let requestIdOverride: string | undefined
-  if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
-    const cfRay = event.req.headers.get('cf-ray')
-    if (cfRay) requestIdOverride = cfRay
+  let requestIdOverride = event.req.headers.get('x-request-id') || undefined
+  if (!requestIdOverride && globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
+    requestIdOverride = event.req.headers.get('cf-ray') || undefined
   }
   return requestIdOverride || ctx.requestId as string | undefined || crypto.randomUUID()
 }

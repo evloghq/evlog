@@ -21,10 +21,10 @@ import { elapsedMs } from '../utils'
 import { callEnrichAndDrain, getSafeHeaders, getResponseStatus } from './enrich-drain'
 
 function createDeferredRequestLogger(e: ServerEvent): AuditableLogger {
-  let requestIdOverride: string | undefined
-  if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
-    const cfRay = getSafeHeaders(e)?.['cf-ray']
-    if (cfRay) requestIdOverride = cfRay
+  const headers = getSafeHeaders(e)
+  let requestIdOverride = headers['x-request-id'] || undefined
+  if (!requestIdOverride && globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
+    requestIdOverride = headers['cf-ray'] || undefined
   }
   return createRequestLogger({
     method: e.method,
