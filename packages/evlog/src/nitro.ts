@@ -73,6 +73,15 @@ export interface NitroModuleOptions {
    * `true` enables all built-in PII patterns. Pass an object for fine-grained control.
    */
   redact?: boolean | RedactConfig
+
+  /**
+   * Register evlog's Nitro error handler, which answers errors with JSON and
+   * includes `why`, `fix` and `link` from an `EvlogError`. Set to false when the
+   * app owns its error responses: the next Nitro error handler (yours, or the
+   * framework's) answers instead. Errors still reach the wide event.
+   * @default true
+   */
+  errorHandler?: boolean
 }
 
 /**

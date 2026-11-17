@@ -37,17 +37,17 @@ function makeFakeNuxt() {
   }
 }
 
-async function setupModule() {
+async function setupModule(options: Record<string, unknown> = {}) {
   const moduleDefinition = (await import('../../src/nuxt/module')).default as unknown as {
     setup: (options: Record<string, unknown>, nuxt: ReturnType<typeof makeFakeNuxt>) => void
   }
   const nuxt = makeFakeNuxt()
-  moduleDefinition.setup({}, nuxt)
+  moduleDefinition.setup(options, nuxt)
   return nuxt
 }
 
-async function nitroConfigHook() {
-  const nuxt = await setupModule()
+async function nitroConfigHook(options: Record<string, unknown> = {}) {
+  const nuxt = await setupModule(options)
   const call = nuxt.hook.mock.calls.find(([hookName]) => hookName === 'nitro:config')
   if (!call) throw new Error('the module registers no nitro:config hook')
   return call[1] as (nitroConfig: { errorHandler?: string | string[] }) => void
@@ -77,6 +77,17 @@ describe('nuxt module nitro version selection', () => {
     hook(nitroConfig)
 
     expect(nitroConfig.errorHandler).toBe('../nitro/errorHandler')
+    expect(addServerPlugin).toHaveBeenCalledWith('../nitro/plugin')
+  })
+
+  it('leaves the app error handler alone with errorHandler: false and still registers the plugin', async () => {
+    getNitroVersion.mockReturnValue(2)
+    const hook = await nitroConfigHook({ errorHandler: false })
+
+    const nitroConfig: { errorHandler?: string | string[] } = { errorHandler: '~/error' }
+    hook(nitroConfig)
+
+    expect(nitroConfig.errorHandler).toBe('~/error')
     expect(addServerPlugin).toHaveBeenCalledWith('../nitro/plugin')
   })
 
