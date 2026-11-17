@@ -169,6 +169,13 @@ describe('evlog cli bin', () => {
     })
   })
 
+  it.each(['2.31.0', '2.40.1', '3.0.0-beta.3'])('runs next to evlog %s, which the peer range accepts on either major', async (version) => {
+    const parent = await tempDir()
+    const shim = await globalCopy(parent, { evlog: version })
+
+    expect(await evlog(shim, ['doctor'], await emptyProject(parent))).toBe('GLOBAL doctor')
+  })
+
   it('stops with one line when the evlog next to it is older than the one it needs', async () => {
     const parent = await tempDir()
     const shim = await globalCopy(parent, { evlog: '2.9.0' })
@@ -194,7 +201,7 @@ describe('evlog cli bin', () => {
     expect(result.code).toBe(1)
     expect(result.stdout).toBe('')
     expect(result.stderr.split('\n')).toEqual([
-      `@evlog/cli 0.0.0 needs evlog 2.31.0 or later, and none is installed next to it`,
+      '@evlog/cli 0.0.0 needs evlog 2.31.0 or later, and none is installed next to it',
       '→ Install evlog where @evlog/cli is installed, then run the command again',
       '',
     ])

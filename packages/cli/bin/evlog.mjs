@@ -9,18 +9,24 @@ const PACKAGE = '@evlog/cli'
 const self = dirname(dirname(fileURLToPath(import.meta.url)))
 const manifest = JSON.parse(readFileSync(join(self, 'package.json'), 'utf8'))
 
-/* The lowest version a range accepts: `>=x.y.z`, or the first alternative of
-   `^x.y.z || >=a.b.c-beta.0`, whose alternatives are written lowest first. */
-function floor(range) {
-  return range.split('||')[0].trim().replace(/^[\^~>=]+/, '')
-}
+const parts = version => version.split('-')[0].split('.').map(Number)
 
-/* Only the floor of `engines.node` and the evlog peer range is checked. A
-   prerelease counts as its release, so a 3.0.0 beta meets `>=3.0.0`. */
-function meets(version, range) {
-  const [have, need] = [version, floor(range)].map(text => text.split('-')[0].split('.').map(Number))
+function atLeast(version, floor) {
+  const [have, need] = [parts(version), parts(floor)]
   const at = have.findIndex((part, index) => part !== need[index])
   return at === -1 || have[at] > need[at]
+}
+
+/* The lowest version a range accepts. `engines.node` is a floor, `>=x.y.z`. The
+   evlog peer range is one floor per major, `^2.31.0 || >=3.0.0-beta.0`, and its
+   alternatives meet end to end, so the lowest one is the floor of the whole range. */
+function floorOf(range) {
+  return range.split('||').map(part => part.trim().replace(/^(\^|>=)/, '')).reduce((low, next) => atLeast(next, low) ? low : next)
+}
+
+/* A prerelease counts as its release, so a 3.0.0 beta meets `>=3.0.0`. */
+function meets(version, range) {
+  return atLeast(version, floorOf(range))
 }
 
 /* The install that resolves from the cwd wins over a global copy. The realpath
@@ -40,7 +46,7 @@ function installed() {
    Its manifest is found from its entry, since older versions do not export it. */
 function evlogProblem() {
   const range = manifest.peerDependencies.evlog
-  const needs = `${PACKAGE} ${manifest.version} needs evlog ${floor(range)} or later`
+  const needs = `${PACKAGE} ${manifest.version} needs evlog ${floorOf(range)} or later`
   let root
   try {
     root = dirname(fileURLToPath(import.meta.resolve('evlog')))
@@ -62,7 +68,7 @@ function stop(message) {
 const local = installed()
 
 if (!meets(process.versions.node, manifest.engines.node)) {
-  stop(`${PACKAGE} needs Node.js ${floor(manifest.engines.node)} or later, and this is Node.js ${process.versions.node}`)
+  stop(`${PACKAGE} needs Node.js ${floorOf(manifest.engines.node)} or later, and this is Node.js ${process.versions.node}`)
 } else if (local && realpathSync(local) !== realpathSync(self)) {
   const { bin } = JSON.parse(readFileSync(join(local, 'package.json'), 'utf8'))
   await import(pathToFileURL(join(local, bin.evlog)).href)
