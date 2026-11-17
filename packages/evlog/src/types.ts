@@ -311,6 +311,23 @@ export interface DrainContext {
 
 export interface SamplingConfig {
   /**
+   * Severity floor for wide events (`createLogger().emit()`, framework middleware).
+   * Events below it are dropped before `keep` and `rates` are checked, so a `keep`
+   * rule or callback cannot bring them back. `error`, `fatal` and audit events are
+   * never dropped by this floor (error events still go through `rates`).
+   * Independent of the top-level `minLevel`, which governs the global `log` API.
+   *
+   * @example
+   * ```ts
+   * sampling: {
+   *   minLevel: 'warn',            // Drop trace, debug and info wide events
+   *   keep: [{ duration: 1000 }],  // Does not rescue an info event
+   * }
+   * ```
+   */
+  minLevel?: Exclude<LogLevel, 'error' | 'fatal'>
+
+  /**
    * Sampling rates per log level (head sampling).
    * Values are percentages from 0 to 100.
    * Default: 100 for all levels except trace (log everything).
@@ -390,21 +407,11 @@ export interface LoggerConfig {
   sampling?: SamplingConfig
   /**
    * Minimum severity for the global `log` API (tagged and object form).
-   * Does not apply to `createLogger().emit()` / request wide events (use `requestMinLevel` for a floor, `sampling` for volume).
+   * Does not apply to `createLogger().emit()` / request wide events (use `sampling.minLevel` for a floor, `sampling.rates` for volume).
    * Order: trace < debug < info < warn < error < fatal.
    * @default 'debug' (all levels)
    */
   minLevel?: LogLevel
-  /**
-   * Minimum severity for request wide events (`createLogger().emit()`, framework
-   * middleware). Events below it are dropped before head sampling, and a
-   * `sampling.keep` rule or `keep` callback cannot bring them back. `error`
-   * and `fatal` events, and audit events, are never dropped by this floor
-   * (error events still go through `sampling`; fatal events are always kept).
-   * Independent of `minLevel`, which governs the global `log` API.
-   * @default undefined (every level)
-   */
-  requestMinLevel?: Exclude<LogLevel, 'error' | 'fatal'>
   /**
    * When pretty is disabled, emit JSON strings (default) or raw objects.
    * Set to false for environments like Cloudflare Workers that expect objects.

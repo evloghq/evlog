@@ -468,7 +468,7 @@ describe('minLevel', () => {
     expect(infoSpy).not.toHaveBeenCalled()
   })
 })
-describe('requestMinLevel', () => {
+describe('sampling.minLevel', () => {
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -479,10 +479,11 @@ describe('requestMinLevel', () => {
     vi.restoreAllMocks()
   })
 
-  it('drops request wide events below the floor and keeps the rest', () => {
-    initLogger({ pretty: false, requestMinLevel: 'warn' })
+  it('drops wide events below the floor and keeps the rest', () => {
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' } })
 
     expect(createRequestLogger({ path: '/info' }).emit()).toBeNull()
+    expect(createLogger({ job: 'sync' }).emit()).toBeNull()
 
     const warnLogger = createRequestLogger({ path: '/warn' })
     warnLogger.warn('slow upstream')
@@ -490,46 +491,46 @@ describe('requestMinLevel', () => {
   })
 
   it('always emits error and fatal events', () => {
-    initLogger({ pretty: false, requestMinLevel: 'warn' })
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' } })
 
     const errorLogger = createRequestLogger({ path: '/error' })
     errorLogger.error(new Error('boom'))
     expect(defined(errorLogger.emit()).level).toBe('error')
 
     const fatalLogger = createRequestLogger({ path: '/fatal' })
-    fatalLogger.fatal(new Error('down'))
+    fatalLogger.fatal('down')
     expect(defined(fatalLogger.emit()).level).toBe('fatal')
   })
 
   it('emits error and fatal events when the floor arrives untyped, as from an env variable', () => {
     for (const floor of ['WARN', 'fatal']) {
-      initLogger({ pretty: false, requestMinLevel: floor as 'warn' })
+      initLogger({ pretty: false, sampling: { minLevel: floor as 'warn' } })
 
       const errorLogger = createRequestLogger({ path: '/error' })
       errorLogger.error(new Error('boom'))
       expect(defined(errorLogger.emit()).level).toBe('error')
 
       const fatalLogger = createRequestLogger({ path: '/fatal' })
-      fatalLogger.fatal(new Error('down'))
+      fatalLogger.fatal('down')
       expect(defined(fatalLogger.emit()).level).toBe('fatal')
     }
   })
 
   it('runs before sampling.keep, so a keep rule does not rescue an event below the floor', () => {
-    initLogger({ pretty: false, requestMinLevel: 'warn', sampling: { keep: [{ duration: 0 }] } })
+    initLogger({ pretty: false, sampling: { minLevel: 'warn', keep: [{ duration: 0 }] } })
 
     const logger = createRequestLogger({ path: '/slow' })
     expect(logger.emit({ _durationMs: 5000 })).toBeNull()
   })
 
   it('runs before a tail-sampling force keep from middleware', () => {
-    initLogger({ pretty: false, requestMinLevel: 'warn' })
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' } })
 
     expect(createRequestLogger({ path: '/kept' }).emit({ _forceKeep: true })).toBeNull()
   })
 
   it('still emits audit events below the floor', () => {
-    initLogger({ pretty: false, requestMinLevel: 'warn' })
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' } })
 
     const event = defined(audit({
       action: 'invoice.refund',
@@ -542,7 +543,7 @@ describe('requestMinLevel', () => {
 
   it('does not apply to the global log API', () => {
     const { drain } = createPipelineSpies()
-    initLogger({ pretty: false, requestMinLevel: 'warn', drain })
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' }, drain })
 
     log.info({ action: 'checkout' })
     expect(drain).toHaveBeenCalledTimes(1)

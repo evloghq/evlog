@@ -41,7 +41,6 @@ function buildConfig(options: EvlogViteOptions): Record<string, unknown> {
   if (options.silent !== undefined) config.silent = options.silent
   if (options.sampling) config.sampling = options.sampling
   if (options.minLevel !== undefined) config.minLevel = options.minLevel
-  if (options.requestMinLevel !== undefined) config.requestMinLevel = options.requestMinLevel
   if (options.stringify !== undefined) config.stringify = options.stringify
 
   return config
@@ -67,7 +66,6 @@ function fileSettings(file: EvlogConfig): EvlogViteOptions {
     silent: file.silent,
     sampling: file.sampling,
     minLevel: file.minLevel,
-    requestMinLevel: file.requestMinLevel,
     stringify: file.stringify,
   }
 }

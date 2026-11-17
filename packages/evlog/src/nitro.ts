@@ -1,4 +1,4 @@
-import type { EnvironmentContext, LoggerConfig, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from './types'
+import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from './types'
 import type { DevTerminalInput, DevTerminalResolveInput } from './shared/dev-terminal'
 import { extractErrorStatus } from './shared/errors'
 import { resolveDevTerminal, shouldShowFrameworkOverlay } from './shared/dev-terminal'
@@ -69,12 +69,6 @@ export interface NitroModuleOptions {
   minLevel?: LogLevel
 
   /**
-   * Minimum severity for request wide events, applied before sampling and
-   * `keep`. `error` and `fatal` events are never dropped by this floor.
-   */
-  requestMinLevel?: LoggerConfig['requestMinLevel']
-
-  /**
    * Auto-redaction configuration for PII protection.
    * `true` enables all built-in PII patterns. Pass an object for fine-grained control.
    */
@@ -98,7 +92,6 @@ export interface NitroPluginEvlogConfig extends DevTerminalResolveInput {
   routes?: Record<string, RouteConfig>
   sampling?: SamplingConfig
   minLevel?: LogLevel
-  requestMinLevel?: LoggerConfig['requestMinLevel']
   redact?: boolean | RedactConfig | Record<string, unknown>
   transport?: TransportConfig
 }

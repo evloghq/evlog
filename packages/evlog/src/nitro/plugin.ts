@@ -86,7 +86,6 @@ export default defineNitroPlugin(async (nitroApp) => {
     silent: evlogConfig?.silent,
     sampling: evlogConfig?.sampling,
     minLevel: evlogConfig?.minLevel,
-    requestMinLevel: evlogConfig?.requestMinLevel,
     stringify: evlogConfig?.stringify,
     redact,
     // Nitro does not await plugins, so a plugin that ran before this one settled

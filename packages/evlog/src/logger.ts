@@ -168,7 +168,6 @@ export function initLogger(config: LoggerConfig = {}): void {
   state.redact = resolveRedactConfig(config.redact ?? !isDev())
   state.silent = config.silent ?? false
   state.minLevel = config.minLevel ?? 'debug'
-  state.requestMinLevel = config.requestMinLevel
   state.pluginRunner = config.plugins?.length
     ? createPluginRunner(config.plugins)
     : getEmptyPluginRunner()
@@ -1124,7 +1123,8 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
 
       const auditForceKeep = consumeAuditForceKeep(context)
       // error and fatal are checked by level, not through the floor, so an untyped floor ('WARN', 'fatal') cannot drop them.
-      if (!auditForceKeep && level !== 'error' && level !== 'fatal' && state.requestMinLevel && !isLevelEnabled(level, state.requestMinLevel)) {
+      const floor = state.sampling.minLevel
+      if (!auditForceKeep && level !== 'error' && level !== 'fatal' && floor && !isLevelEnabled(level, floor)) {
         emitted = true
         pendingWideEvent = null
         return null

@@ -1,4 +1,4 @@
-import type { LoggerConfig, LogLevel, SamplingConfig, TransportConfig } from '../types'
+import type { LogLevel, SamplingConfig, TransportConfig } from '../types'
 
 export interface AutoImportsOptions {
   /** Which symbols to auto-import @default ['log', 'createEvlogError', 'parseError'] */
@@ -34,8 +34,6 @@ export interface EvlogViteOptions {
   sampling?: SamplingConfig
   /** Minimum severity for the global `log` API (not request wide events) @default 'debug' */
   minLevel?: LogLevel
-  /** Minimum severity for wide events, applied before sampling and `keep`. `error` and `fatal` are never dropped by this floor. */
-  requestMinLevel?: LoggerConfig['requestMinLevel']
   /** Emit JSON strings or raw objects @default true */
   stringify?: boolean
   /** Opt-in auto-imports for log, createEvlogError, parseError */
