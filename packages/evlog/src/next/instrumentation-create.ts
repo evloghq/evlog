@@ -136,7 +136,7 @@ function createLifecycleSafeDrain(
 
 function resolveCaptureOutputOptions(
   captureOutput: InstrumentationOptions['captureOutput'],
-): CaptureOutputOptions | undefined {
+): Required<CaptureOutputOptions> | undefined {
   if (!captureOutput) return undefined
   if (captureOutput === true) {
     return { stdout: true, stderr: true, ignore: DEFAULT_CAPTURE_OUTPUT_IGNORE }
@@ -159,12 +159,12 @@ function shouldIgnoreCapturedOutput(message: string, ignore: Array<string | RegE
   })
 }
 
-function applyCaptureOutput(config: CaptureOutputOptions, logApi: Log, silent: boolean): void {
+function applyCaptureOutput(config: Required<CaptureOutputOptions>, logApi: Log, silent: boolean): void {
   activeCaptureOutput = {
     log: logApi,
-    ignore: config.ignore ?? DEFAULT_CAPTURE_OUTPUT_IGNORE,
-    stdout: config.stdout !== false,
-    stderr: config.stderr !== false,
+    ignore: config.ignore,
+    stdout: config.stdout,
+    stderr: config.stderr,
     silent,
   }
 
