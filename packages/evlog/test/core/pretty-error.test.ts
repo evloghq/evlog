@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createError } from '../../src/error'
-import { createRequestLogger, initLogger, loadPrettyErrorFormatter } from '../../src/logger'
+import { createRequestLogger, initLogger, loadPrettyFormatters } from '../../src/logger'
 import {
   buildErrorEntries,
   normalizeErrorContext,
@@ -350,7 +350,7 @@ describe('pretty error logger integration', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'log').mockImplementation(() => {})
     initLogger({ pretty: true, dev: { prettyError: { snippet: false } } })
-    await loadPrettyErrorFormatter()
+    await loadPrettyFormatters()
   })
 
   afterEach(() => {
@@ -367,13 +367,13 @@ describe('pretty error logger integration', () => {
   })
 })
 
-describe('pretty error formatter loading', () => {
+describe('pretty formatter loading', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.resetModules()
   })
 
-  it('prints an error emitted before the formatter loads once it has, in emit order', async () => {
+  it('prints error and AI events emitted before the formatters load once they have, in emit order', async () => {
     vi.resetModules()
     const logger = await import('../../src/logger')
     const lines: string[] = []
@@ -382,19 +382,23 @@ describe('pretty error formatter loading', () => {
     })
     logger.initLogger({ pretty: true, env: { service: 'svc' }, dev: { prettyError: { snippet: false } } })
 
-    const failed = logger.createRequestLogger({ method: 'GET', path: '/first' })
+    const chat = logger.createRequestLogger({ method: 'GET', path: '/first' })
+    chat.set({ ai: { model: 'claude', inputTokens: 100, outputTokens: 50 } })
+    chat.emit({ status: 200 })
+    const failed = logger.createRequestLogger({ method: 'GET', path: '/second' })
     failed.error(createError({ message: 'Payment failed', why: 'Card declined' }))
     failed.emit({ status: 402 })
-    const ok = logger.createRequestLogger({ method: 'GET', path: '/second' })
-    ok.emit({ status: 200 })
+    logger.createRequestLogger({ method: 'GET', path: '/third' }).emit({ status: 200 })
 
     expect(lines).toEqual([])
-    await logger.loadPrettyErrorFormatter()
-    await vi.waitFor(() => expect(lines).toHaveLength(2))
+    await logger.loadPrettyFormatters()
+    await vi.waitFor(() => expect(lines).toHaveLength(3))
 
     expect(lines[0]).toContain('/first')
-    expect(lines[0]).toContain('Payment failed')
-    expect(lines[0]).toContain('Why:')
+    expect(lines[0]).toContain('ai.tokens:')
     expect(lines[1]).toContain('/second')
+    expect(lines[1]).toContain('Payment failed')
+    expect(lines[1]).toContain('Why:')
+    expect(lines[2]).toContain('/third')
   })
 })

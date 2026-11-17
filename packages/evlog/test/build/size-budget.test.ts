@@ -25,9 +25,9 @@ describe('bundle-size budget', () => {
     expect(defined(scenarios.find(s => s.scenario === 'axiom'), 'axiom').modules).toContain('dist/adapters/axiom.mjs')
   })
 
-  it('loads the pretty-error formatter on demand, not at startup', () => {
+  it('loads the pretty error and AI formatters on demand, not at startup', () => {
     for (const { scenario, modules, lazy } of scenarios) {
-      expect(modules.filter(m => /^dist\/pretty-error-[\w-]+\.mjs$/.test(m)), scenario).toEqual([])
+      expect(modules.filter(m => /^dist\/pretty-(?:error|ai)-[\w-]+\.mjs$/.test(m)), scenario).toEqual([])
       expect(lazy, scenario).toBeGreaterThan(0)
     }
   })
