@@ -1,6 +1,6 @@
 ---
 name: self-review
-description: Weekly review of the evlog repository and Evi's own surface, covering what has drifted out of coherence and what is missing. Load this when the self-review schedule fires, or when Hugo asks for a self-review, an audit, ideas for what Evi should do next, or what is inconsistent in the repo.
+description: Weekly review of the evlog repository and Evi's own surface, covering what has drifted out of coherence and what is missing. Load this when the self-review schedule fires, or when Hugo asks for a self-review, an audit of Evi or the repository, ideas for what Evi should do next, a convention drift review, or what is inconsistent in the repo.
 ---
 
 # Self review

@@ -1,6 +1,6 @@
 ---
 name: repo-health-sweep
-description: Twice-weekly simplification audit of the evlog repository and Evi's own communication, run in bounded cohorts. Removes, dedupes and clarifies, opens one ready PR per batch of same-kind fixes, and records rejected findings so later runs go deeper. Load this when the repo-health-sweep schedule fires, or when Hugo asks for repository simplification, an unslop pass, a clarity audit, a skills-vs-reality check, or a convention drift review.
+description: Twice-weekly simplification audit of the evlog repository and Evi's own communication, run in bounded cohorts. Removes, dedupes and clarifies, opens one ready PR per batch of same-kind fixes, and records rejected findings so later runs go deeper. Load this when the repo-health-sweep schedule fires, or when Hugo asks for repository simplification, an unslop pass, or a clarity audit.
 ---
 
 # Repo health sweep
