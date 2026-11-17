@@ -78,30 +78,33 @@ function getDateString(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+function logFilePath(dir: string, date: string, index: number): string {
+  return join(dir, index === 0 ? `${date}.jsonl` : `${date}.${index}.jsonl`)
+}
+
 async function resolveFilePath(dir: string, maxSizePerFile?: number): Promise<string> {
   const date = getDateString()
-  const basePath = join(dir, `${date}.jsonl`)
+  if (!maxSizePerFile) return logFilePath(dir, date, 0)
 
-  if (!maxSizePerFile) return basePath
+  // Append to the day's newest file rather than the first free index: `maxFiles`
+  // cleanup deletes the oldest files, the unsuffixed one included.
+  const latest = (await readdir(dir))
+    .filter(isLogFilename)
+    .map(parseLogFilename)
+    .filter(file => file.date === date)
+    .reduce((max, file) => Math.max(max, file.index), -1)
+  if (latest === -1) return logFilePath(dir, date, 0)
 
+  const latestPath = logFilePath(dir, date, latest)
+  let size: number
   try {
-    const stats = await stat(basePath)
-    if (stats.size < maxSizePerFile) return basePath
-  } catch {
-    return basePath
+    ({ size } = await stat(latestPath))
+  } catch (error) {
+    // Removed since readdir: appending recreates it at the same, still newest, index.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return latestPath
+    throw error
   }
-
-  for (let i = 1; i < 1000; i++) {
-    const rotatedPath = join(dir, `${date}.${i}.jsonl`)
-    try {
-      const stats = await stat(rotatedPath)
-      if (stats.size < maxSizePerFile) return rotatedPath
-    } catch {
-      return rotatedPath
-    }
-  }
-
-  return join(dir, `${date}.999.jsonl`)
+  return size < maxSizePerFile ? latestPath : logFilePath(dir, date, latest + 1)
 }
 
 function parseLogFilename(filename: string): { date: string; index: number } {

@@ -169,60 +169,63 @@ describe('fs adapter', () => {
   })
 
   describe('file rotation (maxSizePerFile)', () => {
-    it('uses base file when under size limit', async () => {
-      mockedStat.mockResolvedValueOnce({ size: 500 } as Stats)
+    const config = { dir: '.evlog/logs', pretty: false, maxSizePerFile: 1024 }
 
-      await writeToFs(createTestEvent(), {
-        dir: '.evlog/logs',
-        pretty: false,
-        maxSizePerFile: 1024,
+    /** Answer `stat` by path, so the `.gitignore` probe cannot consume a size meant for a log file. */
+    function mockFileSizes(sizes: Record<string, number>) {
+      mockedStat.mockImplementation((path) => {
+        const size = sizes[String(path)]
+        return size === undefined
+          ? Promise.reject(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
+          : Promise.resolve({ size } as Stats)
       })
+    }
 
-      const [filePath] = defined(mockedAppendFile.mock.calls[0], 'appendFile call')
-      expect(filePath).toBe(join('.evlog/logs', '2026-03-14.jsonl'))
+    async function writtenPath(): Promise<string> {
+      await writeToFs(createTestEvent(), config)
+      return String(defined(mockedAppendFile.mock.calls[0], 'appendFile call')[0])
+    }
+
+    it('uses base file when under size limit', async () => {
+      mockReaddirNames(['2026-03-14.jsonl'])
+      mockFileSizes({ [join('.evlog/logs', '2026-03-14.jsonl')]: 500 })
+
+      expect(await writtenPath()).toBe(join('.evlog/logs', '2026-03-14.jsonl'))
     })
 
     it('rotates to suffixed file when base file exceeds size limit', async () => {
-      mockedStat
-        .mockResolvedValueOnce({ size: 2048 } as Stats)
-        .mockRejectedValueOnce(new Error('ENOENT'))
+      mockReaddirNames(['2026-03-14.jsonl'])
+      mockFileSizes({ [join('.evlog/logs', '2026-03-14.jsonl')]: 2048 })
 
-      await writeToFs(createTestEvent(), {
-        dir: '.evlog/logs',
-        pretty: false,
-        maxSizePerFile: 1024,
-      })
-
-      const [filePath] = defined(mockedAppendFile.mock.calls[0], 'appendFile call')
-      expect(filePath).toBe(join('.evlog/logs', '2026-03-14.1.jsonl'))
+      expect(await writtenPath()).toBe(join('.evlog/logs', '2026-03-14.1.jsonl'))
     })
 
-    it('skips full rotated files and finds next available', async () => {
-      mockedStat
-        .mockResolvedValueOnce({ size: 2048 } as Stats)
-        .mockResolvedValueOnce({ size: 2048 } as Stats)
-        .mockResolvedValueOnce({ size: 2048 } as Stats)
-        .mockRejectedValueOnce(new Error('ENOENT'))
+    it('appends to the newest file of the day while it has room', async () => {
+      mockReaddirNames(['2026-03-13.7.jsonl', '2026-03-14.jsonl', '2026-03-14.1.jsonl', '2026-03-14.2.jsonl'])
+      mockFileSizes({ [join('.evlog/logs', '2026-03-14.jsonl')]: 2048, [join('.evlog/logs', '2026-03-14.2.jsonl')]: 100 })
 
-      await writeToFs(createTestEvent(), {
-        dir: '.evlog/logs',
-        pretty: false,
-        maxSizePerFile: 1024,
-      })
-
-      const [filePath] = defined(mockedAppendFile.mock.calls[0], 'appendFile call')
-      expect(filePath).toBe(join('.evlog/logs', '2026-03-14.3.jsonl'))
+      expect(await writtenPath()).toBe(join('.evlog/logs', '2026-03-14.2.jsonl'))
     })
 
-    it('uses base file when stat fails (new file)', async () => {
-      await writeToFs(createTestEvent(), {
-        dir: '.evlog/logs',
-        pretty: false,
-        maxSizePerFile: 1024,
-      })
+    it('keeps rotating after maxFiles cleanup deleted the unsuffixed file', async () => {
+      mockReaddirNames(['2026-03-14.1.jsonl', '2026-03-14.2.jsonl'])
+      mockFileSizes({ [join('.evlog/logs', '2026-03-14.2.jsonl')]: 2048 })
 
-      const [filePath] = defined(mockedAppendFile.mock.calls[0], 'appendFile call')
-      expect(filePath).toBe(join('.evlog/logs', '2026-03-14.jsonl'))
+      expect(await writtenPath()).toBe(join('.evlog/logs', '2026-03-14.3.jsonl'))
+    })
+
+    it('appends to the newest file when it disappears between listing and stat', async () => {
+      mockReaddirNames(['2026-03-14.jsonl', '2026-03-14.1.jsonl'])
+      mockFileSizes({ [join('.evlog/logs', '2026-03-14.jsonl')]: 2048 })
+
+      expect(await writtenPath()).toBe(join('.evlog/logs', '2026-03-14.1.jsonl'))
+    })
+
+    it('uses base file when no file exists for today', async () => {
+      mockReaddirNames(['2026-03-13.4.jsonl'])
+
+      expect(await writtenPath()).toBe(join('.evlog/logs', '2026-03-14.jsonl'))
+      expect(mockedStat).not.toHaveBeenCalledWith(expect.stringContaining('2026-03-14'))
     })
   })
 
