@@ -1,6 +1,6 @@
 ---
 name: content-pass
-description: The daily pass over evlog's written surfaces. Picks the files the scanner ranks worst across the docs, the landing, the package READMEs, the skills, and the AGENTS.md files, reviews them against the content doctrine, applies what holds, and opens one ready PR whose body is the report. Also covers the enrichment half, run when nothing scores badly enough to rewrite, such as the page an index promises and nobody wrote, the integration documented at half its contract, the correction that should have become a rule. Load this when the content-pass schedule fires, or when Hugo asks for a content pass, a docs review, a rewrite of a page, a README, a skill or an AGENTS.md, or what is worth writing next.
+description: Daily pass over evlog's written surfaces. Reviews the worst-ranked files against the content doctrine, applies what holds, and opens one ready PR whose body is the report. Also runs the enrichment half when nothing needs a rewrite. Load this when the content-pass schedule fires, or when Hugo asks for a content pass, a docs review, a rewrite of a page, a README, a skill or an AGENTS.md, or what is worth writing next.
 ---
 
 # Content pass
