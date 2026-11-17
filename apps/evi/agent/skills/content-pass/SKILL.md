@@ -144,7 +144,7 @@ Run this when `eligible` is 0, or when Hugo asks what is worth writing next. It 
 
 **Whatever file you end up editing, run `--fix` on it first.** A page you are already opening does not have "pre-existing" findings, it has findings, and the mechanical ones cost one command. Leaving a wrong term on a page you just edited, and writing that it was out of scope, is the pass explaining why it did less than the tool it was given.
 
-Look, in this order, and stop at the first thing that holds:
+Look, in this order, and stop at the first thing that holds. When Hugo asked what is worth writing next, skip the checks that end in a report instead of something to write (a skill that outran the repository) and keep going until one names a page, a paragraph, a rule, or a post:
 
 - **A promise with no page.** A section index, a card group, or a `links:` block pointing at something thin or missing. The scanner's `U-16` findings are the mechanical version; the interesting cases are pages that exist and do not deliver what the index said.
 - **An integration documented at half its contract.** Every framework page owes `evlog()`, `useLogger()`, `log.fork()`, and the framework-native accessor. `evlog/workers` is the documented exception. A page missing half of that is a real gap in the docs, not a style problem.

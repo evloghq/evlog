@@ -28,7 +28,9 @@ For each adapter:
 - **Theirs**: the ingest documentation URL and the `Start here` files in the official client at its latest published version. Read the version with `npm view <package> version` from the sandbox. Read source with `github__getFileContent` at the matching tag; a `Start here` path that no longer exists is a limitation to record, and the run locates the replacement with `github__searchCode` before continuing. Do not reason from memory of the client; read the lines.
 - **Their product**: the provider's product documentation, read for every feature it offers, not only the ingest page. List each feature and the input it needs. Then the `Feature entry points` files, where the official client sends that input. When the cell says the first run pins the files, find them with `github__searchCode` from the client's public API (`captureException`, `identify`, a metrics or span call), read them, and write the paths into the cell in the same PR that moves the pin. A feature the client does not reach still counts: the product docs are the authority for what exists, the client only shows how it is fed.
 
-Record the client version and the files read. They are the evidence for everything below.
+When the row's `Official client` is `none` (Sazabi today), there is no client side to read: the ingest documentation is the authority for the request, compared against the evlog encoder the row names. The pin then records the date the docs were read instead of a package version.
+
+Record the client version (or the docs date) and the files read. They are the evidence for everything below.
 
 ## 3. Compare
 
@@ -50,7 +52,7 @@ The e2e test is part of the comparison. An adapter with no e2e file (Datadog and
 
 **Capability gap → Linear proposal, never a PR.** A new feature is Hugo's call, whatever its size. Search open pull requests with `github__searchIssues` and Linear with `linear__list_issues` first: a gap already covered by an open PR or issue gets the link in the thread and nothing new. Otherwise file one issue per gap, stating what the feature gives the user, the provider page, the client file that feeds it when there is one, the evlog fields that would feed it, whether it would be opt-in, and what a user of both the provider's SDK and evlog would see twice. Rank the gaps in the thread by what a user of that provider would miss most.
 
-**Move the pin.** In a real run, once every mismatch and every gap on an adapter is in a PR, in an issue, or recorded as a choice, update that row's `Aligned to` to `<package> <version> @ <short SHA of main>` in the same PR as the fixes, or in its own `docs:` PR when nothing needed fixing. A pin never moves past a mismatch or a gap that has no destination.
+**Move the pin.** In a real run, once every mismatch and every gap on an adapter is in a PR, in an issue, or recorded as a choice, update that row's `Aligned to` to `<package> <version> @ <short SHA of main>`, or `docs <YYYY-MM-DD> @ <short SHA of main>` for a row with no client, in the same PR as the fixes, or in its own `docs:` PR when nothing needed fixing. A pin never moves past a mismatch or a gap that has no destination.
 
 Then post one line per adapter to the thread: aligned, or the PR and issue links inline.
 
