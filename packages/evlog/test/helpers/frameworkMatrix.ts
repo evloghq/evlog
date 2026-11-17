@@ -59,6 +59,8 @@ interface MatrixCheck {
   name: string
   options: BuiltAppOptions
   request: MatrixRequest
+  /** Picks the event to assert on. Defaults to the first one for `request.path`. */
+  match?: (event: WideEvent) => boolean
   assert: (event: WideEvent) => void
 }
 
@@ -86,6 +88,35 @@ const checks: MatrixCheck[] = [
     request: { method: 'GET', path: '/api/users' },
     assert(event) {
       expect(event.service).toBe('matrix-service')
+    },
+  },
+]
+
+/**
+ * Checks only the built-app matrix runs: each fixture serves `GET /api/fork`,
+ * which sets `viaUseLogger: true` through a zero-argument `useLogger()` and
+ * forks `matrix_fork`, whose child sets `forked: true`.
+ */
+const builtAppChecks: MatrixCheck[] = [
+  {
+    name: 'returns the request logger from a zero-argument useLogger()',
+    options: {},
+    request: { method: 'GET', path: '/api/fork' },
+    match: event => event.path === '/api/fork' && event.operation === undefined,
+    assert(event) {
+      expect(event.viaUseLogger).toBe(true)
+    },
+  },
+  {
+    name: 'emits a child event from log.fork(), passing the child to fn',
+    options: {},
+    request: { method: 'GET', path: '/api/fork', headers: { 'x-request-id': 'matrix-fork-parent' } },
+    // The child of the previous check can still arrive while this one polls.
+    match: event => event.operation === 'matrix_fork' && event._parentRequestId === 'matrix-fork-parent',
+    assert(event) {
+      expect(event).toMatchObject({ path: '/api/fork', forked: true })
+      expect(event.requestId).not.toBe('matrix-fork-parent')
+      expect(event.viaUseLogger).toBeUndefined()
     },
   },
 ]
@@ -155,14 +186,14 @@ export function describeBuiltAppMatrix(adapter: BuiltAppAdapter, timeout = 180_0
       await built.app?.cleanup()
     })
 
-    for (const check of checks) {
+    for (const check of [...checks, ...builtAppChecks]) {
       it(check.name, async () => {
         const { fire, drained } = defined(built.app, `${adapter.name} app`)
         const { status } = await fire(check.request)
         expect(status).toBe(200)
         const event = await vi.waitFor(async () => {
           const events = await drained()
-          return defined(events.find(e => e.path === check.request.path), `event for ${check.request.path}`)
+          return defined(events.find(check.match ?? (e => e.path === check.request.path)), `event for ${check.name}`)
         }, { timeout: 5_000, interval: 50 })
         check.assert(event)
       })
