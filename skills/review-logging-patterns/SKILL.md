@@ -1190,7 +1190,7 @@ const agent = new ToolLoopAgent({
 })
 ```
 
-This adds `ai.tools` (per-tool `{ name, durationMs, success, error? }`) and `ai.totalDurationMs` to the wide event.
+This adds `gen_ai.tools` (per-tool `{ name, duration_ms, success, error? }`) and `gen_ai.duration_ms` to the wide event.
 
 ### Embeddings
 
@@ -1207,7 +1207,7 @@ ai.captureEmbed({ usage, model: 'text-embedding-3-small', count: documents.lengt
 
 ### Cost estimation
 
-Pass a pricing map to get `ai.estimatedCost` in the wide event:
+Pass a pricing map to get `gen_ai.usage.estimated_cost` in the wide event:
 
 ```typescript
 const ai = createAILogger(log, {
@@ -1218,16 +1218,16 @@ const ai = createAILogger(log, {
 })
 ```
 
-### Wide event `ai` field
+### Wide event `gen_ai` field
 
-Includes: `calls`, `model`, `provider`, `inputTokens`, `outputTokens`, `totalTokens`, `cacheReadTokens`, `reasoningTokens`, `finishReason`, `toolCalls`, `steps`, `msToFirstChunk`, `msToFinish`, `tokensPerSecond`, `error`, `tools` (via telemetry integration), `totalDurationMs` (via telemetry integration), `embedding` (via `captureEmbed`), `estimatedCost` (via `cost` option).
+OpenTelemetry GenAI names where the conventions define one, evlog fields under the same key otherwise. Includes: `calls`, `provider.name`, `request.model`, `usage.input_tokens`, `usage.output_tokens`, `usage.total_tokens`, `usage.cache_read.input_tokens`, `usage.reasoning.output_tokens`, `response.finish_reasons`, `response.time_to_first_chunk` (seconds), `response.duration_ms`, `response.tokens_per_second`, `tool_calls`, `steps`, `error`, `tools` (via telemetry integration), `duration_ms` (via telemetry integration), `embedding` (via `captureEmbed`), `usage.estimated_cost` (via `cost` option).
 
 Anti-patterns to detect:
 
 | Anti-Pattern | Fix |
 |--------------|-----|
 | Manual token tracking in `onFinish` | `ai.wrap()`: middleware captures automatically |
-| `console.log('tokens:', result.usage)` | `ai.wrap()`: structured `ai.*` fields in wide event |
+| `console.log('tokens:', result.usage)` | `ai.wrap()`: structured `gen_ai.*` fields in wide event |
 | No AI observability | Add `createAILogger(log)` + `ai.wrap()` |
 | No tool execution timing | Add `createEvlogIntegration(ai)` to `telemetry.integrations` |
 | Manual cost calculation | Use `cost` option in `createAILogger()` |

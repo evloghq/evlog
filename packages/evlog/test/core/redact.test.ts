@@ -618,7 +618,10 @@ describe('redactEvent - secrets built-in', () => {
 
   it('keeps token counters and keys that only start with a secret word', () => {
     const event = {
-      ai: { totalTokens: 1200, inputTokens: 800, tokensPerSecond: 42 },
+      gen_ai: {
+        usage: { total_tokens: 1200, input_tokens: 800, cache_read: { input_tokens: 600 } },
+        response: { tokens_per_second: 42 },
+      },
       auth: { tokenType: 'Bearer', passwordChangedAt: '2026-01-01' },
     }
     expect(redact(event)).toEqual(event)

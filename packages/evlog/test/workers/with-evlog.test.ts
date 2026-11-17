@@ -145,7 +145,7 @@ describe('evlog/workers withEvlog', () => {
     const { stream, close } = createDeferredStream()
 
     const worker = withEvlog((_req, _env, _ctx, log) => {
-      queueMicrotask(() => log.set({ ai: { calls: 1 } }))
+      queueMicrotask(() => log.set({ gen_ai: { calls: 1 } }))
       return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
     }, { drain })
 
@@ -156,7 +156,7 @@ describe('evlog/workers withEvlog', () => {
     await expect(res.text()).resolves.toBe('hello world')
     await vi.waitFor(() => expect(drain).toHaveBeenCalledTimes(1))
 
-    expect(drain.mock.calls[0][0].event.ai).toEqual({ calls: 1 })
+    expect(drain.mock.calls[0][0].event.gen_ai).toEqual({ calls: 1 })
   })
 
   describe('log.fork()', () => {

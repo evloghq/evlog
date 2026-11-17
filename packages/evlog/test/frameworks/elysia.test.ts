@@ -506,7 +506,7 @@ describe('evlog/elysia', () => {
           const { stream, close } = createDeferredStream()
           closeStream = close
           queueMicrotask(() => {
-            log.set({ ai: { calls: 1, totalTokens: 42 } })
+            log.set({ gen_ai: { calls: 1, usage: { total_tokens: 42 } } })
           })
           return new Response(stream, {
             headers: { 'content-type': 'text/event-stream' },
@@ -523,8 +523,8 @@ describe('evlog/elysia', () => {
         expect(drain).toHaveBeenCalledTimes(1)
       })
 
-      expect(warnSpy.mock.calls.some(([m]) => String(m).includes('Keys dropped: ai'))).toBe(false)
-      expect(drain.mock.calls[0]?.[0]?.event?.ai).toEqual({ calls: 1, totalTokens: 42 })
+      expect(warnSpy.mock.calls.some(([m]) => String(m).includes('Keys dropped: gen_ai'))).toBe(false)
+      expect(drain.mock.calls[0]?.[0]?.event?.gen_ai).toEqual({ calls: 1, usage: { total_tokens: 42 } })
     })
 
     it('still emits immediately for non-streaming responses', async () => {
