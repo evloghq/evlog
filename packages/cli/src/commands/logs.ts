@@ -264,6 +264,7 @@ export default defineEvlogCommand('logs', {
   meta: { name: 'logs' },
   args: {
     what: { type: 'positional', required: false, description: '`errors`, `slow`, `stats`, or a request id to show in full' },
+    session: { type: 'string', description: 'Only one AI conversation: its gen_ai.conversation.id, such as an eve session id' },
     follow: { type: 'boolean', alias: 'f', description: 'Keep reading as the app writes, like tail -f' },
     since: { type: 'string', description: 'Only events after this: a duration back (15m, 2h, 3d) or a date' },
     until: { type: 'string', description: 'Only events before this: a duration back or a date' },
