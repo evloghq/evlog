@@ -14,7 +14,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import pkg from '../../package.json' with { type: 'json' }
 
@@ -38,7 +38,8 @@ function formatBytes(bytes: number): string {
 
 const STATIC_RELATIVE_IMPORT = /^(?:import|export)\b(?!\s*\()[^;]*?["'](\.{1,2}\/[^"']+)["']/gm
 
-async function measureEntry(path: string): Promise<{ raw: number, gzip: number }> {
+/** Every dist file `path` loads through static relative imports, itself included. */
+export async function staticImportClosure(path: string): Promise<Map<string, Buffer>> {
   const files = new Map<string, Buffer>()
   const pending = [path]
 
@@ -52,6 +53,11 @@ async function measureEntry(path: string): Promise<{ raw: number, gzip: number }
     }
   }
 
+  return files
+}
+
+async function measureEntry(path: string): Promise<{ raw: number, gzip: number }> {
+  const files = await staticImportClosure(path)
   const bundle = Buffer.concat([...files.values()])
   return { raw: bundle.byteLength, gzip: gzipSync(bundle).byteLength }
 }
@@ -98,4 +104,6 @@ async function run(): Promise<void> {
   console.log('')
 }
 
-run()
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (isMain) await run()

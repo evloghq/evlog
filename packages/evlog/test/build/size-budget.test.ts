@@ -1,5 +1,8 @@
+import { fileURLToPath } from 'node:url'
 import { beforeAll, describe, expect, it } from 'vitest'
+import pkg from '../../package.json' with { type: 'json' }
 import type { ScenarioSize } from '../../bench/scripts/size-budget'
+import { staticImportClosure } from '../../bench/scripts/size'
 import { measureScenarios, measureUnpacked, sizeBudget } from '../../bench/scripts/size-budget'
 import { defined } from '../helpers/defined'
 
@@ -31,4 +34,17 @@ describe('bundle-size budget', () => {
   it('keeps the unpacked tarball within its budget', () => {
     expect(measureUnpacked(), 'unpacked bytes; see bench/baseline/size-budget.json').toBeLessThanOrEqual(sizeBudget.unpacked.bytes)
   }, 60_000)
+})
+
+describe('dist import graph', () => {
+  // tsdown marks each source module in a chunk with a `// src/<path>` comment.
+  it('loads audit.ts only from the root entry, which re-exports it', async () => {
+    const loadingAudit: string[] = []
+    for (const [subpath, target] of Object.entries(pkg.exports)) {
+      if (typeof target === 'string') continue
+      const closure = await staticImportClosure(fileURLToPath(new URL(`../../${target.import}`, import.meta.url)))
+      if ([...closure.values()].some(file => file.includes('// src/audit.ts\n'))) loadingAudit.push(subpath)
+    }
+    expect(loadingAudit).toEqual(['.'])
+  })
 })
