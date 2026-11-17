@@ -44,8 +44,18 @@ describe('evlog bin', () => {
   })
 
   it('exposes the CLI commands', async () => {
-    const { stderr } = await run(process.execPath, [bin, '--help'])
-    for (const command of ['init', 'map', 'doctor', 'agents']) expect(stderr).toContain(command)
+    const { stdout } = await run(process.execPath, [bin, '--help'])
+    for (const command of ['init', 'map', 'doctor', 'agents']) expect(stdout).toContain(command)
+  })
+
+  it('runs the installed @evlog/cli from a directory whose package.json does not parse', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'evlog-bin-'))
+    tempDirs.push(dir)
+    await writeFile(join(dir, 'package.json'), '{ "name": "app", ')
+
+    const { stdout } = await run(process.execPath, [bin, '--version'], { cwd: dir })
+
+    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/)
   })
 
   it('fetches @evlog/cli with npx when it is not installed', async () => {
