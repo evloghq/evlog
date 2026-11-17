@@ -4,7 +4,7 @@ import { buildAuditFields, consumeAuditForceKeep, finalizeAudit } from './shared
 import { markGloballyRedacted, redactEvent, resolveRedactConfig } from './redact'
 import type { PluginRunner } from './shared/plugin'
 import { createPluginRunner, getEmptyPluginRunner } from './shared/plugin'
-import { buildErrorEntries, compactStackForStorage, PRETTY_ERROR_TREE_SPACER } from './shared/pretty-error'
+import { compactStackForStorage } from './shared/stack-frames'
 import { resolveDevTerminal } from './shared/dev-terminal'
 import { globalConfig } from './shared/globalRegistry'
 import { publishWideEvent } from './shared/wideEventChannel'
@@ -170,6 +170,7 @@ export function initLogger(config: LoggerConfig = {}): void {
 
   state.pretty = config.pretty ?? isDev()
   state.prettyError = resolveDevTerminal(config).prettyError
+  if (state.pretty) void loadPrettyErrorFormatter()
   state.sampling = config.sampling ?? {}
   state.stringify = config.stringify ?? true
   state.drain = config.drain
@@ -401,7 +402,7 @@ export function redactWithGlobalConfig(event: WideEvent): WideEvent {
 export function outputWideEvent(event: WideEvent): void {
   if (state.silent) return
   if (state.pretty) {
-    prettyPrintWideEvent(event)
+    printPretty(event)
   } else if (state.stringify) {
     writeOwnOutput(() => console[getConsoleMethod(event.level)](JSON.stringify(event)))
   } else {
@@ -702,6 +703,43 @@ function flushPrettyLines(lines: string[]): void {
   writeOwnOutput(() => console.log(lines.join('\n')))
 }
 
+// The error formatter is only needed for pretty output, so production bundles do not ship it.
+let prettyErrorFormatter: typeof import('./shared/pretty-error') | undefined
+let prettyErrorFormatterLoad: Promise<void> | undefined
+let pendingPrettyEvents: WideEvent[] | undefined
+
+/** @internal Resolves once pretty output can print an error synchronously. */
+export function loadPrettyErrorFormatter(): Promise<void> {
+  prettyErrorFormatterLoad ??= import('./shared/pretty-error').then((formatter) => {
+    prettyErrorFormatter = formatter
+  })
+  return prettyErrorFormatterLoad
+}
+
+function flushPendingPrettyEvents(): void {
+  const events = pendingPrettyEvents
+  pendingPrettyEvents = undefined
+  for (const event of events ?? []) prettyPrintWideEvent(event)
+}
+
+/**
+ * Prints synchronously once the formatter is loaded. An error event that arrives
+ * before then waits for it, and so does every event behind it, to keep their order.
+ * A process that exits first still gets them, with the error reduced to its message.
+ */
+function printPretty(event: WideEvent): void {
+  if (!pendingPrettyEvents && (prettyErrorFormatter || event.error === undefined)) {
+    prettyPrintWideEvent(event)
+    return
+  }
+  if (!pendingPrettyEvents) {
+    pendingPrettyEvents = []
+    void loadPrettyErrorFormatter().then(flushPendingPrettyEvents)
+    if (typeof process !== 'undefined' && typeof process.once === 'function') process.once('exit', flushPendingPrettyEvents)
+  }
+  pendingPrettyEvents.push(event)
+}
+
 function prettyPrintWideEvent(event: Record<string, unknown>): void {
   const { timestamp, level, service, environment, version, ...rest } = event
   const ts = typeof timestamp === 'string' ? timestamp.slice(11, 23) : ''
@@ -774,10 +812,14 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
 
   const restEntries = Object.entries(rest).filter(([_, v]) => v !== undefined)
   const aiEntries = aiData ? buildAIEntries(aiData) : []
-  const errorEntries = errorData !== undefined
-    ? buildErrorEntries(errorData, state.prettyError)
+  const errorEntries = errorData !== undefined && prettyErrorFormatter
+    ? prettyErrorFormatter.buildErrorEntries(errorData, state.prettyError)
+    : []
+  const unformattedError = errorData !== undefined && !prettyErrorFormatter
+    ? [{ key: 'error', value: isPlainObject(errorData) && typeof errorData.message === 'string' ? errorData.message : formatValue(errorData) }]
     : []
   const fieldEntries: TreeEntry[] = [
+    ...unformattedError,
     ...restEntries.map(([key, value]) => ({ key, value: formatValue(value) })),
     ...aiEntries,
   ]
@@ -809,7 +851,7 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
       for (let j = 0; j < children.length; j++) {
         const child = children[j]
         if (child === undefined) continue
-        if (child === PRETTY_ERROR_TREE_SPACER) {
+        if (child === prettyErrorFormatter?.PRETTY_ERROR_TREE_SPACER) {
           writeLine(`  ${colors.dim}${connector}${colors.reset}`)
           continue
         }
