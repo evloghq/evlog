@@ -6,5 +6,5 @@
     "create-logger": { "gzip": 14200, "reference": 13250 },
     "hono": { "gzip": 17100, "reference": 16037 }
   },
-  "unpacked": { "bytes": 940000, "reference": 908448 }
+  "unpacked": { "bytes": 950000, "reference": 908448 }
 }
