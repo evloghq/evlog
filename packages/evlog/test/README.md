@@ -15,7 +15,8 @@ Goals: fast (full suite < 2s locally), deterministic, no fake-greens, no console
 | Accessing the request logger inside a route handler test | `useLogger()` — not `req.log!` (keep one test per framework that asserts `req.log` is attached) |
 | An adapter posts the right URL / body / headers | `mockFetch()` from `helpers/fetch.ts` + `getFetchCall` / `getFetchJson` / `getFetchHeaders` |
 | A wide event factory for adapter tests | `makeWideEvent(overrides?)` from `helpers/events.ts` |
-| The sweep of HTTP framework specs ("emits event", "x-request-id", "route service") | `describeStandardHttpMatrix({ name, mount })` from `helpers/frameworkMatrix.ts` — wired in all seven HTTP framework test files |
+| The sweep of HTTP framework specs ("emits event", "x-request-id", "route service") | `describeStandardHttpMatrix({ name, mount })` from `helpers/frameworkMatrix.ts`, wired in every framework test file; `describeBuiltAppMatrix({ name, start })` for Nitro v2, Nitro v3 and Nuxt (`test/{nitro-v2,nitro-v3,nuxt}/matrix.test.ts`) |
+| An integration still exposes the contract (`evlog()` options, `useLogger()`, `log.fork()`, native accessor) | `test/frameworks/contract.test-d.ts`, type-checked by the `types` Vitest project; one `describe` per row of `.agents/skills/create-framework-integration/references/contract.md` |
 
 ## Framework runtime fidelity
 
@@ -70,7 +71,7 @@ test/
     fetch.ts               # mockFetch / getFetchCall / getFetchJson / getFetchHeaders
     framework.ts           # createPipelineSpies / assertHttpEventEmitted / waitForDrainCalls / findEventViaDrain / ...
     defined.ts             # defined() / getDrainCallArg() — type-safe narrowing without `!`
-    frameworkMatrix.ts     # describeStandardHttpMatrix(adapter)
+    frameworkMatrix.ts     # describeStandardHttpMatrix(adapter), describeBuiltAppMatrix(adapter)
     slowReporter.ts        # CI-only reporter for tests > EVLOG_SLOW_TEST_BUDGET_MS (default 500ms)
     timers.ts              # withFakeTimers / flushMicrotasks / fastestRunMs / expectLinearTime
 
