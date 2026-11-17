@@ -283,6 +283,29 @@ describe('log', () => {
     expect(JSON.stringify(event)).not.toContain('tok_secret')
   })
 
+  it.each([
+    ['an Error', (error: Error) => log.error(error)],
+    ['an object event', (error: Error) => log.error({ action: 'checkout', error })],
+    ['an h3 wrapper', (error: Error) => log.error({ action: 'checkout', error: h3CreateError(error) })],
+  ])('logs the data and internal values an error\'s own toJSON rewrites (%s)', (_name, logIt) => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    class PaymentError extends Error {
+      data = { cardNumber: '4242424242424242', orderId: 'ord_1' }
+      internal = { token: 'tok_secret' }
+      toJSON() {
+        return { name: this.name, message: this.message, data: { orderId: this.data.orderId, cardNumber: '[REDACTED]' }, internal: undefined }
+      }
+    }
+    logIt(new PaymentError('Declined'))
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ message: 'Declined', data: { orderId: 'ord_1', cardNumber: '[REDACTED]' } })
+    expect(event.error).not.toHaveProperty('internal')
+    expect(JSON.stringify(event)).not.toContain('4242424242424242')
+    expect(JSON.stringify(event)).not.toContain('tok_secret')
+  })
+
   it('keeps the data an h3 error carries', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, redact: false, drain })
