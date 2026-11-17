@@ -6,8 +6,6 @@ import { evlogErrorDataKey, isEvlogError } from './error-brand'
  */
 const ERROR_FIELDS = ['code', 'status', 'data', 'internal', 'why', 'fix', 'link'] as const
 
-const NONE: readonly string[] = []
-
 function readErrorField(error: Error, key: string): unknown {
   return (error as unknown as Record<string, unknown>)[key]
 }
@@ -36,15 +34,21 @@ function dataOf(error: Error): unknown {
 }
 
 /**
- * The payload fields (`data`, `internal`) an error's own `toJSON` leaves out,
- * which its serialized form leaves out too. `EvlogError#toJSON` shapes the HTTP
- * response and omits `internal`, which logs keep, so it does not count.
+ * An error's own `toJSON` output, which decides how the payload fields (`data`,
+ * `internal`) are logged: a field it leaves out is not logged and a field it
+ * rewrites is logged as rewritten. `EvlogError#toJSON` shapes the HTTP response
+ * and omits `internal`, which logs keep, so it does not count.
  */
-function payloadFieldsHiddenBy(error: Error): readonly string[] {
+function payloadShownBy(error: Error): Record<string, unknown> | undefined {
   const { toJSON } = error as { toJSON?: unknown }
-  if (typeof toJSON !== 'function' || isEvlogError(error)) return NONE
+  if (typeof toJSON !== 'function' || isEvlogError(error)) return undefined
   const shown: unknown = toJSON.call(error)
-  return ['data', 'internal'].filter(key => typeof shown !== 'object' || shown === null || !(key in shown))
+  return typeof shown === 'object' && shown !== null ? shown as Record<string, unknown> : {}
+}
+
+function payloadOf(error: Error, key: 'data' | 'internal', shown: Record<string, unknown> | undefined): unknown {
+  if (shown) return Object.hasOwn(shown, key) ? shown[key] : undefined
+  return key === 'data' ? dataOf(error) : readErrorField(error, key)
 }
 
 /**
@@ -122,12 +126,12 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
     if (isWrapperOf(error, cause) && !ancestors.includes(cause)) {
       // The cause already carries the message, which the wrapper repeats.
       const serialized = serialize(cause, ancestors)
-      const hidden = payloadFieldsHiddenBy(error)
       const status = statusOf(error)
       if (status !== undefined) serialized.status = status
-      // h3 copies the cause's `data` onto the wrapper; for an EvlogError that copy includes the guidance.
-      const data = isEvlogError(cause) ? undefined : readErrorField(error, 'data')
-      if (data !== undefined && !hidden.includes('data')) serialized.data = walk(data, ancestors)
+      // h3 copies the cause's `data` onto the wrapper, so the cause already decided how it is logged.
+      // For an EvlogError that copy also includes the guidance.
+      const data = isEvlogError(cause) ? undefined : payloadOf(error, 'data', payloadShownBy(error))
+      if (data !== undefined && data !== readErrorField(cause, 'data')) serialized.data = walk(data, ancestors)
       ancestors.pop()
       return serialized
     }
@@ -137,10 +141,12 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
       message: error.message,
       stack: formatStack(error.stack),
     }
-    const hidden = payloadFieldsHiddenBy(error)
+    const shown = payloadShownBy(error)
     for (const key of ERROR_FIELDS) {
-      const value = key === 'status' ? statusOf(error) : key === 'data' ? dataOf(error) : readErrorField(error, key)
-      if (value !== undefined && !hidden.includes(key)) serialized[key] = walk(value, ancestors)
+      const value = key === 'status'
+        ? statusOf(error)
+        : key === 'data' || key === 'internal' ? payloadOf(error, key, shown) : readErrorField(error, key)
+      if (value !== undefined) serialized[key] = walk(value, ancestors)
     }
     if (isH3InputOf(error, cause)) {
       if (cause.fatal !== undefined) serialized.fatal = cause.fatal
