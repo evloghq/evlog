@@ -152,8 +152,8 @@ importers:
         specifier: 0.43.0
         version: 0.43.0(eve@1.0.0-rc.17)
       '@github-tools/eve-extension':
-        specifier: 0.13.0
-        version: 0.13.0(2474a7f39cd1fb20a482f27c83a6fc77)
+        specifier: 0.14.0
+        version: 0.14.0(2474a7f39cd1fb20a482f27c83a6fc77)
       '@opentelemetry/api':
         specifier: ^1.10.0
         version: 1.10.0
@@ -2313,8 +2313,8 @@ packages:
     peerDependencies:
       vue: 3.5.45
 
-  '@github-tools/eve-extension@0.13.0':
-    resolution: {integrity: sha512-NHvCnKmvoEmCwmyw0x3XA3EKD5iPIuiY9ZfMxrvetkjH31Z8tiCxL8R5OC1edSAIkwZM7GTRxgKyXgORFnQT2g==}
+  '@github-tools/eve-extension@0.14.0':
+    resolution: {integrity: sha512-GCgR4D5tdloTudlpeEbEOO+WMkh45eYoJ9gmP4HltRzZf/4CfX7ElpGWuXGvUF/oyLP4OEgVwRhfewsAWY9n2g==}
     engines: {node: '>=24'}
     peerDependencies:
       '@vercel/connect': '>=2.7.0'
@@ -2323,8 +2323,8 @@ packages:
       '@vercel/connect':
         optional: true
 
-  '@github-tools/sdk@1.22.0':
-    resolution: {integrity: sha512-fNpJZqUjT47E/3yAxcVKUM2xDYYORSPqiXsSSDv+dzq4DOSHUi7B90zvuOgWkz8ksA7TcMLTnwZqHVnRrMfogQ==}
+  '@github-tools/sdk@1.23.0':
+    resolution: {integrity: sha512-WQ2p4ZKEL+AhqajI/iPdH2i2hhLLft2s1qkfup04Yk1i4MfMICMtLDkkGGeVuG9ytWesx6/6X1Ccx6WaAy1OOA==}
     peerDependencies:
       '@ai-sdk/workflow': ^1.0.16 || ^2.0.0
       '@tanstack/ai': ~0.64.0
@@ -17467,9 +17467,9 @@ snapshots:
       '@floating-ui/utils': 0.2.12
       vue: 3.5.45(typescript@6.0.3)
 
-  '@github-tools/eve-extension@0.13.0(2474a7f39cd1fb20a482f27c83a6fc77)':
+  '@github-tools/eve-extension@0.14.0(2474a7f39cd1fb20a482f27c83a6fc77)':
     dependencies:
-      '@github-tools/sdk': 1.22.0(6f7d5722f441854e650348d55779bcc0)
+      '@github-tools/sdk': 1.23.0(6f7d5722f441854e650348d55779bcc0)
       eve: 1.0.0-rc.17(@nuxt/kit@4.6.4(@nuxt/schema@4.6.4)(confbox@0.3.1)(dotenv@17.4.2)(giget@3.3.0)(jiti@2.7.0)(magic-string@1.4.5)(mlly@1.8.2)(oxc-parser@0.158.0)(rolldown@1.3.2)(unplugin@3.7.0(esbuild@0.28.2)(rolldown@1.3.2)(rollup@4.68.0)(vite@8.3.8(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))))(@nuxt/schema@4.6.4)(@opentelemetry/api@1.10.0)(@vercel/connect@2.9.3)(ai@7.0.173(zod@4.6.7))(better-auth@1.7.25(49df8fc3415ce007f156623c578755f5))(next@16.4.6(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(babel-plugin-macros@3.1.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)(svelte@5.57.3(@typescript-eslint/types@8.59.1))(vite@8.3.8(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.45(typescript@7.0.2))
       zod: 4.6.7
     optionalDependencies:
@@ -17498,7 +17498,7 @@ snapshots:
       - vite
       - workflow
 
-  '@github-tools/sdk@1.22.0(6f7d5722f441854e650348d55779bcc0)':
+  '@github-tools/sdk@1.23.0(6f7d5722f441854e650348d55779bcc0)':
     dependencies:
       ai: 7.0.173(zod@4.6.7)
       evlog: 2.29.0(e8906e4a7b5a673499fc5a7614667082)
