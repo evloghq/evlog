@@ -3,6 +3,7 @@
 // modules that only exist inside rollup builds and crash when loaded externally
 // (nitropack dev loads plugins outside the bundle via Worker threads).
 import { defineNitroPlugin } from 'nitropack/runtime/internal/plugin'
+import { nitroAsyncContext } from 'nitropack/runtime/internal/context'
 import type { NitroApp } from 'nitropack/types'
 import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
@@ -13,6 +14,9 @@ import { normalizeRedactConfig } from '../redact'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import { bindStreamingResponseLifecycle, shouldDeferEmitForResponse } from '../shared/streamResponse'
+import { setNitroRequestLoggerResolver } from '../shared/globalRegistry'
+import type { MiddlewareLoggerOptions } from '../shared/middleware'
+import { attachNitroFork } from '../shared/nitroFork'
 import { startStreamServer, type StreamServerOptions } from '../stream'
 import type { AuditableLogger } from '../audit'
 import type { RequestLifecycleContext } from '../shared/plugin'
@@ -31,6 +35,22 @@ function createDeferredRequestLogger(e: ServerEvent): AuditableLogger {
     path: e.path,
     requestId: requestIdOverride || e.context.requestId || crypto.randomUUID(),
   }, { _deferDrain: true })
+}
+
+function forkOptions(nitroApp: NitroApp, e: ServerEvent): MiddlewareLoggerOptions {
+  const waitUntilCtx = e.context.cloudflare?.context ?? e.context
+  return {
+    method: e.method,
+    path: e.path,
+    headers: getSafeHeaders(e),
+    enrich: async (ctx) => {
+      await nitroApp.hooks.callHook('evlog:enrich', ctx)
+    },
+    drain: async (ctx) => {
+      await nitroApp.hooks.callHook('evlog:drain', ctx)
+    },
+    waitUntil: typeof waitUntilCtx?.waitUntil === 'function' ? waitUntilCtx.waitUntil.bind(waitUntilCtx) : undefined,
+  }
 }
 
 function requestInfo(requestLog: RequestLogger, e: ServerEvent): RequestLifecycleContext['request'] {
@@ -96,6 +116,8 @@ export default defineNitroPlugin(async (nitroApp) => {
   const transportEndpoint = getTransportEndpoint(evlogConfig)
 
   registerPrettyErrorSnippetReader(readCodeSnippetFromDisk)
+  // Only reaches a request when the app sets `experimental.asyncContext`.
+  setNitroRequestLoggerResolver(() => (nitroAsyncContext.tryUse()?.event as ServerEvent | undefined)?.context.log)
 
   initLogger({
     enabled: evlogConfig?.enabled,
@@ -135,7 +157,7 @@ export default defineNitroPlugin(async (nitroApp) => {
   if (!isEnabled()) {
     nitroApp.hooks.hook('request', (event) => {
       const e = event as ServerEvent
-      e.context.log = createDeferredRequestLogger(e)
+      e.context.log = attachNitroFork(createDeferredRequestLogger(e), () => forkOptions(nitroApp, e), false)
     })
     return
   }
@@ -166,7 +188,7 @@ export default defineNitroPlugin(async (nitroApp) => {
       runner.runOnRequestStart({ logger: requestLog, request: requestInfo(requestLog, e), headers: getSafeHeaders(e) })
     }
 
-    e.context.log = requestLog
+    e.context.log = attachNitroFork(requestLog, () => forkOptions(nitroApp, e), e.context._evlogShouldEmit as boolean)
   })
 
   nitroApp.hooks.hook('error', async (error, { event }) => {

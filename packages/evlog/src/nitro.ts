@@ -1,3 +1,4 @@
+import type { AuditableLogger } from './audit'
 import type { EnvironmentContext, LogLevel, RedactConfig, RouteConfig, SamplingConfig, TransportConfig } from './types'
 import type { DevTerminalInput, DevTerminalResolveInput } from './shared/dev-terminal'
 import { extractErrorStatus } from './shared/errors'
@@ -8,6 +9,26 @@ export type { DevTerminalInput, DevTerminalPreset, DevPrettyErrorConfig, DevTerm
 export { resolveDevTerminal, shouldShowFrameworkOverlay } from './shared/dev-terminal'
 
 export { shouldLog, getServiceForPath } from './shared/routes'
+
+/** The request logger `useLogger()` returns in Nitro and Nuxt. */
+export type NitroRequestLogger<T extends object = Record<string, unknown>> = AuditableLogger<T> & {
+  /**
+   * Run background work under a forked logger that emits its own wide event,
+   * with `operation` set to `label` and `_parentRequestId` to this request's id.
+   * `fn` receives the forked logger: a zero-argument `useLogger()` inside `fn`
+   * still returns the parent. Resolves once the child has drained, never rejects,
+   * and is registered with `waitUntil` when the runtime provides one.
+   *
+   * @example
+   * ```ts
+   * log.fork('send_receipt', async (child) => {
+   *   child.set({ receipt: { orderId } })
+   *   await sendReceipt(orderId)
+   * })
+   * ```
+   */
+  fork: (label: string, fn: (log: AuditableLogger) => void | Promise<void>) => Promise<void>
+}
 
 export interface NitroModuleOptions {
   /**
