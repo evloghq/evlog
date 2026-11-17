@@ -60,6 +60,16 @@ describe('run', () => {
     expect(process.exitCode).not.toBe(2)
   })
 
+  it('names a nested command from the root and shows the version in its --help', async () => {
+    const stdout = capture('stdout')
+
+    await run(['telemetry', 'status', '--help'])
+
+    expect(stdout()).toContain('USAGE  evlog telemetry status')
+    expect(stdout()).toContain(`evlog v${version} `)
+    expect(process.exitCode ?? 0).toBe(0)
+  })
+
   it('prints the usage of the command --help was asked on to stdout and exits 0', async () => {
     const stdout = capture('stdout')
     const stderr = capture('stderr')
