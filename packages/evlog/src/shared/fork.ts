@@ -20,11 +20,12 @@ export interface ForkLifecycle {
  * @beta Part of `evlog/toolkit`
  */
 export interface ForkBackgroundLoggerOptions {
-  storage: AsyncLocalStorage<RequestLogger>
+  /** Makes `useLogger()` resolve to the child inside `fn`. Without it, `fn` reaches the child only through its argument. */
+  storage?: AsyncLocalStorage<RequestLogger>
   parent: RequestLogger
   middlewareOptions: MiddlewareLoggerOptions
   label: string
-  fn: () => void | Promise<void>
+  fn: (log: AuditableLogger) => void | Promise<void>
   lifecycle?: ForkLifecycle
 }
 
@@ -42,8 +43,8 @@ export function attachForkToLogger<TLogger extends RequestLogger>(
 }
 
 /**
- * Run background work under a child request logger so `useLogger()` resolves to the
- * child while `fn` runs. The child emits a separate wide event when `fn` settles,
+ * Run background work under a child request logger, passed to `fn`. With `storage`,
+ * `useLogger()` also resolves to the child while `fn` runs. The child emits a separate wide event when `fn` settles,
  * with `operation` and `_parentRequestId` set for correlation.
  *
  * Returns the child's lifetime: it resolves once `fn` has settled and the child
@@ -90,10 +91,10 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): Prom
     requestId: child.getContext().requestId as string,
   }
 
-  const lifetime = storage.run(child, () => {
+  const run = () => {
     lifecycle?.onChildEnter?.(child)
     return Promise.resolve()
-      .then(() => fn())
+      .then(() => fn(child))
       .then(
         () => {
           const ctxStatus = child.getContext().status
@@ -122,7 +123,8 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): Prom
       .finally(() => {
         lifecycle?.onChildExit?.(child)
       })
-  })
+  }
+  const lifetime = storage ? storage.run(child, run) : run()
 
   if (waitUntil) {
     // Covers a pipeline's batch delivery without making an awaited fork wait for it.

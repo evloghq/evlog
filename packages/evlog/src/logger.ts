@@ -1,6 +1,6 @@
 import type { AuditableLogger, AuditInput, AuditMethod, ForkableLogger } from './audit'
 import type { DrainContext, EnvironmentContext, FieldContext, Log, LogLevel, LoggerConfig, RequestLogEntry, RequestLogger, RequestLoggerOptions, TailSamplingContext, WideEvent } from './types'
-import { buildAuditFields, consumeAuditForceKeep, finalizeAudit } from './audit'
+import { buildAuditFields, consumeAuditForceKeep, finalizeAudit } from './shared/audit-fields'
 import { markGloballyRedacted, redactEvent, resolveRedactConfig } from './redact'
 import type { PluginRunner } from './shared/plugin'
 import { createPluginRunner, getEmptyPluginRunner } from './shared/plugin'
