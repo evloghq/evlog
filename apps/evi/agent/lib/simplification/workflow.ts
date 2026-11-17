@@ -126,10 +126,10 @@ interface ReviewAssignment {
 }
 
 type FindingResult = z.infer<typeof findingResultSchema>
-type ReviewResult = z.infer<typeof reviewResultSchema> & Pick<ReviewAssignment, 'agent' | 'category'>
+export type ReviewResult = z.infer<typeof reviewResultSchema> & Pick<ReviewAssignment, 'agent' | 'category'>
 type VerdictResult = z.infer<typeof verdictResultSchema>
 type VerificationResult = z.infer<typeof verificationResultSchema>
-type VerifiedFinding = FindingResult & Omit<VerdictResult, 'id'>
+export type VerifiedFinding = FindingResult & Omit<VerdictResult, 'id'>
 
 /**
  * A subagent turn can settle with prose instead of the requested structured
@@ -414,3 +414,6 @@ export async function runSimplificationSweep(
     ...summarizeSimplificationSweep(identified, verification),
   }
 }
+
+/** What `simplification-sweep` returns to the model, and what the recorder writes to disk. */
+export type SimplificationSweepResult = Awaited<ReturnType<typeof runSimplificationSweep>>

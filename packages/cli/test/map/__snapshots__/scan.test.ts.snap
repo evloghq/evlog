@@ -25,6 +25,15 @@ exports[`effect > effect-basic map snapshot 1`] = `
           "status": "pass",
         },
       },
+      "event": {
+        "audit": [
+          "checkout.completed",
+        ],
+        "fields": [
+          "user.id",
+          "cart.items",
+        ],
+      },
       "file": "src/routes/checkout.ts",
       "framework": "effect",
       "handler": {
@@ -156,6 +165,12 @@ exports[`effect > effect-basic map snapshot 1`] = `
           "status": "pass",
         },
       },
+      "event": {
+        "audit": [],
+        "fields": [
+          "user.id",
+        ],
+      },
       "file": "src/routes/users.ts",
       "framework": "effect",
       "handler": {
@@ -204,6 +219,14 @@ exports[`full scan snapshots > hono-basic map snapshot 1`] = `
         "wide-event": {
           "status": "pass",
         },
+      },
+      "event": {
+        "audit": [
+          "checkout.completed",
+        ],
+        "fields": [
+          "user.id",
+        ],
       },
       "file": "src/checkout.ts",
       "framework": "hono",
@@ -367,6 +390,14 @@ exports[`full scan snapshots > next-app-router map snapshot 1`] = `
           "status": "pass",
         },
       },
+      "event": {
+        "audit": [
+          "checkout.completed",
+        ],
+        "fields": [
+          "user.id",
+        ],
+      },
       "file": "app/api/checkout/route.ts",
       "framework": "next",
       "handler": {
@@ -509,6 +540,12 @@ exports[`full scan snapshots > next-app-router map snapshot 1`] = `
         "wide-event": {
           "status": "pass",
         },
+      },
+      "event": {
+        "audit": [],
+        "fields": [
+          "invoice.id",
+        ],
       },
       "file": "app/api/invoices/route.ts",
       "framework": "next",
@@ -796,6 +833,14 @@ exports[`full scan snapshots > nuxt-basic map snapshot 1`] = `
           "status": "pass",
         },
       },
+      "event": {
+        "audit": [
+          "checkout.completed",
+        ],
+        "fields": [
+          "user.id",
+        ],
+      },
       "file": "server/api/checkout.post.ts",
       "framework": "nuxt",
       "handler": {
@@ -880,6 +925,12 @@ exports[`full scan snapshots > nuxt-basic map snapshot 1`] = `
           "status": "pass",
         },
       },
+      "event": {
+        "audit": [],
+        "fields": [
+          "item",
+        ],
+      },
       "file": "server/api/orders/[id].get.ts",
       "framework": "nuxt",
       "handler": {
@@ -924,6 +975,12 @@ exports[`full scan snapshots > nuxt-basic map snapshot 1`] = `
         "wide-event": {
           "status": "pass",
         },
+      },
+      "event": {
+        "audit": [],
+        "fields": [
+          "item",
+        ],
       },
       "file": "server/api/orders/[id].head.ts",
       "framework": "nuxt",
@@ -1285,6 +1342,14 @@ exports[`full scan snapshots > tanstack-basic map snapshot 1`] = `
         "wide-event": {
           "status": "pass",
         },
+      },
+      "event": {
+        "audit": [
+          "checkout",
+        ],
+        "fields": [
+          "cart.total",
+        ],
       },
       "file": "src/routes/api/checkout.ts",
       "framework": "tanstack-start",

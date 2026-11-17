@@ -58,18 +58,12 @@ interface InstrumentationResult {
 export function defineStreamedInstrumentation(options: StreamedInstrumentationOptions = {}): InstrumentationResult {
   const { stream: streamOpt, drain: userDrain, ...rest } = options
 
-  function shouldStartServer(): boolean {
-    if (streamOpt === true) return true
-    if (streamOpt && typeof streamOpt === 'object') return true
-    return false
-  }
-
-  const start: boolean = shouldStartServer()
+  const start: boolean = Boolean(streamOpt)
   let serverDrain: ((ctx: DrainContext) => void | Promise<void>) | null = null
 
   async function register(): Promise<void> {
     if (start) {
-      const cfg: StreamServerOptions = streamOpt && typeof streamOpt === 'object' ? streamOpt : {}
+      const cfg: StreamServerOptions = typeof streamOpt === 'object' ? streamOpt : {}
       try {
         const server = await startStreamServer(cfg)
         serverDrain = ctx => server.drain(ctx)

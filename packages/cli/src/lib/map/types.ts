@@ -66,6 +66,18 @@ export interface RawRouteEntry {
   handler: HandlerLocation | null
 }
 
+/**
+ * What the entry point's wide event carries, as far as the handler's own file
+ * spells it out: field paths from `log.set()`, actions from `log.audit()`.
+ * Context added in a helper, a middleware, or an enricher is not here.
+ */
+export interface EventShape {
+  /** Dotted leaf paths, `user.id`, in the order the handler sets them. */
+  fields: string[]
+  /** Literal `action` of each `log.audit()` call, `checkout.completed`. */
+  audit: string[]
+}
+
 /** A scanned route with checks, sensitivity, and score attached. */
 export interface RouteEntry extends RawRouteEntry {
   id: string
@@ -78,6 +90,8 @@ export interface RouteEntry extends RawRouteEntry {
    */
   suggestions: Partial<Record<CheckId, CheckResult>>
   sensitivity: Sensitivity
+  /** Present when the handler sets a field or records an audit event. */
+  event?: EventShape
   score: number
 }
 

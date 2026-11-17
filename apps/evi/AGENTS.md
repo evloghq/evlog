@@ -25,12 +25,35 @@ in the agent: turns carry third-party GitHub and Linear content. A new outcome
 field follows the same rule: never a raw error string or an untrusted URL. Turning that off rules out LLM-judge evaluations in PostHog, which is
 a deliberate trade.
 
-## Evals cost real money
+## Commands
 
-`pnpm eval` runs the agent against a live model. Twenty evals is a real bill, so
-nothing runs automatically: the GitHub Actions workflow
-(`.github/workflows/evi-evals.yml`) is dispatch-only, and everything else runs
-from a checkout with `pnpm --filter evi exec eve eval`.
+```bash
+pnpm --filter evi dev                    # local agent (eve dev)
+pnpm --filter evi test                   # unit tests for agent/lib
+pnpm --filter evi typecheck
+pnpm --filter evi exec eve eval --exclude-tag needs-connect   # live-model evals, see below
+```
+
+`eve dev` never fires crons: `POST /eve/v1/dev/schedules/<name>` on the dev
+server triggers one.
+
+## Evals gate prompt and model changes
+
+A change to `agent/instructions.md`, `agent/instructions/`, `agent/skills/`, a
+subagent prompt, or `EVI_MODEL` runs the suite before it merges, and the PR
+body gives the pass count before and after. LLM evals are noisy: compare
+several runs per side, not one.
+
+`pnpm eval` runs the agent against a live model, so nothing runs
+automatically: the GitHub Actions workflow (`.github/workflows/evi-evals.yml`)
+is dispatch-only, and everything else runs from a checkout with
+`pnpm --filter evi exec eve eval`. A full run without `needs-connect` costs
+cents, not dollars.
+
+The judge in `evals/evals.config.ts` must be a gateway decision model (such as
+`openai/gpt-6-luna-decisions`): a language model id fails every `t.judge`
+before it grades anything. Evals that need the sandbox (the `content/` ones)
+need KVM locally, so they fail on hosts without `/dev/kvm`.
 
 Evals tagged `needs-connect` assert on GitHub calls that must *succeed*, and
 GitHub is reached through Vercel Connect, which authenticates with a Vercel

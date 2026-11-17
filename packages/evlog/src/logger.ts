@@ -1129,8 +1129,16 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const durationMs = overrides?._durationMs ?? elapsedMs(startTime)
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
-      let forceKeep = false
       const auditForceKeep = consumeAuditForceKeep(context)
+      // error and fatal are checked by level, not through the floor, so an untyped floor ('WARN', 'fatal') cannot drop them.
+      const floor = state.sampling.minLevel
+      if (!auditForceKeep && level !== 'error' && level !== 'fatal' && floor && !isLevelEnabled(level, floor)) {
+        emitted = true
+        pendingWideEvent = null
+        return null
+      }
+
+      let forceKeep = false
       if (overrides?._forceKeep) {
         forceKeep = true
       } else if (auditForceKeep) {
@@ -1206,11 +1214,12 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
  * ```
  */
 export function createRequestLogger<T extends object = Record<string, unknown>>(options: RequestLoggerOptions = {}, internalOptions?: CreateLoggerInternalOptions): AuditableLogger<T> {
-  const { method, path, requestId, waitUntil: optionsWaitUntil } = options
+  const { method, path, requestId, operation, waitUntil: optionsWaitUntil } = options
   const initial: Record<string, unknown> = {}
   if (method !== undefined) initial.method = method
   if (path !== undefined) initial.path = path
   if (requestId !== undefined) initial.requestId = requestId
+  if (operation !== undefined) initial.operation = operation
   return createLogger<T>(initial, {
     ...internalOptions,
     waitUntil: internalOptions?.waitUntil ?? optionsWaitUntil,

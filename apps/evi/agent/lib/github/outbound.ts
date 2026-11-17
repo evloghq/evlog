@@ -1,0 +1,98 @@
+/**
+ * Checks on the text Evi writes to GitHub, applied in the approval policy so a
+ * failing write never reaches the API and the model gets a reason it can fix.
+ * Only prose is checked: fenced blocks and inline code quote real output.
+ */
+
+const FENCE = /(`{3,})[\s\S]*?\1/g
+const HAS_FENCE = /(`{3,})[\s\S]*?\1/
+const INLINE_CODE = /`[^`\n]+`/g
+const DETAILS = /<details>[\s\S]*?<\/details>/g
+const ELI5_DISCLOSURE = /<details>\s*<summary>ELI5<\/summary>\s*\n\s*\S[\s\S]*?<\/details>\s*$/
+const TABLE_ROW = /^\s*\|.*\|\s*$/m
+const IMAGE = /!\[[^\]]*\]\([^)]+\)|<img\s/i
+const PLACEHOLDER = /\bTODO\b|\bTBD\b|<!--[\s\S]*?-->|\[(?:paste|insert|add)[^\]]*\]/i
+const NARRATION = /^\s*(?:ok(?:ay)?[,.]?\s*)?(?:let me|i'?ll|i am going to|i'm going to)\b/i
+const PR_TITLE = /^[a-z]+(?:\([a-z0-9-]+\))?!?: [^A-Z\s]/
+
+/** Most prose words a pull request body may carry outside its proof and ELI5. */
+export const PR_PROSE_WORD_LIMIT = 250
+
+const TEXT_FIELDS = ['title', 'body'] as const
+
+/** Text a reader sees as prose: code, tables, the ELI5 disclosure and the disclosure quote excluded. */
+export function proseOf(markdown: string) {
+  return markdown
+    .replace(FENCE, '')
+    .replace(DETAILS, '')
+    .replace(INLINE_CODE, '')
+    .split('\n')
+    .filter(line => !line.trim().startsWith('|') && !line.trim().startsWith('>'))
+    .join('\n')
+}
+
+/** Prose word count of a markdown body. */
+function proseWords(markdown: string) {
+  return proseOf(markdown).split(/\s+/).filter(word => /\w/.test(word)).length
+}
+
+function excerpt(text: string, index: number) {
+  return text.slice(Math.max(0, index - 30), index + 30).replace(/\s+/g, ' ').trim()
+}
+
+function textDenial(field: string, text: string): string | null {
+  const prose = proseOf(text)
+  const dash = prose.indexOf('\u2014')
+  if (dash !== -1) {
+    return `The ${field} has an em dash near "${excerpt(prose, dash)}". Use a comma, a colon, or a period, then retry.`
+  }
+  if (/^\s*\+\+\+ ELI5/m.test(text)) {
+    return `The ${field} uses Linear's "+++ ELI5" block. On GitHub, write it as <details><summary>ELI5</summary> ... </details>, then retry.`
+  }
+  return null
+}
+
+function pullRequestBodyDenial(body: string): string | null {
+  if (PLACEHOLDER.test(body.replace(FENCE, ''))) {
+    return 'The pull request body has a placeholder (TODO, an HTML comment, or "[paste ...]"). Use only evidence you have; say plainly what could not be captured, then retry.'
+  }
+  const withoutDetails = body.replace(DETAILS, '')
+  if (!HAS_FENCE.test(withoutDetails) && !TABLE_ROW.test(withoutDetails) && !IMAGE.test(withoutDetails)) {
+    return 'The pull request body has no proof: add the real output, a diff, a usage snippet, a table, or a capture in the body, then retry.'
+  }
+  if (!ELI5_DISCLOSURE.test(body)) {
+    return 'The pull request body must end with a <details><summary>ELI5</summary> disclosure. Add it, then retry.'
+  }
+  const words = proseWords(body)
+  if (words > PR_PROSE_WORD_LIMIT) {
+    return `The pull request body has ${words} words of prose outside its proof and ELI5; the limit is ${PR_PROSE_WORD_LIMIT}. Keep Why, Proof, Risk, Checks, cut the rest, then retry.`
+  }
+  return null
+}
+
+/**
+ * Reason to refuse a GitHub write, or null when its text passes. `name` is the
+ * github-tools name (`createPullRequest`), with or without its `github__` prefix.
+ */
+export function outboundDenial(name: string, toolInput: unknown): string | null {
+  const toolName = name.replace(/^.*__/, '')
+  const input = (toolInput ?? {}) as Record<string, unknown>
+  for (const field of TEXT_FIELDS) {
+    const value = input[field]
+    if (typeof value !== 'string') continue
+    const reason = textDenial(field, value)
+    if (reason) return reason
+  }
+  const body = typeof input.body === 'string' ? input.body : undefined
+  if (body !== undefined && /Comment$/.test(toolName) && NARRATION.test(body)) {
+    return 'The comment opens by narrating what you will do. Post the result instead, or nothing, then retry.'
+  }
+  if (toolName === 'createPullRequest' || toolName === 'updatePullRequest') {
+    const { title } = input
+    if (typeof title === 'string' && !PR_TITLE.test(title)) {
+      return `The title "${title}" is not a Conventional Commits title with a lowercase subject, such as "fix(sentry): ...". Fix it, then retry.`
+    }
+    if (body !== undefined) return pullRequestBodyDenial(body)
+  }
+  return null
+}

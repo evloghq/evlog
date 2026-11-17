@@ -7,7 +7,19 @@ export default defineEval({
   description: 'Drafted the body for a CLI fix PR, the answer contains a fenced block with the real terminal output, not a paraphrase.',
   tags: ['fast'],
   async test(t) {
-    const turn = await t.send('You just fixed a bug where `evlog init` wrote a malformed config: you reproduced the broken output before the fix and ran the fixed command after. The fix is on a branch and you are about to open the pull request. Draft the PR body for me.')
+    const turn = await t.send(`You just fixed a bug where \`evlog init\` wrote a malformed config. The fix is on a branch and you are about to open the pull request. Here is what you captured.
+
+Before the fix:
+$ pnpm evlog init --yes && node -e "import('./evlog.config.ts')"
+SyntaxError: Unexpected token '}' in evlog.config.ts:7
+exit code 1
+
+After the fix:
+$ pnpm evlog init --yes && node -e "import('./evlog.config.ts')"
+evlog.config.ts written
+exit code 0
+
+Draft the PR body for me.`)
     t.succeeded()
     t.calledSkill('contributing')
     t.check(turn.reply, includes(/```/))

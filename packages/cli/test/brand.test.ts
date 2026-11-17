@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TAGLINE, WORDMARK, formatBanner, wantsHeader } from '../src/core/brand'
+import { GRADIENT_GLYPH, TAGLINE, WORDMARK, formatBanner, wantsHeader } from '../src/core/brand'
 import { createContext } from '../src/core/context'
 
 const base = { cwd: '/tmp', env: {}, nodeVersion: 'v22.0.0', tty: true }
@@ -47,8 +47,14 @@ describe('formatBanner', () => {
   })
 
   it('renders a truecolor gradient rule that fades blue to dark', () => {
-    const banner = formatBanner(createContext({ ...base, color: true, columns: 100 }), '0.0.0')
+    const banner = formatBanner(createContext({ ...base, color: true, truecolor: true, columns: 100 }), '0.0.0')
     expect(banner).toContain('\x1B[38;2;43;90;255m') // brand blue start
     expect(banner).toContain('\x1B[38;2;8;10;40m') // near-black end
+  })
+
+  it('renders the rule in plain blue on a terminal without truecolor', () => {
+    const banner = formatBanner(createContext({ ...base, color: true, truecolor: false, columns: 100 }), '0.0.0')
+    expect(banner).not.toContain('\x1B[38;2;')
+    expect(banner).toContain(`\x1B[34m${GRADIENT_GLYPH.repeat(WORDMARK[0].length)}\x1B[0m`)
   })
 })
