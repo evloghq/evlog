@@ -782,6 +782,8 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
   const startTime = Date.now()
   const context: Record<string, unknown> = { ...(serializeErrorsIn(initialContext) as Record<string, unknown>) }
   let hasError = false
+  /** The fields the last error() call wrote into `error`, which the next call replaces. */
+  let loggedErrorKeys: readonly string[] = []
   let hasFatal = false
   let hasWarn = false
   let manualLevel: LogLevel | undefined
@@ -865,10 +867,13 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const errorObj = serializeError(err)
 
       if (isPlainRecord(context.error)) {
-        mergeInto(writableChild(context, 'error'), errorObj)
+        const target = writableChild(context, 'error')
+        for (const key of loggedErrorKeys) delete target[key]
+        mergeInto(target, errorObj)
       } else {
         context.error = errorObj
       }
+      loggedErrorKeys = Object.keys(errorObj)
     },
 
     fatal(message: string, fatalContext?: FieldContext<T>): void {
