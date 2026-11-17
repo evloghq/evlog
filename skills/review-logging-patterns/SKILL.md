@@ -141,6 +141,8 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
+`log.fork(label, async (child) => { ... })` gives background work its own wide event, with the forked logger passed to `fn`. With `nitro: { experimental: { asyncContext: true } }`, `useLogger()` without the event works in services too.
+
 Drain, enrich, sampling and redaction can live in `evlog.config.ts` at the app root. The module loads it on the server, and the `evlog` key in `nuxt.config.ts` overrides it. The browser logger reads only the `evlog` key.
 
 ```typescript

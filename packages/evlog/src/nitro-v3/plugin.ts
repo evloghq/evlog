@@ -1,4 +1,5 @@
 import { definePlugin } from 'nitro'
+import { useRequest } from 'nitro/context'
 import type { CaptureError } from 'nitro/types'
 import type { HTTPEvent } from 'nitro/h3'
 import * as h3 from 'nitro/h3'
@@ -13,7 +14,10 @@ import { normalizeRedactConfig } from '../redact'
 import { shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
-import type { EnrichContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
+import { setNitroRequestLoggerResolver } from '../shared/globalRegistry'
+import type { MiddlewareLoggerOptions } from '../shared/middleware'
+import { attachNitroFork } from '../shared/nitroFork'
+import type { DrainContext, EnrichContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
 import { elapsedMs, filterSafeHeaders } from '../utils'
 
 // Nitro v3 doesn't fully export hook types yet
@@ -25,7 +29,7 @@ interface NitroV3Hooks {
   response: (res: Response, event: HTTPEvent) => void | Promise<void>
   'evlog:emit:keep': (ctx: TailSamplingContext) => void | Promise<void>
   'evlog:enrich': (ctx: EnrichContext) => void | Promise<void>
-  'evlog:drain': (ctx: { event: WideEvent; request?: { method?: string; path: string; requestId?: string }; headers?: Record<string, string> }) => void | Promise<void>
+  'evlog:drain': (ctx: DrainContext) => void | Promise<void>
 }
 
 type Hooks = {
@@ -46,6 +50,30 @@ function resolveRequestId(event: HTTPEvent, ctx: Record<string, unknown>): strin
     requestIdOverride = event.req.headers.get('cf-ray') || undefined
   }
   return requestIdOverride || ctx.requestId as string | undefined || crypto.randomUUID()
+}
+
+function forkOptions(hooks: Hooks, event: HTTPEvent): MiddlewareLoggerOptions {
+  return {
+    method: event.req.method,
+    path: parseURL(event.req.url).pathname,
+    headers: getSafeRequestHeaders(event),
+    enrich: async (ctx) => {
+      await hooks.callHook('evlog:enrich', ctx)
+    },
+    drain: async (ctx) => {
+      await hooks.callHook('evlog:drain', ctx)
+    },
+    waitUntil: typeof event.req.waitUntil === 'function' ? event.req.waitUntil.bind(event.req) : undefined,
+  }
+}
+
+/** The request logger of the request Nitro's async context holds; `useRequest()` throws without one. */
+function currentRequestLogger(): unknown {
+  try {
+    return (useRequest() as { context?: Record<string, unknown> }).context?.log
+  } catch {
+    return undefined
+  }
 }
 
 // eslint-disable-next-line max-params
@@ -246,6 +274,8 @@ export default definePlugin(async (nitroApp) => {
 
   const hooks = nitroApp.hooks as unknown as Hooks
   hooks.hook('close', flushEvlogFileConfigDrain)
+  // Only reaches a request when the app sets `experimental.asyncContext`.
+  setNitroRequestLoggerResolver(currentRequestLogger)
 
   // When globally disabled, createRequestLogger returns a no-op logger — still
   // attach it so handlers can call useLogger without throwing.
@@ -253,11 +283,11 @@ export default definePlugin(async (nitroApp) => {
     hooks.hook('request', (event) => {
       const { pathname } = parseURL(event.req.url)
       const ctx = getContext(event)
-      ctx.log = createRequestLogger({
+      ctx.log = attachNitroFork(createRequestLogger({
         method: event.req.method,
         path: pathname,
         requestId: resolveRequestId(event, ctx),
-      }, { _deferDrain: true })
+      }, { _deferDrain: true }), () => forkOptions(hooks, event), false)
     })
     return
   }
@@ -296,7 +326,7 @@ export default definePlugin(async (nitroApp) => {
       })
     }
 
-    ctx.log = log
+    ctx.log = attachNitroFork(log, () => forkOptions(hooks, event), ctx._evlogShouldEmit as boolean)
   })
 
   const recordError = (log: RequestLogger, error: Error): Error => {

@@ -63,6 +63,8 @@ interface EvlogRegistry {
    * Created lazily: an older copy of evlog that built this registry does not set it.
    */
   warnedDeprecations?: Set<string>
+  /** Set by the Nitro plugins: returns the request logger of the request Nitro's async context holds. */
+  nitroRequestLogger?: () => unknown
 }
 
 type RegistryHost = typeof globalThis & {
@@ -135,6 +137,16 @@ export function getSharedStorage<T>(
     storages.set(id, storage)
   }
   return storage as AsyncLocalStorageLike<T>
+}
+
+/** Register how a zero-argument Nitro `useLogger()` finds the current request logger. */
+export function setNitroRequestLoggerResolver(resolve: () => unknown): void {
+  getRegistry().nitroRequestLogger = resolve
+}
+
+/** The current request logger from Nitro's async context, when a Nitro plugin registered a resolver. */
+export function resolveNitroRequestLogger(): unknown {
+  return getRegistry().nitroRequestLogger?.()
 }
 
 /**
