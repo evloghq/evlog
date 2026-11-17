@@ -615,9 +615,14 @@ export function formatMapMatrix(ctx: CliContext, result: ScanResult): string {
   /* Root-level entry points (Next's `middleware.ts`) group under `./` rather
      than becoming a directory of their own with a nameless row in it. */
   const groupOf = (route: RouteEntry): string => route.file.includes('/') ? route.file.split('/')[0]! : '.'
-  const labelOf = (route: RouteEntry): string => route.file.includes('/')
-    ? route.file.split('/').slice(1).join('/')
-    : route.file
+  const perFile = new Map<string, number>()
+  for (const route of map.routes) perFile.set(route.file, (perFile.get(route.file) ?? 0) + 1)
+  /* A routes file holds one row per entry point, each with its own verdict:
+     the file name alone would print the same label on all of them. */
+  const labelOf = (route: RouteEntry): string => {
+    const file = route.file.includes('/') ? route.file.split('/').slice(1).join('/') : route.file
+    return perFile.get(route.file)! > 1 ? `${file} · ${entryQuery(route)}` : file
+  }
 
   const byDirectory = new Map<string, RouteEntry[]>()
   for (const route of map.routes) {
@@ -746,10 +751,16 @@ function normalizeQuery(query: string): string {
   return query.replace(/^\.\//, '')
 }
 
-/** Find an entry point by route path or by file path. */
+/** What `evlog map <entry>` takes to name this entry point and no other at its path. */
+function entryQuery(route: RouteEntry): string {
+  return route.method ? `${route.method} ${route.path}` : route.path
+}
+
+/** Find an entry point by method and route path, by route path, or by file path. */
 export function findEntryPoint(result: ScanResult, query: string): RouteEntry | undefined {
   const needle = normalizeQuery(query)
-  return result.map.routes.find(route => route.path === needle)
+  return result.map.routes.find(route => route.method && entryQuery(route) === needle)
+    ?? result.map.routes.find(route => route.path === needle)
     ?? result.map.routes.find(route => route.file === needle)
     ?? result.map.routes.find(route => route.file.endsWith(needle))
 }
@@ -776,6 +787,18 @@ export function formatMapInspect(ctx: CliContext, result: ScanResult, route: Rou
   lines.push(paint('dim', 'WHY THIS FILE IS SCANNED'))
   lines.push(`${paint('blue', '▍')} ${paint('dim', entryKindText(route))}`)
   lines.push('')
+
+  const siblings = result.map.routes
+    .filter(other => other.file === route.file && other.id !== route.id)
+    .sort((a, b) => a.score - b.score)
+  if (siblings.length > 0) {
+    lines.push(paint('dim', 'ALSO IN THIS FILE'))
+    for (const sibling of siblings) {
+      lines.push(`${entryLabel(style, sibling)}  ${paint(scoreColor(sibling.score), String(sibling.score))}`)
+    }
+    lines.push(paint('dim', `▸ evlog map "${entryQuery(siblings[0]!)}" inspects that one`))
+    lines.push('')
+  }
 
   if (route.sensitivity.reasons.length > 0) {
     lines.push(paint('dim', 'FLAGGED SENSITIVE BECAUSE'))

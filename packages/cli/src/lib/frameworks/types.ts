@@ -1,5 +1,5 @@
 import type { WiringInput, WiringPlan } from '../init/wiring'
-import type { RawRouteEntry, ScanContext } from '../map/types'
+import type { ExtractedRoute, RawRouteEntry, ScanContext } from '../map/types'
 
 /**
  * How the CLI recognizes a framework from its `package.json` and config files.
@@ -27,7 +27,7 @@ export interface FrameworkShape {
 
 /** Route discovery for `evlog map`, loaded only when a scan runs. */
 export interface MapAdapter {
-  extractRoutes: (ctx: ScanContext) => Promise<RawRouteEntry[]>
+  extractRoutes: (ctx: ScanContext) => Promise<ExtractedRoute[]>
   /**
    * Per-project override for {@link FrameworkDefinition.requestLogger}, for
    * frameworks where ambient emission depends on app code (Hono's
@@ -76,11 +76,11 @@ export interface FrameworkDefinition<TId extends string = string> {
    */
   evlogAutoImports?: readonly string[]
   /**
-   * Member under which the integration parks the request logger on the request
+   * Members under which the integration parks the request logger on the request
    * object, e.g. `log` for Express's `req.log`. A handler that calls
    * `req.log.set(…)` is instrumented without ever naming `useLogger`.
    */
-  requestLoggerMember?: string
+  requestLoggerMembers?: readonly string[]
   shape: FrameworkShape
   map: () => Promise<MapAdapter>
   init?: () => Promise<InitPlanner>
