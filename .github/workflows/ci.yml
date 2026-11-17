@@ -124,8 +124,10 @@ jobs:
       # dist-dependent tests (auto-import types, api-surface) would run
       # against a missing build. Prepare it explicitly; the remote cache
       # makes this a restore, not a rebuild, when src is untouched.
+      # test/bin.test.ts runs the evlog bin, which needs the workspace
+      # @evlog/cli built; without it the bin falls back to fetching the CLI.
       - name: Prepare evlog dist
-        run: pnpm exec turbo run dev:prepare --filter=evlog
+        run: pnpm exec turbo run dev:prepare --filter=evlog --filter=@evlog/cli
 
       - name: Test evlog with coverage
         run: pnpm --filter evlog run test:coverage

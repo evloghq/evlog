@@ -80,6 +80,15 @@ export interface ModuleOptions {
   client?: boolean
 
   /**
+   * Register evlog's Nitro error handler, which answers errors with JSON and
+   * includes `why`, `fix` and `link` from an `EvlogError`. Set to false when the
+   * app owns its error responses: the next Nitro error handler (yours, or the
+   * framework's) answers instead. Errors still reach the wide event.
+   * @default true
+   */
+  errorHandler?: boolean
+
+  /**
    * @default true in development, false in production
    */
   pretty?: boolean
@@ -375,14 +384,16 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
     // often cannot resolve useRuntimeConfig().evlog via dynamic import reliably).
     // @ts-expect-error nitro:config hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:config', (nitroConfig: NitroConfig) => {
-      const evlogHandler = resolver.resolve(
-        isNitroV3 ? '../nitro/errorHandler' : '../nitro/v2/errorHandler',
-      ).replace(/\\/g, '/')
-      // Nitro's DeepPartial config types array entries as possibly undefined; the helper expects string paths.
-      nitroConfig.errorHandler = prependNitroErrorHandler(
-        nitroConfig.errorHandler as string | string[] | undefined,
-        evlogHandler,
-      )
+      if (options.errorHandler !== false) {
+        const evlogHandler = resolver.resolve(
+          isNitroV3 ? '../nitro/errorHandler' : '../nitro/v2/errorHandler',
+        ).replace(/\\/g, '/')
+        // Nitro's DeepPartial config types array entries as possibly undefined; the helper expects string paths.
+        nitroConfig.errorHandler = prependNitroErrorHandler(
+          nitroConfig.errorHandler as string | string[] | undefined,
+          evlogHandler,
+        )
+      }
 
       const evlogForNitro = nuxt.options.runtimeConfig.evlog ?? options
       if (evlogForNitro !== undefined && typeof evlogForNitro === 'object') {
