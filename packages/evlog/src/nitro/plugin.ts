@@ -5,7 +5,7 @@
 import { defineNitroPlugin } from 'nitropack/runtime/internal/plugin'
 import type { NitroApp } from 'nitropack/types'
 import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled } from '../logger'
-import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
+import { registerPrettyErrorSnippetReader } from '../shared/stack-frames'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
 import { shouldLog, getServiceForPath, extractErrorStatus, type NitroPluginEvlogConfig } from '../nitro'

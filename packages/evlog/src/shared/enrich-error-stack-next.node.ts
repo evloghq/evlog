@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { isAbsolute, relative } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
-import { isFrameworkRuntimePath } from './pretty-error'
+import { isFrameworkRuntimePath } from './stack-frames'
 
 interface NextParsedFrame {
   file: string | null
