@@ -1544,7 +1544,7 @@ describe('init command', () => {
 
     const { json } = await run(cwd, ['--json', '--dry-run'])
 
-    expect(json().install).toMatchObject({ status: 'skipped', command: 'npm install evlog' })
+    expect(json().install).toMatchObject({ status: 'skipped', command: `npm install ${evlogPackageSpec(VERSION)}` })
     expect(json().agentGuide).toMatchObject({ status: 'pending' })
     expect(installs.calls).toEqual([])
     expect(skills.calls).toBe(0)
@@ -1583,22 +1583,22 @@ describe('init command', () => {
     const cwd = await project({ ...NUXT, 'pnpm-lock.yaml': '' })
 
     const installed = await run(cwd, ['--json', '--yes', '--no-agents'])
-    expect(installed.json().install).toEqual({ status: 'installed', command: 'pnpm add evlog' })
+    expect(installed.json().install).toEqual({ status: 'installed', command: `pnpm add ${evlogPackageSpec(VERSION)}` })
     expect(installs.calls).toEqual(['pnpm'])
 
     vi.restoreAllMocks()
     const skipped = await run(await project({ ...NUXT, 'pnpm-lock.yaml': '' }), ['--json', '--yes', '--no-agents', '--no-install'])
-    expect(skipped.json().install).toEqual({ status: 'skipped', command: 'pnpm add evlog' })
+    expect(skipped.json().install).toEqual({ status: 'skipped', command: `pnpm add ${evlogPackageSpec(VERSION)}` })
     expect(installs.calls).toEqual(['pnpm'])
   })
 
   it('exits 1 when the install fails, with the wiring written and the error in the JSON', async () => {
-    installs.result = { ok: false, error: 'Command failed: npm install evlog' }
+    installs.result = { ok: false, error: `Command failed: npm install ${evlogPackageSpec(VERSION)}` }
     const cwd = await project(NUXT)
 
     const { json } = await run(cwd, ['--json', '--yes', '--no-agents'])
 
-    expect(json().install).toEqual({ status: 'failed', command: 'npm install evlog', error: 'Command failed: npm install evlog' })
+    expect(json().install).toEqual({ status: 'failed', command: `npm install ${evlogPackageSpec(VERSION)}`, error: `Command failed: npm install ${evlogPackageSpec(VERSION)}` })
     expect(process.exitCode).toBe(1)
     expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(true)
   })
