@@ -25,6 +25,15 @@ export default defineConfig({
     // The `hono` peer accepts Hono 4 and Hono 5, so the Hono suite runs once per major.
     projects: [
       { extends: true, test: { name: 'evlog', include: ['test/**/*.test.ts'] } },
+      // `*.test-d.ts` files are type-checked, never run. Their own tsconfig keeps
+      // the check to them and the source they import.
+      {
+        extends: true,
+        test: {
+          name: 'types',
+          typecheck: { enabled: true, only: true, include: ['test/**/*.test-d.ts'], tsconfig: './tsconfig.test-d.json' },
+        },
+      },
       {
         extends: true,
         resolve: { alias: { hono: 'hono-5' } },

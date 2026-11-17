@@ -5,6 +5,7 @@ import { initLogger } from '../../src/logger'
 import { createError } from '../../src/error'
 import { defined } from '../helpers/defined'
 import { createDeferredStream } from '../helpers/stream'
+import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
 
 // Mock next/server to prevent import errors
 vi.mock('next/server', () => ({
@@ -643,4 +644,22 @@ describe('withEvlog', () => {
       })
     })
   })
+})
+
+describeStandardHttpMatrix({
+  name: 'next',
+  mount(options) {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    const handler = createWithEvlog({ ...options, pretty: false })(() => Response.json({ users: [] }))
+    return Promise.resolve({
+      async fire({ method, path, headers }) {
+        const response = await handler(new Request(`http://localhost${path}`, { method, headers }))
+        return { status: response.status }
+      },
+      cleanup() {
+        vi.restoreAllMocks()
+        return Promise.resolve()
+      },
+    })
+  },
 })
