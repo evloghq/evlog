@@ -438,6 +438,7 @@
     "bench:events": "tsx bench/scripts/event-count.ts",
     "size": "tsx bench/scripts/size.ts",
     "size:json": "tsx bench/scripts/size.ts --json",
+    "size:budget": "tsx bench/scripts/size-budget.ts",
     "size:alternatives": "tsx bench/scripts/bundled-size.ts --write && tsx bench/scripts/report.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",

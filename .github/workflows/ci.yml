@@ -130,6 +130,12 @@ jobs:
       - name: Test evlog with coverage
         run: pnpm --filter evlog run test:coverage
 
+      # test/build/size-budget.test.ts enforces the budget; this writes the table,
+      # including when that test failed.
+      - name: Bundle size report
+        if: ${{ !cancelled() && matrix.node-version == '24' }}
+        run: pnpm --filter evlog run size:budget >> "$GITHUB_STEP_SUMMARY"
+
       # The sandbox smoke runs every non-interactive CLI command against a real
       # app per framework — the end-to-end seam (detect → init → doctor → map →
       # baseline) that unit tests cover only piecewise. Gated to changes that
