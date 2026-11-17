@@ -123,6 +123,11 @@ jobs:
       - name: Test evlog with coverage
         run: pnpm --filter evlog run test:coverage
 
+      # The fs drain needs no network and no secret, so its round-trip e2e runs
+      # on every pull request rather than only in e2e.yml.
+      - name: Test fs drain end to end
+        run: pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts
+
       # The sandbox smoke runs every non-interactive CLI command against a real
       # app per framework — the end-to-end seam (detect → init → doctor → map →
       # baseline) that unit tests cover only piecewise. Gated to changes that
