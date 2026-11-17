@@ -21,7 +21,7 @@ export const fastify = defineFramework({
   detect: { deps: ['fastify'], specificity: 10 },
   accessor: '`request.log`, or `useLogger()` from `evlog/fastify` below the handler',
   requestLogger: 'explicit',
-  requestLoggerMember: 'log',
+  requestLoggerMembers: ['evlog', 'log'],
   shape: {
     loggerCall: 'const log = request.log',
     handler(route, body) {

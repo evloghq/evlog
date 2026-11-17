@@ -178,6 +178,14 @@ export function walkAst(node: Node, visitor: VisitorFn, parent: Node | null = nu
   }
 }
 
+/** Half-open `[start, end)` byte range of a file's source. */
+export type SourceRange = readonly [start: number, end: number]
+
+export function nodeRange(node: Node): SourceRange {
+  const { start, end } = node as unknown as { start: number, end: number }
+  return [start, end]
+}
+
 /**
  * Real source position of a node.
  *
@@ -244,25 +252,26 @@ export function hasDirective(program: Program, directive: string): boolean {
   return found
 }
 
-export function findHttpMethodExports(parsed: ParseResult): Array<{ method: string, line: number }> {
+/** Each HTTP method a module exports, with the source that export is written in. */
+export function findHttpMethodExports(parsed: ParseResult): Array<{ method: string, line: number, scope: SourceRange }> {
   const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
-  const found: Array<{ method: string, line: number }> = []
+  const found: Array<{ method: string, line: number, scope: SourceRange }> = []
   walkAst(parsed.program, (node) => {
     if (node.type === 'ExportNamedDeclaration') {
-      const decl = node as { declaration?: Node, specifiers?: Array<{ exported: Node }> }
+      const decl = node as { declaration?: Node, specifiers?: Array<Node & { exported: Node }> }
       if (decl.declaration?.type === 'FunctionDeclaration') {
         const fn = decl.declaration as { id?: { name: string } }
         if (fn.id?.name && methods.includes(fn.id.name)) {
           const loc = nodeLoc(node, parsed.lines)
-          found.push({ method: fn.id.name, line: loc?.line ?? 1 })
+          found.push({ method: fn.id.name, line: loc?.line ?? 1, scope: nodeRange(node) })
         }
       }
       if (decl.declaration?.type === 'VariableDeclaration') {
-        const varDecl = decl.declaration as { declarations: Array<{ id: Node, init?: Node }> }
+        const varDecl = decl.declaration as { declarations: Array<Node & { id: Node, init?: Node }> }
         for (const d of varDecl.declarations) {
           if (d.id.type === 'Identifier' && methods.includes(d.id.name) && d.init) {
             const loc = nodeLoc(d.init, parsed.lines)
-            found.push({ method: d.id.name, line: loc?.line ?? 1 })
+            found.push({ method: d.id.name, line: loc?.line ?? 1, scope: nodeRange(d) })
           }
         }
       }
@@ -274,7 +283,7 @@ export function findHttpMethodExports(parsed: ParseResult): Array<{ method: stri
         const name = exported.type === 'Identifier' ? exported.name : exported.value
         if (!name || !methods.includes(name)) continue
         const loc = nodeLoc(specifier.exported, parsed.lines)
-        found.push({ method: name, line: loc?.line ?? 1 })
+        found.push({ method: name, line: loc?.line ?? 1, scope: nodeRange(specifier) })
       }
     }
   })
