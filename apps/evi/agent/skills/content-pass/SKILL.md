@@ -15,7 +15,7 @@ The doctrine lives in the repository, at `.agents/skills/write-evlog-content/`. 
 
 **Rewrite** is the default: the scanner ranks the corpus, the worst pages get reviewed, and what survives review gets applied.
 
-**Enrich** is what runs when the rewrite half comes back empty, with no page above the bar or everything ranked inside its cooldown. That is a good day, not a wasted one. Switch to the second half rather than lowering the bar.
+**Enrich** is what runs when the rewrite half comes back empty, with no page above the bar or everything ranked inside its cooldown. That is a good day, not a wasted one. Switch to the second half rather than lowering the bar. It also runs when Hugo asks what is worth writing next.
 
 Never run both in one pass. A PR that rewrites two pages and adds a third is a PR nobody reviews properly.
 
@@ -27,7 +27,7 @@ Call `content-targets`. It runs the scanner over the whole corpus, drops files c
 
 Pass `surface` when Hugo asked for one, or when the weekly corpus check found a surface drifting. Otherwise take what ranks.
 
-**Read `eligible` before deciding anything.** It is the count of files with findings that are outside the cooldown, and it is the only number that says whether there is work. `eligible: 0` sends you to **Enrich**. Anything above zero means the rewrite half has targets, and the pass rewrites.
+**Read `eligible` before deciding anything.** It is the count of files with findings that are outside the cooldown, and it is the only number that says whether there is work. `eligible: 0` sends you to **Enrich**. Anything above zero means the rewrite half has targets, and the pass rewrites, unless Hugo asked what is worth writing next: that request runs **Enrich** whatever `eligible` says.
 
 Write the three numbers into the PR body verbatim: `scanned`, `candidates`, `eligible`. A pass that says the rewrite half was empty without them is asserting, not reporting, and a corpus of 120 files with 47 eligible pages has been called empty before.
 
@@ -140,7 +140,7 @@ Report to the thread: what group, how many files, the PR link. Two lines maximum
 
 ## Enrich
 
-Run this when `eligible` is 0. It needs an observation, not an opinion: name the gap you found and where you found it, or drop it.
+Run this when `eligible` is 0, or when Hugo asks what is worth writing next. It needs an observation, not an opinion: name the gap you found and where you found it, or drop it.
 
 **Whatever file you end up editing, run `--fix` on it first.** A page you are already opening does not have "pre-existing" findings, it has findings, and the mechanical ones cost one command. Leaving a wrong term on a page you just edited, and writing that it was out of scope, is the pass explaining why it did less than the tool it was given.
 

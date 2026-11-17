@@ -18,6 +18,8 @@ The first question keeps what we send correct. The second makes sure an evlog us
 
 Read `.agents/skills/create-adapter/references/upstream-alignment.md` in `/workspace/repo`. Take the two rows with the oldest `Aligned to`, treating `unset` as oldest. Break a tie with the reference's "First in line" list, then table order. Skip a row only when a run in the last two weeks already covered it and record why.
 
+When Hugo names adapters, compare those and no others: the rotation is for scheduled runs, and a request never swaps a named adapter for an older row.
+
 ## 2. Read both sides
 
 For each adapter:
