@@ -25,6 +25,8 @@ Every framework integration must expose:
 3. `log.fork()` support (automatic when `storage` is provided to the manifest)
 4. The framework-native accessor (`c.get('log')`, `req.log`, `event.locals.log`, …)
 
+`references/contract.md` lists what every shipped integration exposes against this contract, with its known gaps. A new integration adds a row there and a matching `describe` in `packages/evlog/test/frameworks/contract.test-d.ts`, which fails to type-check until it does.
+
 ## PR Title
 
 ```
@@ -210,7 +212,7 @@ Create `packages/evlog/test/frameworks/{framework}.test.ts`. Read `packages/evlo
 Two non-negotiables:
 
 1. **Real request driver.** Use the framework's own driver: supertest (Express/NestJS), `app.request()` (Hono), `app.inject()` (Fastify), `app.handle(new Request(...))` (Elysia). If no Node-friendly driver exists, call the user-facing contract directly with realistic input shapes (see the SvelteKit and React Router tests). Never extract internals to test a substitute.
-2. **Wire the shared matrix.** Call `describeStandardHttpMatrix({ name, mount })` from `test/helpers/frameworkMatrix.ts`. It covers the standard sweep (event emission, `x-request-id`, route service) for every HTTP framework.
+2. **Wire the shared matrix.** Call `describeStandardHttpMatrix({ name, mount })` from `test/helpers/frameworkMatrix.ts`. It covers the standard sweep (event emission, `x-request-id`, route service) for every HTTP framework. An integration configured through a built app (Nitro, Nuxt) uses `describeBuiltAppMatrix({ name, start })` instead: the app is built once with the options in its config and serves its drained events on `DRAINED_PATH`.
 
 On top of the matrix, cover the framework-specific surface:
 
