@@ -8,6 +8,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 const bin = fileURLToPath(new URL('../bin/evlog.mjs', import.meta.url))
 const run = promisify(execFile)
+
+/* These runs reach the real CLI: with telemetry on it writes its state in the contributor's home. */
+const quiet: NodeJS.ProcessEnv = { ...process.env, EVLOG_TELEMETRY: '0' }
 const tempDirs: string[] = []
 
 afterEach(async () => {
@@ -32,19 +35,19 @@ async function isolated(): Promise<{ dir: string, log: string, shim: string, env
     dir,
     log,
     shim,
-    env: { ...process.env, PATH: [dir, ...(process.env.PATH ?? '').split(delimiter).filter(entry => !entry.endsWith(join('node_modules', '.bin')))].join(delimiter) },
+    env: { ...quiet, PATH: [dir, ...(quiet.PATH ?? '').split(delimiter).filter(entry => !entry.endsWith(join('node_modules', '.bin')))].join(delimiter) },
     calls: async () => (await readFile(log, 'utf8')).trim(),
   }
 }
 
 describe('evlog bin', () => {
   it('runs the installed @evlog/cli executable', async () => {
-    const { stdout } = await run(process.execPath, [bin, '--version'])
+    const { stdout } = await run(process.execPath, [bin, '--version'], { env: quiet })
     expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/)
   })
 
   it('exposes the CLI commands', async () => {
-    const { stdout } = await run(process.execPath, [bin, '--help'])
+    const { stdout } = await run(process.execPath, [bin, '--help'], { env: quiet })
     for (const command of ['init', 'map', 'doctor', 'agents']) expect(stdout).toContain(command)
   })
 
@@ -53,7 +56,7 @@ describe('evlog bin', () => {
     tempDirs.push(dir)
     await writeFile(join(dir, 'package.json'), '{ "name": "app", ')
 
-    const { stdout } = await run(process.execPath, [bin, '--version'], { cwd: dir })
+    const { stdout } = await run(process.execPath, [bin, '--version'], { cwd: dir, env: quiet })
 
     expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+/)
   })

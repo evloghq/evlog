@@ -26,6 +26,13 @@ const FIXTURES = join(ROOT, 'packages/cli/test/map/fixtures')
 const CLI = join(ROOT, 'packages/cli/bin/evlog.mjs')
 const EVLOG = join(ROOT, 'packages/evlog')
 
+/* `init` hands the skills install to `npx skills add`, a CLI with a higher Node
+   floor than this one. Under that floor the hand-off fails and `init` exits 1,
+   so a run there sets EVLOG_SANDBOX_NO_AGENTS=1 to leave it out. */
+const initArgs = (...flags) => process.env.EVLOG_SANDBOX_NO_AGENTS === '1'
+  ? ['init', '--no-agents', ...flags]
+  : ['init', ...flags]
+
 const color = process.stdout.isTTY && !process.env.NO_COLOR
 const paint = (code, text) => color ? `[${code}m${text}[0m` : text
 const green = text => paint('32', text)
@@ -317,16 +324,16 @@ check('map --baseline catches a regression', (dir) => {
 })
 
 check('init --dry-run writes nothing', (dir) => {
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--dry-run', '--no-install']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--dry-run', '--no-install')))
   expect(payload.written.length > 0, 'nothing was planned')
   expect(payload.dryRun === true, 'dryRun was not reported')
   expect(git(dir, 'status', '--porcelain').trim() === '', 'the working tree changed')
 })
 
 check('init is idempotent', (dir) => {
-  const first = json(cli(dir, ['init', '--json', '--yes', '--no-install']))
+  const first = json(cli(dir, initArgs('--json', '--yes', '--no-install')))
   expect(first.written.length > 0, 'nothing was written')
-  const second = json(cli(dir, ['init', '--json', '--yes', '--no-install']))
+  const second = json(cli(dir, initArgs('--json', '--yes', '--no-install')))
   expect(second.written.length === 0, `the second run wrote ${second.written.length} file(s)`)
   expect(second.already.length > 0, 'the second run reported nothing as already wired')
 })
@@ -334,7 +341,7 @@ check('init is idempotent', (dir) => {
 check('init splits dev and production destinations', (dir) => {
   rmSync(join(dir, 'lib/evlog.ts'), { force: true })
 
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--prod-drain', 'axiom,sentry']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--no-install', '--prod-drain', 'axiom,sentry')))
   expect(payload.prodDrains.join() === 'axiom,sentry', `prodDrains were ${payload.prodDrains}`)
 
   const wired = payload.written.map(file => join(dir, file.file))
@@ -346,7 +353,7 @@ check('init splits dev and production destinations', (dir) => {
 })
 
 check('init writes an evlog.config.ts that type-checks before nuxi prepare', (dir) => {
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--prod-drain', 'axiom']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--no-install', '--prod-drain', 'axiom')))
   expect(payload.written.some(file => file.file === 'evlog.config.ts'), 'init did not write evlog.config.ts')
 
   const config = readFileSync(join(dir, 'evlog.config.ts'), 'utf8')
@@ -363,7 +370,7 @@ check('init writes an evlog.config.ts that type-checks before nuxi prepare', (di
 })
 
 check('init writes .env.example, never .env', (dir) => {
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--prod-drain', 'axiom']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--no-install', '--prod-drain', 'axiom')))
   const files = payload.written.map(file => file.file)
 
   expect(files.includes('.env.example'), 'no .env.example was written')
@@ -386,7 +393,7 @@ check('init seeds an error catalog from repeated errors', (dir) => {
   write(dir, 'sandbox-a.post.ts', handler)
   write(dir, 'sandbox-b.post.ts', handler)
 
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--extras', 'error-catalog']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--no-install', '--extras', 'error-catalog')))
   expect(payload.insight?.repeatedErrors > 0, 'the scan found no repeated error')
 
   const catalog = payload.written.find(file => file.file.endsWith('errors.ts'))
@@ -400,7 +407,7 @@ check('init seeds an error catalog from repeated errors', (dir) => {
 })
 
 check('init verifies with doctor before it finishes', (dir) => {
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--no-install')))
   expect(payload.verified !== null, 'no verification ran')
   expect(payload.verified.fail === 0, `doctor reported ${payload.verified.fail} failures after setup`)
 })
@@ -412,7 +419,7 @@ check('init --drain axiom --extras pipeline', (dir) => {
      That gap has its own check below. */
   rmSync(join(dir, 'lib/evlog.ts'), { force: true })
 
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--drain', 'none', '--prod-drain', 'axiom', '--extras', 'pipeline']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--no-install', '--drain', 'none', '--prod-drain', 'axiom', '--extras', 'pipeline')))
   expect(payload.prodDrains[0] === 'axiom', `prodDrains were ${payload.prodDrains}`)
   const wired = payload.written.map(file => join(dir, file.file))
     .filter(path => !path.endsWith('.env.example'))
@@ -429,7 +436,7 @@ check('init never overwrites, never silently drops a destination', (dir) => {
   write(dir, 'lib/evlog.ts', '// pre-existing\n')
   write(dir, 'server/plugins/evlog-drain.ts', '// pre-existing\n')
 
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--prod-drain', 'axiom']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--no-install', '--prod-drain', 'axiom')))
 
   expect(readFileSync(join(dir, 'lib/evlog.ts'), 'utf8') === '// pre-existing\n', 'lib/evlog.ts was modified')
   expect(readFileSync(join(dir, 'server/plugins/evlog-drain.ts'), 'utf8') === '// pre-existing\n', 'the drain plugin was modified')
@@ -441,7 +448,7 @@ check('init never overwrites, never silently drops a destination', (dir) => {
 })
 
 check('init --drain none writes no drain', (dir) => {
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--drain', 'none']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--no-install', '--drain', 'none')))
   expect(!payload.written.some(file => file.file.includes('evlog-drain')), 'a drain plugin was written')
 })
 
@@ -449,14 +456,14 @@ check('init offers nothing it cannot back up', (dir) => {
   /* Batching is meaningless with no production destination, and the AI and auth
      integrations are meaningless without their packages. Asking for them anyway
      drops them rather than wiring something inert. */
-  const payload = json(cli(dir, ['init', '--json', '--yes', '--no-install', '--extras', 'pipeline,ai,better-auth']))
+  const payload = json(cli(dir, initArgs('--json', '--yes', '--no-install', '--extras', 'pipeline,ai,better-auth')))
 
   expect(payload.extras.length === 0, `wired ${payload.extras.join(', ')} with nothing to back them`)
   expect(payload.dropped.length === 3, `dropped ${payload.dropped.join(', ')}`)
 })
 
 check('init rejects an unknown drain', (dir) => {
-  const result = cli(dir, ['init', '--yes', '--drain', 'axium'])
+  const result = cli(dir, initArgs('--yes', '--drain', 'axium'))
   expect(result.code === 2, `exit code was ${result.code}`)
   expect(result.stderr.includes('Unknown --drain'), 'no explanation printed')
   expect(git(dir, 'status', '--porcelain').trim() === '', 'a rejected run still wrote files')
@@ -465,7 +472,7 @@ check('init rejects an unknown drain', (dir) => {
 check('init never prompts without a TTY', (dir) => {
   /* The regression that matters most for agents: a run that blocks forever on a
      keystroke nobody is there to press. */
-  const result = spawnSync(process.execPath, [CLI, 'init', '--no-install'], {
+  const result = spawnSync(process.execPath, [CLI, ...initArgs('--no-install')], {
     cwd: dir,
     encoding: 'utf8',
     timeout: 20_000,
