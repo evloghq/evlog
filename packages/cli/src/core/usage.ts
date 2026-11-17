@@ -9,20 +9,21 @@ export async function resolve<T>(value: T | (() => T | Promise<T>) | Promise<T> 
 }
 
 /**
- * The command `rawArgs` leads to and its parent, the pair {@link showUsage}
- * takes: `map --help` is `map` under the root, an unknown name stays on the
- * command that did not know it.
+ * The command `rawArgs` leads to and the commands above it, root first, the
+ * pair {@link showUsage} takes: `telemetry status --help` is `status` under
+ * the root and `telemetry`, an unknown name stays on the command that did not
+ * know it.
  */
 export async function resolveCommand(
   cmd: CommandDef<any>,
   rawArgs: string[],
-  parent?: CommandDef<any>,
-): Promise<[CommandDef<any>, CommandDef<any> | undefined]> {
+  parents: CommandDef<any>[] = [],
+): Promise<[CommandDef<any>, CommandDef<any>[]]> {
   const subCommands = await resolve(cmd.subCommands)
   const index = rawArgs.findIndex(arg => !arg.startsWith('-'))
   const sub = index === -1 ? undefined : subCommands?.[rawArgs[index]!]
-  if (!sub) return [cmd, parent]
-  return resolveCommand(await resolve(sub as Resolvable<CommandDef<any>>) as CommandDef<any>, rawArgs.slice(index + 1), cmd)
+  if (!sub) return [cmd, parents]
+  return resolveCommand(await resolve(sub as Resolvable<CommandDef<any>>) as CommandDef<any>, rawArgs.slice(index + 1), [...parents, cmd])
 }
 
 interface Row {
@@ -49,14 +50,13 @@ function flagName(key: string): string {
  * @param to - `stdout` when the usage was asked for with `--help`, so it can be
  * piped; `stderr` when it comes with an error.
  */
-export async function showUsage(cmd: CommandDef<any>, parent: CommandDef<any> | undefined, to: 'stdout' | 'stderr'): Promise<void> {
+export async function showUsage(cmd: CommandDef<any>, parents: CommandDef<any>[], to: 'stdout' | 'stderr'): Promise<void> {
   const ctx = createContext({}, process[to])
   const { paint } = createStyle(ctx)
 
-  const meta = await resolve(cmd.meta)
-  const parentMeta = await resolve(parent?.meta)
-  const commandName = [parentMeta?.name, meta?.name].filter(Boolean).join(' ') || 'evlog'
-  const version = meta?.version ?? parentMeta?.version ?? ''
+  const metas = await Promise.all([...parents, cmd].map(c => resolve(c.meta)))
+  const commandName = metas.map(m => m?.name).filter(Boolean).join(' ') || 'evlog'
+  const version = metas.findLast(m => m?.version)?.version ?? ''
 
   const subCommands = await resolve(cmd.subCommands)
   const args = Object.entries(await resolve(cmd.args as ArgsDef | undefined) ?? {})
