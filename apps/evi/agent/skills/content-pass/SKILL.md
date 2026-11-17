@@ -1,11 +1,11 @@
 ---
 name: content-pass
-description: The daily pass over evlog's written surfaces. Picks the files the scanner ranks worst across the docs, the landing, the package READMEs, the skills, and the AGENTS.md files, reviews them against the content doctrine, applies what holds, and opens one ready PR whose body is the report. Also covers the enrichment half, run when nothing scores badly enough to rewrite, such as the page an index promises and nobody wrote, the integration documented at half its contract, the correction that should have become a rule. Load this when the content-pass schedule fires, or when Hugo asks for a content pass, a docs review, a rewrite of a page, a README, a skill or an AGENTS.md, or what is worth writing next.
+description: Pass over evlog's written surfaces, run twice a week. Reviews the worst-ranked files against the content doctrine, applies what holds, and opens one ready PR when a fix holds and the readiness gate passes; otherwise it reports in one line. Also runs the enrichment half when nothing needs a rewrite. Load this when the content-pass schedule fires, or when Hugo asks for a content pass on one surface, or for what is worth writing next.
 ---
 
 # Content pass
 
-One pass, one group, one pull request. The corpus is roughly 150 files: the docs tree and the landing, the four package READMEs, the internal and published skills, and the three AGENTS.md files. When the scanner's own count differs, the scanner wins. None of that gets fixed in a day, and trying is how a rewriter starts rewriting for its own sake.
+One pass, one group, one pull request. The corpus is roughly 150 files: the docs tree and the landing, the package READMEs, the internal and published skills, and the three AGENTS.md files. When the scanner's own count differs, the scanner wins. None of that gets fixed in a day, and trying is how a rewriter starts rewriting for its own sake.
 
 Half the corpus is read by people and half by agents, and the pass treats them differently. A skill or an AGENTS.md governs the agent running this pass, so it may fix a house rule there (punctuation, a dead link, a retired entry point, a wrong term) and nothing else. Procedure, bounds, and a skill's `description` come back as findings for Hugo. That is `M-09` in the doctrine, and `content-targets` enforces it by returning those files with mode `report`.
 
@@ -15,7 +15,7 @@ The doctrine lives in the repository, at `.agents/skills/write-evlog-content/`. 
 
 **Rewrite** is the default: the scanner ranks the corpus, the worst pages get reviewed, and what survives review gets applied.
 
-**Enrich** is what runs when the rewrite half comes back empty, with no page above the bar or everything ranked inside its cooldown. That is a good day, not a wasted one. Switch to the second half rather than lowering the bar.
+**Enrich** is what runs when the rewrite half comes back empty, with no page above the bar or everything ranked inside its cooldown. That is a good day, not a wasted one. Switch to the second half rather than lowering the bar. It also runs when Hugo asks what is worth writing next.
 
 Never run both in one pass. A PR that rewrites two pages and adds a third is a PR nobody reviews properly.
 
@@ -27,7 +27,7 @@ Call `content-targets`. It runs the scanner over the whole corpus, drops files c
 
 Pass `surface` when Hugo asked for one, or when the weekly corpus check found a surface drifting. Otherwise take what ranks.
 
-**Read `eligible` before deciding anything.** It is the count of files with findings that are outside the cooldown, and it is the only number that says whether there is work. `eligible: 0` sends you to **Enrich**. Anything above zero means the rewrite half has targets, and the pass rewrites.
+**Read `eligible` before deciding anything.** It is the count of files with findings that are outside the cooldown, and it is the only number that says whether there is work. `eligible: 0` sends you to **Enrich**. Anything above zero means the rewrite half has targets, and the pass rewrites, unless Hugo asked what is worth writing next: that request runs **Enrich** whatever `eligible` says.
 
 Write the three numbers into the PR body verbatim: `scanned`, `candidates`, `eligible`. A pass that says the rewrite half was empty without them is asserting, not reporting, and a corpus of 120 files with 47 eligible pages has been called empty before.
 
@@ -140,11 +140,11 @@ Report to the thread: what group, how many files, the PR link. Two lines maximum
 
 ## Enrich
 
-Run this when `eligible` is 0. It needs an observation, not an opinion: name the gap you found and where you found it, or drop it.
+Run this when `eligible` is 0, or when Hugo asks what is worth writing next. It needs an observation, not an opinion: name the gap you found and where you found it, or drop it.
 
 **Whatever file you end up editing, run `--fix` on it first.** A page you are already opening does not have "pre-existing" findings, it has findings, and the mechanical ones cost one command. Leaving a wrong term on a page you just edited, and writing that it was out of scope, is the pass explaining why it did less than the tool it was given.
 
-Look, in this order, and stop at the first thing that holds:
+Look, in this order, and stop at the first thing that holds. When Hugo asked what is worth writing next, skip the checks that end in a report instead of something to write (a skill that outran the repository) and keep going until one names a page, a paragraph, a rule, or a post:
 
 - **A promise with no page.** A section index, a card group, or a `links:` block pointing at something thin or missing. The scanner's `U-16` findings are the mechanical version; the interesting cases are pages that exist and do not deliver what the index said.
 - **An integration documented at half its contract.** Every framework page owes `evlog()`, `useLogger()`, `log.fork()`, and the framework-native accessor. `evlog/workers` is the documented exception. A page missing half of that is a real gap in the docs, not a style problem.
@@ -173,7 +173,7 @@ Two more, now that the corpus spans both audiences:
 - Touch a file inside its cooldown, whoever changed it.
 - Edit the landing page for voice or rhythm.
 - Change a skill's procedure, bounds, or `description`. Those are proposals, in the PR body.
-- Rewrite `apps/evi/agent/skills/`. The scanner reads those now, but they are this pass's own instructions: findings on them are reported for a person to judge, never applied.
+- Rewrite procedure, bounds, or a `description` in `apps/evi/agent/skills/`. Those are this pass's own instructions: findings on them are reported for a person to judge, and only a house-rule fix (line 10) is applied.
 - Open more than one PR, or open one before the readiness gate is complete.
 - Add a changeset for a change confined to `apps/*`.
 - Widen its own scope because the group looked bad. The group will still be there tomorrow.

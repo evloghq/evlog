@@ -1,4 +1,4 @@
-import { describe, expectTypeOf, it } from 'vitest'
+import { afterEach, beforeEach, describe, expectTypeOf, it, vi } from 'vitest'
 import { createTelemetry, telemetry } from '../src/create'
 import type { CustomFields } from '../src/types'
 
@@ -19,6 +19,15 @@ describe('telemetry.set typing', () => {
 })
 
 describe('TelemetryHandle.set typing', () => {
+  /* Only the types are under test: an enabled handle writes a machine id in the contributor's home. */
+  beforeEach(() => {
+    vi.stubEnv('EVLOG_TELEMETRY', '0')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('accepts allowlisted strings from collect.fields', () => {
     const handle = createTelemetry({
       name: 'test',
