@@ -613,6 +613,15 @@ describe('logs command', () => {
     expect(process.exitCode).toBeUndefined()
   })
 
+  it('a config it cannot read is a failure, as in map and config', async () => {
+    const cwd = await makeSink()
+    await writeFile(join(cwd, 'evlog.config.ts'), 'export default {')
+    const out = captureStdout()
+    await runCommand(logs, { rawArgs: ['--cwd', cwd, '--json', '--no-header'] })
+    expect(JSON.parse(out.join('')).error.code).toBe('cli.CONFIG_PARSE_FAILED')
+    expect(process.exitCode).toBe(1)
+  })
+
   it('no sink is a failure with the fix', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-logs-empty-'))
     tempDirs.push(cwd)

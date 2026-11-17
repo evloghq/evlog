@@ -8,7 +8,7 @@ import type { CliContext } from '../core/context'
 import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
 import { loadCliConfig } from '../lib/config'
-import { cliErrors } from '../lib/errors'
+import { cliErrors, isUsageError } from '../lib/errors'
 import { flagValues } from '../lib/flags'
 import { buildQuery, computeStats, select } from '../lib/logs/query'
 import type { LogsArgs, LogsQuery } from '../lib/logs/query'
@@ -299,8 +299,7 @@ export default defineEvlogCommand('logs', {
           json: { error: { code: error.code, message: error.message, why: error.why, fix: error.fix } },
           human: error.fix ? `${error.message}\n→ ${error.fix}` : error.message,
         })
-        const failed = error.code === cliErrors.LOGS_NO_SINK.code || error.code === cliErrors.LOGS_URL_UNREACHABLE.code
-        ui.exit(failed ? EXIT_FAIL : EXIT_USAGE)
+        ui.exit(isUsageError(error) ? EXIT_USAGE : EXIT_FAIL)
         return
       }
       throw error

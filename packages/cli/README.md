@@ -79,7 +79,7 @@ pnpm evlog map
 | `evlog doctor` | Monorepo-aware diagnosis: Node, project/workspace, stack, evlog install, `.evlog/logs` |
 | `evlog doctor --cwd <dir>` | Run against another directory |
 | `evlog doctor --debug` | Same, plus a debug wide event (see Debug) |
-| `evlog upgrade` | Show what moving to the newest evlog major changes, and what needs a person; writes nothing |
+| `evlog upgrade` | Experimental. Show what moving to the newest evlog major changes, and what needs a person; writes nothing |
 | `evlog upgrade --write` | Apply the fixes and bump `evlog` in `package.json` (refuses on uncommitted changes without `--force`) |
 | `evlog telemetry status` | Show telemetry status and disclosure |
 | `evlog telemetry enable` / `disable` | Change telemetry preference (disable purges buffered data) |
@@ -150,7 +150,7 @@ Commands print a short branded header by default. Skip it with `--no-header`, `E
 
 ## Debug
 
-Emit one debug case file per command with `--debug` or `EVLOG_CLI_DEBUG=1` (dogfoods `evlog`). Human mode prints a compact summary on stderr (`steps`, `findings`, resolve probes). With `--json`, the raw wide event goes to stderr so stdout stays a clean JSON contract. Separate from product telemetry (`@evlog/telemetry`).
+Experimental. Emit one debug case file per command with `--debug` or `EVLOG_CLI_DEBUG=1` (dogfoods `evlog`). Human mode prints a compact summary on stderr (`steps`, `findings`, resolve probes). With `--json`, the raw wide event goes to stderr so stdout stays a clean JSON contract. Separate from product telemetry (`@evlog/telemetry`).
 
 ```bash
 evlog doctor --debug
