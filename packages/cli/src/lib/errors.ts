@@ -78,7 +78,7 @@ export const cliErrors = defineErrorCatalog('cli', {
   },
   MAP_FRAMEWORK_NOT_DETECTED: {
     status: 400,
-    message: 'Could not detect a supported framework (nuxt, nitro, next, tanstack-start, hono)',
+    message: `Could not detect a supported framework (${FRAMEWORK_IDS.join(', ')})`,
     why: 'No matching dependency or config file was found in this project',
     fix: 'Use --framework <name> to override detection',
     tags: ['map', 'project'],

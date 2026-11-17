@@ -1346,6 +1346,40 @@ describe('runInit — hono', () => {
   })
 })
 
+describe('planWiring — effect', () => {
+  it('creates src/evlog.ts with the evlog/effect layers and asks for the Layer.provide lines', async () => {
+    const root = await project({
+      'package.json': '{"name":"shop","dependencies":{"effect":"^4.0.0"}}',
+      'src/index.ts': 'export {}\n',
+    })
+
+    const plan = await planWiring({ root, framework: 'effect', service: 'api', ...wiring({ prodDrains: ['axiom'] }), nitroMajor: 3 })
+    const file = action(plan, join('src', 'evlog.ts')).contents
+
+    expect(file).toContain(`import { initLoggerLayer, routerLayer } from 'evlog/effect'`)
+    expect(file).toContain(`import config from '../evlog.config'`)
+    expect(file).toContain('export const EvlogInit = initLoggerLayer(toLoggerConfig(config))')
+    expect(file).toContain('export const EvlogRouter = routerLayer(toMiddlewareOptions(config))')
+    expect(file).not.toContain('createAxiomDrain')
+    expect(action(plan, 'evlog.config.ts').contents).toContain('createAxiomDrain')
+    expect(plan.manual.find(step => step.title === 'Provide the layers to your server')?.snippet).toContain('Layer.provide(EvlogRouter)')
+  })
+})
+
+describe('runInit — effect', () => {
+  it('wires an Effect project end to end', async () => {
+    const cwd = await project({
+      'package.json': '{"name":"shop","dependencies":{"effect":"^4.0.0","@effect/platform-node":"^4.0.0"}}',
+      'src/index.ts': 'export {}\n',
+    })
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
+
+    expect(result.answers.framework).toBe('effect')
+    expect(result.written.map(action => action.relative)).toEqual(expect.arrayContaining(['evlog.config.ts', join('src', 'evlog.ts')]))
+  })
+})
+
 describe('env guidance', () => {
   it('puts the missing drain variables in front of the manual steps', async () => {
     const root = await project({ 'package.json': '{"name":"shop"}' })
