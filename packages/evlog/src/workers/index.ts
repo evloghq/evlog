@@ -1,6 +1,7 @@
-import { initLogger, createRequestLogger } from '../logger'
+import { initLogger, createRequestLogger, noopLogger } from '../logger'
 import type { AuditableLogger } from '../audit'
 import type { LoggerConfig } from '../types'
+import { forkBackgroundLogger } from '../shared/fork'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
 
@@ -127,6 +128,28 @@ function pickCfContext(request: Request): Record<string, unknown> {
 /** Options accepted by {@link withEvlog}. */
 export type EvlogWorkersOptions = BaseEvlogOptions
 
+/**
+ * The request logger {@link withEvlog} passes to the handler. Workers has no
+ * `useLogger()`, so `log.fork()` hands the forked logger to `fn` instead.
+ */
+export type WorkersRequestLogger = AuditableLogger & {
+  /**
+   * Run background work under a forked logger that emits its own wide event,
+   * with `operation` set to `label` and `_parentRequestId` to this request's id.
+   * The returned promise is registered with `ctx.waitUntil`, resolves once the
+   * child has drained, and never rejects.
+   *
+   * @example
+   * ```ts
+   * log.fork('send_receipt', async (child) => {
+   *   child.set({ receipt: { to: order.email } })
+   *   await sendReceipt(order)
+   * })
+   * ```
+   */
+  fork: (label: string, fn: (log: AuditableLogger) => void | Promise<void>) => Promise<void>
+}
+
 interface WorkersRequestContext {
   request: Request
   ctx?: WorkerExecutionContext
@@ -205,7 +228,7 @@ export function withEvlog<TEnv = unknown, TCtx extends WorkerExecutionContext = 
     request: Request,
     env: TEnv,
     ctx: TCtx,
-    log: AuditableLogger,
+    log: WorkersRequestLogger,
   ) => Response | Promise<Response>,
   options: EvlogWorkersOptions = {},
 ): {
@@ -213,14 +236,20 @@ export function withEvlog<TEnv = unknown, TCtx extends WorkerExecutionContext = 
 } {
   return {
     async fetch(request, env, ctx) {
-      const { logger, finish, finishResponse, skipped } = integration.start({ request, ctx }, options)
+      const { logger, finish, finishResponse, skipped, middlewareOptions } = integration.start({ request, ctx }, options)
 
       if (skipped) {
-        return await handler(request, env, ctx, createWorkersLogger(request, { executionCtx: ctx }))
+        const fork: WorkersRequestLogger['fork'] = (label, fn) => {
+          const lifetime = noopLogger.fork(label, () => fn(noopLogger))
+          middlewareOptions.waitUntil?.(lifetime)
+          return lifetime
+        }
+        return await handler(request, env, ctx, Object.assign(createWorkersLogger(request, { executionCtx: ctx }), { fork }))
       }
 
       try {
-        const response = await handler(request, env, ctx, logger)
+        const fork: WorkersRequestLogger['fork'] = (label, fn) => forkBackgroundLogger({ parent: logger, middlewareOptions, label, fn })
+        const response = await handler(request, env, ctx, Object.assign(logger, { fork }))
         return await finishResponse(response, { status: response.status })
       } catch (error) {
         await finish({ error: error as Error })

@@ -214,44 +214,87 @@ function setRedacted(record: Record<string, unknown>, key: string, value: unknow
   console.warn(`[evlog] redact could not rewrite read-only field "${path}" — value left as-is`)
 }
 
+/** Escape one JSON Pointer segment (RFC 6901): `~` becomes `~0`, `/` becomes `~1`. */
+export function escapePointerSegment(segment: string): string {
+  return segment.replace(/~/g, '~0').replace(/\//g, '~1')
+}
+
+function unescapePointerSegment(segment: string): string {
+  return segment.replace(/~1/g, '/').replace(/~0/g, '~')
+}
+
 /**
  * Return a copy of `value` with path-pattern matches replaced by `replacement`.
  * Used by audit diffs; does not mutate the input.
  *
  * `pointerPath` is a JSON Pointer (e.g. `/user/password`).
  */
+// eslint-disable-next-line max-params
 export function redactValueByPaths(
   value: unknown,
   matchers: RedactPathMatchers,
   replacement: RedactReplacement,
   pointerPath = '',
+  ancestors = new Set<object>(),
 ): unknown {
-  const segments = pointerPath.split('/').filter(Boolean)
+  const segments = pointerPath.split('/').slice(1).map(unescapePointerSegment)
   const dotPath = segments.join('.')
   const leafKey = segments.at(-1) ?? ''
 
-  if (value === null || typeof value !== 'object') {
-    if (dotPath && matchesRedactPath(dotPath, leafKey, matchers)) {
-      return resolveReplacement(replacement, value, { path: dotPath, key: leafKey })
+  if (dotPath && matchesRedactPath(dotPath, leafKey, matchers)) {
+    return resolveReplacement(replacement, value, { path: dotPath, key: leafKey })
+  }
+
+  if (value === null || typeof value !== 'object') return value
+  if (!Array.isArray(value) && !isFieldRecord(value)) return value
+
+  // Returning the original object here would hand back its fields unredacted.
+  if (ancestors.has(value)) return '[Circular]'
+  ancestors.add(value)
+
+  try {
+    if (Array.isArray(value)) {
+      return value.map((v, i) => redactValueByPaths(v, matchers, replacement, `${pointerPath}/${i}`, ancestors))
     }
-    return value
-  }
 
-  if (Array.isArray(value)) {
-    return value.map((v, i) => redactValueByPaths(v, matchers, replacement, `${pointerPath}/${i}`))
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      const childPointer = `${pointerPath}/${escapePointerSegment(k)}`
+      const childDot = dotPath ? `${dotPath}.${k}` : k
+      out[k] = matchesRedactPath(childDot, k, matchers)
+        ? resolveReplacement(replacement, v, { path: childDot, key: k })
+        : redactValueByPaths(v, matchers, replacement, childPointer, ancestors)
+    }
+    return out
+  } finally {
+    ancestors.delete(value)
   }
+}
 
-  if (!isPlainRecord(value)) return value
-
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(value)) {
-    const childPointer = pointerPath ? `${pointerPath}/${k}` : `/${k}`
-    const childDot = dotPath ? `${dotPath}.${k}` : k
-    out[k] = matchesRedactPath(childDot, k, matchers)
-      ? resolveReplacement(replacement, v, { path: childDot, key: k })
-      : redactValueByPaths(v, matchers, replacement, childPointer)
-  }
-  return out
+/**
+ * @internal Whether `value` keeps its state in own fields and is walked key by key:
+ * plain objects, null-prototype objects and class instances. Built-ins that keep
+ * their state in internal slots (`Date`, `RegExp`, `Map`, `Set`, ...) are not.
+ * Classified by prototype chain, not `Object.prototype.toString`, so a
+ * `Symbol.toStringTag` cannot opt an object out of field redaction.
+ */
+export function isFieldRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  return !(
+    value instanceof Date
+    || value instanceof RegExp
+    || value instanceof Map
+    || value instanceof Set
+    || value instanceof WeakMap
+    || value instanceof WeakSet
+    || value instanceof Promise
+    || value instanceof Error
+    || value instanceof ArrayBuffer
+    || ArrayBuffer.isView(value)
+    || value instanceof Boolean
+    || value instanceof Number
+    || value instanceof String
+  )
 }
 
 /**
@@ -298,8 +341,12 @@ export const builtinPatterns = {
   },
   /** Credit card numbers → ****1111 (PCI DSS: last 4 allowed) */
   creditCard: {
-    pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
-    mask: (m: string) => `****${m.replace(/[\s-]/g, '').slice(-4)}`,
+    // A whole UUID is matched first and kept, so its digit groups never read as a card.
+    // Its edges are any non-hex character, so `_` next to it (`id_<uuid>_v2`) still counts.
+    // A card may not end inside a whole UUID (`2026-0001-<uuid>`), or it would take the
+    // UUID's first groups before the UUID alternative reaches them.
+    pattern: /(?<![\dA-Fa-f])[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}(?![\dA-Fa-f])|\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b(?<!(?<![\dA-Fa-f])(?=[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}(?![\dA-Fa-f]))[\dA-Fa-f-]{1,35})/g,
+    mask: (m: string) => m.length === 36 ? m : `****${m.replace(/[\s-]/g, '').slice(-4)}`,
   },
   /** Email addresses → a***@***.com */
   email: {
@@ -831,12 +878,6 @@ export function normalizeRedactConfig(raw: boolean | Record<string, unknown> | u
   }
 
   return resolveRedactConfig(config)
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const proto = Object.getPrototypeOf(value)
-  return proto === Object.prototype || proto === null
 }
 
 function deserializeRegexList(raw: unknown[]): RegExp[] {

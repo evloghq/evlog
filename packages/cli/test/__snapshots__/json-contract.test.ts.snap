@@ -1,0 +1,255 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`--json contract > keeps the config envelope 1`] = `
+{
+  "exitCode": 0,
+  "output": {
+    "app": [
+      {
+        "path": "service",
+        "source": "evlog.config.ts:2",
+        "value": "shop",
+      },
+      {
+        "path": "sampling.rates.info",
+        "source": "evlog.config.ts:3",
+        "value": 50,
+      },
+    ],
+    "cli": [
+      {
+        "path": "map.minScore",
+        "source": "evlog.config.ts:4",
+        "value": 50,
+      },
+    ],
+    "environment": "test",
+    "extends": null,
+    "file": "evlog.config.ts",
+    "moduleOptions": null,
+    "schemaVersion": 2,
+  },
+}
+`;
+
+exports[`--json contract > keeps the doctor envelope 1`] = `
+{
+  "exitCode": 0,
+  "output": {
+    "checks": [
+      {
+        "id": "node",
+        "message": "<node-version>",
+        "status": "ok",
+      },
+      {
+        "id": "project",
+        "message": "hono-basic-fixture",
+        "status": "ok",
+      },
+      {
+        "id": "stack",
+        "message": "hono",
+        "status": "ok",
+      },
+      {
+        "hint": "resolved from node_modules/evlog",
+        "id": "evlog",
+        "message": "v3.0.0 (workspace:*)",
+        "status": "ok",
+      },
+      {
+        "id": "config",
+        "message": "evlog.config.ts",
+        "status": "ok",
+      },
+      {
+        "id": "logs",
+        "message": "1 file · .evlog/logs",
+        "status": "ok",
+      },
+    ],
+    "environment": "test",
+    "project": {
+      "cwd": "<cwd>",
+      "kind": "single",
+      "name": "hono-basic-fixture",
+      "packageDir": "<cwd>",
+      "root": "<cwd>",
+      "stack": [
+        "hono",
+      ],
+    },
+    "schemaVersion": 2,
+    "summary": {
+      "fail": 0,
+      "ok": 6,
+      "warn": 0,
+    },
+  },
+}
+`;
+
+exports[`--json contract > keeps the logs envelope 1`] = `
+{
+  "exitCode": 0,
+  "output": {
+    "count": 2,
+    "environment": "test",
+    "events": [
+      {
+        "durationMs": 412,
+        "error": {
+          "message": "Payment processing failed",
+          "name": "Error",
+          "statusCode": 402,
+        },
+        "level": "error",
+        "method": "POST",
+        "path": "/api/checkout",
+        "requestId": "cccccccc-0000-4000-8000-000000000003",
+        "service": "shop",
+        "status": 402,
+        "timestamp": "2026-10-01T10:00:00.000Z",
+      },
+      {
+        "durationMs": 2,
+        "level": "info",
+        "method": "GET",
+        "path": "/api/health",
+        "requestId": "bbbbbbbb-0000-4000-8000-000000000002",
+        "service": "shop",
+        "status": 200,
+        "timestamp": "2026-10-01T11:00:00.000Z",
+      },
+    ],
+    "matched": 2,
+    "schemaVersion": 2,
+    "sources": [
+      ".evlog/logs",
+    ],
+    "view": "recent",
+  },
+}
+`;
+
+exports[`--json contract > keeps the map envelope 1`] = `
+{
+  "exitCode": 0,
+  "output": {
+    "environment": "test",
+    "grade": "good",
+    "ignored": 0,
+    "map": {
+      "cliVersion": "<cli-version>",
+      "framework": "hono",
+      "generatedAt": "<time>",
+      "projectName": "hono-basic-fixture",
+      "routes": [
+        {
+          "checks": {
+            "audit": {
+              "status": "pass",
+            },
+            "context": {
+              "status": "pass",
+            },
+            "error-handling": {
+              "status": "n/a",
+            },
+            "structured-errors": {
+              "status": "n/a",
+            },
+            "wide-event": {
+              "status": "pass",
+            },
+          },
+          "event": {
+            "audit": [
+              "checkout.completed",
+            ],
+            "fields": [
+              "user.id",
+            ],
+          },
+          "file": "src/checkout.ts",
+          "framework": "hono",
+          "handler": {
+            "column": 0,
+            "line": 6,
+          },
+          "id": "ec65818b4193",
+          "kind": "api",
+          "method": "POST",
+          "path": "/checkout",
+          "score": 100,
+          "sensitivity": {
+            "level": "high",
+            "reasons": [
+              "money: path says "checkout"",
+            ],
+          },
+          "suggestions": {},
+        },
+        {
+          "checks": {
+            "audit": {
+              "status": "n/a",
+            },
+            "context": {
+              "evidence": {
+                "file": "src/health.ts",
+                "line": 5,
+              },
+              "message": "no log.set() context accumulation",
+              "status": "fail",
+            },
+            "error-handling": {
+              "status": "n/a",
+            },
+            "structured-errors": {
+              "status": "n/a",
+            },
+            "wide-event": {
+              "evidence": {
+                "file": "src/health.ts",
+                "line": 5,
+              },
+              "message": "handler adds nothing to its request event — only method, path and status are recorded",
+              "status": "fail",
+            },
+          },
+          "file": "src/health.ts",
+          "framework": "hono",
+          "handler": {
+            "column": 0,
+            "line": 5,
+          },
+          "id": "f52aa661f8a3",
+          "kind": "api",
+          "method": "GET",
+          "path": "/health",
+          "score": 45,
+          "sensitivity": {
+            "level": "none",
+            "reasons": [],
+          },
+          "suggestions": {},
+        },
+      ],
+      "ruleSetVersion": 3,
+      "score": 82,
+      "version": 1,
+    },
+    "mapPath": null,
+    "schemaVersion": 2,
+    "summary": {
+      "dark": 1,
+      "exempt": 0,
+      "instrumented": 1,
+      "partial": 0,
+      "suppressedChecks": 0,
+    },
+  },
+}
+`;

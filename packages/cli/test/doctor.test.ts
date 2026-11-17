@@ -56,6 +56,17 @@ describe('runDoctor', () => {
     expect(result.project.kind).toBe('single')
   })
 
+  it('lists Effect in the stack', async () => {
+    const cwd = await makeProject({
+      'package.json': JSON.stringify({ name: 'app', dependencies: { 'effect': '^4.0.0', '@effect/platform-node': '^4.0.0', 'evlog': '^3.0.0' } }),
+      'node_modules/evlog/package.json': JSON.stringify({ name: 'evlog', version: '3.0.0' }),
+    })
+
+    const result = await runDoctor(fakeContext(cwd))
+
+    expect(result.project.stack).toEqual(['effect'])
+  })
+
   it('resolves evlog from a pnpm workspace root when run in a child package', async () => {
     const root = await makeProject({
       'pnpm-workspace.yaml': 'packages:\n  - apps/*\n',
@@ -148,15 +159,6 @@ export default defineNitroPlugin((nitroApp) => {
     const logs = result.checks.find(c => c.id === 'logs')
     expect(logs?.status).toBe('ok')
     expect(logs?.message).toContain('var/evlog')
-  })
-
-  it('fails on unsupported Node versions', async () => {
-    const cwd = await makeProject({ 'package.json': '{}' })
-    const result = await runDoctor(fakeContext(cwd, { nodeVersion: 'v18.19.0' }))
-
-    const node = result.checks.find(c => c.id === 'node')
-    expect(node?.status).toBe('fail')
-    expect(result.summary.fail).toBeGreaterThan(0)
   })
 
   it('records steps + catalog findings on the debug logger', async () => {

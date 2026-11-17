@@ -27,7 +27,7 @@ jobs:
     if: >
       (github.event_name == 'workflow_dispatch' && inputs.branch != '')
       || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Delete the Neon preview branch
@@ -68,7 +68,7 @@ jobs:
 
   sweep:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.branch == '')
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read

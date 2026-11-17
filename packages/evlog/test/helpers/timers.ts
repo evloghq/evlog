@@ -60,12 +60,14 @@ const MAX_SAMPLE_CALLS = 100_000
 const LINEAR_TIME_BUDGET_MS = 2_000
 
 /**
- * CPU time this process has used, in ms. Wall time also counts the time the
- * scheduler hands the core to other processes, which on a loaded machine hits
- * a long call far more often than a short one and skews the ratio.
+ * CPU time the calling thread has used, in ms. Wall time also counts the time
+ * the scheduler hands the core to other processes, and process CPU time also
+ * counts V8's GC and compiler threads; either can land on the long run alone
+ * and skew the ratio. Node before 22.19 has no `threadCpuUsage()` and falls
+ * back to process CPU time.
  */
 function cpuMs(): number {
-  const { user, system } = process.cpuUsage()
+  const { user, system } = process.threadCpuUsage?.() ?? process.cpuUsage()
   return (user + system) / 1_000
 }
 
@@ -95,8 +97,8 @@ function fastestPerCallMs(fn: () => unknown, runs = 3): number {
 /**
  * Assert `fn` stays linear in input length. `build(n)` returns the adversarial
  * input at scale `n`; both sizes must have the same shape, which a prefix of
- * the long input does not guarantee. Times `build(1)` and `build(8)` in process
- * CPU time, each as the fastest per-call average. The longer run may be at most
+ * the long input does not guarantee. Times `build(1)` and `build(8)` in the
+ * calling thread's CPU time, each as the fastest per-call average. The longer run may be at most
  * 24x the shorter; a 2 s cap on the long run catches a hang that is already
  * slow at scale 1.
  *

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import logs, { runLogs } from '../src/commands/logs'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
-import { buildQuery, computeStats, matchesId, matchesWhere, parseDuration, parseTime, parseWhere } from '../src/lib/logs/query'
+import { buildQuery, matchesId, matchesWhere, parseDuration, parseTime, parseWhere } from '../src/lib/logs/query'
 import { formatEvent, formatLine, formatLogsReport } from '../src/lib/logs/render'
 import { createStyle } from '../src/core/output'
 
@@ -245,7 +245,7 @@ describe('runLogs', () => {
     const result = await runLogs(fakeContext(cwd), { what: 'stats' }, { now: NOW })
     expect(result.events).toEqual([])
     expect(result.matched).toBe(6)
-    const stats = computeStats(result.all)
+    const stats = result.stats!
     expect(stats.total).toBe(6)
     expect(stats.errors).toBe(2)
     expect(stats.byRoute[0]).toEqual({ route: 'GET /api/items', count: 2, errors: 1, p50: 30, p95: 700 })
@@ -268,6 +268,27 @@ describe('runLogs', () => {
     expect(result.sources).toEqual(['apps/api/.evlog/logs', 'apps/web/.evlog/logs'])
     expect(result.events.map(e => e.path)).toEqual(['/users', '/home'])
     expect(formatLine(createStyle({ color: false }), result.events[0]!)).toMatch(/^\S+  api\s+GET    \/users/)
+  })
+
+  it('orders a workspace by time in every view, whatever order the files are read in', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'evlog-cli-logs-mono-'))
+    tempDirs.push(root)
+    await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'mono', workspaces: ['apps/*'] }))
+    const apps = {
+      api: [['/a1', '09:00', 100, 'info'], ['/a2', '12:00', 900, 'warn'], ['/a3', '08:00', 900, 'error']],
+      web: [['/w1', '10:00', 900, 'debug'], ['/w2', '11:00', 50, 'info'], ['/w3', '08:00', 10, 'info']],
+    } as const
+    for (const [app, rows] of Object.entries(apps)) {
+      await mkdir(join(root, 'apps', app, '.evlog', 'logs'), { recursive: true })
+      const lines = rows.map(([path, at, durationMs, level]) => JSON.stringify(event({ path, timestamp: `2026-10-01T${at}:00.000Z`, durationMs, level })))
+      await writeFile(join(root, 'apps', app, '.evlog', 'logs', '2026-10-01.jsonl'), `${lines.join('\n')}\n`)
+    }
+    const ctx = fakeContext(root)
+
+    /* By time: a3 and w3 at 08:00 in the order read, then a1, w1, w2, a2. */
+    expect((await runLogs(ctx, { limit: '2' }, { now: NOW })).events.map(e => e.path)).toEqual(['/w2', '/a2'])
+    expect((await runLogs(ctx, { what: 'slow', limit: '2' }, { now: NOW })).events.map(e => e.path)).toEqual(['/a3', '/w1'])
+    expect(Object.entries((await runLogs(ctx, { what: 'stats' }, { now: NOW })).stats!.byLevel)).toEqual([['error', 1], ['info', 3], ['debug', 1], ['warn', 1]])
   })
 
   it('reads a memory drain endpoint with --url, and follows it by polling', async () => {
@@ -611,6 +632,15 @@ describe('logs command', () => {
     await runCommand(logs, { rawArgs: ['--cwd', cwd, '--json', '--no-header'] })
     expect(JSON.parse(out.join('')).events).toEqual([{ timestamp: '2026-10-01T11:00:00.000Z', level: 'info', path: '/a', duration: 12 }])
     expect(process.exitCode).toBeUndefined()
+  })
+
+  it('a config it cannot read is a failure, as in map and config', async () => {
+    const cwd = await makeSink()
+    await writeFile(join(cwd, 'evlog.config.ts'), 'export default {')
+    const out = captureStdout()
+    await runCommand(logs, { rawArgs: ['--cwd', cwd, '--json', '--no-header'] })
+    expect(JSON.parse(out.join('')).error.code).toBe('cli.CONFIG_PARSE_FAILED')
+    expect(process.exitCode).toBe(1)
   })
 
   it('no sink is a failure with the fix', async () => {

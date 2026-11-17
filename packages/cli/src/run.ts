@@ -33,7 +33,7 @@ async function checkGroupFlags(cmd: CommandDef<any>, rawArgs: string[]): Promise
  */
 export async function run(rawArgs: string[]): Promise<void> {
   if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
-    await showUsage(...await resolveCommand(main, rawArgs))
+    await showUsage(...await resolveCommand(main, rawArgs), 'stdout')
     return
   }
   if (rawArgs.length === 1 && (rawArgs[0] === '--version' || rawArgs[0] === '-v')) {
@@ -51,7 +51,7 @@ export async function run(rawArgs: string[]): Promise<void> {
       return
     }
     if (error instanceof Error && error.name === 'CLIError') {
-      await showUsage(...await resolveCommand(main, rawArgs))
+      await showUsage(...await resolveCommand(main, rawArgs), 'stderr')
       writeHuman(error.message)
       setExitCode(EXIT_USAGE)
       return

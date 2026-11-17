@@ -8,7 +8,7 @@
   },
   "author": "HugoRCD",
   "license": "MIT",
-  "packageManager": "pnpm@11.28.11",
+  "packageManager": "pnpm@11.28.12",
   "scripts": {
     "dev": "turbo run dev --filter=evlog-playground",
     "dev:prepare": "turbo run dev:prepare",
@@ -29,7 +29,7 @@
     "sandbox:up": "docker compose -f packages/evlog/test/e2e/docker-compose.yml up -d --wait",
     "sandbox:seed": "node packages/evlog/test/e2e/seed.mjs",
     "sandbox:down": "docker compose -f packages/evlog/test/e2e/docker-compose.yml down -v",
-    "sandbox:e2e": "LOKI_ENDPOINT=http://localhost:3100 CLICKHOUSE_ENDPOINT=http://localhost:8123 GRAFANA_ENDPOINT=http://localhost:3001 pnpm run test:e2e",
+    "sandbox:e2e": "LOKI_ENDPOINT=http://localhost:3100 CLICKHOUSE_ENDPOINT=http://localhost:8123 GRAFANA_ENDPOINT=http://localhost:3001 OTLP_ENDPOINT=http://localhost:4318 OTLP_EXPORT_FILE=$PWD/packages/evlog/test/e2e/.otel/logs.jsonl pnpm run test:e2e",
     "cli": "node packages/cli/bin/evlog.mjs",
     "content:lint": "node scripts/content-lint/index.mjs",
     "content:lint:test": "vitest run --root scripts/content-lint",
@@ -50,17 +50,17 @@
     "release": "turbo run build --filter='./packages/*' && changeset publish"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "^4.0.37",
+    "@ai-sdk/provider": "^4.0.38",
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.1",
     "@hrcd/eslint-config": "^3.0.3",
     "@types/node": "^25.9.9",
-    "ai": "^7.0.165",
+    "ai": "^7.0.173",
     "automd": "^0.4.3",
     "dotenv-cli": "^11.1.0",
     "eslint": "^9.39.5",
     "h3": "^1.15.11",
-    "turbo": "^2.11.10",
+    "turbo": "^2.11.11",
     "typescript": "^6.0.3",
     "vitest": "^4.1.12",
     "vue-tsc": "^3.3.14"

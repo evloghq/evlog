@@ -278,21 +278,6 @@ export function buildQuery(args: LogsArgs, now = new Date(), defaultLimit?: numb
   return { view, id, where, since, until, level, limit, over, filter }
 }
 
-/**
- * The events a one-shot run shows, from everything the reader yielded in
- * file order: the last `limit` of them, oldest first, so the newest is at the
- * bottom like `tail`. The `slow` view is the exception: worst first.
- */
-export function select(events: WideEvent[], query: LogsQuery): WideEvent[] {
-  if (query.view === 'stats') return []
-  if (query.view === 'slow') {
-    return [...events]
-      .sort((a, b) => (number(b, 'durationMs') ?? 0) - (number(a, 'durationMs') ?? 0))
-      .slice(0, query.limit)
-  }
-  return events.slice(-query.limit)
-}
-
 export interface RouteStats {
   route: string
   count: number
@@ -309,40 +294,141 @@ export interface LogsStats {
   byLevel: Record<string, number>
 }
 
+export const timeOf = (event: WideEvent): number => Date.parse(event.timestamp) || 0
+
+/**
+ * Where an event stands among the ones a run read: `seq` is the order read,
+ * and `at` its timestamp when several sources are merged by time, else 0.
+ */
+interface Placed<T extends WideEvent = WideEvent> {
+  event: T
+  at: number
+  seq: number
+}
+
+const inOrder = (a: Omit<Placed, 'event'>, b: Omit<Placed, 'event'>): number => a.at - b.at || a.seq - b.seq
+const latestFirst = (a: Placed, b: Placed): number => inOrder(b, a)
+const slowestFirst = (a: Placed, b: Placed): number =>
+  (number(b.event, 'durationMs') ?? 0) - (number(a.event, 'durationMs') ?? 0) || inOrder(a, b)
+
+/** The `limit` values that sort first, in memory that does not grow with how many are offered. */
+function keepFirst<T>(limit: number, compare: (a: T, b: T) => number): { add: (value: T) => void, values: () => T[] } {
+  const slack = Math.max(limit, 1024)
+  const kept: T[] = []
+  const trim = (): void => {
+    kept.sort(compare)
+    if (kept.length > limit) kept.length = limit
+  }
+  return {
+    add(value) {
+      kept.push(value)
+      if (kept.length >= limit + slack) trim()
+    },
+    values() {
+      trim()
+      return kept
+    },
+  }
+}
+
 function percentile(sorted: number[], p: number): number | undefined {
   if (sorted.length === 0) return undefined
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)]
 }
 
-/** The shape of the traffic: per route, per status class, per level. Routes with the most errors first, then the busiest. */
-export function computeStats(events: WideEvent[]): LogsStats {
-  const routes = new Map<string, { count: number, errors: number, durations: number[] }>()
-  const byStatus: Record<string, number> = {}
-  const byLevel: Record<string, number> = {}
-  let errors = 0
-  for (const event of events) {
-    const method = text(event, 'method')
-    const route = `${method ? `${method} ` : ''}${text(event, 'path') ?? text(event, 'operation') ?? event.service}`
-    const entry = routes.get(route) ?? { count: 0, errors: 0, durations: [] }
-    entry.count += 1
-    const failed = isError(event)
-    if (failed) {
-      entry.errors += 1
-      errors += 1
-    }
-    const duration = number(event, 'durationMs')
-    if (duration !== undefined) entry.durations.push(duration)
-    routes.set(route, entry)
-    const status = number(event, 'status')
-    const statusKey = status === undefined ? 'none' : `${Math.floor(status / 100)}xx`
-    byStatus[statusKey] = (byStatus[statusKey] ?? 0) + 1
-    byLevel[event.level] = (byLevel[event.level] ?? 0) + 1
+/** A count per key, listed in the order the keys first appear among the events. */
+function createTally(): { add: (key: string, placed: Placed) => void, counts: () => Record<string, number> } {
+  const keys = new Map<string, { count: number, at: number, seq: number }>()
+  return {
+    add(key, placed) {
+      const entry = keys.get(key)
+      if (!entry) keys.set(key, { count: 1, at: placed.at, seq: placed.seq })
+      else {
+        entry.count += 1
+        if (inOrder(placed, entry) < 0) Object.assign(entry, { at: placed.at, seq: placed.seq })
+      }
+    },
+    counts: () => Object.fromEntries([...keys].sort((a, b) => inOrder(a[1], b[1])).map(([key, entry]) => [key, entry.count])),
   }
-  const byRoute = [...routes.entries()]
-    .map(([route, entry]) => {
-      const sorted = [...entry.durations].sort((a, b) => a - b)
-      return { route, count: entry.count, errors: entry.errors, p50: percentile(sorted, 0.5), p95: percentile(sorted, 0.95) }
-    })
-    .sort((a, b) => b.errors - a.errors || b.count - a.count || a.route.localeCompare(b.route))
-  return { total: events.length, errors, byRoute, byStatus, byLevel }
+}
+
+/**
+ * The shape of the traffic: per route, per status class, per level. Routes
+ * with the most errors first, then the busiest. Of each event it keeps a
+ * duration, which the percentiles need, and nothing else.
+ */
+function createStats(): { add: (placed: Placed) => void, result: () => LogsStats } {
+  const routes = new Map<string, { count: number, errors: number, durations: number[] }>()
+  const byStatus = createTally()
+  const byLevel = createTally()
+  let total = 0
+  let errors = 0
+  return {
+    add(placed) {
+      const { event } = placed
+      total += 1
+      const method = text(event, 'method')
+      const route = `${method ? `${method} ` : ''}${text(event, 'path') ?? text(event, 'operation') ?? event.service}`
+      const entry = routes.get(route) ?? { count: 0, errors: 0, durations: [] }
+      entry.count += 1
+      if (isError(event)) {
+        entry.errors += 1
+        errors += 1
+      }
+      const duration = number(event, 'durationMs')
+      if (duration !== undefined) entry.durations.push(duration)
+      routes.set(route, entry)
+      const status = number(event, 'status')
+      byStatus.add(status === undefined ? 'none' : `${Math.floor(status / 100)}xx`, placed)
+      byLevel.add(event.level, placed)
+    },
+    result() {
+      const byRoute = [...routes.entries()]
+        .map(([route, entry]) => {
+          const sorted = entry.durations.sort((a, b) => a - b)
+          return { route, count: entry.count, errors: entry.errors, p50: percentile(sorted, 0.5), p95: percentile(sorted, 0.95) }
+        })
+        .sort((a, b) => b.errors - a.errors || b.count - a.count || a.route.localeCompare(b.route))
+      return { total, errors, byRoute, byStatus: byStatus.counts(), byLevel: byLevel.counts() }
+    },
+  }
+}
+
+/** What a one-shot run reports of the events it read. */
+export interface Selected<T extends WideEvent = WideEvent> {
+  /** How many events were offered. */
+  matched: number
+  /**
+   * The last `limit` of them, oldest first, so the newest is at the bottom like
+   * `tail`. The `slow` view is the exception: worst first. Empty for `stats`.
+   */
+  events: T[]
+  /** The `stats` view. */
+  stats?: LogsStats
+}
+
+/**
+ * Takes the events of a one-shot run one at a time and keeps what the view
+ * shows, so a log of any size is read in the memory `limit` events need. `stats`
+ * also keeps one duration per event.
+ *
+ * Events are in the order offered. With `byTime`, for several sources read one
+ * after the other, they are ordered by timestamp, and by the order offered
+ * within the same instant.
+ */
+export function createSelection<T extends WideEvent>(query: LogsQuery, byTime = false): { add: (event: T) => void, done: () => Selected<T> } {
+  const stats = query.view === 'stats' ? createStats() : undefined
+  const shown = keepFirst<Placed<T>>(query.limit, query.view === 'slow' ? slowestFirst : latestFirst)
+  let matched = 0
+  return {
+    add(event) {
+      const placed = { event, at: byTime ? timeOf(event) : 0, seq: matched++ }
+      if (stats) stats.add(placed)
+      else shown.add(placed)
+    },
+    done() {
+      const events = shown.values().map(placed => placed.event)
+      return { matched, events: query.view === 'slow' ? events : events.reverse(), stats: stats?.result() }
+    },
+  }
 }

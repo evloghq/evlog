@@ -89,7 +89,7 @@ export const {camelId}Rule = {
 Key rules:
 
 - **Reporting nothing means the rule passed.** `context.report()` only for gaps.
-- **Read `FileFacts` first** (`../facts.ts`). If the answer isn't there, consider extending the facts rather than writing AST listeners; facts are computed once per file for all rules.
+- **Read `FileFacts` first** (`../facts.ts`). If the answer isn't there, consider extending the facts rather than writing AST listeners; facts are computed once per entry point for all rules, from the code that entry point runs: its handler and the same-file declarations it names (`../reach.ts`). In a file with several routes, a rule never sees another route's calls, and a node listener only receives nodes inside that reach.
 - **`project` (`ProjectFacts`) is the gate for opportunities**: `project.features` (evlog features in use), `project.pairable` (installed packages evlog integrates with), `project.catalogs` (for naming things in suggestions).
 - **Messages are report copy.** Concrete, lowercase, pointing at the evidence (`"X is spelled out here and in 2 other files, and one catalog entry would cover them"`). No exclamation marks, no advice-column tone.
 - **Weights are a scoring decision**: look at `score.ts` and the existing spread (40 down to 15) and discuss the number in the PR rather than inventing precedent.
@@ -103,7 +103,7 @@ The id also goes in `EvlogMapRuleId` in `packages/evlog/src/shared/define.ts`, t
 
 ## Step 4: Tests
 
-`packages/cli/test/map/rules.test.ts` has a declarative `Case` harness: source code in, expected check results out, with knobs for `kind`, `framework`, `path` (sensitivity), `hasEvlog`, `features`, `pairable`, `dependencies`, `catalogs`, `barrels`. Use `runRuleSet([yourRule], run)` to exercise the rule in isolation.
+`packages/cli/test/map/rules.test.ts` has a declarative `Case` harness: source code in, expected check results out, with knobs for `kind`, `framework`, `path` (sensitivity), `scope` (the source range of one entry point in a file that declares several), `hasEvlog`, `features`, `pairable`, `dependencies`, `catalogs`, `barrels`. Use `runRuleSet([yourRule], run)` to exercise the rule in isolation.
 
 Cover at minimum:
 
@@ -149,15 +149,15 @@ A framework is one directory under `packages/cli/src/lib/frameworks/<id>/`:
 
 | File | Role |
 |------|------|
-| `index.ts` | The definition: `defineFramework({ id, label, docs, detect, accessor, requestLogger, evlogAutoImports?, requestLoggerMember?, shape, map, init? })`. Stays free of parser and template code; `map` and `init` are `() => import(...)` loaders so `evlog doctor` never pays for a scanner |
-| `map.ts` | Route discovery (`MapAdapter`: `extractRoutes`, optional `resolveRequestLogger`). Code-first frameworks build it from `shared/code-routes.ts` with a method table (`hono`, `express`, `fastify` are each a dozen lines) |
+| `index.ts` | The definition: `defineFramework({ id, label, docs, detect, accessor, requestLogger, evlogAutoImports?, requestLoggerMembers?, shape, map, init? })`. Stays free of parser and template code; `map` and `init` are `() => import(...)` loaders so `evlog doctor` never pays for a scanner |
+| `map.ts` | Route discovery (`MapAdapter`: `extractRoutes`, optional `resolveRequestLogger`). A file that can declare several entry points sets `scope` on each route, the source range it is written in, so each one is judged on its own code; leave it out when the file is the entry point. Code-first frameworks build it from `shared/code-routes.ts` with a method table (`hono`, `express`, `fastify` are each a dozen lines) |
 | `init.ts` | Optional: the `evlog init` planner (`InitPlanner`), default export. Code-first frameworks use `middlewareModuleTemplate` from `init/wiring.ts` |
 
 The `Framework` type, `--framework` parsing and help text, detection, labels, docs links, telemetry allowlists, error messages and the `AGENTS.md` accessor all derive from the registry in `frameworks/index.ts`; adding the definition to `DEFINITIONS` is the only registration step.
 
 | # | File | Action |
 |---|------|--------|
-| 1 | `packages/cli/src/lib/frameworks/{id}/index.ts` | Write the definition. `shape.loggerCall` and `shape.handler` are what `evlog map <file>` suggests; `requestLoggerMember` (e.g. `log` for `req.log`) is how `facts.ts` credits a handler that never names `useLogger` |
+| 1 | `packages/cli/src/lib/frameworks/{id}/index.ts` | Write the definition. `shape.loggerCall` and `shape.handler` are what `evlog map <file>` suggests; `requestLoggerMembers` (e.g. `['log']` for `req.log`) is how `facts.ts` credits a handler that never names `useLogger`. A member the framework also uses for its own logger (Fastify's `request.log`) only counts when the app registers evlog's middleware or the call is `set`, `audit` or `fork` |
 | 2 | `packages/cli/src/lib/frameworks/{id}/map.ts` | Route discovery. File-based routers: see `nuxt/map.ts`, `next/map.ts`, `tanstack-start/map.ts`. Code-registered routes: `codeRoutesAdapter({ framework, methods, on?, routeObject?, middleware })` |
 | 3 | `packages/cli/src/lib/frameworks/{id}/init.ts` | Optional. Leave `init` out of the definition when `evlog init` cannot wire the framework yet, and say so in the PR |
 | 4 | `packages/cli/src/lib/frameworks/index.ts` | Add the definition to `DEFINITIONS` |

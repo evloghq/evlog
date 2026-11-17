@@ -59,7 +59,7 @@ pnpm evlog map
 | `evlog map` | Static observability score for the current app — Lighthouse for wide events |
 | `evlog map <route-or-file>` | Explain one entry point: why it was scanned, each verdict, the shape it could take |
 | `evlog map --all` | Every entry point as a check matrix, grouped by directory |
-| `evlog map --framework <name>` | Override framework detection (`nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`) |
+| `evlog map --framework <name>` | Override framework detection (`nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`, `effect`) |
 | `evlog map --min-score <n>` | Exit 1 if the global score is below `n` |
 | `evlog map --baseline [ref]` | Exit 1 on a regression against the committed `evlog.map.json` (path, or `git:<ref>`) |
 | `evlog map --no-write` | Skip writing `evlog.map.json` to the project root |
@@ -79,7 +79,7 @@ pnpm evlog map
 | `evlog doctor` | Monorepo-aware diagnosis: Node, project/workspace, stack, evlog install, `.evlog/logs` |
 | `evlog doctor --cwd <dir>` | Run against another directory |
 | `evlog doctor --debug` | Same, plus a debug wide event (see Debug) |
-| `evlog upgrade` | Show what moving to the newest evlog major changes, and what needs a person; writes nothing |
+| `evlog upgrade` | Experimental. Show what moving to the newest evlog major changes, and what needs a person; writes nothing |
 | `evlog upgrade --write` | Apply the fixes and bump `evlog` in `package.json` (refuses on uncommitted changes without `--force`) |
 | `evlog telemetry status` | Show telemetry status and disclosure |
 | `evlog telemetry enable` / `disable` | Change telemetry preference (disable purges buffered data) |
@@ -128,7 +128,7 @@ With `--json`, the payload is the **only** thing written to stdout, and everythi
 
 With `--baseline`, the payload gains a `baseline` key holding the comparison (`regressions`, `fixed`, `added`, `removed`, `delta`).
 
-Breaking either shape requires a `schemaVersion` bump. In `routes[]`, `checks` holds the requirements that move the score and `suggestions` holds the opportunities that never do, in separate keys so a suggestion can't be mistaken for a failure.
+Breaking either shape requires a `schemaVersion` bump. In `routes[]`, `checks` holds the requirements that move the score and `suggestions` holds the opportunities that never do, in separate keys so a suggestion can't be mistaken for a failure. `event` lists the fields `log.set()` writes (`user.id`) and the `log.audit()` actions the handler's file spells out.
 
 ## Telemetry
 
@@ -150,7 +150,7 @@ Commands print a short branded header by default. Skip it with `--no-header`, `E
 
 ## Debug
 
-Emit one debug case file per command with `--debug` or `EVLOG_CLI_DEBUG=1` (dogfoods `evlog`). Human mode prints a compact summary on stderr (`steps`, `findings`, resolve probes). With `--json`, the raw wide event goes to stderr so stdout stays a clean JSON contract. Separate from product telemetry (`@evlog/telemetry`).
+Experimental. Emit one debug case file per command with `--debug` or `EVLOG_CLI_DEBUG=1` (dogfoods `evlog`). Human mode prints a compact summary on stderr (`steps`, `findings`, resolve probes). With `--json`, the raw wide event goes to stderr so stdout stays a clean JSON contract. Separate from product telemetry (`@evlog/telemetry`).
 
 ```bash
 evlog doctor --debug

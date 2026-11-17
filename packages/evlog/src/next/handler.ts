@@ -8,18 +8,15 @@ import type { NextEvlogOptions } from './types'
 import { evlogStorage } from './storage'
 
 interface WithEvlogState {
-  initialized: boolean
   options: NextEvlogOptions
 }
 
 const state: WithEvlogState = {
-  initialized: false,
   options: {},
 }
 
 export function configureHandler(options: NextEvlogOptions): void {
   state.options = options
-  state.initialized = true
 
   // Skip if instrumentation register() already configured the logger.
   // Re-initializing would wipe the global drain.

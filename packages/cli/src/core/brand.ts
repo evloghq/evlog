@@ -57,16 +57,18 @@ export const HEADER_GRADIENT_WIDTH = 28
 
 /**
  * Horizontal rule fading blue → dark, like the site's accent bar.
- * Truecolor per-cell; plain dashes when colors are off.
+ * Truecolor per-cell; plain blue on a terminal without truecolor, plain dashes
+ * when colors are off.
  *
  * @param glyph - Override {@link GRADIENT_GLYPH} to tune vertical air above the bar.
  */
 export function gradientRule(
-  ctx: Pick<CliContext, 'color'>,
+  ctx: Pick<CliContext, 'color' | 'truecolor'>,
   width: number,
   glyph: string = GRADIENT_GLYPH,
 ): string {
   if (!ctx.color) return '─'.repeat(width)
+  if (!ctx.truecolor) return createStyle(ctx).paint('blue', glyph.repeat(width))
   let out = ''
   for (let i = 0; i < width; i++) {
     const t = width === 1 ? 1 : i / (width - 1)

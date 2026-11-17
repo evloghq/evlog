@@ -35,7 +35,7 @@ jobs:
       contents: read
       id-token: write # remote cache OIDC
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # --affected needs history
           persist-credentials: false
@@ -72,7 +72,7 @@ jobs:
       contents: read
       id-token: write # remote cache OIDC
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -124,11 +124,24 @@ jobs:
       # dist-dependent tests (auto-import types, api-surface) would run
       # against a missing build. Prepare it explicitly; the remote cache
       # makes this a restore, not a rebuild, when src is untouched.
+      # test/bin.test.ts runs the evlog bin, which needs the workspace
+      # @evlog/cli built; without it the bin falls back to fetching the CLI.
       - name: Prepare evlog dist
-        run: pnpm exec turbo run dev:prepare --filter=evlog
+        run: pnpm exec turbo run dev:prepare --filter=evlog --filter=@evlog/cli
 
       - name: Test evlog with coverage
         run: pnpm --filter evlog run test:coverage
+
+      # test/build/size-budget.test.ts enforces the budget; this writes the table,
+      # including when that test failed.
+      - name: Bundle size report
+        if: ${{ !cancelled() && matrix.node-version == '24' }}
+        run: pnpm --filter evlog run size:budget >> "$GITHUB_STEP_SUMMARY"
+
+      # The fs drain needs no network and no secret, so its round-trip e2e runs
+      # on every pull request rather than only in e2e.yml.
+      - name: Test fs drain end to end
+        run: pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts
 
       # The sandbox smoke runs every non-interactive CLI command against a real
       # app per framework — the end-to-end seam (detect → init → doctor → map →
@@ -180,7 +193,7 @@ jobs:
       contents: read
       id-token: write # remote cache OIDC
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -211,7 +224,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # the base commit must be present for the worktree below
           persist-credentials: false
@@ -282,7 +295,7 @@ jobs:
       id-token: write # remote cache OIDC
       pull-requests: write # pkg-pr-new comments the preview install command
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false

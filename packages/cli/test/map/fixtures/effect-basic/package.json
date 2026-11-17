@@ -1,0 +1,10 @@
+{
+  "name": "effect-basic-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@effect/platform-node": "^4.0.0",
+    "effect": "^4.0.0",
+    "evlog": "workspace:*"
+  }
+}

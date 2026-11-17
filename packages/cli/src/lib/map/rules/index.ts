@@ -6,6 +6,7 @@ import type { Suppression } from '../directives'
 import { collectSuppressions, suppressionMessage } from '../directives'
 import { getRouteExemption, isSkipped } from '../exemptions'
 import type { ProjectFacts } from '../project-facts'
+import type { Reach } from '../reach'
 import type { CheckId, CheckResult, Framework, ScanContext } from '../types'
 import { lineSnippet } from '../utils'
 import { aiLoggingRule } from './ai-logging'
@@ -83,7 +84,7 @@ export const RULES: readonly MapRule[] = REGISTRY
  * baseline for nothing. Written beside the CLI version so `--baseline` can
  * tell a stale committed map apart from a merely older one.
  */
-export const RULE_SET_VERSION = 2
+export const RULE_SET_VERSION = 3
 
 /** Why a check is `n/a` when `evlog.config` turns it off. */
 export const RULE_OFF_MESSAGE = 'turned off in evlog.config'
@@ -142,6 +143,8 @@ export interface RuleRun {
   target: RuleTarget
   parsed: ParseResult | null
   facts: FileFacts | null
+  /** The code this entry point runs, when its file declares several. */
+  reach?: Reach
   project: ProjectFacts
   capabilities: FrameworkCapabilities
 }
@@ -251,6 +254,7 @@ export function runRuleSet(rules: readonly MapRule[], run: RuleRun): RuleResults
   const withNodeListeners = active.filter(entry => hasNodeListeners(entry.listeners))
   if (withNodeListeners.length > 0) {
     walkAst(parsed.program, (node) => {
+      if (run.reach && !run.reach.covers(node)) return
       for (const entry of withNodeListeners) {
         entry.listeners[node.type]?.(node)
       }
