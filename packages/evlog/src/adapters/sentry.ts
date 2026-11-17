@@ -4,7 +4,7 @@ import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import { chunkSerialized } from '../shared/chunk'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
-import { parseStackFrames } from '../shared/pretty-error'
+import { parseStackFrames } from '../shared/stack-frames'
 import { OTEL_SEVERITY_NUMBER } from '../shared/severity'
 import { EVLOG_VERSION } from '../shared/http'
 

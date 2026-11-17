@@ -25,6 +25,13 @@ describe('bundle-size budget', () => {
     expect(defined(scenarios.find(s => s.scenario === 'axiom'), 'axiom').modules).toContain('dist/adapters/axiom.mjs')
   })
 
+  it('loads the pretty-error formatter on demand, not at startup', () => {
+    for (const { scenario, modules, lazy } of scenarios) {
+      expect(modules.filter(m => /^dist\/pretty-error-[\w-]+\.mjs$/.test(m)), scenario).toEqual([])
+      expect(lazy, scenario).toBeGreaterThan(0)
+    }
+  })
+
   it('keeps every scenario within its gzip budget', () => {
     for (const { scenario, gzip } of scenarios) {
       expect(gzip, `${scenario} gzip bytes; see bench/baseline/size-budget.json`).toBeLessThanOrEqual(defined(sizeBudget.scenarios[scenario], scenario).gzip)

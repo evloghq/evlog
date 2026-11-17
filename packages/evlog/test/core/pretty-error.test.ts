@@ -3,16 +3,18 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createError } from '../../src/error'
-import { createRequestLogger, initLogger } from '../../src/logger'
+import { createRequestLogger, initLogger, loadPrettyErrorFormatter } from '../../src/logger'
 import {
   buildErrorEntries,
-  compactStackForStorage,
   normalizeErrorContext,
-  parseStackFrames,
   pickPrimaryFrame,
+} from '../../src/shared/pretty-error'
+import {
+  compactStackForStorage,
+  parseStackFrames,
   readCodeSnippet,
   registerPrettyErrorSnippetReader,
-} from '../../src/shared/pretty-error'
+} from '../../src/shared/stack-frames'
 import { readCodeSnippetFromDisk } from '../../src/shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../../src/shared/enrich-error-stack.node'
 import { prependNitroErrorHandler } from '../../src/nitro'
@@ -344,10 +346,11 @@ describe('enrichErrorStackForDev', () => {
 })
 
 describe('pretty error logger integration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'log').mockImplementation(() => {})
     initLogger({ pretty: true, dev: { prettyError: { snippet: false } } })
+    await loadPrettyErrorFormatter()
   })
 
   afterEach(() => {
@@ -361,5 +364,37 @@ describe('pretty error logger integration', () => {
 
     expect(console.log).toHaveBeenCalled()
     expect(console.error).not.toHaveBeenCalled()
+  })
+})
+
+describe('pretty error formatter loading', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.resetModules()
+  })
+
+  it('prints an error emitted before the formatter loads once it has, in emit order', async () => {
+    vi.resetModules()
+    const logger = await import('../../src/logger')
+    const lines: string[] = []
+    vi.spyOn(console, 'log').mockImplementation((line: string) => {
+      lines.push(line)
+    })
+    logger.initLogger({ pretty: true, env: { service: 'svc' }, dev: { prettyError: { snippet: false } } })
+
+    const failed = logger.createRequestLogger({ method: 'GET', path: '/first' })
+    failed.error(createError({ message: 'Payment failed', why: 'Card declined' }))
+    failed.emit({ status: 402 })
+    const ok = logger.createRequestLogger({ method: 'GET', path: '/second' })
+    ok.emit({ status: 200 })
+
+    expect(lines).toEqual([])
+    await logger.loadPrettyErrorFormatter()
+    await vi.waitFor(() => expect(lines).toHaveLength(2))
+
+    expect(lines[0]).toContain('/first')
+    expect(lines[0]).toContain('Payment failed')
+    expect(lines[0]).toContain('Why:')
+    expect(lines[1]).toContain('/second')
   })
 })
