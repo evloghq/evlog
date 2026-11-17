@@ -10,7 +10,7 @@ import type { RouterContext } from 'react-router'
 import type pkg from '../../package.json'
 import type { AuditableLogger, ForkableLogger, ServerEvent } from '../../src'
 import type { BaseEvlogOptions } from '../../src/shared/middleware'
-import type { NitroModuleOptions } from '../../src/nitro'
+import type { NitroModuleOptions, NitroRequestLogger } from '../../src/nitro'
 import { evlog as effectEvlog, EvlogLogger, routerLayer, useLogger as effectUseLogger } from '../../src/effect/index'
 import { evlog as elysiaEvlog, useLogger as elysiaUseLogger } from '../../src/elysia/index'
 import { evlog as expressEvlog, useLogger as expressUseLogger } from '../../src/express/index'
@@ -212,7 +212,7 @@ describe('evlog/effect (exception: the logger is an Effect service)', () => {
   })
 })
 
-describe('evlog/nitro, evlog/nitro/v2, evlog/nuxt (exception: built apps)', () => {
+describe('evlog/nitro, evlog/nitro/v2, evlog/nuxt', () => {
   it('take route options from the module and the callbacks as `evlog:*` hooks', () => {
     expectTypeOf<Exclude<BaseOptionKey, keyof NitroModuleOptions>>().toEqualTypeOf<NitroHookOptionKey>()
     expectTypeOf<Pick<NitroModuleOptions, Exclude<BaseOptionKey, NitroHookOptionKey>>>()
@@ -224,11 +224,13 @@ describe('evlog/nitro, evlog/nitro/v2, evlog/nuxt (exception: built apps)', () =
     expectTypeOf<Exclude<BaseOptionKey, keyof NuxtModuleOptions>>().toEqualTypeOf<NitroHookOptionKey>()
   })
 
-  it('read the logger off the event, with no `log.fork()`', () => {
-    expectTypeOf(nitroV3UseLogger).parameters.toEqualTypeOf<[event: HTTPEvent, service?: string]>()
-    expectTypeOf(nitroV3UseLogger).returns.toEqualTypeOf<AuditableLogger>()
-    expectTypeOf(nitroV2UseLogger).parameters.toEqualTypeOf<[event: ServerEvent, service?: string]>()
-    expectTypeOf(nitroV2UseLogger).returns.toEqualTypeOf<AuditableLogger>()
+  it('take the event optionally in `useLogger()`, which returns a logger with `log.fork()`', () => {
+    expectTypeOf(nitroV3UseLogger).parameters.toEqualTypeOf<[event?: HTTPEvent, service?: string]>()
+    expectTypeOf(nitroV3UseLogger).returns.toEqualTypeOf<NitroRequestLogger>()
+    expectTypeOf(nitroV2UseLogger).parameters.toEqualTypeOf<[event?: ServerEvent, service?: string]>()
+    expectTypeOf(nitroV2UseLogger).returns.toEqualTypeOf<NitroRequestLogger>()
     expectTypeOf(nuxtUseLogger).toEqualTypeOf(nitroV2UseLogger)
+    expectTypeOf<ReturnType<typeof nitroV3UseLogger>>().toExtend<ForkableLogger>()
+    expectTypeOf<Parameters<NitroRequestLogger['fork']>[1]>().parameters.toEqualTypeOf<[log: AuditableLogger]>()
   })
 })

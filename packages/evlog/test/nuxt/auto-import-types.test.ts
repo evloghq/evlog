@@ -48,7 +48,7 @@ describe('nuxt auto-import type declarations', () => {
     const useLoggerType = typeOfUseLogger([resolve(fixtureDir, 'evlog-server.d.ts')])
 
     expect(useLoggerType).not.toBe('any')
-    expect(useLoggerType).toContain('AuditableLogger')
+    expect(useLoggerType).toContain('NitroRequestLogger')
     expect(useLoggerType).toContain('ServerEvent')
   })
 

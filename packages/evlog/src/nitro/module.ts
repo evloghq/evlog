@@ -7,6 +7,7 @@ import { prepareRedactForBridge } from '../redact'
 import { registerEvlogConfigPlugin } from '../shared/configPlugin'
 
 export type { NitroModuleOptions }
+export type { NitroRequestLogger } from '../nitro'
 
 const _dir = dirname(fileURLToPath(import.meta.url))
 

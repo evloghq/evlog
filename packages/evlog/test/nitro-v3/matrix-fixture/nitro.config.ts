@@ -6,6 +6,7 @@ export default defineConfig({
   alias: {
     evlog: resolve(__dirname, '../../../src/index.ts'),
   },
+  experimental: { asyncContext: true },
   builder: 'rollup',
   watchOptions: { ignored: ['**/*'], ignoreInitial: true, usePolling: false },
   rollupConfig: { watch: { exclude: ['**/*'], chokidar: { ignoreInitial: true, usePolling: false } } },
