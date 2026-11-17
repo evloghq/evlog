@@ -20,7 +20,7 @@ Two places enforce this table, and a change to one needs the other:
 | `evlog/react-router` | `evlog(options)` | all | yes | yes | `context.get(loggerContext)` | yes |
 | `evlog/sveltekit` | `evlog(options)`, `createEvlogHooks(options)` | all | yes | yes | `event.locals.log`, typed by the app on `App.Locals` | yes |
 | `evlog/next` | `createEvlog(options).withEvlog` | all | yes | yes | none: `useLogger()` is the accessor | yes |
-| `evlog/workers` | `withEvlog(handler, options)` | all | no, sanctioned | **no** | the handler's fourth argument | yes |
+| `evlog/workers` | `withEvlog(handler, options)` | all | no, sanctioned | yes, `fn` receives the child | the handler's fourth argument | yes |
 | `evlog/effect` | `evlog(options)`, `routerLayer(options)` | all | an Effect, sanctioned | no, sanctioned: nested `withLogger` | the `EvlogLogger` service | yes |
 | `evlog/nitro` (v3) | `modules: [evlog(options)]` | `include`, `exclude`, `routes`, `redact`; the rest as below | **`useLogger(event)`** | **no** | `useLogger(event)` | yes (built app) |
 | `evlog/nitro/v2` | `modules: [evlog(options)]` | as Nitro v3 | **`useLogger(event)`** | **no** | `useLogger(event)`, `event.context.log` | yes (built app) |
@@ -42,6 +42,5 @@ A function cannot cross a Nitro build, so these are not module options:
 
 ## Known gaps
 
-- **Workers has no `log.fork()`.** The sanctioned exception covers `useLogger()` only. `fork` is built on the integration's `AsyncLocalStorage` (`attachForkToLogger` in `src/shared/fork.ts`), and Workers has none, so the fourth argument is an `AuditableLogger` without `fork` at runtime and in its type.
 - **Nitro v3, Nitro v2 and Nuxt have no zero-argument `useLogger()` and no `log.fork()`.** Both follow from the logger living on the event rather than in `AsyncLocalStorage`. The docs say so (`frameworks/04.nitro.md`, `learn/wide-events`).
 - **Effect answers a `createError({ status })` failure with `500`** unless the handler catches it and responds with `parseError()`. Documented as a known limit on the Effect page; it does not show in this table because the matrix only drives successful requests.

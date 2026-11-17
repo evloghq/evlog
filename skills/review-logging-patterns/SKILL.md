@@ -871,7 +871,7 @@ export default withEvlog(async (request, _env, _ctx, log) => {
 })
 ```
 
-`withEvlog` emits one wide event per request when the handler returns, with no manual `log.emit()`. Async drains are registered with `waitUntil` so they survive the response; streaming responses defer the emit until the body completes. `requestId` comes from `x-request-id` (fallback `cf-ray`); `method`, `path`, `cf-ray`, `traceparent`, and the safe subset of `request.cf` are captured automatically. It accepts the same options (`drain`, `enrich`, `keep`, `include`, `exclude`, `routes`) as every other integration. For manual control (scheduled handlers, queues), `createWorkersLogger(request)` + `log.emit()` remains available. No ALS-based `useLogger()` on Workers, so pass `log` explicitly.
+`withEvlog` emits one wide event per request when the handler returns, with no manual `log.emit()`. Async drains are registered with `waitUntil` so they survive the response; streaming responses defer the emit until the body completes. `requestId` comes from `x-request-id` (fallback `cf-ray`); `method`, `path`, `cf-ray`, `traceparent`, and the safe subset of `request.cf` are captured automatically. It accepts the same options (`drain`, `enrich`, `keep`, `include`, `exclude`, `routes`) as every other integration. For manual control (scheduled handlers, queues), `createWorkersLogger(request)` + `log.emit()` remains available. No ALS-based `useLogger()` on Workers, so pass `log` explicitly. `log.fork(label, async (child) => { ... })` hands the forked logger to `fn` and is registered with `waitUntil`.
 
 ### AWS Lambda
 

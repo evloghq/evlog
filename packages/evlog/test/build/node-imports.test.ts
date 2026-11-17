@@ -59,9 +59,9 @@ function assertNoNodeBuiltins(source: string, label: string): void {
 
 describe.skipIf(!distExists)('dist node built-in imports (#387)', () => {
   it('audit graph does not import Node built-ins', () => {
-    const auditChunk = listDistFiles().find(f => /^audit-[^/]+\.mjs$/.test(f))
-    expect(auditChunk, 'expected hashed audit chunk').toBeDefined()
-    assertNoNodeBuiltins(readDist(auditChunk!), auditChunk!)
+    for (const chunk of ['audit.mjs', ...collectRelativeImports('audit.mjs')]) {
+      assertNoNodeBuiltins(readDist(chunk), chunk)
+    }
   })
 
   it('audit-action entry stays isomorphic', () => {
