@@ -38,13 +38,15 @@ export interface RuleContext {
 export interface FrameworkCapabilities {
   requestLogger: 'ambient' | 'explicit'
   evlogAutoImports: readonly string[]
-  /** Member the integration parks the request logger under on the request object, e.g. `log` for `req.log`. */
-  requestLoggerMember?: string
+  /** Members the integration parks the request logger under on the request object, e.g. `log` for `req.log`. */
+  requestLoggerMembers?: readonly string[]
 }
 
 /**
  * Node-type listeners dispatched during the shared AST pass, plus `onEnd` for
- * verdicts that depend on the whole file ("nothing anywhere in this handler").
+ * verdicts that depend on the whole handler ("nothing anywhere in it"). In a
+ * file that declares several entry points, the pass covers the code this one
+ * runs and nothing else.
  *
  * Most rules only need `onEnd` because {@link FileFacts} already answers their
  * question; listeners are the escape hatch for anything the facts do not cover.

@@ -1,5 +1,7 @@
 # Local observability sandbox: the backends the self-hostable adapters target,
-# plus a Grafana already wired to Loki so you can *see* your wide events.
+# an OpenTelemetry Collector that writes every OTLP request it accepts to
+# .otel/logs.jsonl, plus a Grafana already wired to Loki so you can *see* your
+# wide events.
 #
 #   pnpm run sandbox:up      # start everything
 #   pnpm run sandbox:seed    # emit realistic wide events into both backends
@@ -10,7 +12,7 @@
 #   ClickHouse  same Grafana — the ClickHouse datasource is provisioned too
 #
 # The e2e suites reuse the same stack; they read LOKI_ENDPOINT /
-# CLICKHOUSE_ENDPOINT and skip themselves when unset.
+# CLICKHOUSE_ENDPOINT / OTLP_ENDPOINT and skip themselves when unset.
 services:
   loki:
     image: grafana/loki:3.3.2
@@ -44,6 +46,17 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    container_name: evlog-e2e-otel-collector
+    # The image's default user cannot write to a host bind mount; root writes a 0644 file the suites can read.
+    user: '0'
+    ports:
+      - '4318:4318'
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ./.otel:/out
 
   grafana:
     image: grafana/grafana:11.4.0

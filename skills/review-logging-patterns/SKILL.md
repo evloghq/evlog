@@ -90,6 +90,7 @@ What you get:
 - **FIX FIRST**: the three most valuable places to fix
 - **GOING FURTHER**: opportunities (catalogs, audit coverage, AI logging, auth identity) that never cost points
 - Per-file inspect: `npx evlog map <file> --no-write` shows the shape the handler could take
+- Each route is scored on its own handler and the same-file helpers it calls. In an Express, Hono or Fastify routes file, inspect one route with `npx evlog map "GET /users/:id" --no-write`
 - Re-run after fixes and watch the score move
 
 Work FIX FIRST in order, keep changes minimal (`useLogger()`, `log.set()`, `log.audit()`, `createError({ why, fix })`), then re-run with `--no-write`. Omit `--no-write` only when the user wants `evlog.map.json` written.

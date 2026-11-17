@@ -1,10 +1,12 @@
 import type { Node } from 'oxc-parser'
-import type { ParseResult } from './parse'
-import { walkAst } from './parse'
+import type { ParseResult, SourceRange } from './parse'
+import { nodeRange, walkAst } from './parse'
+import type { Reach } from './reach'
 import type { HandlerLocation } from './types'
 
 /**
- * Everything the rules are allowed to know about one file.
+ * Everything the rules are allowed to know about one entry point: its whole
+ * file, or the part of it the handler runs when the file declares several.
  *
  * All AST decoding lives here, in a single pass, so that rules never walk the
  * tree themselves. That is deliberate: hand-rolled node spelunking scattered
@@ -13,7 +15,7 @@ import type { HandlerLocation } from './types'
  * One place to get it right, one place to fix when it is wrong.
  */
 export interface FileFacts {
-  /** Local binding → import source, e.g. `useLogger` → `evlog`. */
+  /** Local binding → import source, e.g. `useLogger` → `evlog`, for the imports the entry point uses. */
   imports: Map<string, string>
   /** Names declared in this file — used to detect shadowing of auto-imports. */
   localDeclarations: Set<string>
@@ -42,7 +44,7 @@ export interface FileFacts {
    * only looks for `useLogger()` would flag evlog's own recommended code.
    */
   evlogWrappers: ReadonlySet<string>
-  /** evlog entrypoints imported here, e.g. `evlog`, `evlog/ai`. */
+  /** evlog entrypoints the file imports, e.g. `evlog`, `evlog/ai`. */
   evlogImports: ReadonlySet<string>
   /**
    * evlog names this file re-exports, or `*` for `export * from 'evlog'`.
@@ -57,7 +59,7 @@ export interface FileFacts {
    * followed to the file that actually wraps evlog.
    */
   reexports: readonly ReexportFact[]
-  /** Object keys and member names seen anywhere — cheap PII surface. */
+  /** Object keys and member names the entry point spells out — cheap PII surface. */
   names: ReadonlySet<string>
   /** `createError({ … })` calls with enough literal detail to compare. */
   inlineErrors: readonly InlineErrorFact[]
@@ -89,6 +91,8 @@ export interface CallFact {
    * and `set` is never credited to the logger.
    */
   factory?: string | null
+  /** The chain hangs on `c.get('log')`: Hono's accessor, called without being bound. */
+  onContextLogger?: boolean
   /** Member names from the root — `['audit', 'deny']` for `log.audit?.deny()`. */
   chain: readonly string[]
   line: number
@@ -173,14 +177,6 @@ const HANDLING_MEMBERS = ['error', 'warn', 'set', 'audit', 'captureException']
 
 /** Calls that put an error affordance around whatever they wrap. */
 const ERROR_GUARD_MEMBERS = ['catch', 'onError', 'catchError']
-
-/** Half-open `[start, end)` byte range of source that guards against a failure. */
-type GuardRange = readonly [number, number]
-
-function nodeRange(node: Node): GuardRange {
-  const { start, end } = node as unknown as { start: number, end: number }
-  return [start, end]
-}
 
 function isEvlogSource(source: string | undefined | null): boolean {
   return source === 'evlog' || (source?.startsWith('evlog/') ?? false)
@@ -304,7 +300,7 @@ function objectPaths(node: Node | undefined, prefix = ''): string[] {
   return paths
 }
 
-type CalleeShape = Pick<CallFact, 'name' | 'member' | 'receiver' | 'root' | 'chain' | 'factory'>
+type CalleeShape = Pick<CallFact, 'name' | 'member' | 'receiver' | 'root' | 'chain' | 'factory' | 'onContextLogger'>
 
 /** Strip the wrapper oxc puts around an optional chain (`a?.b()`). */
 /**
@@ -353,7 +349,7 @@ function hasContextLoggerPath(chain: readonly string[]): boolean {
 
 /**
  * Whether a member path is the logger the integration parks on the request
- * object: `req.log` for Express, `request.log` for Fastify. The request is
+ * object: `req.log` for Express, `request.evlog` for Fastify. The request is
  * whatever the framework handed the handler, so the root has to be a function
  * parameter: `fastify.log` on the instance built at module level is Fastify's
  * own logger, not evlog's, and must not count.
@@ -361,25 +357,43 @@ function hasContextLoggerPath(chain: readonly string[]): boolean {
 function isRequestLogger(
   root: string | null,
   path: readonly string[],
-  member: string | undefined,
+  members: readonly string[],
   parameters: ReadonlySet<string>,
 ): boolean {
-  return member !== undefined && root !== null && parameters.has(root) && path.length > 0 && path.at(-1) === member
+  const member = path.at(-1)
+  return member !== undefined && root !== null && parameters.has(root) && members.includes(member)
+}
+
+/**
+ * Calls only evlog's request logger answers. `request.log` is Fastify's own
+ * logger in an app without evlog's plugin, and `req.log` is pino-http's: both
+ * have `info` and `child`, neither has these.
+ */
+const REQUEST_LOGGER_ONLY = ['set', 'audit', 'fork']
+
+function isEvlogOnlyCall(chain: readonly string[]): boolean {
+  return chain.some(name => REQUEST_LOGGER_ONLY.includes(name))
 }
 
 /**
  * Whether a call is made on that logger: `req.log.set(…)`. The member has to
  * sit before the invoked one, so `console.log(…)` and `logger.log(…)`, where
  * `log` is the call itself, never count.
+ *
+ * @param registered - Whether the app registers evlog's middleware. Without a
+ * registration in the scanned sources the member may hold another logger, and
+ * only a call evlog alone answers counts.
  */
 function callsRequestLogger(
   call: Pick<CallFact, 'root' | 'chain'>,
-  member: string | undefined,
+  members: readonly string[],
   parameters: ReadonlySet<string>,
+  registered: boolean,
 ): boolean {
-  if (member === undefined || call.root === null || !parameters.has(call.root)) return false
-  const index = call.chain.indexOf(member)
-  return index !== -1 && index < call.chain.length - 1
+  if (call.root === null || !parameters.has(call.root)) return false
+  const index = call.chain.findIndex(name => members.includes(name))
+  if (index === -1 || index === call.chain.length - 1) return false
+  return registered || isEvlogOnlyCall(call.chain.slice(index + 1))
 }
 
 /**
@@ -434,7 +448,7 @@ function parameterNames(node: Node): string[] {
  * Only the shapes that appear in evlog's own setup are handled: a plain name and
  * a flat object pattern. Anything deeper would be guesswork.
  */
-function patternNames(id: Node): string[] {
+export function patternNames(id: Node): string[] {
   if (id.type === 'Identifier') return [id.name]
   if (id.type !== 'ObjectPattern') return []
 
@@ -501,6 +515,7 @@ function describeCallee(rawCallee: Node): CalleeShape | null {
     root,
     chain,
     factory,
+    onContextLogger: isContextGetLog(current),
   }
 }
 
@@ -570,6 +585,13 @@ function statementHandlesError(statement: Node): boolean {
  * ever touching the filesystem.
  * @param options.evlogPackages - installed packages that forward evlog, keyed by
  * the exact specifier they are imported by (`@acme/logger`, `@acme/logger/next`).
+ * @param options.requestLoggerMembers - members of the request object the
+ * framework's integration parks evlog's logger under.
+ * @param options.middlewareRegistered - whether the app registers that
+ * integration, which is what makes those members evlog's.
+ * @param options.reach - the code one entry point runs. Calls, throws, catches,
+ * names and the imports in use are then read from that code alone; what the
+ * file declares and re-exports stays the file's.
  */
 export function buildFileFacts(
   parsed: ParseResult,
@@ -577,7 +599,9 @@ export function buildFileFacts(
     evlogAutoImports?: readonly string[]
     evlogBarrels?: ReadonlyMap<string, ReadonlySet<string>>
     evlogPackages?: ReadonlyMap<string, ReadonlySet<string>>
-    requestLoggerMember?: string
+    requestLoggerMembers?: readonly string[]
+    middlewareRegistered?: boolean
+    reach?: Reach
   } = {},
 ): FileFacts {
   const { lines } = parsed
@@ -595,16 +619,24 @@ export function buildFileFacts(
   const names = new Set<string>()
   /** Resolved after the pass: needs imports and declarations to be complete. */
   const loggerCandidates: Array<{ binding: string | null, factory: string, line: number }> = []
-  /** Loggers read off the request context — no import to resolve them against. */
-  const contextLoggers: Array<{ binding: string, line: number }> = []
-  /** Every function parameter in the file: what a request logger may hang on. */
+  /**
+   * Loggers read off the request — no import to resolve them against. One read
+   * off a member another logger may hold is `unconfirmed` until a call on it
+   * settles whose it is.
+   */
+  const contextLoggers: Array<{ binding: string, line: number, unconfirmed: boolean }> = []
+  /** Every function parameter in reach: what a request logger may hang on. */
   const parameters = new Set<string>()
+  const requestLoggerMembers = options.requestLoggerMembers ?? []
+  const middlewareRegistered = options.middlewareRegistered ?? false
+  const { reach } = options
   /** Exported bindings whose value comes from a call — resolved after the pass. */
   const exportedFromFactory: Array<{ names: readonly string[], factory: string }> = []
   /** Source spans in which a failure is caught, handled or surfaced. */
-  const guards: GuardRange[] = []
+  const guards: SourceRange[] = []
 
   walkAst(parsed.program, (node) => {
+    const reached = !reach || reach.covers(node)
     switch (node.type) {
       case 'ImportDeclaration': {
         const declaration = node as {
@@ -679,7 +711,7 @@ export function buildFileFacts(
       case 'ClassDeclaration': {
         const { id } = (node as { id?: { name: string } })
         if (id?.name) localDeclarations.add(id.name)
-        if (node.type === 'FunctionDeclaration') {
+        if (reached && node.type === 'FunctionDeclaration') {
           for (const name of parameterNames(node)) parameters.add(name)
         }
         break
@@ -687,7 +719,7 @@ export function buildFileFacts(
 
       case 'FunctionExpression':
       case 'ArrowFunctionExpression': {
-        for (const name of parameterNames(node)) parameters.add(name)
+        if (reached) for (const name of parameterNames(node)) parameters.add(name)
         break
       }
 
@@ -699,7 +731,7 @@ export function buildFileFacts(
         for (const name of patternNames(declarator.id)) {
           localDeclarations.add(name)
         }
-        if (!declarator.init) break
+        if (!reached || !declarator.init) break
 
         let init = unwrapChain(declarator.init)
         /* `yield*` is how an Effect generator reads a service or runs an effect. */
@@ -720,13 +752,14 @@ export function buildFileFacts(
         if (init.type === 'MemberExpression') {
           const path = memberPath(init)
           const line = lines.lineAt((init as unknown as { start: number }).start)
-          if (hasContextLoggerPath(path) || isRequestLogger(memberRoot(init), path, options.requestLoggerMember, parameters)) {
+          const onContext = hasContextLoggerPath(path)
+          if (onContext || isRequestLogger(memberRoot(init), path, requestLoggerMembers, parameters)) {
             for (const name of patternNames(declarator.id)) {
-              contextLoggers.push({ binding: name, line })
+              contextLoggers.push({ binding: name, line, unconfirmed: !onContext && !middlewareRegistered })
             }
           } else if (path.at(-1) === CONTEXT_LOGGER_PATH[0]) {
             const binding = destructuredAs(declarator.id, CONTEXT_LOGGER_PATH[1])
-            if (binding) contextLoggers.push({ binding, line })
+            if (binding) contextLoggers.push({ binding, line, unconfirmed: false })
           }
         }
 
@@ -743,7 +776,7 @@ export function buildFileFacts(
           if (isContextGetLog(init)) {
             const line = lines.lineAt((init as unknown as { start: number }).start)
             for (const name of patternNames(declarator.id)) {
-              contextLoggers.push({ binding: name, line })
+              contextLoggers.push({ binding: name, line, unconfirmed: false })
             }
           }
         }
@@ -760,6 +793,7 @@ export function buildFileFacts(
       }
 
       case 'CallExpression': {
+        if (!reached) break
         const described = describeCallee((node as { callee: Node }).callee)
         if (!described) break
         const [firstArgument] = (node as { arguments: Node[] }).arguments
@@ -783,7 +817,7 @@ export function buildFileFacts(
 
       case 'ThrowStatement': {
         const { argument } = (node as { argument: Node | null })
-        if (!argument) break
+        if (!reached || !argument) break
         const line = lines.lineAt((node as unknown as { start: number }).start)
 
         if (argument.type === 'NewExpression') {
@@ -805,6 +839,7 @@ export function buildFileFacts(
       }
 
       case 'CatchClause': {
+        if (!reached) break
         const statements = (node as { body: { body: Node[] } }).body.body
         catchFacts.push({
           line: lines.lineAt((node as unknown as { start: number }).start),
@@ -816,11 +851,12 @@ export function buildFileFacts(
 
       case 'MemberExpression': {
         const { property } = (node as { property: Node })
-        if (property.type === 'Identifier') names.add(property.name)
+        if (reached && property.type === 'Identifier') names.add(property.name)
         break
       }
 
       case 'Property': {
+        if (!reached) break
         const { key } = node as { key: Node }
         if (key.type === 'Identifier') names.add(key.name)
         if (key.type === 'Literal') names.add(String((key as { value: unknown }).value))
@@ -867,6 +903,7 @@ export function buildFileFacts(
      `context.log` is harmless, while missing evlog's own documented shape tells
      a correctly instrumented handler that it is a dark event. */
   for (const contextLogger of contextLoggers) {
+    if (contextLogger.unconfirmed && !calls.some(call => call.root === contextLogger.binding && isEvlogOnlyCall(call.chain))) continue
     loggerInit ??= { line: contextLogger.line, column: 0 }
     loggerBindings.add(contextLogger.binding)
   }
@@ -882,7 +919,7 @@ export function buildFileFacts(
   }
   /* `event.context.log.set({ … })` — used straight off the request, never bound. */
   if (!loggerInit) {
-    const inline = calls.find(call => hasContextLoggerPath(call.chain) || callsRequestLogger(call, options.requestLoggerMember, parameters))
+    const inline = calls.find(call => hasContextLoggerPath(call.chain) || call.onContextLogger || callsRequestLogger(call, requestLoggerMembers, parameters, middlewareRegistered))
     if (inline) loggerInit = { line: inline.line, column: 0 }
   }
 
@@ -927,7 +964,9 @@ export function buildFileFacts(
   )
 
   return {
-    imports,
+    /* An import nothing in reach names is another handler's: `stripe` at the
+       top of a file does not make its health check a payment. */
+    imports: reach ? new Map([...imports].filter(([name]) => reach.references.has(name))) : imports,
     localDeclarations,
     calls,
     throws: throwFacts,
@@ -945,13 +984,14 @@ export function buildFileFacts(
     catalogsDeclared,
     /* Matches anywhere in the chain so `log.audit()` and `log.audit?.deny()`
        both count as audit calls, and reads the logger straight off the request
-       context for handlers that never bind it — `req.context.log.set({ … })`. */
+       context for handlers that never bind it — `req.context.log.set({ … })`,
+       `c.get('log').set({ … })`. */
     loggerCalls: member => calls.filter((call) => {
       if (!call.chain.includes(member)) return false
       if (call.root !== null && loggerBindings.has(call.root)) return true
       /* `useLogger(event).set({ … })`: the chain hangs on the factory call itself. */
       if (call.factory && LOGGER_FACTORIES.includes(call.factory) && resolvesToEvlog(call.factory)) return true
-      return hasContextLoggerPath(call.chain) || callsRequestLogger(call, options.requestLoggerMember, parameters)
+      return hasContextLoggerPath(call.chain) || call.onContextLogger || callsRequestLogger(call, requestLoggerMembers, parameters, middlewareRegistered)
     }),
     callsTo: name => calls.filter(call => call.member === name),
   }

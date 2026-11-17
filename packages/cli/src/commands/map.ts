@@ -302,7 +302,7 @@ export default defineEvlogCommand('map', {
   meta: { name: 'map' },
   bare: ['baseline'],
   args: {
-    entry: { type: 'positional', required: false, description: 'Inspect one entry point by route or file path' },
+    entry: { type: 'positional', required: false, description: 'Inspect one entry point by route, "METHOD /route" or file path' },
     framework: { type: 'string', description: `Override framework detection (${FRAMEWORK_IDS.join(', ')})` },
     all: { type: 'boolean', description: 'Every entry point, as a check matrix' },
     minScore: { type: 'string', description: 'Exit 1 if the global score is below this threshold' },

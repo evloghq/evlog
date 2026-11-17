@@ -1,0 +1,29 @@
+# Receives OTLP/HTTP (JSON and protobuf, plain or gzip) and writes every
+# request it accepts to .otel/logs.jsonl, one ExportLogsServiceRequest per
+# line. otlp.e2e.ts and hyperdx.e2e.ts read that file back.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        include_metadata: true
+
+processors:
+  # Copies the request's Authorization header onto each record, so a suite can
+  # check the header an adapter sent. Local sandbox only: the keys are dummies.
+  attributes/request-auth:
+    actions:
+      - key: e2e.request.authorization
+        from_context: metadata.authorization
+        action: insert
+
+exporters:
+  file:
+    path: /out/logs.jsonl
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [attributes/request-auth]
+      exporters: [file]

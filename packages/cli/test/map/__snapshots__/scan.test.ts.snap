@@ -189,7 +189,7 @@ exports[`effect > effect-basic map snapshot 1`] = `
       "suggestions": {},
     },
   ],
-  "ruleSetVersion": 2,
+  "ruleSetVersion": 3,
   "score": 78,
   "version": 1,
 }
@@ -295,7 +295,7 @@ exports[`full scan snapshots > hono-basic map snapshot 1`] = `
       "suggestions": {},
     },
   ],
-  "ruleSetVersion": 2,
+  "ruleSetVersion": 3,
   "score": 82,
   "version": 1,
 }
@@ -676,7 +676,7 @@ exports[`full scan snapshots > next-app-router map snapshot 1`] = `
       "suggestions": {},
     },
   ],
-  "ruleSetVersion": 2,
+  "ruleSetVersion": 3,
   "score": 52,
   "version": 1,
 }
@@ -1239,7 +1239,7 @@ exports[`full scan snapshots > nuxt-basic map snapshot 1`] = `
       "suggestions": {},
     },
   ],
-  "ruleSetVersion": 2,
+  "ruleSetVersion": 3,
   "score": 56,
   "version": 1,
 }
@@ -1418,7 +1418,7 @@ exports[`full scan snapshots > tanstack-basic map snapshot 1`] = `
       "suggestions": {},
     },
   ],
-  "ruleSetVersion": 2,
+  "ruleSetVersion": 3,
   "score": 69,
   "version": 1,
 }
