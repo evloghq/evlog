@@ -26,7 +26,7 @@ import { evlog as orpcEvlog, useLogger as orpcUseLogger, withEvlog as orpcWithEv
 import { evlog as reactRouterEvlog, loggerContext, useLogger as reactRouterUseLogger } from '../../src/react-router/index'
 import { createEvlogHooks, evlog as sveltekitEvlog, useLogger as sveltekitUseLogger } from '../../src/sveltekit/index'
 import type * as workers from '../../src/workers/index'
-import { withEvlog as workersWithEvlog } from '../../src/workers/index'
+import { withEvlog as workersWithEvlog, type WorkersRequestLogger } from '../../src/workers/index'
 
 /*
  * The integration contract (AGENTS.md, create-framework-integration skill):
@@ -194,7 +194,12 @@ describe('evlog/workers (exception: no AsyncLocalStorage)', () => {
   it('takes the full options and passes the logger as the handler\'s fourth argument', () => {
     expectTypeOf<BaseSlice<OptionsOf<typeof workersWithEvlog, 1>>>().toEqualTypeOf<BaseEvlogOptions>()
     expectTypeOf<typeof workers>().not.toHaveProperty('useLogger')
-    expectTypeOf<Parameters<OptionsOf<typeof workersWithEvlog>>[3]>().toEqualTypeOf<AuditableLogger>()
+    expectTypeOf<Parameters<OptionsOf<typeof workersWithEvlog>>[3]>().toEqualTypeOf<WorkersRequestLogger>()
+  })
+
+  it('has `log.fork()`, handing the child to `fn` and still accepting a zero-argument `fn`', () => {
+    expectTypeOf<WorkersRequestLogger>().toExtend<ForkableLogger>()
+    expectTypeOf<Parameters<WorkersRequestLogger['fork']>[1]>().parameters.toEqualTypeOf<[log: AuditableLogger]>()
   })
 })
 
