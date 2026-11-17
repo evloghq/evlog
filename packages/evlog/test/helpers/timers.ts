@@ -63,10 +63,11 @@ const LINEAR_TIME_BUDGET_MS = 2_000
  * CPU time the calling thread has used, in ms. Wall time also counts the time
  * the scheduler hands the core to other processes, and process CPU time also
  * counts V8's GC and compiler threads; either can land on the long run alone
- * and skew the ratio.
+ * and skew the ratio. Node before 22.19 has no `threadCpuUsage()` and falls
+ * back to process CPU time.
  */
 function cpuMs(): number {
-  const { user, system } = process.threadCpuUsage()
+  const { user, system } = process.threadCpuUsage?.() ?? process.cpuUsage()
   return (user + system) / 1_000
 }
 

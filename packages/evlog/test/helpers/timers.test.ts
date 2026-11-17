@@ -77,6 +77,23 @@ describe('expectLinearTime', () => {
     }).toThrow(/quadratic/)
   })
 
+  it('times on process CPU time where Node has no threadCpuUsage', () => {
+    const { threadCpuUsage } = process
+    // @ts-expect-error removed to run as Node before 22.19
+    delete process.threadCpuUsage
+    try {
+      let now = 0
+      vi.spyOn(process, 'cpuUsage').mockImplementation(() => ({ user: now * 1_000, system: 0 }))
+      expect(() => {
+        expectLinearTime((input) => {
+          now += (input.length * input.length) / 50_000
+        }, n => 'x'.repeat(1_024 * n), 'quadratic')
+      }).toThrow(/quadratic/)
+    } finally {
+      process.threadCpuUsage = threadCpuUsage
+    }
+  })
+
   it('rejects quadratic work whose short run is below one millisecond', () => {
     let now = 0
     mockCpuClock(() => now)
