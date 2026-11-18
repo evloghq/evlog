@@ -9,7 +9,7 @@ import type { LogsQuery, LogsStats, Selected } from './query'
 const STANDARD = new Set([
   'timestamp', 'level', 'service', 'environment', 'version', 'commitHash', 'region',
   'duration', 'durationMs', 'method', 'path', 'status', 'requestId', 'traceId', 'spanId',
-  '_parentRequestId', 'operation', 'requestLogs', 'userAgent', 'source', 'error', 'audit',
+  '_parentRequestId', 'operation', 'requestLogs', 'userAgent', 'source', 'error', 'audit', 'idempotencyKey',
 ])
 
 function str(value: unknown): string | undefined {

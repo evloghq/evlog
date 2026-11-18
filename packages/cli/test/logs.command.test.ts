@@ -240,6 +240,32 @@ describe('runLogs', () => {
     expect((await runLogs(ctx, { where: ['!error', 'durationMs>=700'] }, { now: NOW })).events.map(e => e.path)).toEqual(['/api/reports', '/api/items'])
   })
 
+  it('--session keeps one conversation, and a redelivered event shows once', async () => {
+    const cwd = await makeSink()
+    const turn = (session: string, turnId: string, at: string): WideEvent => event({
+      timestamp: at, path: undefined, method: undefined, operation: 'turn', requestId: `${session}:${turnId}`,
+      idempotencyKey: `${session}:${turnId}`, gen_ai: { conversation: { id: session } },
+    })
+    const turns = [
+      turn('wrun_A', 'turn_0', '2026-10-01T11:50:00.000Z'),
+      turn('wrun_B', 'turn_0', '2026-10-01T11:51:00.000Z'),
+      turn('wrun_A', 'turn_1', '2026-10-01T11:52:00.000Z'),
+      /* The step that emitted turn_1 was retried, so the drain wrote it again. */
+      turn('wrun_A', 'turn_1', '2026-10-01T11:52:00.000Z'),
+      /* Without an idempotencyKey, two identical events stay two. */
+      event({ timestamp: '2026-10-01T11:53:00.000Z', requestId: 'gggggggg-0000-4000-8000-000000000007' }),
+      event({ timestamp: '2026-10-01T11:53:00.000Z', requestId: 'gggggggg-0000-4000-8000-000000000007' }),
+    ]
+    await appendFile(join(cwd, '.evlog', 'logs', '2026-10-01.jsonl'), `${turns.map(e => JSON.stringify(e)).join('\n')}\n`)
+    const ctx = fakeContext(cwd)
+
+    const session = await runLogs(ctx, { session: 'wrun_A' }, { now: NOW })
+    expect(session.events.map(e => e.requestId)).toEqual(['wrun_A:turn_0', 'wrun_A:turn_1'])
+    const all = await runLogs(ctx, {}, { now: NOW })
+    expect(all.matched).toBe(EVENTS.length + 5)
+    expect(all.events.filter(e => e.requestId === 'gggggggg-0000-4000-8000-000000000007')).toHaveLength(2)
+  })
+
   it('stats: per route with errors first, then by status class and level', async () => {
     const cwd = await makeSink()
     const result = await runLogs(fakeContext(cwd), { what: 'stats' }, { now: NOW })
