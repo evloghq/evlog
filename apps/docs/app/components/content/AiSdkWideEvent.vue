@@ -11,12 +11,12 @@ interface TimelineStep {
 
 const steps: TimelineStep[] = [
   { id: 'call', label: 'streamText()', hint: 'model wrapped, request sent', icon: 'i-lucide-play', color: 'text-violet-400' },
-  { id: 'first', label: 'first chunk', hint: 'msToFirstChunk: 234', icon: 'i-lucide-radio', color: 'text-sky-400' },
+  { id: 'first', label: 'first chunk', hint: 'time_to_first_chunk: 0.234', icon: 'i-lucide-radio', color: 'text-sky-400' },
   { id: 'stream-1', label: 'streaming…', hint: 'output tokens flowing', icon: 'i-lucide-activity', color: 'text-emerald-400' },
   { id: 'tool-call', label: 'tool: getWeather', hint: 'paris', icon: 'i-lucide-wrench', color: 'text-amber-400' },
   { id: 'tool-result', label: 'tool result', hint: '22°C, sunny', icon: 'i-lucide-check', color: 'text-emerald-400' },
   { id: 'stream-2', label: 'streaming…', hint: 'final answer being generated', icon: 'i-lucide-activity', color: 'text-emerald-400' },
-  { id: 'finish', label: 'stream finish', hint: 'finishReason: stop · msToFinish: 4500', icon: 'i-lucide-flag', color: 'text-primary' },
+  { id: 'finish', label: 'stream finish', hint: 'finish_reasons: [stop] · duration_ms: 4500', icon: 'i-lucide-flag', color: 'text-primary' },
 ]
 
 const FINAL_INPUT = 3312
@@ -237,7 +237,7 @@ const estimatedCost = computed(() => {
         <div class="border-t border-default/30 lg:border-t-0 lg:border-l">
           <div class="flex items-center gap-2 border-b border-default/30 px-4 py-2.5">
             <UIcon name="i-lucide-package" class="size-3 text-primary" />
-            <span class="font-mono text-[10px] tracking-widest text-dimmed uppercase">wide event · ai field</span>
+            <span class="font-mono text-[10px] tracking-widest text-dimmed uppercase">wide event · gen_ai field</span>
             <span
               v-if="finished"
               class="ml-auto font-mono text-[9px] tracking-widest text-primary"
@@ -252,19 +252,19 @@ const estimatedCost = computed(() => {
             </div>
             <div class="pl-4 space-y-1 text-muted">
               <div class="flex items-baseline gap-2">
-                <span class="text-sky-400">model</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">request.model</span><span class="text-dimmed">:</span>
                 <span class="text-emerald-400">"claude-sonnet-4.6"</span>
               </div>
               <div class="flex items-baseline gap-2">
-                <span class="text-sky-400">provider</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">provider.name</span><span class="text-dimmed">:</span>
                 <span class="text-emerald-400">"anthropic"</span>
               </div>
               <div class="flex items-baseline gap-2">
-                <span class="text-sky-400">inputTokens</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">usage.input_tokens</span><span class="text-dimmed">:</span>
                 <span class="text-pink-400 tabular-nums">{{ inputTokens.toLocaleString('en-US') }}</span>
               </div>
               <div class="flex items-baseline gap-2">
-                <span class="text-sky-400">outputTokens</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">usage.output_tokens</span><span class="text-dimmed">:</span>
                 <span class="text-pink-400 tabular-nums">{{ outputTokens.toLocaleString('en-US') }}</span>
                 <span
                   v-if="phase >= 2 && !finished"
@@ -273,35 +273,35 @@ const estimatedCost = computed(() => {
                 />
               </div>
               <div class="flex items-baseline gap-2">
-                <span class="text-sky-400">totalTokens</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">usage.total_tokens</span><span class="text-dimmed">:</span>
                 <span class="text-pink-400 tabular-nums">{{ totalTokens.toLocaleString('en-US') }}</span>
               </div>
               <div class="flex items-baseline gap-2 transition-opacity duration-500" :class="phase >= 1 ? 'opacity-100' : 'opacity-0'">
-                <span class="text-sky-400">reasoningTokens</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">usage.reasoning.output_tokens</span><span class="text-dimmed">:</span>
                 <span class="text-pink-400 tabular-nums">{{ FINAL_REASONING }}</span>
               </div>
               <div class="flex items-baseline gap-2 transition-opacity duration-500" :class="toolName ? 'opacity-100' : 'opacity-0'">
-                <span class="text-sky-400">tools</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">tool_calls</span><span class="text-dimmed">:</span>
                 <span class="text-emerald-400">[{{ toolName ? `"${toolName}"` : '' }}]</span>
               </div>
               <div class="flex items-baseline gap-2 transition-opacity duration-500" :class="phase >= 1 ? 'opacity-100' : 'opacity-0'">
-                <span class="text-sky-400">msToFirstChunk</span><span class="text-dimmed">:</span>
-                <span class="text-pink-400">234</span>
+                <span class="text-sky-400">response.time_to_first_chunk</span><span class="text-dimmed">:</span>
+                <span class="text-pink-400">0.234</span>
               </div>
               <div class="flex items-baseline gap-2 transition-opacity duration-500" :class="finished ? 'opacity-100' : 'opacity-0'">
-                <span class="text-sky-400">msToFinish</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">response.duration_ms</span><span class="text-dimmed">:</span>
                 <span class="text-pink-400">{{ FINAL_DURATION }}</span>
               </div>
               <div class="flex items-baseline gap-2 transition-opacity duration-500" :class="finished ? 'opacity-100' : 'opacity-0'">
-                <span class="text-sky-400">tokensPerSecond</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">response.tokens_per_second</span><span class="text-dimmed">:</span>
                 <span class="text-pink-400 tabular-nums">{{ tokensPerSecond }}</span>
               </div>
               <div class="flex items-baseline gap-2 transition-opacity duration-500" :class="finished ? 'opacity-100' : 'opacity-0'">
-                <span class="text-sky-400">finishReason</span><span class="text-dimmed">:</span>
-                <span class="text-emerald-400">"stop"</span>
+                <span class="text-sky-400">response.finish_reasons</span><span class="text-dimmed">:</span>
+                <span class="text-emerald-400">["stop"]</span>
               </div>
               <div class="flex items-baseline gap-2 transition-opacity duration-500" :class="finished ? 'opacity-100' : 'opacity-0'">
-                <span class="text-sky-400">estimatedCost</span><span class="text-dimmed">:</span>
+                <span class="text-sky-400">usage.estimated_cost</span><span class="text-dimmed">:</span>
                 <span class="text-amber-400 tabular-nums">${{ estimatedCost }}</span>
               </div>
             </div>
