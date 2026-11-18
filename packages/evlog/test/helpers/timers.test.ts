@@ -55,6 +55,15 @@ describe('expectLinearTime', () => {
     }, n => 'x'.repeat(1_024 * n))
   })
 
+  it('accepts linear work that costs a few times more per character above a size', () => {
+    let cpu = 0
+    mockCpuClock(() => cpu)
+    expectLinearTime((input) => {
+      // Node 22 with a large heap limit redacts strings past about 16k characters up to ~3.5x slower per character.
+      cpu += (input.length / 1_000) * (input.length > 1_024 ? 3.5 : 1)
+    }, n => 'x'.repeat(1_024 * n))
+  })
+
   it('ignores CPU time other threads use while the long input runs', () => {
     let thread = 0
     let processCpu = 0

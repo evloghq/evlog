@@ -45,8 +45,12 @@ export function fastestRunMs(fn: () => unknown, runs = 3): number {
 
 /** The long input is built at this scale, the short one at 1. Linear work is ~this times slower; quadratic is ~this squared. */
 const SIZE_RATIO = 8
-/** Max allowed (long ms / short ms) at {@link SIZE_RATIO}. Linear at 8x size is ~8; quadratic is ~64. */
-const MAX_TIME_RATIO = 24
+/**
+ * Max allowed (long ms / short ms) at {@link SIZE_RATIO}. Linear at 8x size is ~8; quadratic is ~64.
+ * Node 22 with a large heap limit makes strings past about 16k characters up to ~3.5x slower per
+ * character, so linear work there can reach ~28.
+ */
+const MAX_TIME_RATIO = 32
 /**
  * Each timed sample repeats the call until at least this much time has elapsed,
  * then divides by the number of calls. A single sub-millisecond call is mostly
@@ -99,7 +103,7 @@ function fastestPerCallMs(fn: () => unknown, runs = 3): number {
  * input at scale `n`; both sizes must have the same shape, which a prefix of
  * the long input does not guarantee. Times `build(1)` and `build(8)` in the
  * calling thread's CPU time, each as the fastest per-call average. The longer run may be at most
- * 24x the shorter; a 2 s cap on the long run catches a hang that is already
+ * 32x the shorter; a 2 s cap on the long run catches a hang that is already
  * slow at scale 1.
  *
  * @example
