@@ -8,7 +8,7 @@ import type {
 } from '@ai-sdk/provider'
 import type { LanguageModel } from 'ai'
 import type { RequestLogger } from '../../src/types'
-import { createAILogger, createAIMiddleware, createEvlogIntegration, type AILogger, type EvlogTelemetry } from '../../src/ai'
+import { createAILogger, createAIMiddleware, createEvlogIntegration, type AILogger, type AIMetadata, type EvlogTelemetry } from '../../src/ai'
 import { createLogger, mergeWideEventFields } from '../../src/logger'
 import { defined } from '../helpers/defined'
 import { withFakeTimers } from '../helpers/timers'
@@ -134,8 +134,8 @@ async function consumeStream(stream: ReadableStream<LanguageModelV4StreamPart>):
   return result
 }
 
-function getLastAiData(log: MockLogger): Record<string, unknown> {
-  return defined(log.setCalls.at(-1)?.ai, 'last ai payload') as Record<string, unknown>
+function getLastAiData(log: MockLogger): AIMetadata {
+  return defined(log.setCalls.at(-1)?.gen_ai, 'last gen_ai payload') as AIMetadata
 }
 
 function callIntegrationOnStart(integration: EvlogTelemetry, event?: Record<string, unknown>) {
@@ -271,15 +271,15 @@ describe('createAILogger', () => {
 
       expect(log.set).toHaveBeenCalled()
       const lastSetCall = log.setCalls[log.setCalls.length - 1]
-      const aiData = lastSetCall.ai as Record<string, unknown>
+      const aiData = lastSetCall.gen_ai as AIMetadata
 
       expect(aiData.calls).toBe(1)
-      expect(aiData.model).toBe('claude-sonnet-4.6')
-      expect(aiData.provider).toBe('anthropic')
-      expect(aiData.inputTokens).toBe(200)
-      expect(aiData.outputTokens).toBe(800)
-      expect(aiData.totalTokens).toBe(1000)
-      expect(aiData.finishReason).toBe('stop')
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6')
+      expect(aiData.provider?.name).toBe('anthropic')
+      expect(aiData.usage.input_tokens).toBe(200)
+      expect(aiData.usage.output_tokens).toBe(800)
+      expect(aiData.usage.total_tokens).toBe(1000)
+      expect(aiData.response?.finish_reasons).toEqual(['stop'])
     })
 
     it('captures cache and reasoning token breakdown', async () => {
@@ -298,10 +298,10 @@ describe('createAILogger', () => {
       vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult(mockResult))
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.cacheReadTokens).toBe(150)
-      expect(aiData.cacheWriteTokens).toBe(50)
-      expect(aiData.reasoningTokens).toBe(100)
+      const aiData = getLastAiData(log)
+      expect(aiData.usage.cache_read?.input_tokens).toBe(150)
+      expect(aiData.usage.cache_write?.input_tokens).toBe(50)
+      expect(aiData.usage.reasoning?.output_tokens).toBe(100)
     })
 
     it('omits cache/reasoning fields when zero', async () => {
@@ -320,10 +320,10 @@ describe('createAILogger', () => {
       vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult(mockResult))
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.cacheReadTokens).toBeUndefined()
-      expect(aiData.cacheWriteTokens).toBeUndefined()
-      expect(aiData.reasoningTokens).toBeUndefined()
+      const aiData = getLastAiData(log)
+      expect(aiData.usage.cache_read?.input_tokens).toBeUndefined()
+      expect(aiData.usage.cache_write?.input_tokens).toBeUndefined()
+      expect(aiData.usage.reasoning?.output_tokens).toBeUndefined()
     })
 
     it('captures tool calls from content', async () => {
@@ -346,9 +346,9 @@ describe('createAILogger', () => {
       vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult(mockResult))
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.toolCalls).toEqual(['searchWeb', 'calculatePrice'])
-      expect(aiData.finishReason).toBe('tool-calls')
+      const aiData = getLastAiData(log)
+      expect(aiData.tool_calls).toEqual(['searchWeb', 'calculatePrice'])
+      expect(aiData.response?.finish_reasons).toEqual(['tool-calls'])
     })
 
     it('uses response.modelId over model.modelId', async () => {
@@ -367,8 +367,8 @@ describe('createAILogger', () => {
       vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult(mockResult))
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.model).toBe('claude-sonnet-4.6-20250514')
+      const aiData = getLastAiData(log)
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6-20250514')
     })
 
     it('falls back to model.modelId when response has no modelId', async () => {
@@ -386,8 +386,8 @@ describe('createAILogger', () => {
       vi.mocked(model.doGenerate).mockResolvedValue(asGenerateResult(mockResult))
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.model).toBe('claude-sonnet-4.6')
+      const aiData = getLastAiData(log)
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6')
     })
   })
 
@@ -417,11 +417,11 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.inputTokens).toBe(300)
-      expect(aiData.outputTokens).toBe(150)
-      expect(aiData.totalTokens).toBe(450)
-      expect(aiData.finishReason).toBe('stop')
+      const aiData = getLastAiData(log)
+      expect(aiData.usage.input_tokens).toBe(300)
+      expect(aiData.usage.output_tokens).toBe(150)
+      expect(aiData.usage.total_tokens).toBe(450)
+      expect(aiData.response?.finish_reasons).toEqual(['stop'])
     })
 
     it('captures streaming metrics', async () => {
@@ -444,11 +444,11 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.msToFirstChunk).toBeTypeOf('number')
-      expect(aiData.msToFirstChunk).toBeGreaterThanOrEqual(0)
-      expect(aiData.msToFinish).toBeTypeOf('number')
-      expect(aiData.msToFinish).toBeGreaterThanOrEqual(0)
+      const aiData = getLastAiData(log)
+      expect(aiData.response?.time_to_first_chunk).toBeTypeOf('number')
+      expect(aiData.response?.time_to_first_chunk).toBeGreaterThanOrEqual(0)
+      expect(aiData.response?.duration_ms).toBeTypeOf('number')
+      expect(aiData.response?.duration_ms).toBeGreaterThanOrEqual(0)
     })
 
     it('captures modelId from response-metadata chunk', async () => {
@@ -472,8 +472,8 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.model).toBe('claude-sonnet-4.6-20250514')
+      const aiData = getLastAiData(log)
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6-20250514')
     })
 
     it('passes stream chunks through unchanged', async () => {
@@ -525,14 +525,14 @@ describe('createAILogger', () => {
       await wrappedModel.doGenerate(createMockCallOptions())
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.calls).toBe(2)
-      expect(aiData.inputTokens).toBe(300)
-      expect(aiData.outputTokens).toBe(150)
-      expect(aiData.totalTokens).toBe(450)
+      expect(aiData.usage.input_tokens).toBe(300)
+      expect(aiData.usage.output_tokens).toBe(150)
+      expect(aiData.usage.total_tokens).toBe(450)
     })
 
-    it('tracks multiple models with ai.models array', async () => {
+    it('tracks multiple models in gen_ai.request.models', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
 
@@ -559,14 +559,14 @@ describe('createAILogger', () => {
       await wrappedGemini.doGenerate(createMockCallOptions())
       await wrappedClaude.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.model).toBe('claude-sonnet-4.6')
-      expect(aiData.models).toEqual(['gemini-3-flash', 'claude-sonnet-4.6'])
-      expect(aiData.inputTokens).toBe(300)
-      expect(aiData.outputTokens).toBe(150)
+      const aiData = getLastAiData(log)
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6')
+      expect(aiData.request?.models).toEqual(['gemini-3-flash', 'claude-sonnet-4.6'])
+      expect(aiData.usage.input_tokens).toBe(300)
+      expect(aiData.usage.output_tokens).toBe(150)
     })
 
-    it('does not duplicate models in ai.models array', async () => {
+    it('does not duplicate models in gen_ai.request.models', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -584,9 +584,9 @@ describe('createAILogger', () => {
       await wrappedModel.doGenerate(createMockCallOptions())
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.model).toBe('claude-sonnet-4.6')
-      expect(aiData.models).toBeUndefined()
+      const aiData = getLastAiData(log)
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6')
+      expect(aiData.request?.models).toBeUndefined()
     })
 
     it('does not grow array fields quadratically across multi-step runs', async () => {
@@ -608,16 +608,17 @@ describe('createAILogger', () => {
         await wrappedModel.doGenerate(createMockCallOptions())
       }
 
-      const merged = log.merged.ai as Record<string, unknown>
-      expect((merged.toolCalls as string[])).toEqual(tools)
-      expect((merged.stepsUsage as unknown[])).toHaveLength(tools.length)
+      const merged = log.merged.gen_ai as AIMetadata
+      expect((merged.tool_calls as string[])).toEqual(tools)
+      expect((merged.steps_usage as unknown[])).toHaveLength(tools.length)
       expect(merged.steps).toBe(tools.length)
+      expect(merged.response?.finish_reasons).toEqual(tools.map(() => 'tool-calls'))
 
       // Each flush should ship at most a single new tool call, not the full
       // cumulative array — guarding against the quadratic regression.
       const totalToolCallEntries = log.setCalls.reduce((sum, call) => {
-        const ai = call.ai as { toolCalls?: unknown[] } | undefined
-        return sum + (ai?.toolCalls?.length ?? 0)
+        const genAi = call.gen_ai as { tool_calls?: unknown[] } | undefined
+        return sum + (genAi?.tool_calls?.length ?? 0)
       }, 0)
       expect(totalToolCallEntries).toBe(tools.length)
     })
@@ -638,9 +639,9 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.provider).toBe('google')
-      expect(aiData.model).toBe('gemini-3-flash')
+      const aiData = getLastAiData(log)
+      expect(aiData.provider?.name).toBe('google')
+      expect(aiData.request?.model).toBe('gemini-3-flash')
     })
 
     it('uses response.modelId for gateway resolution when available', async () => {
@@ -658,9 +659,9 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.provider).toBe('anthropic')
-      expect(aiData.model).toBe('claude-sonnet-4.6-20250514')
+      const aiData = getLastAiData(log)
+      expect(aiData.provider?.name).toBe('anthropic')
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6-20250514')
     })
 
     it('keeps non-gateway provider as-is', async () => {
@@ -678,9 +679,9 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.provider).toBe('anthropic')
-      expect(aiData.model).toBe('claude-sonnet-4.6')
+      const aiData = getLastAiData(log)
+      expect(aiData.provider?.name).toBe('anthropic')
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6')
     })
 
     it('resolves provider in stream mode', async () => {
@@ -703,9 +704,9 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.provider).toBe('anthropic')
-      expect(aiData.model).toBe('claude-sonnet-4.6')
+      const aiData = getLastAiData(log)
+      expect(aiData.provider?.name).toBe('anthropic')
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6')
     })
   })
 
@@ -720,8 +721,8 @@ describe('createAILogger', () => {
     })
   })
 
-  describe('tokensPerSecond', () => {
-    it('computes tokensPerSecond when stream takes measurable time', async () => {
+  describe('tokens_per_second', () => {
+    it('computes tokens_per_second when stream takes measurable time', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -742,13 +743,13 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.msToFinish).toBeGreaterThan(0)
-      expect(aiData.tokensPerSecond).toBeTypeOf('number')
-      expect(aiData.tokensPerSecond).toBeGreaterThan(0)
+      const aiData = getLastAiData(log)
+      expect(aiData.response?.duration_ms).toBeGreaterThan(0)
+      expect(aiData.response?.tokens_per_second).toBeTypeOf('number')
+      expect(aiData.response?.tokens_per_second).toBeGreaterThan(0)
     })
 
-    it('omits tokensPerSecond when stream finishes instantly', async () => {
+    it('omits tokens_per_second when stream finishes instantly', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -768,9 +769,9 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      if (aiData.msToFinish === 0) {
-        expect(aiData.tokensPerSecond).toBeUndefined()
+      const aiData = getLastAiData(log)
+      if (aiData.response?.duration_ms === 0) {
+        expect(aiData.response?.tokens_per_second).toBeUndefined()
       }
     })
   })
@@ -786,9 +787,9 @@ describe('createAILogger', () => {
 
       await expect(wrappedModel.doGenerate(createMockCallOptions())).rejects.toThrow('API rate limit exceeded')
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.error).toBe('API rate limit exceeded')
-      expect(aiData.finishReason).toBe('error')
+      expect(aiData.response?.finish_reasons).toEqual(['error'])
       expect(aiData.calls).toBe(1)
     })
 
@@ -802,9 +803,9 @@ describe('createAILogger', () => {
 
       await expect(wrappedModel.doStream(createMockCallOptions())).rejects.toThrow('Connection timeout')
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.error).toBe('Connection timeout')
-      expect(aiData.finishReason).toBe('error')
+      expect(aiData.response?.finish_reasons).toEqual(['error'])
       expect(aiData.calls).toBe(1)
     })
 
@@ -827,7 +828,7 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.error).toBe('Content filter triggered')
     })
   })
@@ -839,11 +840,11 @@ describe('createAILogger', () => {
 
       ai.captureEmbed({ usage: { tokens: 42 } })
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.calls).toBe(1)
-      expect(aiData.inputTokens).toBe(42)
-      expect(aiData.outputTokens).toBe(0)
-      expect(aiData.totalTokens).toBe(42)
+      expect(aiData.usage.input_tokens).toBe(42)
+      expect(aiData.usage.output_tokens).toBe(0)
+      expect(aiData.usage.total_tokens).toBe(42)
     })
 
     it('accumulates with language model calls', async () => {
@@ -863,11 +864,11 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.calls).toBe(2)
-      expect(aiData.inputTokens).toBe(230)
-      expect(aiData.outputTokens).toBe(100)
-      expect(aiData.totalTokens).toBe(330)
+      expect(aiData.usage.input_tokens).toBe(230)
+      expect(aiData.usage.output_tokens).toBe(100)
+      expect(aiData.usage.total_tokens).toBe(330)
     })
   })
 
@@ -887,8 +888,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.toolCalls).toEqual(['searchWeb'])
+      const aiData = getLastAiData(log)
+      expect(aiData.tool_calls).toEqual(['searchWeb'])
     })
 
     it('captures tool call inputs from doGenerate when enabled', async () => {
@@ -909,8 +910,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.toolCalls).toEqual([
+      const aiData = getLastAiData(log)
+      expect(aiData.tool_calls).toEqual([
         { name: 'searchWeb', input: { query: 'weather in SF' } },
         { name: 'calculate', input: { expression: '2+2' } },
       ])
@@ -931,8 +932,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      const toolCalls = aiData.toolCalls as Array<{ name: string, input: unknown }>
+      const aiData = getLastAiData(log)
+      const toolCalls = aiData.tool_calls as Array<{ name: string, input: unknown }>
       expect(toolCalls[0].input).toBe('not-json')
     })
 
@@ -957,8 +958,8 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.toolCalls).toEqual([{ name: 'searchWeb', input: { query: 'hello' } },])
+      const aiData = getLastAiData(log)
+      expect(aiData.tool_calls).toEqual([{ name: 'searchWeb', input: { query: 'hello' } },])
     })
 
     it('does not capture stream tool inputs when toolInputs is false', async () => {
@@ -981,8 +982,8 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.toolCalls).toEqual(['searchWeb'])
+      const aiData = getLastAiData(log)
+      expect(aiData.tool_calls).toEqual(['searchWeb'])
     })
 
     it('handles object-type tool inputs from doGenerate', async () => {
@@ -1000,8 +1001,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      const toolCalls = aiData.toolCalls as Array<{ name: string, input: unknown }>
+      const aiData = getLastAiData(log)
+      const toolCalls = aiData.tool_calls as Array<{ name: string, input: unknown }>
       expect(toolCalls[0].input).toEqual({ already: 'parsed' })
     })
 
@@ -1020,8 +1021,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      const inputs = aiData.toolCalls as Array<{ name: string, input: unknown }>
+      const aiData = getLastAiData(log)
+      const inputs = aiData.tool_calls as Array<{ name: string, input: unknown }>
       expect(inputs[0].input).toBeTypeOf('string')
       expect((inputs[0].input as string).length).toBeLessThanOrEqual(21)
       expect((inputs[0].input as string).endsWith('…')).toBe(true)
@@ -1042,8 +1043,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      const inputs = aiData.toolCalls as Array<{ name: string, input: unknown }>
+      const aiData = getLastAiData(log)
+      const inputs = aiData.tool_calls as Array<{ name: string, input: unknown }>
       expect(inputs[0].input).toEqual({ q: 'hello' })
     })
 
@@ -1074,8 +1075,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      const inputs = aiData.toolCalls as Array<{ name: string, input: unknown }>
+      const aiData = getLastAiData(log)
+      const inputs = aiData.tool_calls as Array<{ name: string, input: unknown }>
       expect(inputs[0]).toEqual({ name: 'queryDB', input: { sql: '***' } })
       expect(inputs[1]).toEqual({ name: 'search', input: { q: 'hello' } })
     })
@@ -1100,8 +1101,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      const inputs = aiData.toolCalls as Array<{ name: string, input: unknown }>
+      const aiData = getLastAiData(log)
+      const inputs = aiData.tool_calls as Array<{ name: string, input: unknown }>
       expect((inputs[0].input as string).endsWith('…')).toBe(true)
       expect((inputs[0].input as string).length).toBeLessThanOrEqual(11)
     })
@@ -1127,8 +1128,8 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      const inputs = aiData.toolCalls as Array<{ name: string, input: unknown }>
+      const aiData = getLastAiData(log)
+      const inputs = aiData.tool_calls as Array<{ name: string, input: unknown }>
       expect((inputs[0].input as string).endsWith('…')).toBe(true)
       expect((inputs[0].input as string).length).toBeLessThanOrEqual(16)
     })
@@ -1155,9 +1156,9 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
-      expect(aiData.output).toBe('Hello there')
+      const aiData = getLastAiData(log)
+      expect(aiData.input?.text).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(aiData.output?.text).toBe('Hello there')
     })
 
     it('does not capture prompt or output by default', async () => {
@@ -1174,9 +1175,9 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.prompt).toBeUndefined()
-      expect(aiData.output).toBeUndefined()
+      const aiData = getLastAiData(log)
+      expect(aiData.input?.text).toBeUndefined()
+      expect(aiData.output?.text).toBeUndefined()
     })
 
     it('captures only text parts as generate output', async () => {
@@ -1196,8 +1197,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.output).toBe('Searching now')
+      const aiData = getLastAiData(log)
+      expect(aiData.output?.text).toBe('Searching now')
     })
 
     it('marks non-text prompt parts', async () => {
@@ -1216,8 +1217,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions(prompt))
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.prompt).toBe('[user] Describe this\n[file]')
+      const aiData = getLastAiData(log)
+      expect(aiData.input?.text).toBe('[user] Describe this\n[file]')
     })
 
     it('marks tool calls and tool results in the prompt', async () => {
@@ -1240,8 +1241,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions(prompt))
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.prompt).toBe('[user] Search the docs\n\n[assistant] [tool-call search]\n\n[tool] [tool-result search]')
+      const aiData = getLastAiData(log)
+      expect(aiData.input?.text).toBe('[user] Search the docs\n\n[assistant] [tool-call search]\n\n[tool] [tool-result search]')
     })
 
     it('truncates prompt and output with maxLength', async () => {
@@ -1258,9 +1259,9 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions([{ role: 'user', content: [{ type: 'text', text: 'a very long user question' }] }]))
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.prompt).toBe('[user] a v…')
-      expect(aiData.output).toBe('a very lon…')
+      const aiData = getLastAiData(log)
+      expect(aiData.input?.text).toBe('[user] a v…')
+      expect(aiData.output?.text).toBe('a very lon…')
     })
 
     it('applies transform before maxLength', async () => {
@@ -1282,9 +1283,9 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.prompt).toBe('redacted')
-      expect(aiData.output).toBeUndefined()
+      const aiData = getLastAiData(log)
+      expect(aiData.input?.text).toBe('redacted')
+      expect(aiData.output?.text).toBeUndefined()
     })
 
     it('captures prompt and streamed output', async () => {
@@ -1308,9 +1309,9 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions(testPrompt))
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
-      expect(aiData.output).toBe('Hello world')
+      const aiData = getLastAiData(log)
+      expect(aiData.input?.text).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(aiData.output?.text).toBe('Hello world')
     })
 
     it('captures only the prompt when the output option is off', async () => {
@@ -1327,9 +1328,9 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
-      expect(aiData.output).toBeUndefined()
+      const aiData = getLastAiData(log)
+      expect(aiData.input?.text).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(aiData.output?.text).toBeUndefined()
     })
 
     it('captures only the output when the prompt option is off', async () => {
@@ -1346,9 +1347,9 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.prompt).toBeUndefined()
-      expect(aiData.output).toBe('Hello there')
+      const aiData = getLastAiData(log)
+      expect(aiData.input?.text).toBeUndefined()
+      expect(aiData.output?.text).toBe('Hello there')
     })
 
     it('keeps the first prompt and the last output across steps', async () => {
@@ -1374,18 +1375,18 @@ describe('createAILogger', () => {
       await wrappedModel.doGenerate(createMockCallOptions(testPrompt))
       await wrappedModel.doGenerate(createMockCallOptions(secondPrompt))
 
-      const merged = log.merged.ai as Record<string, unknown>
-      expect(merged.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
-      expect(merged.output).toBe('final answer')
+      const merged = log.merged.gen_ai as AIMetadata
+      expect(merged.input?.text).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(merged.output?.text).toBe('final answer')
 
       const metadata = ai.getMetadata()
-      expect(metadata.prompt).toBe('[system] You are helpful\n\n[user] Hi there')
-      expect(metadata.output).toBe('final answer')
+      expect(metadata.input?.text).toBe('[system] You are helpful\n\n[user] Hi there')
+      expect(metadata.output?.text).toBe('final answer')
     })
   })
 
-  describe('responseId', () => {
-    it('captures responseId from doGenerate', async () => {
+  describe('response id', () => {
+    it('captures the response id from doGenerate', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -1400,11 +1401,11 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.responseId).toBe('msg_01XFDUDYJgAACzvnptvVoYEL')
+      const aiData = getLastAiData(log)
+      expect(aiData.response?.id).toBe('msg_01XFDUDYJgAACzvnptvVoYEL')
     })
 
-    it('captures responseId from stream response-metadata', async () => {
+    it('captures the response id from stream response-metadata', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -1425,11 +1426,11 @@ describe('createAILogger', () => {
       const result = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.responseId).toBe('msg_stream_123')
+      const aiData = getLastAiData(log)
+      expect(aiData.response?.id).toBe('msg_stream_123')
     })
 
-    it('omits responseId when not provided', async () => {
+    it('omits the response id when not provided', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -1444,13 +1445,13 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.responseId).toBeUndefined()
+      const aiData = getLastAiData(log)
+      expect(aiData.response?.id).toBeUndefined()
     })
   })
 
-  describe('stepsUsage', () => {
-    it('omits stepsUsage for a single call', async () => {
+  describe('steps_usage', () => {
+    it('omits steps_usage for a single call', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -1465,12 +1466,12 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.stepsUsage).toBeUndefined()
+      const aiData = getLastAiData(log)
+      expect(aiData.steps_usage).toBeUndefined()
       expect(aiData.steps).toBeUndefined()
     })
 
-    it('includes stepsUsage for multiple calls', async () => {
+    it('includes steps_usage for multiple calls', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -1493,24 +1494,24 @@ describe('createAILogger', () => {
       await wrappedModel.doGenerate(createMockCallOptions())
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.steps).toBe(2)
-      const stepsUsage = aiData.stepsUsage as Array<Record<string, unknown>>
+      const stepsUsage = aiData.steps_usage as Array<Record<string, unknown>>
       expect(stepsUsage).toHaveLength(2)
       expect(stepsUsage[0]).toEqual({
         model: 'claude-sonnet-4.6',
-        inputTokens: 100,
-        outputTokens: 50,
-        toolCalls: ['search'],
+        input_tokens: 100,
+        output_tokens: 50,
+        tool_calls: ['search'],
       })
       expect(stepsUsage[1]).toEqual({
         model: 'claude-sonnet-4.6',
-        inputTokens: 300,
-        outputTokens: 200,
+        input_tokens: 300,
+        output_tokens: 200,
       })
     })
 
-    it('includes stepsUsage with stream calls', async () => {
+    it('includes steps_usage with stream calls', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -1539,24 +1540,24 @@ describe('createAILogger', () => {
       const result2 = await wrappedModel.doStream(createMockCallOptions())
       await consumeStream(result2.stream)
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.steps).toBe(2)
-      const stepsUsage = aiData.stepsUsage as Array<Record<string, unknown>>
+      const stepsUsage = aiData.steps_usage as Array<Record<string, unknown>>
       expect(stepsUsage).toHaveLength(2)
       expect(stepsUsage[0]).toEqual({
         model: 'claude-sonnet-4.6',
-        inputTokens: 150,
-        outputTokens: 80,
-        toolCalls: ['search'],
+        input_tokens: 150,
+        output_tokens: 80,
+        tool_calls: ['search'],
       })
       expect(stepsUsage[1]).toEqual({
         model: 'claude-sonnet-4.6',
-        inputTokens: 400,
-        outputTokens: 100,
+        input_tokens: 400,
+        output_tokens: 100,
       })
     })
 
-    it('tracks per-step models in stepsUsage', async () => {
+    it('tracks per-step models in steps_usage', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const fast = createMockModel({ provider: 'anthropic', modelId: 'claude-haiku-4.5' })
@@ -1582,8 +1583,8 @@ describe('createAILogger', () => {
       await wrappedFast.doGenerate(createMockCallOptions())
       await wrappedSmart.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      const stepsUsage = aiData.stepsUsage as Array<Record<string, unknown>>
+      const aiData = getLastAiData(log)
+      const stepsUsage = aiData.steps_usage as Array<Record<string, unknown>>
       expect(stepsUsage[0].model).toBe('claude-haiku-4.5')
       expect(stepsUsage[1].model).toBe('claude-sonnet-4.6')
     })
@@ -1620,10 +1621,10 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.calls).toBe(1)
-      expect(aiData.toolCalls).toEqual([{ name: 'search', input: { q: 'test' } }])
-      expect(aiData.responseId).toBe('msg_abc')
+      expect(aiData.tool_calls).toEqual([{ name: 'search', input: { q: 'test' } }])
+      expect(aiData.response?.id).toBe('msg_abc')
     })
   })
 
@@ -1647,9 +1648,9 @@ describe('createAILogger', () => {
 
       const aiData = getLastAiData(log)
       expect(aiData.calls).toBe(1)
-      expect(aiData.inputTokens).toBe(120)
-      expect(aiData.outputTokens).toBe(40)
-      expect(aiData.model).toBe('claude-sonnet-4.6')
+      expect(aiData.usage.input_tokens).toBe(120)
+      expect(aiData.usage.output_tokens).toBe(40)
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6')
     })
 
     it('still accepts a V3 model and upgrades the wrapped result to V4', async () => {
@@ -1671,8 +1672,8 @@ describe('createAILogger', () => {
 
       const aiData = getLastAiData(log)
       expect(aiData.calls).toBe(1)
-      expect(aiData.inputTokens).toBe(80)
-      expect(aiData.responseId).toBe('msg_v3')
+      expect(aiData.usage.input_tokens).toBe(80)
+      expect(aiData.response?.id).toBe('msg_v3')
     })
 
     it('captures V4 stream finish usage and TTFT', async () => {
@@ -1697,9 +1698,9 @@ describe('createAILogger', () => {
 
       const aiData = getLastAiData(log)
       expect(aiData.calls).toBe(1)
-      expect(aiData.inputTokens).toBe(10)
-      expect(aiData.outputTokens).toBe(5)
-      expect(aiData.msToFirstChunk).toBeTypeOf('number')
+      expect(aiData.usage.input_tokens).toBe(10)
+      expect(aiData.usage.output_tokens).toBe(5)
+      expect(aiData.response?.time_to_first_chunk).toBeTypeOf('number')
     })
   })
 
@@ -1710,9 +1711,9 @@ describe('createAILogger', () => {
 
       ai.captureEmbed({ usage: { tokens: 500 }, model: 'text-embedding-3-small', dimensions: 1536 })
 
-      const aiData = log.setCalls[0].ai as Record<string, unknown>
+      const aiData = log.setCalls[0].gen_ai as AIMetadata
       expect(aiData.calls).toBe(1)
-      expect(aiData.inputTokens).toBe(500)
+      expect(aiData.usage.input_tokens).toBe(500)
       expect(aiData.embedding).toEqual({
         tokens: 500,
         model: 'text-embedding-3-small',
@@ -1726,8 +1727,8 @@ describe('createAILogger', () => {
 
       ai.captureEmbed({ usage: { tokens: 2000 }, model: 'text-embedding-3-small', count: 10 })
 
-      const aiData = log.setCalls[0].ai as Record<string, unknown>
-      const embedding = aiData.embedding as Record<string, unknown>
+      const aiData = log.setCalls[0].gen_ai as AIMetadata
+      const embedding = defined(aiData.embedding, 'embedding')
       expect(embedding.count).toBe(10)
       expect(embedding.tokens).toBe(2000)
     })
@@ -1739,9 +1740,9 @@ describe('createAILogger', () => {
       ai.captureEmbed({ usage: { tokens: 100 }, model: 'text-embedding-3-small', dimensions: 1536, count: 5 })
       ai.captureEmbed({ usage: { tokens: 200 }, count: 10 })
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       expect(aiData.calls).toBe(2)
-      const embedding = aiData.embedding as Record<string, unknown>
+      const embedding = defined(aiData.embedding, 'embedding')
       expect(embedding.tokens).toBe(300)
       expect(embedding.model).toBe('text-embedding-3-small')
       expect(embedding.dimensions).toBe(1536)
@@ -1754,15 +1755,15 @@ describe('createAILogger', () => {
 
       ai.captureEmbed({ usage: { tokens: 100 } })
 
-      const aiData = log.setCalls[0].ai as Record<string, unknown>
+      const aiData = log.setCalls[0].gen_ai as AIMetadata
       expect(aiData.calls).toBe(1)
-      expect(aiData.inputTokens).toBe(100)
+      expect(aiData.usage.input_tokens).toBe(100)
       expect(aiData.embedding).toEqual({ tokens: 100 })
     })
   })
 
   describe('cost estimation', () => {
-    it('computes estimatedCost from pricing map', async () => {
+    it('computes usage.estimated_cost from pricing map', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log, {
         cost: {
@@ -1781,12 +1782,12 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+      const aiData = getLastAiData(log)
       // 1M input * $3/1M = $3 + 500K output * $15/1M = $7.5 => $10.5
-      expect(aiData.estimatedCost).toBe(10.5)
+      expect(aiData.usage.estimated_cost).toBe(10.5)
     })
 
-    it('omits estimatedCost when model not in pricing map', async () => {
+    it('omits usage.estimated_cost when model not in pricing map', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log, {
         cost: {
@@ -1805,11 +1806,11 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.estimatedCost).toBeUndefined()
+      const aiData = getLastAiData(log)
+      expect(aiData.usage.estimated_cost).toBeUndefined()
     })
 
-    it('omits estimatedCost when no pricing map provided', async () => {
+    it('omits usage.estimated_cost when no pricing map provided', async () => {
       const log = createMockLogger()
       const ai = createAILogger(log)
       const model = createMockModel()
@@ -1824,8 +1825,8 @@ describe('createAILogger', () => {
 
       await wrappedModel.doGenerate(createMockCallOptions())
 
-      const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
-      expect(aiData.estimatedCost).toBeUndefined()
+      const aiData = getLastAiData(log)
+      expect(aiData.usage.estimated_cost).toBeUndefined()
     })
   })
 
@@ -1859,15 +1860,15 @@ describe('createAILogger', () => {
       callIntegrationOnFinish(integration)
 
       const aiData = getLastAiData(log)
-      const tools = aiData.tools as Array<Record<string, unknown>>
+      const tools = defined(aiData.tools, 'tools')
       expect(tools).toHaveLength(1)
       expect(tools[0]).toEqual({
         name: 'getWeather',
-        durationMs: 150,
+        duration_ms: 150,
         success: true,
       })
-      expect(aiData.totalDurationMs).toBeTypeOf('number')
-      expect(aiData.totalDurationMs).toBeGreaterThanOrEqual(0)
+      expect(aiData.duration_ms).toBeTypeOf('number')
+      expect(aiData.duration_ms).toBeGreaterThanOrEqual(0)
     })
 
     it('captures tool execution errors', () => {
@@ -1884,11 +1885,11 @@ describe('createAILogger', () => {
       callIntegrationOnFinish(integration)
 
       const aiData = getLastAiData(log)
-      const tools = aiData.tools as Array<Record<string, unknown>>
+      const tools = defined(aiData.tools, 'tools')
       expect(tools).toHaveLength(1)
       expect(tools[0]).toEqual({
         name: 'searchDB',
-        durationMs: 50,
+        duration_ms: 50,
         success: false,
         error: 'Connection refused',
       })
@@ -1914,7 +1915,7 @@ describe('createAILogger', () => {
       callIntegrationOnFinish(integration)
 
       const aiData = getLastAiData(log)
-      const tools = aiData.tools as Array<Record<string, unknown>>
+      const tools = defined(aiData.tools, 'tools')
       expect(tools).toHaveLength(2)
       expect(tools[0].name).toBe('getWeather')
       expect(tools[1].name).toBe('searchDB')
@@ -1946,17 +1947,17 @@ describe('createAILogger', () => {
 
       const aiData = getLastAiData(log)
       expect(aiData.calls).toBe(1)
-      expect(aiData.model).toBe('claude-sonnet-4.6')
-      expect(aiData.inputTokens).toBe(200)
-      expect(aiData.outputTokens).toBe(100)
-      const tools = aiData.tools as Array<Record<string, unknown>>
+      expect(aiData.request?.model).toBe('claude-sonnet-4.6')
+      expect(aiData.usage.input_tokens).toBe(200)
+      expect(aiData.usage.output_tokens).toBe(100)
+      const tools = defined(aiData.tools, 'tools')
       expect(tools).toHaveLength(1)
       expect(tools[0].name).toBe('getWeather')
-      expect(tools[0].durationMs).toBe(75)
-      expect(aiData.totalDurationMs).toBeTypeOf('number')
+      expect(tools[0].duration_ms).toBe(75)
+      expect(aiData.duration_ms).toBeTypeOf('number')
     })
 
-    it('computes totalDurationMs from onStart to onFinish', async () => {
+    it('computes duration_ms from onStart to onFinish', async () => {
       await withFakeTimers(() => {
         const log = createMockLogger()
         const integration = createEvlogIntegration(log)
@@ -1966,7 +1967,7 @@ describe('createAILogger', () => {
         callIntegrationOnFinish(integration)
 
         const aiData = getLastAiData(log)
-        expect(aiData.totalDurationMs).toBe(20)
+        expect(aiData.duration_ms).toBe(20)
       })
     })
 
@@ -1984,7 +1985,7 @@ describe('createAILogger', () => {
       callIntegrationOnFinish(integration)
 
       const aiData = getLastAiData(log)
-      const tools = aiData.tools as Array<Record<string, unknown>>
+      const tools = defined(aiData.tools, 'tools')
       expect(tools[0].error).toBe('Something went wrong')
     })
 
@@ -2014,11 +2015,11 @@ describe('createAILogger', () => {
         callIntegrationOnEnd(integration)
 
         const aiData = getLastAiData(log)
-        const tools = aiData.tools as Array<Record<string, unknown>>
+        const tools = defined(aiData.tools, 'tools')
         expect(tools).toHaveLength(1)
         expect(tools[0]).toEqual({
           name: 'getWeather',
-          durationMs: 150,
+          duration_ms: 150,
           success: true,
         })
       })
@@ -2037,16 +2038,16 @@ describe('createAILogger', () => {
         callIntegrationOnEnd(integration)
 
         const aiData = getLastAiData(log)
-        const tools = aiData.tools as Array<Record<string, unknown>>
+        const tools = defined(aiData.tools, 'tools')
         expect(tools[0]).toEqual({
           name: 'searchDB',
-          durationMs: 50,
+          duration_ms: 50,
           success: false,
           error: 'Connection refused',
         })
       })
 
-      it('computes totalDurationMs from onStart to onEnd', async () => {
+      it('computes duration_ms from onStart to onEnd', async () => {
         await withFakeTimers(() => {
           const log = createMockLogger()
           const integration = createEvlogIntegration(log)
@@ -2056,7 +2057,7 @@ describe('createAILogger', () => {
           callIntegrationOnEnd(integration)
 
           const aiData = getLastAiData(log)
-          expect(aiData.totalDurationMs).toBe(20)
+          expect(aiData.duration_ms).toBe(20)
         })
       })
 
@@ -2073,7 +2074,7 @@ describe('createAILogger', () => {
 
         const aiData = getLastAiData(log)
         expect(aiData.calls).toBe(1)
-        expect(aiData.inputTokens).toBe(42)
+        expect(aiData.usage.input_tokens).toBe(42)
         expect(aiData.embedding).toEqual({
           model: 'text-embedding-3-small',
           tokens: 42,
@@ -2090,9 +2091,9 @@ describe('createAILogger', () => {
         callIntegrationOnAbort(integration, new Error('User cancelled'))
 
         const aiData = getLastAiData(log)
-        expect(aiData.finishReason).toBe('abort')
+        expect(aiData.response?.finish_reasons).toEqual(['abort'])
         expect(aiData.error).toBe('User cancelled')
-        expect(aiData.totalDurationMs).toBeTypeOf('number')
+        expect(aiData.duration_ms).toBeTypeOf('number')
       })
 
       it('records unrecoverable errors via onError', () => {
@@ -2116,12 +2117,10 @@ describe('createAILogger', () => {
         const metadata = ai.getMetadata()
         expect(metadata).toEqual({
           calls: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
+          usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
         })
-        expect(metadata.model).toBeUndefined()
-        expect(metadata.provider).toBeUndefined()
+        expect(metadata.request?.model).toBeUndefined()
+        expect(metadata.provider?.name).toBeUndefined()
       })
 
       it('returns the same shape as the wide event data', async () => {
@@ -2141,20 +2140,20 @@ describe('createAILogger', () => {
 
         await wrappedModel.doGenerate(createMockCallOptions())
 
-        const aiData = log.setCalls[log.setCalls.length - 1].ai as Record<string, unknown>
+        const aiData = getLastAiData(log)
         const metadata = ai.getMetadata()
 
         expect(metadata).toEqual(aiData)
         expect(metadata.calls).toBe(1)
-        expect(metadata.model).toBe('claude-sonnet-4.6')
-        expect(metadata.provider).toBe('anthropic')
-        expect(metadata.inputTokens).toBe(1_000_000)
-        expect(metadata.outputTokens).toBe(500_000)
-        expect(metadata.totalTokens).toBe(1_500_000)
-        expect(metadata.estimatedCost).toBe(10.5)
-        expect(metadata.responseId).toBe('msg_abc')
-        expect(metadata.toolCalls).toEqual(['search'])
-        expect(metadata.finishReason).toBe('tool-calls')
+        expect(metadata.request?.model).toBe('claude-sonnet-4.6')
+        expect(metadata.provider?.name).toBe('anthropic')
+        expect(metadata.usage.input_tokens).toBe(1_000_000)
+        expect(metadata.usage.output_tokens).toBe(500_000)
+        expect(metadata.usage.total_tokens).toBe(1_500_000)
+        expect(metadata.usage.estimated_cost).toBe(10.5)
+        expect(metadata.response?.id).toBe('msg_abc')
+        expect(metadata.tool_calls).toEqual(['search'])
+        expect(metadata.response?.finish_reasons).toEqual(['tool-calls'])
       })
 
       it('returns a fresh copy that does not mutate underlying state', async () => {
@@ -2173,12 +2172,12 @@ describe('createAILogger', () => {
         await wrappedModel.doGenerate(createMockCallOptions())
 
         const first = ai.getMetadata()
-        ;(first.toolCalls as string[]).push('mutated')
+        ;(first.tool_calls as string[]).push('mutated')
         first.calls = 999
 
         const second = ai.getMetadata()
         expect(second.calls).toBe(1)
-        expect(second.toolCalls).toEqual(['search'])
+        expect(second.tool_calls).toEqual(['search'])
       })
 
       it('updates after each step in a multi-step run', async () => {
@@ -2204,12 +2203,13 @@ describe('createAILogger', () => {
         await wrappedModel.doGenerate(createMockCallOptions())
         const afterStep1 = ai.getMetadata()
         expect(afterStep1.calls).toBe(1)
-        expect(afterStep1.totalTokens).toBe(150)
+        expect(afterStep1.usage.total_tokens).toBe(150)
 
         await wrappedModel.doGenerate(createMockCallOptions())
         const afterStep2 = ai.getMetadata()
         expect(afterStep2.calls).toBe(2)
-        expect(afterStep2.totalTokens).toBe(450)
+        expect(afterStep2.usage.total_tokens).toBe(450)
+        expect(afterStep2.response?.finish_reasons).toEqual(['stop', 'stop'])
       })
 
       it('reflects embedding capture', () => {
@@ -2220,7 +2220,7 @@ describe('createAILogger', () => {
 
         const metadata = ai.getMetadata()
         expect(metadata.calls).toBe(1)
-        expect(metadata.inputTokens).toBe(500)
+        expect(metadata.usage.input_tokens).toBe(500)
         expect(metadata.embedding).toEqual({
           tokens: 500,
           model: 'text-embedding-3-small',
@@ -2240,7 +2240,7 @@ describe('createAILogger', () => {
 
         const metadata = ai.getMetadata()
         expect(metadata.error).toBe('quota exceeded')
-        expect(metadata.finishReason).toBe('error')
+        expect(metadata.response?.finish_reasons).toEqual(['error'])
       })
     })
 
@@ -2262,7 +2262,7 @@ describe('createAILogger', () => {
         expect(ai.getEstimatedCost()).toBeUndefined()
       })
 
-      it('returns the same value as metadata.estimatedCost', async () => {
+      it('returns the same value as metadata.usage.estimated_cost', async () => {
         const log = createMockLogger()
         const ai = createAILogger(log, {
           cost: { 'claude-sonnet-4.6': { input: 3, output: 15 } },
@@ -2280,7 +2280,7 @@ describe('createAILogger', () => {
         await wrappedModel.doGenerate(createMockCallOptions())
 
         expect(ai.getEstimatedCost()).toBe(10.5)
-        expect(ai.getEstimatedCost()).toBe(ai.getMetadata().estimatedCost)
+        expect(ai.getEstimatedCost()).toBe(ai.getMetadata().usage.estimated_cost)
       })
 
       it('returns undefined for an unpriced model', async () => {
@@ -2332,9 +2332,9 @@ describe('createAILogger', () => {
 
         expect(updates).toHaveLength(2)
         expect(updates[0].calls).toBe(1)
-        expect(updates[0].totalTokens).toBe(150)
+        expect(updates[0].usage.total_tokens).toBe(150)
         expect(updates[1].calls).toBe(2)
-        expect(updates[1].totalTokens).toBe(450)
+        expect(updates[1].usage.total_tokens).toBe(450)
       })
 
       it('fires on captureEmbed', () => {
@@ -2364,7 +2364,7 @@ describe('createAILogger', () => {
 
         expect(updates).toHaveLength(1)
         expect(updates[0].error).toBe('boom')
-        expect(updates[0].finishReason).toBe('error')
+        expect(updates[0].response?.finish_reasons).toEqual(['error'])
       })
 
       it('fires on createEvlogIntegration onFinish when sharing state', async () => {
@@ -2397,7 +2397,7 @@ describe('createAILogger', () => {
         expect(updates.length).toBeGreaterThanOrEqual(2)
         const last = updates[updates.length - 1]
         expect(last.tools).toHaveLength(1)
-        expect(last.totalDurationMs).toBeTypeOf('number')
+        expect(last.duration_ms).toBeTypeOf('number')
       })
 
       it('returns an unsubscribe function', async () => {
@@ -2511,17 +2511,18 @@ describe('createAILogger', () => {
 
       const wide = defined(log.emit({ _forceKeep: true }), 'wide event')
       expect(wide).not.toBeNull()
-      const aiData = defined(wide.ai, 'wide event ai') as Record<string, unknown>
+      const aiData = defined(wide.gen_ai, 'wide event gen_ai') as AIMetadata
 
-      expect((aiData.toolCalls as string[])).toEqual(tools)
-      expect((aiData.stepsUsage as unknown[])).toHaveLength(tools.length)
+      expect((aiData.tool_calls as string[])).toEqual(tools)
+      expect((aiData.steps_usage as unknown[])).toHaveLength(tools.length)
       expect(aiData.steps).toBe(tools.length)
       expect(aiData.calls).toBe(tools.length)
-      expect(aiData.inputTokens).toBe(100 * tools.length)
-      expect(aiData.outputTokens).toBe(20 * tools.length)
+      expect(aiData.response?.finish_reasons).toEqual(tools.map(() => 'tool-calls'))
+      expect(aiData.usage.input_tokens).toBe(100 * tools.length)
+      expect(aiData.usage.output_tokens).toBe(20 * tools.length)
     })
 
-    it('keeps `models` deduplicated across many flushes on the real wide event', async () => {
+    it('keeps `request.models` deduplicated across many flushes on the real wide event', async () => {
       const log = createLogger()
       const ai = createAILogger(log)
 
@@ -2546,8 +2547,8 @@ describe('createAILogger', () => {
       await wrappedClaude.doGenerate(createMockCallOptions())
 
       const wide = defined(log.emit({ _forceKeep: true }), 'wide event')
-      const aiData = defined(wide.ai, 'wide event ai') as Record<string, unknown>
-      expect(aiData.models).toEqual(['gemini-3-flash', 'claude-sonnet-4.6'])
+      const aiData = defined(wide.gen_ai, 'wide event gen_ai') as AIMetadata
+      expect(aiData.request?.models).toEqual(['gemini-3-flash', 'claude-sonnet-4.6'])
     })
   })
 })

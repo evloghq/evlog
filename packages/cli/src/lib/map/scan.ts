@@ -4,7 +4,9 @@ import { getFramework } from '../frameworks'
 import { glob } from '../glob'
 import { countSuppressed } from './directives'
 import { buildFileFacts } from './facts'
+import type { FileFacts } from './facts'
 import { createParseCache, parseFile } from './parse'
+import { handlerReach } from './reach'
 import { collectProjectFacts, readPackageJson } from './project-facts'
 import type { ProjectFacts } from './project-facts'
 import { RULE_SET_VERSION, getRule, runRules } from './rules/index'
@@ -14,6 +16,8 @@ import { classifyRouteObservability, gradeFromScore, hasScoredRoutes, scoreGloba
 import type {
   CheckId,
   CheckResult,
+  EventShape,
+  ExtractedRoute,
   MapFile,
   ProjectSuggestion,
   RawRouteEntry,
@@ -25,27 +29,31 @@ import { relativeFromRoot, routeIds } from './utils'
 
 interface AnalyseInput {
   ctx: ScanContext
-  raw: RawRouteEntry
+  extracted: ExtractedRoute
   id: string
   project: ProjectFacts
   capabilities: FrameworkCapabilities
 }
 
 /**
- * Analyse one entry point: read it once, derive the facts, classify
- * sensitivity from those facts, then run the rules against them.
+ * Analyse one entry point: read it once, derive the facts of the code it
+ * runs, classify sensitivity from those facts, then run the rules against them.
  *
  * Sensitivity has to come before the rules because `audit` is gated on it.
  */
 function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: string[] } {
-  const { ctx, raw, id, project, capabilities } = input
+  const { ctx, id, project, capabilities } = input
+  const { scope, ...raw } = input.extracted
   const parsed = (ctx.parse ?? parseFile)(join(ctx.projectRoot, raw.file))
+  const reach = parsed && scope ? handlerReach(parsed, scope) : undefined
   const facts = parsed
     ? buildFileFacts(parsed, {
       evlogAutoImports: capabilities.evlogAutoImports,
       evlogBarrels: project.evlogBarrels,
       evlogPackages: project.evlogPackages,
-      requestLoggerMember: capabilities.requestLoggerMember,
+      requestLoggerMembers: capabilities.requestLoggerMembers,
+      middlewareRegistered: capabilities.requestLogger === 'ambient',
+      reach,
     })
     : null
 
@@ -57,10 +65,12 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
     target: { ...raw, sensitivity },
     parsed,
     facts,
+    reach,
     project,
     capabilities,
   })
 
+  const event = facts ? eventShape(facts) : undefined
   return {
     route: {
       ...raw,
@@ -68,10 +78,18 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
       checks,
       suggestions,
       sensitivity,
+      ...(event ? { event } : {}),
       score: scoreRoute(checks),
     },
     warnings,
   }
+}
+
+/** The fields and audit actions the handler's event carries, or nothing when it carries neither. */
+function eventShape(facts: FileFacts): EventShape | undefined {
+  const fields = [...new Set(facts.loggerCalls('set').flatMap(call => call.fields))]
+  const audit = facts.loggerCalls('audit').map(call => call.literals.get('action')).filter(action => action !== undefined)
+  return fields.length > 0 || audit.length > 0 ? { fields, audit: [...new Set(audit)] } : undefined
 }
 
 /** Extract entry points for `ctx.framework`, run the rules, and score them. */
@@ -97,7 +115,7 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
   const capabilities: FrameworkCapabilities = {
     requestLogger: adapter.resolveRequestLogger?.(ctx) ?? definition.requestLogger,
     evlogAutoImports: definition.evlogAutoImports ?? [],
-    requestLoggerMember: definition.requestLoggerMember,
+    requestLoggerMembers: definition.requestLoggerMembers,
   }
 
   const project = collectProjectFacts(ctx, {
@@ -113,7 +131,7 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
      nobody can name. One failing entry point stands in for them, so a score
      never rises because a file broke. */
   const listed = new Set(found.map(route => route.file))
-  const extracted = [
+  const extracted: ExtractedRoute[] = [
     ...found,
     ...[...broken.keys()].filter(file => !listed.has(file)).map((file): RawRouteEntry => ({
       framework: ctx.framework,
@@ -127,7 +145,7 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
   const ignored = new Set(ctx.ignore?.length ? glob(ctx.ignore, ctx.projectRoot).map(file => relativeFromRoot(ctx.projectRoot, file)) : [])
   const kept = extracted.filter(raw => !ignored.has(raw.file))
   const ids = routeIds(kept)
-  const analysed = kept.map((raw, index) => analyseRoute({ ctx, raw, id: ids[index]!, project, capabilities }))
+  const analysed = kept.map((route, index) => analyseRoute({ ctx, extracted: route, id: ids[index]!, project, capabilities }))
   const routes = analysed.map(entry => entry.route)
   const unparsed = [...broken]
     .filter(([file]) => !ignored.has(file))

@@ -35,7 +35,7 @@ jobs:
       contents: read
       id-token: write # remote cache OIDC
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # --affected needs history
           persist-credentials: false
@@ -72,7 +72,7 @@ jobs:
       contents: read
       id-token: write # remote cache OIDC
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -94,9 +94,9 @@ jobs:
         with:
           bun-version: 1.4.4
 
-      # evlog runs once below, under coverage, which enforces its thresholds
+      # evlog and @evlog/cli run once below, under coverage, which enforces their thresholds
       - name: Test workspace
-        run: pnpm exec turbo run test --affected --filter='!evlog'
+        run: pnpm exec turbo run test --affected --filter='!evlog' --filter='!@evlog/cli'
 
       # content-lint lives in scripts/, outside the workspace graph, so turbo
       # never sees it. Its fixture test is what keeps the content pass honest.
@@ -124,11 +124,27 @@ jobs:
       # dist-dependent tests (auto-import types, api-surface) would run
       # against a missing build. Prepare it explicitly; the remote cache
       # makes this a restore, not a rebuild, when src is untouched.
+      # test/bin.test.ts runs the evlog bin, which needs the workspace
+      # @evlog/cli built; without it the bin falls back to fetching the CLI.
       - name: Prepare evlog dist
-        run: pnpm exec turbo run dev:prepare --filter=evlog
+        run: pnpm exec turbo run dev:prepare --filter=evlog --filter=@evlog/cli
 
       - name: Test evlog with coverage
         run: pnpm --filter evlog run test:coverage
+
+      # test/build/size-budget.test.ts enforces the budget; this writes the table,
+      # including when that test failed.
+      - name: Bundle size report
+        if: ${{ !cancelled() && matrix.node-version == '24' }}
+        run: pnpm --filter evlog run size:budget >> "$GITHUB_STEP_SUMMARY"
+
+      # The fs drain needs no network and no secret, so its round-trip e2e runs
+      # on every pull request rather than only in e2e.yml.
+      - name: Test fs drain end to end
+        run: pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts
+
+      - name: Test @evlog/cli with coverage
+        run: pnpm --filter @evlog/cli run test:coverage
 
       # The sandbox smoke runs every non-interactive CLI command against a real
       # app per framework — the end-to-end seam (detect → init → doctor → map →
@@ -172,6 +188,78 @@ jobs:
             echo "CLI untouched, install check skipped"
           fi
 
+  # The same smoke where the Test job cannot reach: the oldest Node the CLI
+  # declares in `engines`, and Windows.
+  #
+  # `init` hands the skills install to `npx skills add`, which does not start on
+  # Node 22.0 or 22.1, so that leg runs `init` with --no-agents.
+  cli-compat:
+    name: CLI smoke (${{ matrix.name }})
+    if: github.event_name == 'pull_request'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Node 22.0.0
+            os: ubuntu-latest
+            node: 22.0.0
+            no-agents: '1'
+          - name: Windows
+            os: windows-latest
+            node: ''
+            no-agents: ''
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+      id-token: write # remote cache OIDC
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check whether the CLI changed
+        id: cli
+        run: |
+          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs .github/workflows/ci.yml | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "CLI untouched — smoke skipped"
+          fi
+
+      - name: Set up Turborepo remote cache
+        if: steps.cli.outputs.changed == 'true' && env.IS_INTERNAL == 'true'
+        uses: vercel/setup-turborepo-remote-cache-action@49d7b1b46ba4c9251e1977986bfe18336feabc8f # v1.1.0
+        with:
+          team: ${{ vars.TURBO_TEAM }}
+
+      - name: Set up pnpm and Node
+        if: steps.cli.outputs.changed == 'true'
+        uses: ./.github/actions/setup
+
+      - name: Build the CLI
+        if: steps.cli.outputs.changed == 'true'
+        run: pnpm exec turbo run dev:prepare --filter=@evlog/cli
+
+      # The build needs the workspace's Node; only the CLI under test runs on the old one.
+      - name: Switch to Node ${{ matrix.node }}
+        if: steps.cli.outputs.changed == 'true' && matrix.node != ''
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: CLI sandbox smoke
+        if: steps.cli.outputs.changed == 'true'
+        env:
+          EVLOG_SANDBOX_NO_AGENTS: ${{ matrix.no-agents }}
+        run: |
+          node --version
+          node scripts/cli-sandbox.mjs --smoke
+
   examples:
     name: Build examples
     runs-on: ubuntu-latest
@@ -180,7 +268,7 @@ jobs:
       contents: read
       id-token: write # remote cache OIDC
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -211,7 +299,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # the base commit must be present for the worktree below
           persist-credentials: false
@@ -282,7 +370,7 @@ jobs:
       id-token: write # remote cache OIDC
       pull-requests: write # pkg-pr-new comments the preview install command
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -310,7 +398,7 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-slim
-    needs: [quality, test, examples]
+    needs: [quality, test, cli-compat, examples]
     if: always()
     steps:
       # v3 publishes prereleases until 3.0 GA; drop this step on v3 when GA is cut

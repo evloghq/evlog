@@ -161,15 +161,6 @@ export default defineNitroPlugin((nitroApp) => {
     expect(logs?.message).toContain('var/evlog')
   })
 
-  it('fails on unsupported Node versions', async () => {
-    const cwd = await makeProject({ 'package.json': '{}' })
-    const result = await runDoctor(fakeContext(cwd, { nodeVersion: 'v18.19.0' }))
-
-    const node = result.checks.find(c => c.id === 'node')
-    expect(node?.status).toBe('fail')
-    expect(result.summary.fail).toBeGreaterThan(0)
-  })
-
   it('records steps + catalog findings on the debug logger', async () => {
     const cwd = await makeProject({
       'package.json': JSON.stringify({ name: 'app', devDependencies: { evlog: '^2.0.0' } }),

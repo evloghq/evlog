@@ -100,7 +100,7 @@ export const fixtures: Fixture[] = [
       agent: { name: 'support' },
       message: { received: 'Cancel my subscription, I moved to the team plan.', response: 'Done. Your Pro subscription is cancelled and the unused days are credited to the team plan.' },
       tools: [{ name: 'getSubscription', ok: true }, { name: 'cancelSubscription', ok: true }, { name: 'applyCredit', ok: true }],
-      ai: { model: 'openai/gpt-5.6-sol', inputTokens: 2_310, outputTokens: 180 },
+      gen_ai: { request: { model: 'openai/gpt-5.6-sol' }, usage: { input_tokens: 2_310, output_tokens: 180 } },
     },
   },
   {
@@ -118,7 +118,7 @@ export const fixtures: Fixture[] = [
         { name: 'searchDocs', args: { q: 'august invoice' }, results: 0 },
         { name: 'searchDocs', args: { q: 'invoice august' }, results: 0 },
       ],
-      ai: { model: 'openai/gpt-5.6-luna', inputTokens: 6_020, outputTokens: 95 },
+      gen_ai: { request: { model: 'openai/gpt-5.6-luna' }, usage: { input_tokens: 6_020, output_tokens: 95 } },
     },
   },
   {

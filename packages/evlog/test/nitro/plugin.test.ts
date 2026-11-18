@@ -916,7 +916,7 @@ describe('nitro plugin - streaming emit defer (#321)', () => {
     })
 
     queueMicrotask(() => {
-      defined(event.context.log, 'request logger').set({ ai: { calls: 1, totalTokens: 42 } })
+      defined(event.context.log, 'request logger').set({ gen_ai: { calls: 1, usage: { total_tokens: 42 } } })
     })
 
     const { bindStreamingResponseLifecycle } = await import('../../src/shared/streamResponse')
@@ -932,7 +932,7 @@ describe('nitro plugin - streaming emit defer (#321)', () => {
     await vi.waitFor(() => {
       expect(emitCount).toBe(1)
     })
-    expect(warnSpy.mock.calls.some(([message]) => String(message).includes('Keys dropped: ai'))).toBe(false)
-    expect(defined(event.context.log, 'request logger').getContext().ai).toEqual({ calls: 1, totalTokens: 42 })
+    expect(warnSpy.mock.calls.some(([message]) => String(message).includes('Keys dropped: gen_ai'))).toBe(false)
+    expect(defined(event.context.log, 'request logger').getContext().gen_ai).toEqual({ calls: 1, usage: { total_tokens: 42 } })
   })
 })

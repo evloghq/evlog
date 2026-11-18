@@ -128,7 +128,7 @@ With `--json`, the payload is the **only** thing written to stdout, and everythi
 
 With `--baseline`, the payload gains a `baseline` key holding the comparison (`regressions`, `fixed`, `added`, `removed`, `delta`).
 
-Breaking either shape requires a `schemaVersion` bump. In `routes[]`, `checks` holds the requirements that move the score and `suggestions` holds the opportunities that never do, in separate keys so a suggestion can't be mistaken for a failure.
+Breaking either shape requires a `schemaVersion` bump. In `routes[]`, `checks` holds the requirements that move the score and `suggestions` holds the opportunities that never do, in separate keys so a suggestion can't be mistaken for a failure. `event` lists the fields `log.set()` writes (`user.id`) and the `log.audit()` actions the handler's file spells out.
 
 ## Telemetry
 

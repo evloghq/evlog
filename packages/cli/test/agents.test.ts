@@ -1,15 +1,17 @@
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
+import { runCommand } from 'citty'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import agents from '../src/commands/agents'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
 import { MARKER_END, MARKER_START, renderBlock, upsertBlock } from '../src/lib/agents/block'
 import { planAgents } from '../src/lib/agents/plan'
 import { formatAgentsReport } from '../src/lib/agents/report'
 import { agentsTelemetryFieldNames, runAgents } from '../src/lib/agents/run'
-import { EVLOG_SKILLS, findInstalledSkills, skillsCommand } from '../src/lib/agents/skills'
+import { EVLOG_SKILLS, findInstalledSkills, runSkills, skillsCommand } from '../src/lib/agents/skills'
 
 /**
  * Only the spawn is faked; everything else in the module stays real.
@@ -56,7 +58,9 @@ function fakeContext(cwd: string, home = join(cwd, '__home')): CliContext {
 
 afterEach(async () => {
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
   vi.restoreAllMocks()
+  process.exitCode = undefined
   skills.spawnResult = null
   skills.calls = 0
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
@@ -267,6 +271,29 @@ describe('skillsCommand', () => {
   })
 })
 
+describe('runSkills', () => {
+  it('reports the line that says why npx failed, not the npm notice printed after it', async () => {
+    const stderr = [
+      'npm error network request to https://registry.npmjs.org/skills failed',
+      'npm notice',
+      'npm notice To update run: npm install -g npm@12.2.2',
+      'npm notice',
+    ]
+    /* `cmd.exe` does not run the extensionless script: without `npx.cmd` it
+       finds the real npx further down PATH and installs the skills for real. */
+    const dir = await project({
+      'npx': ['#!/bin/sh', ...stderr.map(line => `echo "${line}" >&2`), 'exit 1', ''].join('\n'),
+      'npx.cmd': ['@echo off', ...stderr.map(line => `>&2 echo ${line}`), 'exit /b 1', ''].join('\r\n'),
+    })
+    await chmod(join(dir, 'npx'), 0o755)
+    vi.stubEnv('PATH', `${dir}${delimiter}${process.env.PATH}`)
+
+    const outcome = await runSkills(skillsCommand({ interactive: false }), dir, false)
+
+    expect(outcome).toEqual({ ok: false, error: 'npm error network request to https://registry.npmjs.org/skills failed' })
+  })
+})
+
 describe('planAgents', () => {
   it('creates AGENTS.md in a project that has none', async () => {
     const root = await project({ 'package.json': '{"name":"shop"}' })
@@ -465,5 +492,123 @@ describe('runAgents', () => {
 
     expect(result.framework).toBeNull()
     expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toContain('One wide event per operation')
+  })
+})
+
+describe('agents command', () => {
+  const SHOP = { 'package.json': JSON.stringify({ name: 'shop', dependencies: { hono: '^4.0.0' } }) }
+
+  /** Runs `evlog agents` from its raw arguments, the way a shell hands them over. */
+  async function run(cwd: string, rawArgs: string[]): Promise<{ stdout: string, stderr: string, json: () => Record<string, any> }> {
+    const chunks = { stdout: [] as string[], stderr: [] as string[] }
+    for (const stream of ['stdout', 'stderr'] as const) {
+      vi.spyOn(process[stream], 'write').mockImplementation(((chunk: string | Uint8Array) => {
+        chunks[stream].push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString())
+        return true
+      }) as typeof process.stdout.write)
+    }
+    vi.stubEnv('HOME', join(cwd, '__home'))
+    vi.stubEnv('USERPROFILE', join(cwd, '__home'))
+
+    await runCommand(agents, { rawArgs: ['--cwd', cwd, '--no-header', ...rawArgs] })
+
+    const stdout = chunks.stdout.join('')
+    return { stdout, stderr: chunks.stderr.join(''), json: () => JSON.parse(stdout) }
+  }
+
+  it('writes the block and installs the skills', async () => {
+    skills.spawnResult = { ok: true }
+    const cwd = await project(SHOP)
+
+    const { json } = await run(cwd, ['--json'])
+
+    expect(json()).toMatchObject({
+      framework: 'hono',
+      skills: { status: 'installed', command: 'npx --yes skills add https://www.evlog.dev --agent universal --agent claude-code --global --yes' },
+      written: [{ file: 'AGENTS.md', kind: 'create' }],
+      dryRun: false,
+    })
+    expect(skills.calls).toBe(1)
+    expect(await readFile(join(cwd, 'AGENTS.md'), 'utf8')).toContain(MARKER_START)
+    expect(process.exitCode).toBeUndefined()
+  })
+
+  it('carries --skills, --local and --source into the command it runs', async () => {
+    skills.spawnResult = { ok: true }
+    const cwd = await project(SHOP)
+
+    const { json } = await run(cwd, ['--json', '--skills', 'analyze-logs, build-audit-logs', '--local', '--source', 'https://skills.example.com'])
+
+    expect(json().skills.command).toBe('npx --yes skills add https://skills.example.com --skill analyze-logs build-audit-logs --agent universal --agent claude-code --yes')
+    expect(skills.calls).toBe(1)
+  })
+
+  it('reads --skills=<list> the same as --skills <list>', async () => {
+    const cwd = await project(SHOP)
+
+    const { json } = await run(cwd, ['--json', '--dry-run', '--skills=analyze-logs'])
+
+    expect(json().skills.command).toContain('--skill analyze-logs --agent')
+  })
+
+  it('writes the block alone with --no-skills', async () => {
+    const cwd = await project(SHOP)
+
+    const { json } = await run(cwd, ['--json', '--no-skills'])
+
+    expect(json().skills.status).toBe('skipped')
+    expect(skills.calls).toBe(0)
+    expect(existsSync(join(cwd, 'AGENTS.md'))).toBe(true)
+  })
+
+  it('writes nothing and runs nothing under --dry-run', async () => {
+    const cwd = await project(SHOP)
+
+    const { json } = await run(cwd, ['--json', '--dry-run'])
+
+    expect(json()).toMatchObject({ dryRun: true, written: [{ file: 'AGENTS.md', kind: 'create' }] })
+    expect(skills.calls).toBe(0)
+    expect(existsSync(join(cwd, 'AGENTS.md'))).toBe(false)
+  })
+
+  it('stops on a mistyped --dry-run instead of writing for real', async () => {
+    const cwd = await project(SHOP)
+
+    const { json } = await run(cwd, ['--json', '--dryrun'])
+
+    expect(json().error.code).toBe('cli.UNKNOWN_FLAG')
+    expect(process.exitCode).toBe(2)
+    expect(skills.calls).toBe(0)
+    expect(existsSync(join(cwd, 'AGENTS.md'))).toBe(false)
+  })
+
+  it('exits 2 on a --source that is not an http(s) URL, before it runs anything', async () => {
+    const cwd = await project(SHOP)
+
+    const { json } = await run(cwd, ['--json', '--source', 'https://evlog.dev;rm -rf .'])
+
+    expect(json().error.code).toBe('cli.AGENTS_INVALID_SOURCE')
+    expect(process.exitCode).toBe(2)
+    expect(skills.calls).toBe(0)
+    expect(existsSync(join(cwd, 'AGENTS.md'))).toBe(false)
+  })
+
+  it('exits 1 when the skills install fails, with the error in the JSON', async () => {
+    skills.spawnResult = { ok: false, error: 'npx: command not found' }
+    const cwd = await project(SHOP)
+
+    const { json } = await run(cwd, ['--json'])
+
+    expect(json().skills).toMatchObject({ status: 'failed', error: 'npx: command not found' })
+    expect(process.exitCode).toBe(1)
+  })
+
+  it('prints the report on stderr and leaves stdout empty without --json', async () => {
+    const cwd = await project(SHOP)
+
+    const { stdout, stderr } = await run(cwd, ['-y', '--no-skills'])
+
+    expect(stdout).toBe('')
+    expect(stderr).toContain('AGENTS.md')
   })
 })

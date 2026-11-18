@@ -10,12 +10,13 @@ Goals: fast (full suite < 2s locally), deterministic, no fake-greens, no console
 | A drain spy was called within a few microtasks of a request returning | `await waitForDrainCalls(drain)` before drilling into `drain.mock.calls` |
 | A specific event field is set after `log.set(...)` | `findEventViaDrain(drain, e => e.path === ...)` then assert on the returned event |
 | A duration / threshold-based behavior | `vi.useFakeTimers()` + `vi.advanceTimersByTime(N)` + `vi.useRealTimers()` (do *not* `await new Promise(setTimeout)`) |
-| An input is processed in linear time | `expectLinearTime(fn, n => input)` from `helpers/timers.ts`, not `fastestRunMs(...).toBeLessThan(100)` and not one `performance.now()` pair. The helper times the input built at scale 1 against scale 8 in process CPU time, so time spent waiting for a core on a busy machine does not count; linear work scales with length, quadratic work misses the ratio on any machine. Scale only the repeated part, so both sizes keep the same shape: a prefix of the long input can drop the `@` or the closing character the pattern needs. The input must be adversarial and large, around 64k characters at scale 8, built by repeating the pattern's prefix (`n => 'ghp_'.repeat(2_048 * n)`), because a quadratic scan of a short input can still look cheap |
+| An input is processed in linear time | `expectLinearTime(fn, n => input)` from `helpers/timers.ts`, not `fastestRunMs(...).toBeLessThan(100)` and not one `performance.now()` pair. The helper times the input built at scale 1 against scale 8 in the calling thread's CPU time, so neither time spent waiting for a core on a busy machine nor V8's background GC and compiler threads count; linear work scales with length, quadratic work misses the ratio on any machine. Scale only the repeated part, so both sizes keep the same shape: a prefix of the long input can drop the `@` or the closing character the pattern needs. The input must be adversarial and large, around 64k characters at scale 8, built by repeating the pattern's prefix (`n => 'ghp_'.repeat(2_048 * n)`), because a quadratic scan of a short input can still look cheap |
 | Narrowing after `expect(x).toBeDefined()` | `defined(x, 'label')` from `helpers/defined.ts` — not `x!` |
 | Accessing the request logger inside a route handler test | `useLogger()` — not `req.log!` (keep one test per framework that asserts `req.log` is attached) |
 | An adapter posts the right URL / body / headers | `mockFetch()` from `helpers/fetch.ts` + `getFetchCall` / `getFetchJson` / `getFetchHeaders` |
 | A wide event factory for adapter tests | `makeWideEvent(overrides?)` from `helpers/events.ts` |
-| The sweep of HTTP framework specs ("emits event", "x-request-id", "route service") | `describeStandardHttpMatrix({ name, mount })` from `helpers/frameworkMatrix.ts` — wired in all seven HTTP framework test files |
+| The sweep of HTTP framework specs ("emits event", "x-request-id", "route service") | `describeStandardHttpMatrix({ name, mount })` from `helpers/frameworkMatrix.ts`, wired in every framework test file; `describeBuiltAppMatrix({ name, start })` for Nitro v2, Nitro v3 and Nuxt (`test/{nitro-v2,nitro-v3,nuxt}/matrix.test.ts`) |
+| An integration still exposes the contract (`evlog()` options, `useLogger()`, `log.fork()`, native accessor) | `test/frameworks/contract.test-d.ts`, type-checked by the `types` Vitest project; one `describe` per row of `.agents/skills/create-framework-integration/references/contract.md` |
 
 ## Framework runtime fidelity
 
@@ -70,7 +71,7 @@ test/
     fetch.ts               # mockFetch / getFetchCall / getFetchJson / getFetchHeaders
     framework.ts           # createPipelineSpies / assertHttpEventEmitted / waitForDrainCalls / findEventViaDrain / ...
     defined.ts             # defined() / getDrainCallArg() — type-safe narrowing without `!`
-    frameworkMatrix.ts     # describeStandardHttpMatrix(adapter)
+    frameworkMatrix.ts     # describeStandardHttpMatrix(adapter), describeBuiltAppMatrix(adapter)
     slowReporter.ts        # CI-only reporter for tests > EVLOG_SLOW_TEST_BUDGET_MS (default 500ms)
     timers.ts              # withFakeTimers / flushMicrotasks / fastestRunMs / expectLinearTime
 

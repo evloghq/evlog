@@ -694,7 +694,7 @@ describe('evlog/sveltekit', () => {
       })
       closeStream = defined(close, 'close stream')
       queueMicrotask(() => {
-        log.set({ ai: { calls: 1, totalTokens: 42 } })
+        log.set({ gen_ai: { calls: 1, usage: { total_tokens: 42 } } })
       })
       return new Response(stream, {
         status: 200,
@@ -709,7 +709,7 @@ describe('evlog/sveltekit', () => {
     await expect(response.text()).resolves.toBe('hello world')
     await waitForDrainCalls(drain)
 
-    expect(warnSpy.mock.calls.some(([message]) => String(message).includes('Keys dropped: ai'))).toBe(false)
-    expect(findEventViaDrain(drain, e => e.path === '/api/chat')?.ai).toEqual({ calls: 1, totalTokens: 42 })
+    expect(warnSpy.mock.calls.some(([message]) => String(message).includes('Keys dropped: gen_ai'))).toBe(false)
+    expect(findEventViaDrain(drain, e => e.path === '/api/chat')?.gen_ai).toEqual({ calls: 1, usage: { total_tokens: 42 } })
   })
 })

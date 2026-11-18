@@ -294,6 +294,55 @@ describe('formatMapReport', () => {
     expect(byFile).toBe(byPath)
   })
 
+  describe('a file that declares several entry points', () => {
+    const express = async (): Promise<{ ctx: CliContext, result: MapResult }> => {
+      const cwd = await copyFixture('express-basic')
+      await writeFile(join(cwd, 'src/index.ts'), [
+        'import express from \'express\'',
+        'import { evlog } from \'evlog/express\'',
+        'const app = express()',
+        'app.use(evlog())',
+        'app.get(\'/health\', (_req, res) => res.json({ ok: true }))',
+        'app.get(\'/orders\', (req, res) => {',
+        '  req.log.set({ orders: { count: 2 } })',
+        '  res.json([])',
+        '})',
+        'app.post(\'/orders\', (_req, res) => res.json({ ok: true }))',
+        '',
+      ].join('\n'))
+      const ctx = fakeContext(cwd, { columns: 120 })
+      return { ctx, result: await runMap(ctx, undefined, { noWrite: true }) }
+    }
+
+    it('names each of them in the --all matrix, and leaves a lone entry point named by its file', async () => {
+      const { ctx, result } = await express()
+      const rows = formatMapReport(ctx, result, { all: true }).split('\n')
+
+      expect(rows.find(row => row.includes('index.ts · GET /health'))).toMatch(/\b45\b/)
+      expect(rows.find(row => row.includes('index.ts · GET /orders'))).toMatch(/\b100\b/)
+      expect(rows.find(row => row.includes('index.ts · POST /orders'))).toMatch(/\b45\b/)
+      expect(rows.find(row => row.includes('checkout.ts'))).not.toContain('POST /checkout')
+    })
+
+    it('inspects one by method and path when two share the path', async () => {
+      const { ctx, result } = await express()
+
+      expect(formatMapReport(ctx, result, { entry: 'GET /orders' })).toContain('100/100')
+      expect(formatMapReport(ctx, result, { entry: 'POST /orders' })).toContain('45/100')
+    })
+
+    it('lists the others when one is inspected by file path', async () => {
+      const { ctx, result } = await express()
+      const out = formatMapReport(ctx, result, { entry: 'src/index.ts' })
+
+      expect(out).toContain('ALSO IN THIS FILE')
+      expect(out).toMatch(/GET\s+\/orders\s+100/)
+      expect(out).toMatch(/POST\s+\/orders\s+45/)
+      expect(out).toContain('evlog map "POST /orders"')
+      expect(formatMapReport(ctx, result, { entry: 'src/checkout.ts' })).not.toContain('ALSO IN THIS FILE')
+    })
+  })
+
   it('accepts the ./ prefix a shell completes', async () => {
     const { ctx, result } = await nuxt()
     const bare = formatMapReport(ctx, result, { entry: 'server/api/payments/stripe.post.ts' })

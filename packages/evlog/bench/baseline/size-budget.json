@@ -1,0 +1,10 @@
+{
+  "reference": "evlog@2.35.1",
+  "scenarios": {
+    "axiom": { "gzip": 13500, "reference": 14435 },
+    "basic": { "gzip": 11300, "reference": 11905 },
+    "create-logger": { "gzip": 12700, "reference": 13250 },
+    "hono": { "gzip": 15550, "reference": 16037 }
+  },
+  "unpacked": { "bytes": 952000, "reference": 908448 }
+}

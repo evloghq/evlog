@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join } from 'node:path'
 import { detectFramework } from '../map/detect'
 import type { Framework } from '../map/types'
+import { prettyPath } from '../project'
 import type { PackageJson, ProjectInfo } from '../project'
 import { isInitFramework } from '../frameworks'
 import { glob } from '../glob'
@@ -58,12 +59,8 @@ export function findWorkspaceApps(project: ProjectInfo): WorkspaceApp[] {
     try {
       const { framework } = detectFramework(candidate)
       if (!isInitFramework(framework)) continue
-      apps.push({
-        name: packageJson.name ?? relative(project.root, dir),
-        dir,
-        label: relative(project.root, dir),
-        framework,
-      })
+      const label = prettyPath(project.root, dir)
+      apps.push({ name: packageJson.name ?? label, dir, label, framework })
     } catch {
       // No framework, nothing to instrument.
     }

@@ -31,6 +31,20 @@ describe('createRequestLogger', () => {
     expect(context.requestId).toBe('req-123')
   })
 
+  it('carries operation from options into the emitted event', () => {
+    const logger = createRequestLogger({ operation: 'job:sync', requestId: 'r1' })
+
+    const event = defined(logger.emit())
+    expect(event.operation).toBe('job:sync')
+    expect(event.requestId).toBe('r1')
+  })
+
+  it('omits operation when the option is not set', () => {
+    const logger = createRequestLogger({ requestId: 'r1' })
+
+    expect('operation' in logger.getContext()).toBe(false)
+  })
+
   it('accumulates context with set()', () => {
     const logger = createRequestLogger({ method: 'GET', path: '/api/user' })
 
@@ -632,28 +646,28 @@ describe('createRequestLogger', () => {
     warnSpy.mockRestore()
   })
 
-  it('merges ai fields onto the emitted wide event before drain starts', () => {
+  it('merges gen_ai fields onto the emitted wide event before drain starts', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const logger = createRequestLogger(
       { method: 'POST', path: '/api/chat', requestId: 'r1' },
       { _deferDrain: true },
     )
     const emitted = logger.emit({ status: 200 })
-    logger.set({ ai: { calls: 1, totalTokens: 42 } })
+    logger.set({ gen_ai: { calls: 1, usage: { total_tokens: 42 } } })
     expect(warnSpy).not.toHaveBeenCalled()
-    expect(emitted?.ai).toEqual({ calls: 1, totalTokens: 42 })
+    expect(emitted?.gen_ai).toEqual({ calls: 1, usage: { total_tokens: 42 } })
     logger.set({ action: 'chat' })
     expect(warnSpy).toHaveBeenCalled()
     warnSpy.mockRestore()
   })
 
-  it('does not merge ai fields after immediate drain when deferDrain is false', () => {
+  it('does not merge gen_ai fields after immediate drain when deferDrain is false', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const logger = createRequestLogger({ method: 'POST', path: '/api/chat', requestId: 'r1' })
     logger.emit({ status: 200 })
-    logger.set({ ai: { calls: 1, totalTokens: 42 } })
+    logger.set({ gen_ai: { calls: 1, usage: { total_tokens: 42 } } })
     expect(warnSpy).toHaveBeenCalled()
-    expect(String(warnSpy.mock.calls[0]?.[0])).toContain('Keys dropped: ai')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toContain('Keys dropped: gen_ai')
     warnSpy.mockRestore()
   })
 

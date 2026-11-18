@@ -9,6 +9,7 @@ On **Nuxt, Nitro, Next.js App Router, TanStack Start, Hono, Express, Fastify, an
 ```bash
 npx evlog map --no-write
 npx evlog map <file> --no-write   # suggested shape for one entry point
+npx evlog map "GET /users/:id" --no-write   # one route of a file that registers several
 ```
 
 **Requirements** (move the score) map to the anti-patterns below:

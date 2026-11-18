@@ -92,7 +92,7 @@ describe.sequential('Nitro v3 Server with evlog', () => {
     }
   })
 
-  it.sequential('should pass streaming responses through and emit at header time', async () => {
+  it.sequential('should pass streaming responses through and emit once the body ends', async () => {
     const logs: any[] = []
     const mockFn = vi.fn((context) => {
       logs.push(String(context))
@@ -104,22 +104,20 @@ describe.sequential('Nitro v3 Server with evlog', () => {
     try {
       const res = await server.fetch(new Request(new URL('/stream', server.url)))
 
-      expect(res.status).toBe(200)
+      expect(res.status).toBe(207)
 
       // The plugin must not lock, wrap, or replace the streaming body
       const text = await res.text()
       expect(text).toContain('data: one')
       expect(text).toContain('data: two')
 
-      // Wait for the async log write deterministically instead of sleeping
-      await vi.waitFor(
-        () => expect(logs.join('\n')).toMatch(/INFO.*GET \/stream.*200/),
-        { timeout: 1000, interval: 5 },
-      )
+      const streamDrains = () => [...logs.join('\n').matchAll(/\[TEST:DRAIN\] (.+)/g)]
+        .map(match => JSON.parse(match[1]))
+        .filter(drain => drain.requestPath === '/stream')
+      await vi.waitFor(() => expect(streamDrains()).toHaveLength(1), { timeout: 1000, interval: 5 })
 
-      const logOutput = logs.join('\n')
-      expect(logOutput).toContain('stream:')
-      expect(logOutput).toContain('kind=sse')
+      expect(streamDrains()[0]).toMatchObject({ status: 207, stream: { kind: 'sse', late: true } })
+      expect(logs.join('\n')).not.toContain('called after the wide event was emitted')
     } finally {
       consola.restoreAll()
     }

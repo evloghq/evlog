@@ -1,5 +1,7 @@
+import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const distDir = resolve(import.meta.dirname, '../../dist')
@@ -59,9 +61,9 @@ function assertNoNodeBuiltins(source: string, label: string): void {
 
 describe.skipIf(!distExists)('dist node built-in imports (#387)', () => {
   it('audit graph does not import Node built-ins', () => {
-    const auditChunk = listDistFiles().find(f => /^audit-[^/]+\.mjs$/.test(f))
-    expect(auditChunk, 'expected hashed audit chunk').toBeDefined()
-    assertNoNodeBuiltins(readDist(auditChunk!), auditChunk!)
+    for (const chunk of ['audit.mjs', ...collectRelativeImports('audit.mjs')]) {
+      assertNoNodeBuiltins(readDist(chunk), chunk)
+    }
   })
 
   it('audit-action entry stays isomorphic', () => {
@@ -90,5 +92,22 @@ describe.skipIf(!distExists)('dist node built-in imports (#387)', () => {
     const nodeChunk = listDistFiles().find(file => /^diagnostics-channel\.node-/.test(file))
     expect(nodeChunk, 'expected a lazily-imported diagnostics-channel.node chunk').toBeDefined()
     expect(readDist(nodeChunk!)).toMatch(/from\s+["']node:diagnostics_channel["']/)
+  })
+})
+
+describe.skipIf(!distExists)('dist pretty output', () => {
+  it('prints an error logged right before a synchronous process.exit()', () => {
+    const script = `
+      import { createError, createLogger, initLogger } from ${JSON.stringify(pathToFileURL(resolve(distDir, 'index.mjs')).href)}
+      initLogger({ pretty: true, env: { service: 'demo' } })
+      const log = createLogger({ path: '/checkout' })
+      log.error(createError({ message: 'Payment failed', why: 'Card declined' }))
+      log.emit()
+      process.exit(0)
+    `
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env: { ...process.env, NODE_ENV: 'development' } })
+    expect(output).toContain('error:')
+    expect(output).toContain('Payment failed')
+    expect(output).toContain('/checkout')
   })
 })

@@ -62,7 +62,7 @@ export interface PostHogConfig {
    * Record shape. Default: `'compact'`.
    *
    * In `'events'` mode, `'compact'` flattens nested properties into dotted
-   * keys (`ai.costUsd`), which is what the PostHog UI filters and breaks down
+   * keys (`gen_ai.usage.cost`), which is what the PostHog UI filters and breaks down
    * by — a nested object is one opaque property there.
    *
    * @see {@link OTLPRecordShape}

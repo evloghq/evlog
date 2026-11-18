@@ -7,7 +7,8 @@ import {
   type InstrumentationSetupContext,
 } from 'eve/instrumentation'
 import type { AuditableLogger } from '../audit'
-import type { AIToolExecution, AIEventData, ModelCost } from '../ai/index'
+import { toGenAIField } from '../ai/gen-ai'
+import type { AIToolExecution, AIFieldData, ModelCost } from '../ai/index'
 import { initLogger, isLoggerInitialized, isLoggerLocked, noopLogger } from '../logger'
 import type { LoggerConfig } from '../types'
 import type { EvlogConfig } from '../shared/define'
@@ -67,11 +68,11 @@ export interface EvlogEveOptions extends Omit<EvlogConfig, 'extends' | 'map' | '
    */
   redactMessage?: boolean
   /**
-   * Pricing map for {@link AIEventData.estimatedCost}. Keys are model IDs,
+   * Pricing map for `gen_ai.usage.estimated_cost`. Keys are model IDs,
    * values are dollars per 1M tokens — same shape as `evlog/ai`.
    *
    * Only used as a fallback: when eve reports `usage.costUsd`, that value is
-   * recorded as `ai.costUsd` instead.
+   * recorded as `gen_ai.usage.cost` instead.
    */
   cost?: Record<string, ModelCost>
   /**
@@ -216,7 +217,8 @@ interface TurnAccumulator {
   cacheReadTokens: number
   cacheWriteTokens: number
   costUsd: number
-  finishReason?: string
+  /** One per model call, in order. */
+  finishReasons: string[]
   toolExecutions: AIToolExecution[]
   subagents: EveSubagentRecord[]
   authorizations: EveAuthorizationRecord[]
@@ -263,7 +265,7 @@ interface TurnState {
 /** Top-level wide-event keys that stay turn-scoped and are not carried across turns. */
 const TURN_ONLY_KEYS = new Set([
   'eve',
-  'ai',
+  'gen_ai',
   'message',
   'method',
   'path',
@@ -300,6 +302,7 @@ function freshAccumulator(options: EvlogEveOptions): TurnAccumulator {
     outputTokens: 0,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
+    finishReasons: [],
     costUsd: 0,
     toolExecutions: [],
     subagents: [],
@@ -362,9 +365,9 @@ function attributeToolInputTokens(acc: TurnAccumulator, inputTokens: number): vo
   acc.lastStepInputTokens = inputTokens
 }
 
-function buildAiField(state: TurnAccumulator): AIEventData {
+function buildAiField(state: TurnAccumulator): AIFieldData {
   const totalTokens = state.inputTokens + state.outputTokens
-  const data: AIEventData = {
+  const data: AIFieldData = {
     calls: state.calls,
     inputTokens: state.inputTokens,
     outputTokens: state.outputTokens,
@@ -376,7 +379,7 @@ function buildAiField(state: TurnAccumulator): AIEventData {
   if (state.lastProvider) data.provider = state.lastProvider
   if (state.cacheReadTokens > 0) data.cacheReadTokens = state.cacheReadTokens
   if (state.cacheWriteTokens > 0) data.cacheWriteTokens = state.cacheWriteTokens
-  if (state.finishReason) data.finishReason = state.finishReason
+  if (state.finishReasons.length > 0) data.finishReasons = [...state.finishReasons]
   if (state.costUsd > 0) {
     data.costUsd = roundCost(state.costUsd)
   } else {
@@ -982,6 +985,7 @@ function getOrCreateTurnState(
       kind: ctx.channel.kind ?? 'unknown',
       ...(ctx.channel.continuationToken ? { continuing: true } : {}),
     },
+    gen_ai: { agent: { name: ctx.agent.name } },
   })
 
   // Isolated from the turn.started handler: a throwing enrichTurn must not
@@ -1025,7 +1029,13 @@ function flushAi(state: TurnState): void {
       }
     }
   }
-  state.logger.set({ ai })
+  state.logger.set({
+    gen_ai: {
+      ...toGenAIField(ai),
+      operation: { name: 'invoke_agent' },
+      conversation: { id: state.sessionId },
+    },
+  })
 }
 
 async function finishTurn(
@@ -1130,16 +1140,19 @@ async function emitSessionEvent(
       ...(ctx.agent.nodeId ? { nodeId: ctx.agent.nodeId } : {}),
     },
     channel: { kind: ctx.channel.kind ?? 'unknown' },
-    ai: {
-      calls: rollup.calls,
-      inputTokens: rollup.inputTokens,
-      outputTokens: rollup.outputTokens,
-      totalTokens: rollup.inputTokens + rollup.outputTokens,
-      ...(rollup.costUsd > 0 ? { costUsd: roundCost(rollup.costUsd) } : {}),
-      ...(rollup.estimatedCost > 0
-        ? { estimatedCost: roundCost(rollup.estimatedCost) }
-        : {}),
-      ...(rollup.tools.size > 0 ? { toolCalls: [...rollup.tools] } : {}),
+    gen_ai: {
+      ...toGenAIField({
+        calls: rollup.calls,
+        inputTokens: rollup.inputTokens,
+        outputTokens: rollup.outputTokens,
+        totalTokens: rollup.inputTokens + rollup.outputTokens,
+        ...(rollup.costUsd > 0 ? { costUsd: roundCost(rollup.costUsd) } : {}),
+        ...(rollup.estimatedCost > 0 ? { estimatedCost: roundCost(rollup.estimatedCost) } : {}),
+        ...(rollup.tools.size > 0 ? { toolCalls: [...rollup.tools] } : {}),
+      }),
+      operation: { name: 'invoke_agent' },
+      agent: { name: ctx.agent.name },
+      conversation: { id: sessionId },
     },
   })
 
@@ -1480,7 +1493,7 @@ export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {
           if (outcome === 'completed') {
             acc.steps += 1
             acc.calls += 1
-            if (finishReason) acc.finishReason = finishReason
+            if (finishReason) acc.finishReasons.push(finishReason)
           } else if (outcome === 'failed' && error) {
             acc.stepFailures.push({ code: error.code, message: error.message, stepIndex: acc.steps })
           }
@@ -1702,7 +1715,7 @@ export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {
         const acc = state.accumulator
         acc.steps += 1
         acc.calls += 1
-        acc.finishReason = event.data.finishReason
+        if (event.data.finishReason) acc.finishReasons.push(event.data.finishReason)
         if (event.data.usage) addUsage(acc, event.data.usage)
       })
     },

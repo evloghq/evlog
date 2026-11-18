@@ -1,8 +1,8 @@
 import type { Node } from 'oxc-parser'
 import { glob } from '../../glob'
-import type { ParseFn, ParseResult } from '../../map/parse'
-import { nodeLoc, parseFile, walkAst } from '../../map/parse'
-import type { RawRouteEntry, ScanContext } from '../../map/types'
+import type { ParseResult, SourceRange } from '../../map/parse'
+import { nodeLoc, nodeRange, parseFile, walkAst } from '../../map/parse'
+import type { ExtractedRoute, ScanContext } from '../../map/types'
 import { relativeFromRoot } from '../../map/utils'
 import type { Framework } from '../index'
 import type { MapAdapter } from '../types'
@@ -40,6 +40,7 @@ interface FoundRoute {
   method: string | null
   path: string
   line: number
+  scope: SourceRange
 }
 
 /**
@@ -115,6 +116,10 @@ function property(object: Node, key: string): Node | undefined {
  * a handler. The handler is the last argument rather than the second so that
  * Express's `app.get('/x', auth, handler)` and Fastify's
  * `app.get('/x', { schema }, handler)` both count.
+ *
+ * A route's scope starts at the method name, not at the call: in a chain,
+ * `new Hono().get('/a', …).post('/b', …)`, the last call contains every
+ * registration before it.
  */
 function findRoutes(parsed: ParseResult, options: CodeRoutesOptions): FoundRoute[] {
   const found: FoundRoute[] = []
@@ -129,13 +134,14 @@ function findRoutes(parsed: ParseResult, options: CodeRoutesOptions): FoundRoute
     if (computed || member.type !== 'Identifier') return
     const { name } = member
     const line = () => nodeLoc(node, parsed.lines)?.line ?? 1
+    const scope: SourceRange = [nodeRange(member)[0], nodeRange(node)[1]]
 
     if (options.on?.includes(name)) {
       const methods = stringLiterals(call.arguments[0]).map(method => method === '*' ? null : method.toUpperCase())
       const paths = stringLiterals(call.arguments[1]).filter(isRoutePath)
       if (methods.length === 0 || paths.length === 0 || call.arguments.length < 3) return
       for (const method of methods) {
-        for (const path of paths) found.push({ method, path, line: line() })
+        for (const path of paths) found.push({ method, path, line: line(), scope })
       }
       return
     }
@@ -146,14 +152,14 @@ function findRoutes(parsed: ParseResult, options: CodeRoutesOptions): FoundRoute
       const path = stringLiteral(property(definition, options.routeObject.path))
       if (!path || !isRoutePath(path)) return
       const methods = stringLiterals(property(definition, options.routeObject.method)).map(method => method.toUpperCase())
-      for (const method of methods.length > 0 ? methods : [null]) found.push({ method, path, line: line() })
+      for (const method of methods.length > 0 ? methods : [null]) found.push({ method, path, line: line(), scope })
       return
     }
 
     if (!options.methods.has(name)) return
     const path = stringLiteral(call.arguments[0])
     if (!path || !isRoutePath(path) || call.arguments.length < 2 || !looksLikeHandler(call.arguments.at(-1))) return
-    found.push({ method: options.methods.get(name) ?? null, path, line: line() })
+    found.push({ method: options.methods.get(name) ?? null, path, line: line(), scope })
   })
 
   return found
@@ -228,9 +234,9 @@ export function codeRoutesAdapter(options: CodeRoutesOptions): MapAdapter {
       return 'explicit'
     },
     // eslint-disable-next-line require-await -- satisfies the async MapAdapter contract
-    async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
+    async extractRoutes(ctx: ScanContext): Promise<ExtractedRoute[]> {
       const parse = ctx.parse ?? parseFile
-      const routes: RawRouteEntry[] = []
+      const routes: ExtractedRoute[] = []
 
       for (const file of sourceFiles(ctx.projectRoot)) {
         const parsed = parse(file)
@@ -244,6 +250,7 @@ export function codeRoutesAdapter(options: CodeRoutesOptions): MapAdapter {
             path: route.path,
             file: rel,
             handler: { line: route.line, column: 0 },
+            scope: route.scope,
           })
         }
       }

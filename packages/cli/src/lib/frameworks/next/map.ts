@@ -1,15 +1,16 @@
 import { readFileSync } from 'node:fs'
 import type { Node } from 'oxc-parser'
-import type { ParseResult } from '../../map/parse'
+import type { ParseResult, SourceRange } from '../../map/parse'
 import {
   findHandlerLocation,
   findHttpMethodExports,
   hasDirective,
   nodeLoc,
+  nodeRange,
   parseFile,
   walkAst,
 } from '../../map/parse'
-import type { RawRouteEntry, ScanContext } from '../../map/types'
+import type { ExtractedRoute, ScanContext } from '../../map/types'
 import type { MapAdapter } from '../types'
 import { relativeFromRoot, segmentsToPath } from '../../map/utils'
 import { glob } from '../../glob'
@@ -43,8 +44,8 @@ function routeDirFromFile(rel: string, appDir: string): string {
  */
 export const nextAdapter: MapAdapter = {
   // eslint-disable-next-line require-await -- satisfies the async MapAdapter contract
-  async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
-    const routes: RawRouteEntry[] = []
+  async extractRoutes(ctx: ScanContext): Promise<ExtractedRoute[]> {
+    const routes: ExtractedRoute[] = []
     const root = ctx.projectRoot
     const appDir = resolveAppDir(root)
     const parse = ctx.parse ?? parseFile
@@ -78,7 +79,7 @@ export const nextAdapter: MapAdapter = {
           handler: findHandlerLocation(parsed, []),
         })
       } else {
-        for (const { method, line } of methods) {
+        for (const { method, line, scope } of methods) {
           routes.push({
             framework: 'next',
             kind: 'api',
@@ -86,6 +87,7 @@ export const nextAdapter: MapAdapter = {
             path: apiPath,
             file: rel,
             handler: { line, column: 0 },
+            scope,
           })
         }
       }
@@ -138,6 +140,7 @@ export const nextAdapter: MapAdapter = {
           path: `action:${exp.name}`,
           file: rel,
           handler: { line: exp.line, column: 0 },
+          scope: exp.scope,
         })
       }
     }
@@ -164,8 +167,8 @@ function mentionsServerDirective(file: string): boolean {
  * to be an async function, so `withEvlog(async () => …)`, evlog's own documented
  * shape, is an action whatever wraps it.
  */
-function findServerActionExports(parsed: ParseResult): Array<{ name: string, line: number }> {
-  const exports: Array<{ name: string, line: number }> = []
+function findServerActionExports(parsed: ParseResult): Array<{ name: string, line: number, scope: SourceRange }> {
+  const exports: Array<{ name: string, line: number, scope: SourceRange }> = []
   const lineOf = (node: Node | undefined): number => (node ? nodeLoc(node, parsed.lines)?.line ?? 1 : 1)
 
   walkAst(parsed.program, (node) => {
@@ -173,18 +176,18 @@ function findServerActionExports(parsed: ParseResult): Array<{ name: string, lin
       const { declaration } = node as { declaration?: Node }
       if (declaration?.type !== 'FunctionDeclaration' && declaration?.type !== 'ArrowFunctionExpression' && declaration?.type !== 'CallExpression') return
       const name = declaration.type === 'FunctionDeclaration' ? declaration.id?.name ?? 'default' : 'default'
-      exports.push({ name, line: lineOf(node) })
+      exports.push({ name, line: lineOf(node), scope: nodeRange(node) })
       return
     }
 
     if (node.type !== 'ExportNamedDeclaration') return
     const decl = node as {
       source?: { value: string } | null
-      specifiers?: Array<{ exported?: { type: string, name?: string, value?: string } }>
+      specifiers?: Array<Node & { exported?: { type: string, name?: string, value?: string } }>
       declaration?: {
         type: string
         id?: { name: string }
-        declarations?: Array<{ id: { type: string, name: string }, init?: { type: string } }>
+        declarations?: Array<Node & { id: { type: string, name: string }, init?: { type: string } }>
       }
     }
 
@@ -193,18 +196,18 @@ function findServerActionExports(parsed: ParseResult): Array<{ name: string, lin
     if (!decl.declaration && !decl.source) {
       for (const specifier of decl.specifiers ?? []) {
         const name = specifier.exported?.name ?? specifier.exported?.value
-        if (name) exports.push({ name, line: lineOf(node) })
+        if (name) exports.push({ name, line: lineOf(node), scope: nodeRange(specifier) })
       }
       return
     }
 
     if (decl.declaration?.type === 'FunctionDeclaration' && decl.declaration.id?.name) {
-      exports.push({ name: decl.declaration.id.name, line: lineOf(node) })
+      exports.push({ name: decl.declaration.id.name, line: lineOf(node), scope: nodeRange(node) })
     }
     if (decl.declaration?.type === 'VariableDeclaration') {
       for (const d of decl.declaration.declarations ?? []) {
         if (d.id.type === 'Identifier' && d.init && ['ArrowFunctionExpression', 'FunctionExpression', 'CallExpression'].includes(d.init.type)) {
-          exports.push({ name: d.id.name, line: lineOf(d.init as Node) })
+          exports.push({ name: d.id.name, line: lineOf(d.init as Node), scope: nodeRange(d) })
         }
       }
     }

@@ -1,7 +1,7 @@
 import type { ArgsDef, CommandDef, Resolvable } from 'citty'
 import { formatBanner } from './brand'
 import { createContext } from './context'
-import { createStyle, writeHuman } from './output'
+import { createStyle, writeHuman, writeStdout } from './output'
 
 export async function resolve<T>(value: T | (() => T | Promise<T>) | Promise<T> | undefined): Promise<T | undefined> {
   if (typeof value === 'function') return await (value as () => T | Promise<T>)()
@@ -9,20 +9,21 @@ export async function resolve<T>(value: T | (() => T | Promise<T>) | Promise<T> 
 }
 
 /**
- * The command `rawArgs` leads to and its parent, the pair {@link showUsage}
- * takes: `map --help` is `map` under the root, an unknown name stays on the
- * command that did not know it.
+ * The command `rawArgs` leads to and the commands above it, root first, the
+ * pair {@link showUsage} takes: `telemetry status --help` is `status` under
+ * the root and `telemetry`, an unknown name stays on the command that did not
+ * know it.
  */
 export async function resolveCommand(
   cmd: CommandDef<any>,
   rawArgs: string[],
-  parent?: CommandDef<any>,
-): Promise<[CommandDef<any>, CommandDef<any> | undefined]> {
+  parents: CommandDef<any>[] = [],
+): Promise<[CommandDef<any>, CommandDef<any>[]]> {
   const subCommands = await resolve(cmd.subCommands)
   const index = rawArgs.findIndex(arg => !arg.startsWith('-'))
   const sub = index === -1 ? undefined : subCommands?.[rawArgs[index]!]
-  if (!sub) return [cmd, parent]
-  return resolveCommand(await resolve(sub as Resolvable<CommandDef<any>>) as CommandDef<any>, rawArgs.slice(index + 1), cmd)
+  if (!sub) return [cmd, parents]
+  return resolveCommand(await resolve(sub as Resolvable<CommandDef<any>>) as CommandDef<any>, rawArgs.slice(index + 1), [...parents, cmd])
 }
 
 interface Row {
@@ -36,30 +37,39 @@ function formatSection(title: string, rows: Row[], paint: ReturnType<typeof crea
   return `  ${paint('dim', title)}\n\n${lines.join('\n')}`
 }
 
+/** The spelling a flag is typed in: `dryRun` is declared, `--dry-run` is written. */
+function flagName(key: string): string {
+  return `--${key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)}`
+}
+
 /**
  * Branded replacement for citty's default usage renderer — banner on top,
- * blue-railed command and option lists, no repeated boilerplate: the docs
- * link lives in the banner meta line only.
+ * blue-railed command, argument and option lists, no repeated boilerplate: the
+ * docs link lives in the banner meta line only.
+ *
+ * @param to - `stdout` when the usage was asked for with `--help`, so it can be
+ * piped; `stderr` when it comes with an error.
  */
-export async function showUsage(cmd: CommandDef<any>, parent?: CommandDef<any>): Promise<void> {
-  const ctx = createContext()
+export async function showUsage(cmd: CommandDef<any>, parents: CommandDef<any>[], to: 'stdout' | 'stderr'): Promise<void> {
+  const ctx = createContext({}, process[to])
   const { paint } = createStyle(ctx)
 
-  const meta = await resolve(cmd.meta)
-  const parentMeta = await resolve(parent?.meta)
-  const commandName = [parentMeta?.name, meta?.name].filter(Boolean).join(' ') || 'evlog'
-  const version = meta?.version ?? parentMeta?.version ?? ''
+  const metas = await Promise.all([...parents, cmd].map(c => resolve(c.meta)))
+  const commandName = metas.map(m => m?.name).filter(Boolean).join(' ') || 'evlog'
+  const version = metas.findLast(m => m?.version)?.version ?? ''
 
   const subCommands = await resolve(cmd.subCommands)
-  const args = await resolve(cmd.args as ArgsDef | undefined)
+  const args = Object.entries(await resolve(cmd.args as ArgsDef | undefined) ?? {})
+  const positionals = args.filter(([, def]) => def.type === 'positional')
+  const options = args.filter(([, def]) => def.type !== 'positional')
   const hasCommands = !!subCommands && Object.keys(subCommands).length > 0
-  const hasArgs = !!args && Object.keys(args).length > 0
 
   const sections: string[] = [formatBanner(ctx, version).trimEnd()]
 
   const usageParts = [commandName]
   if (hasCommands) usageParts.push('<command>')
-  if (hasArgs) usageParts.push('[options]')
+  for (const [name, def] of positionals) usageParts.push(def.required === false ? `[${name}]` : `<${name}>`)
+  if (options.length > 0) usageParts.push('[options]')
   sections.push(`  ${paint('dim', 'USAGE')}  ${paint('bold', usageParts.join(' '))}`)
 
   if (hasCommands) {
@@ -71,11 +81,15 @@ export async function showUsage(cmd: CommandDef<any>, parent?: CommandDef<any>):
     sections.push(formatSection('COMMANDS', rows, paint))
   }
 
-  if (hasArgs) {
-    const rows: Row[] = Object.entries(args).map(([name, def]) => ({
-      name: `--${name}`,
-      description: (def as { description?: string }).description ?? '',
-    }))
+  if (positionals.length > 0) {
+    sections.push(formatSection('ARGUMENTS', positionals.map(([name, def]) => ({ name, description: def.description ?? '' })), paint))
+  }
+
+  if (options.length > 0) {
+    const rows: Row[] = options.map(([name, def]) => {
+      const short = 'alias' in def ? [def.alias ?? []].flat().map(alias => `-${alias}, `).join('') : ''
+      return { name: `${short}${flagName(name)}`, description: def.description ?? '' }
+    })
     sections.push(formatSection('OPTIONS', rows, paint))
   }
 
@@ -84,5 +98,7 @@ export async function showUsage(cmd: CommandDef<any>, parent?: CommandDef<any>):
   }
 
   // One blank line between major sections; no leading spacer above the banner
-  writeHuman(`${sections.join('\n\n')}\n`)
+  const text = `${sections.join('\n\n')}\n`
+  if (to === 'stdout') writeStdout(text)
+  else writeHuman(text)
 }

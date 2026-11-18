@@ -374,6 +374,21 @@ describe('client log.error with an Error instance', () => {
       expect(sent().error).toEqual({ name: 'Error', message: 'Declined', stack: expect.any(String) })
     })
 
+    it('sends the data and internal values its own toJSON rewrites', () => {
+      initTransport()
+      class PaymentError extends Error {
+        data = { cardNumber: '4242424242424242' }
+        internal = { token: 'tok_secret' }
+        toJSON() {
+          return { name: this.name, message: this.message, data: '[REDACTED]', internal: undefined }
+        }
+      }
+
+      log.error({ action: 'checkout', error: new PaymentError('Declined') })
+
+      expect(sent().error).toEqual({ name: 'Error', message: 'Declined', stack: expect.any(String), data: '[REDACTED]' })
+    })
+
     it('keeps the data an h3 error carries', () => {
       initTransport()
 

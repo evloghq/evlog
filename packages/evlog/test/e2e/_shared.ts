@@ -12,8 +12,10 @@
  * `vitest.e2e.config.ts` and `pnpm run test:e2e`.
  */
 import { randomUUID } from 'node:crypto'
-import { describe, it } from 'vitest'
+import { readFile } from 'node:fs/promises'
+import { describe, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
+import type { OTLPExportLogsRequest, OTLPLogRecord } from '../../src/adapters/otlp'
 
 export interface RunMetadata {
   runId: string
@@ -151,4 +153,61 @@ export function itWithCorrelationId(
       throw err
     }
   }, timeoutMs)
+}
+
+export interface RecordedRequest {
+  url: string
+  headers: Headers
+  body: RequestInit['body']
+  status: number
+}
+
+/**
+ * Let `fetch` reach the network and keep each request with the status the
+ * destination answered, so a write-only API can still be checked on the wire.
+ */
+export function recordFetch(): { requests: RecordedRequest[], restore: () => void } {
+  const original = globalThis.fetch
+  const requests: RecordedRequest[] = []
+  const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const response = await original(input, init)
+    requests.push({ url: String(input), headers: new Headers(init?.headers), body: init?.body, status: response.status })
+    return response
+  })
+  return { requests, restore: () => spy.mockRestore() }
+}
+
+export interface CollectedRecord {
+  resource: Record<string, unknown>
+  scope: { name: string, version?: string }
+  record: OTLPLogRecord
+}
+
+/** Plain value of an OTLP attribute as the collector writes it: int64 comes back as a string. */
+export function attributeValue(attributes: OTLPLogRecord['attributes'] | undefined, key: string): unknown {
+  const value = attributes?.find(attribute => attribute.key === key)?.value as Record<string, unknown> | undefined
+  if (!value) return undefined
+  if ('intValue' in value) return Number(value.intValue)
+  return value.stringValue ?? value.boolValue ?? value.doubleValue ?? value.kvlistValue ?? value.arrayValue
+}
+
+/**
+ * Wait for the sandbox OpenTelemetry Collector to write the record whose
+ * `e2e_correlation_id` attribute matches, and return it with its resource and scope.
+ */
+export function waitForCollectedRecord(file: string, correlationId: string, label: string): Promise<CollectedRecord> {
+  return pollUntil(async () => {
+    const content = await readFile(file, 'utf8').catch(() => '')
+    for (const line of content.split('\n')) {
+      if (!line.includes(correlationId)) continue
+      const request = JSON.parse(line) as OTLPExportLogsRequest
+      for (const { resource, scopeLogs } of request.resourceLogs) {
+        for (const { scope, logRecords } of scopeLogs) {
+          const record = logRecords.find(r => attributeValue(r.attributes, 'e2e_correlation_id') === correlationId)
+          if (record) return { resource: Object.fromEntries((resource.attributes ?? []).map(a => [a.key, attributeValue([a], a.key)])), scope, record }
+        }
+      }
+    }
+    return null
+  }, { timeoutMs: 15_000, intervalMs: 250, label })
 }

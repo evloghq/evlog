@@ -35,7 +35,7 @@ async function fire<TKey extends HookEventType>(
   await handler(event, (options.ctx ?? hookContext()) as HookContext<TKey>)
 }
 
-/** One object field of a wide event (`eve`, `ai`), for assertions on its keys. */
+/** One object field of a wide event (`eve`, `gen_ai`), for assertions on its keys. */
 function field(event: WideEvent | undefined, key: string): Record<string, unknown> | undefined {
   return event?.[key] as Record<string, unknown> | undefined
 }
@@ -102,16 +102,20 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     const event = findEventViaDrain(drain, e => e.path === `/sessions/${SESSION_ID}/turns/${TURN_ID}`)
     expect(event).toMatchObject({ method: 'EVE', status: 200, requestId: `${SESSION_ID}:${TURN_ID}` })
     expect(event?.eve).toMatchObject({ sessionId: SESSION_ID, turnId: TURN_ID })
-    expect(event?.ai).toMatchObject({
+    expect(event?.gen_ai).toMatchObject({
       calls: 2,
       steps: 2,
-      inputTokens: 200,
-      outputTokens: 100,
-      cacheReadTokens: 20,
-      totalTokens: 300,
-      model: 'anthropic/claude-sonnet-4.5',
-      provider: 'anthropic',
-      finishReason: 'stop',
+      usage: {
+        input_tokens: 200,
+        output_tokens: 100,
+        cache_read: { input_tokens: 20 },
+        total_tokens: 300,
+      },
+      request: { model: 'anthropic/claude-sonnet-4.5' },
+      provider: { name: 'anthropic' },
+      response: { finish_reasons: ['tool-calls', 'stop'] },
+      operation: { name: 'invoke_agent' },
+      conversation: { id: SESSION_ID },
     })
   })
 
@@ -124,7 +128,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await settleTurn(hook)
 
     await waitForDrainCalls(drain)
-    expect(findEventViaDrain(drain, () => true)?.ai).toMatchObject({ costUsd: 0.012 })
+    expect(findEventViaDrain(drain, () => true)?.gen_ai).toMatchObject({ usage: { cost: 0.012 } })
   })
 
   it('emits a failed turn as an error wide event with the failure', async () => {
@@ -181,10 +185,10 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await settleTurn(hook)
 
     await waitForDrainCalls(drain)
-    const tools = field(findEventViaDrain(drain, () => true), 'ai')?.tools
+    const tools = field(findEventViaDrain(drain, () => true), 'gen_ai')?.tools
     expect(tools).toEqual([
-      { name: 'search', durationMs: expect.any(Number), success: true },
-      { name: 'fetch_page', durationMs: expect.any(Number), success: false, error: 'page timed out' },
+      { name: 'search', duration_ms: expect.any(Number), success: true },
+      { name: 'fetch_page', duration_ms: expect.any(Number), success: false, error: 'page timed out' },
     ])
   })
 
@@ -227,7 +231,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await waitForDrainCalls(drain)
     const event = findEventViaDrain(drain, () => true)
     expect(event?.approval).toEqual({ status: 'rejected', tool: 'deploy' })
-    expect(field(event, 'ai')?.tools).toEqual([{ name: 'deploy', durationMs: expect.any(Number), success: false, error: 'rejected' }])
+    expect(field(event, 'gen_ai')?.tools).toEqual([{ name: 'deploy', duration_ms: expect.any(Number), success: false, error: 'rejected' }])
     expect(field(event, 'eve')?.phase).toBe('rejected')
   })
 
@@ -422,7 +426,7 @@ describe('evlog/eve on v27 session events (eve 0.84 and later)', () => {
     await waitForDrainCalls(drain, 3)
     const sessionEvent = findEventViaDrain(drain, e => e.path === `/sessions/${SESSION_ID}`)
     expect(sessionEvent?.eve).toMatchObject({ scope: 'session', turns: 2, cancelledTurns: 1 })
-    expect(sessionEvent?.ai).toMatchObject({ calls: 1, inputTokens: 100, costUsd: 0.01 })
+    expect(sessionEvent?.gen_ai).toMatchObject({ calls: 1, usage: { input_tokens: 100, cost: 0.01 }, conversation: { id: SESSION_ID } })
   })
 })
 
