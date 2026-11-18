@@ -42,9 +42,9 @@ type WideEventView = {
     requiresApproval?: boolean;
   };
   audit?: { action?: string; outcome?: string };
-  ai?: {
+  gen_ai?: {
     calls?: number;
-    tools?: Array<{ name?: string; success?: boolean; durationMs?: number }>;
+    tools?: Array<{ name?: string; success?: boolean; duration_ms?: number }>;
   };
 };
 
@@ -259,7 +259,7 @@ function isInterestingEvent(event: WideEventView): boolean {
   if (event.refund?.amount != null) return true;
   if (event.approval?.status) return true;
   if (event.customer?.name || event.customer?.slug) return true;
-  if ((event.ai?.tools?.length ?? 0) > 0) return true;
+  if ((event.gen_ai?.tools?.length ?? 0) > 0) return true;
   if (event.eve?.phase) return true;
   return false;
 }
@@ -355,7 +355,7 @@ function buildSummary(event: WideEventView): EventSummary {
     };
   }
 
-  const tools = event.ai?.tools?.map((tool) => tool.name).filter(Boolean) ?? [];
+  const tools = event.gen_ai?.tools?.map((tool) => tool.name).filter(Boolean) ?? [];
   if (tools.length > 0) {
     return {
       turnLabel,
@@ -393,9 +393,9 @@ function buildTags(event: WideEventView): EventTag[] {
     tags.push({ label: "rejected", tone: "error" });
   }
 
-  const toolCount = event.ai?.tools?.length ?? 0;
+  const toolCount = event.gen_ai?.tools?.length ?? 0;
   if (toolCount > 0) {
-    const failed = event.ai?.tools?.filter((tool) => tool.success === false).length ?? 0;
+    const failed = event.gen_ai?.tools?.filter((tool) => tool.success === false).length ?? 0;
     tags.push({
       label: failed > 0 ? `${toolCount} tools · ${failed} failed` : `${toolCount} tools`,
       tone: failed > 0 ? "error" : "neutral",

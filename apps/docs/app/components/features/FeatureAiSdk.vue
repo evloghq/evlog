@@ -238,39 +238,39 @@ function setView(view: 'without' | 'with') {
               </div>
               <div class="space-y-1 border-l-2 border-sky-500/20 pl-4">
                 <div>
-                  <span class="text-sky-400">ai.model</span><span class="text-dimmed">:</span>
+                  <span class="text-sky-400">gen_ai.request.model</span><span class="text-dimmed">:</span>
                   <span class="text-muted"> "claude-sonnet-4.6"</span>
                 </div>
                 <div>
-                  <span class="text-sky-400">ai.inputTokens</span><span class="text-dimmed">:</span>
+                  <span class="text-sky-400">gen_ai.usage.input_tokens</span><span class="text-dimmed">:</span>
                   <span class="text-pink-400"> 3312</span>
                 </div>
                 <div>
-                  <span class="text-sky-400">ai.outputTokens</span><span class="text-dimmed">:</span>
+                  <span class="text-sky-400">gen_ai.usage.output_tokens</span><span class="text-dimmed">:</span>
                   <span class="text-pink-400"> 814</span>
                 </div>
                 <div>
-                  <span class="text-sky-400">ai.reasoningTokens</span><span class="text-dimmed">:</span>
+                  <span class="text-sky-400">gen_ai.usage.reasoning.output_tokens</span><span class="text-dimmed">:</span>
                   <span class="text-pink-400"> 225</span>
                 </div>
                 <div>
-                  <span class="text-sky-400">ai.toolCalls</span><span class="text-dimmed">:</span>
+                  <span class="text-sky-400">gen_ai.tool_calls</span><span class="text-dimmed">:</span>
                   <span class="text-amber-400"> ["searchWeb", "queryDB"]</span>
                 </div>
                 <div>
-                  <span class="text-sky-400">ai.tools</span><span class="text-dimmed">:</span>
-                  <span class="text-amber-400"> [{name: "searchWeb", durationMs: 150, ...}]</span>
+                  <span class="text-sky-400">gen_ai.tools</span><span class="text-dimmed">:</span>
+                  <span class="text-amber-400"> [{name: "searchWeb", duration_ms: 150, ...}]</span>
                 </div>
                 <div>
-                  <span class="text-sky-400">ai.estimatedCost</span><span class="text-dimmed">:</span>
+                  <span class="text-sky-400">gen_ai.usage.estimated_cost</span><span class="text-dimmed">:</span>
                   <span class="text-emerald-400"> 0.022</span>
                 </div>
                 <div>
-                  <span class="text-sky-400">ai.msToFirstChunk</span><span class="text-dimmed">:</span>
-                  <span class="text-emerald-400"> 234</span>
+                  <span class="text-sky-400">gen_ai.response.time_to_first_chunk</span><span class="text-dimmed">:</span>
+                  <span class="text-emerald-400"> 0.234</span>
                 </div>
                 <div>
-                  <span class="text-sky-400">ai.tokensPerSecond</span><span class="text-dimmed">:</span>
+                  <span class="text-sky-400">gen_ai.response.tokens_per_second</span><span class="text-dimmed">:</span>
                   <span class="text-emerald-400"> 180</span>
                 </div>
               </div>
