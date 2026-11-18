@@ -1886,8 +1886,8 @@ describe('pretty-print tool input serialization', () => {
     circular.self = circular
     const logger = createRequestLogger({ method: 'GET', path: '/ai', requestId: 'r1' })
     logger.set({
-      ai: {
-        toolCalls: [
+      gen_ai: {
+        tool_calls: [
           { name: 'big', input: { n: 1n } },
           { name: 'circ', input: circular },
         ],
@@ -1910,10 +1910,10 @@ describe('pretty-print captured prompt and output', () => {
   it('renders captured prompt and output as tree lines', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r1' })
     logger.set({
-      ai: {
+      gen_ai: {
         calls: 1,
-        prompt: '[system] You are helpful\n\n[user] Hi there',
-        output: 'Hello! How can I help?',
+        input: { text: '[system] You are helpful\n\n[user] Hi there' },
+        output: { text: 'Hello! How can I help?' },
       },
     })
     logger.emit()
@@ -1921,19 +1921,28 @@ describe('pretty-print captured prompt and output', () => {
     const logSpy = vi.mocked(console.log)
     const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
 
-    expect(output).toContain('ai.prompt:')
+    expect(output).toContain('gen_ai.input:')
     expect(output).toContain('[system] You are helpful')
     expect(output).toContain('[user] Hi there')
-    expect(output).toContain('ai.output:')
+    expect(output).toContain('gen_ai.output:')
     expect(output).toContain('Hello! How can I help?')
+  })
+
+  it('names the agent and the conversation on the gen_ai line', () => {
+    const logger = createRequestLogger({ method: 'EVE', path: '/sessions/wrun_A/turns/turn_1', requestId: 'r3' })
+    logger.set({ gen_ai: { calls: 2, request: { model: 'anthropic/claude-opus-5.5' }, agent: { name: 'support' }, conversation: { id: 'wrun_A' } } })
+    logger.emit()
+
+    const output = vi.mocked(console.log).mock.calls.map(call => String(call[0])).join('\n')
+    expect(output).toMatch(/gen_ai:.*anthropic\/claude-opus-5\.5.*2 calls.*agent support.*conversation wrun_A/)
   })
 
   it('truncates long captured text in the console', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r2' })
     const longLine = 'x'.repeat(300)
     logger.set({
-      ai: {
-        output: longLine,
+      gen_ai: {
+        output: { text: longLine },
       },
     })
     logger.emit()
@@ -1941,7 +1950,7 @@ describe('pretty-print captured prompt and output', () => {
     const logSpy = vi.mocked(console.log)
     const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
 
-    expect(output).toContain('ai.output:')
+    expect(output).toContain('gen_ai.output:')
     expect(output).toContain(`${'x'.repeat(160)}…`)
     expect(output).not.toContain('x'.repeat(200))
   })
@@ -1950,8 +1959,8 @@ describe('pretty-print captured prompt and output', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r3' })
     const manyLines = Array.from({ length: 12 }, (_, i) => `line ${i}`)
     logger.set({
-      ai: {
-        prompt: manyLines.join('\n'),
+      gen_ai: {
+        input: { text: manyLines.join('\n') },
       },
     })
     logger.emit()
@@ -1965,15 +1974,15 @@ describe('pretty-print captured prompt and output', () => {
   it('omits entries when nothing was captured', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r4' })
     logger.set({
-      ai: { calls: 1 },
+      gen_ai: { calls: 1 },
     })
     logger.emit()
 
     const logSpy = vi.mocked(console.log)
     const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
 
-    expect(output).not.toContain('ai.prompt:')
-    expect(output).not.toContain('ai.output:')
+    expect(output).not.toContain('gen_ai.input:')
+    expect(output).not.toContain('gen_ai.output:')
   })
 })
 
@@ -2064,10 +2073,10 @@ describe('pretty-print control characters', () => {
   it('escapes control characters in AI fields', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r3' })
     logger.set({
-      ai: {
-        model: 'gpt\x1B[2K',
-        toolCalls: [{ name: 'search\r', input: { q: 'x' } }],
-        prompt: '[user] hi\x1B[2K\rthere',
+      gen_ai: {
+        request: { model: 'gpt\x1B[2K' },
+        tool_calls: [{ name: 'search\r', input: { q: 'x' } }],
+        input: { text: '[user] hi\x1B[2K\rthere' },
       },
     })
     logger.emit()

@@ -138,7 +138,7 @@ function toTraceContextId(value: unknown, pattern: RegExp): string | undefined {
 const toAttributeValue = toOtlpAttributeValue
 
 /**
- * Flatten nested plain objects into dotted attribute keys — `ai.costUsd`,
+ * Flatten nested plain objects into dotted attribute keys — `gen_ai.usage.cost`,
  * `error.message`. Arrays and non-plain objects are serialized as a single
  * value; indexing an array into `tools.0.name` would turn a list into
  * unbounded distinct attribute keys.
@@ -183,14 +183,16 @@ const SEMANTIC_CONVENTIONS: ReadonlyArray<readonly [string, readonly string[], S
   ['exception.type', ['error', 'name'], 'string'],
   ['exception.message', ['error', 'message'], 'string'],
   ['exception.stacktrace', ['error', 'stack'], 'string'],
-  ['gen_ai.request.model', ['ai', 'model'], 'string'],
-  ['gen_ai.provider.name', ['ai', 'provider'], 'string'],
-  ['gen_ai.response.id', ['ai', 'responseId'], 'string'],
-  ['gen_ai.usage.input_tokens', ['ai', 'inputTokens'], 'integer'],
-  ['gen_ai.usage.output_tokens', ['ai', 'outputTokens'], 'integer'],
-  ['gen_ai.usage.cache_read.input_tokens', ['ai', 'cacheReadTokens'], 'integer'],
-  ['gen_ai.usage.cache_creation.input_tokens', ['ai', 'cacheWriteTokens'], 'integer'],
-  ['gen_ai.response.finish_reasons', ['ai', 'finishReason'], 'string[]'],
+  ['gen_ai.request.model', ['gen_ai', 'request', 'model'], 'string'],
+  ['gen_ai.provider.name', ['gen_ai', 'provider', 'name'], 'string'],
+  ['gen_ai.response.id', ['gen_ai', 'response', 'id'], 'string'],
+  ['gen_ai.usage.input_tokens', ['gen_ai', 'usage', 'input_tokens'], 'integer'],
+  ['gen_ai.usage.output_tokens', ['gen_ai', 'usage', 'output_tokens'], 'integer'],
+  ['gen_ai.usage.cache_read.input_tokens', ['gen_ai', 'usage', 'cache_read', 'input_tokens'], 'integer'],
+  ['gen_ai.usage.cache_write.input_tokens', ['gen_ai', 'usage', 'cache_write', 'input_tokens'], 'integer'],
+  ['gen_ai.conversation.id', ['gen_ai', 'conversation', 'id'], 'string'],
+  ['gen_ai.agent.name', ['gen_ai', 'agent', 'name'], 'string'],
+  ['gen_ai.response.finish_reasons', ['gen_ai', 'response', 'finish_reasons'], 'string[]'],
 ]
 
 function readPath(event: Record<string, unknown>, path: readonly string[]): unknown {
@@ -207,9 +209,13 @@ function pushSemanticConventionAttributes(event: Record<string, unknown>, attrib
   for (const [key, path, type] of SEMANTIC_CONVENTIONS) {
     if (present.has(key)) continue
     const value = readPath(event, path)
+    if (type === 'string[]') {
+      if (Array.isArray(value) && value.every(item => typeof item === 'string')) attributes.push({ key, value: toAttributeValue(value) })
+      continue
+    }
     if (type === 'integer' ? !Number.isInteger(value) : typeof value !== 'string') continue
     const normalized = type === 'url-path' && typeof value === 'string' ? value.split(/[?#]/, 1)[0] : value
-    attributes.push({ key, value: toAttributeValue(type === 'string[]' ? [normalized] : normalized) })
+    attributes.push({ key, value: toAttributeValue(normalized) })
   }
 }
 

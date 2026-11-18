@@ -383,7 +383,7 @@ describe('pretty formatter loading', () => {
     logger.initLogger({ pretty: true, env: { service: 'svc' }, dev: { prettyError: { snippet: false } } })
 
     const chat = logger.createRequestLogger({ method: 'GET', path: '/first' })
-    chat.set({ ai: { model: 'claude', inputTokens: 100, outputTokens: 50 } })
+    chat.set({ gen_ai: { request: { model: 'claude' }, usage: { input_tokens: 100, output_tokens: 50 } } })
     chat.emit({ status: 200 })
     const failed = logger.createRequestLogger({ method: 'GET', path: '/second' })
     failed.error(createError({ message: 'Payment failed', why: 'Card declined' }))
@@ -395,7 +395,7 @@ describe('pretty formatter loading', () => {
     await vi.waitFor(() => expect(lines).toHaveLength(3))
 
     expect(lines[0]).toContain('/first')
-    expect(lines[0]).toContain('ai.tokens:')
+    expect(lines[0]).toContain('gen_ai.usage:')
     expect(lines[1]).toContain('/second')
     expect(lines[1]).toContain('Payment failed')
     expect(lines[1]).toContain('Why:')

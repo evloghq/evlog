@@ -148,10 +148,10 @@ describe('otlp adapter', () => {
     })
 
     it('sends non-integer numbers as doubleValue', () => {
-      const event = createTestEvent({ ai: { costUsd: 0.0042 } })
+      const event = createTestEvent({ gen_ai: { usage: { cost: 0.0042 } } })
       const record = toOTLPLogRecord(event, 'compact')
 
-      expect(record.attributes.find(a => a.key === 'ai.costUsd')?.value).toEqual({ doubleValue: 0.0042 })
+      expect(record.attributes.find(a => a.key === 'gen_ai.usage.cost')?.value).toEqual({ doubleValue: 0.0042 })
     })
 
     it('sends integers beyond the safe range as doubleValue', () => {
@@ -252,19 +252,19 @@ describe('otlp adapter', () => {
     })
 
     it('flattens through several levels and keeps value types', () => {
-      const event = createTestEvent({ eve: { caller: { principalId: 'github:1' } }, ai: { calls: 1 } })
+      const event = createTestEvent({ eve: { caller: { principalId: 'github:1' } }, gen_ai: { calls: 1 } })
       const record = toOTLPLogRecord(event, 'compact')
 
       expect(record.attributes.find(a => a.key === 'eve.caller.principalId')?.value)
         .toEqual({ stringValue: 'github:1' })
-      expect(record.attributes.find(a => a.key === 'ai.calls')?.value).toEqual({ intValue: '1' })
+      expect(record.attributes.find(a => a.key === 'gen_ai.calls')?.value).toEqual({ intValue: '1' })
     })
 
     it('serializes arrays rather than indexing them into distinct keys', () => {
-      const event = createTestEvent({ ai: { tools: [{ name: 'search' }] } })
+      const event = createTestEvent({ gen_ai: { tools: [{ name: 'search' }] } })
       const record = toOTLPLogRecord(event, 'compact')
 
-      expect(record.attributes.find(a => a.key === 'ai.tools')?.value)
+      expect(record.attributes.find(a => a.key === 'gen_ai.tools')?.value)
         .toEqual({ stringValue: '[{"name":"search"}]' })
     })
 
@@ -290,15 +290,20 @@ describe('otlp adapter', () => {
         status: 500,
         userAgent: { raw: 'Mozilla/5.0' },
         error: { name: 'PaymentError', message: 'Card declined', stack: 'PaymentError: Card declined\n    at pay' },
-        ai: {
-          model: 'claude-sonnet-4.6',
-          provider: 'anthropic',
-          responseId: 'msg_1',
-          inputTokens: 1200,
-          outputTokens: 300,
-          cacheReadTokens: 800,
-          cacheWriteTokens: 100,
-          finishReason: 'stop',
+        gen_ai: {
+          calls: 2,
+          request: { model: 'claude-sonnet-4.6' },
+          provider: { name: 'anthropic' },
+          conversation: { id: 'sess_1' },
+          agent: { name: 'support' },
+          response: { id: 'msg_1', finish_reasons: ['tool-calls', 'stop'] },
+          usage: {
+            input_tokens: 1200,
+            output_tokens: 300,
+            total_tokens: 1500,
+            cache_read: { input_tokens: 800 },
+            cache_write: { input_tokens: 100 },
+          },
         },
       })
 
@@ -322,8 +327,10 @@ describe('otlp adapter', () => {
           'gen_ai.usage.input_tokens': { intValue: '1200' },
           'gen_ai.usage.output_tokens': { intValue: '300' },
           'gen_ai.usage.cache_read.input_tokens': { intValue: '800' },
-          'gen_ai.usage.cache_creation.input_tokens': { intValue: '100' },
-          'gen_ai.response.finish_reasons': { arrayValue: { values: [{ stringValue: 'stop' }] } },
+          'gen_ai.usage.cache_write.input_tokens': { intValue: '100' },
+          'gen_ai.conversation.id': { stringValue: 'sess_1' },
+          'gen_ai.agent.name': { stringValue: 'support' },
+          'gen_ai.response.finish_reasons': { arrayValue: { values: [{ stringValue: 'tool-calls' }, { stringValue: 'stop' }] } },
         })
       })
 
@@ -339,7 +346,13 @@ describe('otlp adapter', () => {
         const attributes = attributeMap(toOTLPLogRecord(requestEvent, 'compact', { semanticConventions: true }))
 
         expect(attributes.method).toEqual({ stringValue: 'POST' })
-        expect(attributes['ai.inputTokens']).toEqual({ intValue: '1200' })
+        expect(attributes['gen_ai.calls']).toEqual({ intValue: '2' })
+      })
+
+      it('does not repeat a gen_ai attribute the event already carries under the same key', () => {
+        const record = toOTLPLogRecord(requestEvent, 'compact', { semanticConventions: true })
+
+        expect(record.attributes.filter(a => a.key === 'gen_ai.usage.input_tokens')).toHaveLength(1)
       })
 
       it('adds them in the json shape too', () => {
@@ -347,12 +360,15 @@ describe('otlp adapter', () => {
 
         expect(attributes['http.request.method']).toEqual({ stringValue: 'POST' })
         expect(attributes['gen_ai.usage.input_tokens']).toEqual({ intValue: '1200' })
+        expect(attributes['gen_ai.response.finish_reasons']).toEqual({ arrayValue: { values: [{ stringValue: 'tool-calls' }, { stringValue: 'stop' }] } })
       })
 
       it('adds none of them with semanticConventions: false', () => {
-        const attributes = attributeMap(toOTLPLogRecord(requestEvent, 'compact', { semanticConventions: false }))
+        const compact = attributeMap(toOTLPLogRecord(requestEvent, 'compact', { semanticConventions: false }))
+        const json = attributeMap(toOTLPLogRecord(requestEvent, 'json', { semanticConventions: false }))
 
-        expect(Object.keys(attributes).filter(key => key.startsWith('http.') || key.startsWith('gen_ai.'))).toEqual([])
+        expect(Object.keys(compact).filter(key => /^(http|url|user_agent|exception)\./.test(key))).toEqual([])
+        expect(Object.keys(json).filter(key => key.startsWith('gen_ai.'))).toEqual([])
       })
 
       it('skips fields with the wrong type for the convention', () => {

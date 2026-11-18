@@ -119,11 +119,11 @@ const pendingDrainState = new WeakMap<WideEvent, { drainStarted: boolean }>()
 
 function isAiOnlyFieldUpdate(data: Record<string, unknown>): boolean {
   const keys = Object.keys(data)
-  return keys.length === 1 && keys[0] === 'ai'
+  return keys.length === 1 && keys[0] === 'gen_ai'
 }
 
 /**
- * Mark a wide event as past the post-emit AI merge window so late `log.set({ ai })`
+ * Mark a wide event as past the post-emit AI merge window so late `log.set({ gen_ai })`
  * calls warn again. Called by framework enrich/drain pipelines before drain runs.
  *
  * @internal Used by middleware and framework integrations.
@@ -511,10 +511,10 @@ function flushPendingPrettyEvents(): void {
  * Prints synchronously once the formatters are loaded. An event with an error or
  * AI section that arrives before then waits for them, and so does every event
  * behind it, to keep their order. A process that exits first still gets them,
- * with the error reduced to its message and `ai` printed as a plain field.
+ * with the error reduced to its message and `gen_ai` printed as a plain field.
  */
 function printPretty(event: WideEvent): void {
-  if (!pendingPrettyEvents && (prettyFormatters || (event.error === undefined && event.ai === undefined))) {
+  if (!pendingPrettyEvents && (prettyFormatters || (event.error === undefined && event.gen_ai === undefined))) {
     prettyPrintWideEvent(event)
     return
   }
@@ -586,9 +586,9 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
 
   writeLine(parts.join(''), ...styles)
 
-  const aiData = prettyFormatters && isPlainObject(rest.ai) ? rest.ai : undefined
+  const aiData = prettyFormatters && isPlainObject(rest.gen_ai) ? rest.gen_ai : undefined
   if (aiData) {
-    delete rest.ai
+    delete rest.gen_ai
   }
 
   const errorData = rest.error

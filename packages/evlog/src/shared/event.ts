@@ -11,7 +11,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 /**
- * Flatten nested plain objects into dotted keys — `user.id`, `ai.costUsd`.
+ * Flatten nested plain objects into dotted keys — `user.id`, `gen_ai.usage.cost`.
  * Arrays and non-plain values are kept as they are; an empty object stays a
  * leaf rather than disappearing.
  */

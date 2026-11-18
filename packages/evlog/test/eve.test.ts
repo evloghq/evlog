@@ -372,14 +372,19 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain)
     const event = findEventViaDrain(spies.drain, () => true)
-    expect(event?.ai).toMatchObject({
+    expect(event?.gen_ai).toMatchObject({
       calls: 2,
       steps: 2,
-      inputTokens: 200,
-      outputTokens: 100,
-      cacheReadTokens: 20,
-      totalTokens: 300,
-      finishReason: 'stop',
+      usage: {
+        input_tokens: 200,
+        output_tokens: 100,
+        cache_read: { input_tokens: 20 },
+        total_tokens: 300,
+      },
+      response: { finish_reasons: ['tool-calls', 'stop'] },
+      operation: { name: 'invoke_agent' },
+      conversation: { id: SESSION_ID },
+      agent: { name: 'test-agent' },
     })
   })
 
@@ -397,11 +402,11 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain)
     const event = findEventViaDrain(spies.drain, () => true)
-    expect(event?.ai?.tools?.[0]?.name).toBe('get_weather')
-    expect(event?.ai?.tools?.[0]?.durationMs).toBeGreaterThan(0)
-    expect(event?.ai?.tools?.[1]).toEqual({
+    expect(event?.gen_ai?.tools?.[0]?.name).toBe('get_weather')
+    expect(event?.gen_ai?.tools?.[0]?.duration_ms).toBeGreaterThan(0)
+    expect(event?.gen_ai?.tools?.[1]).toEqual({
       name: 'search',
-      durationMs: 0,
+      duration_ms: 0,
       success: false,
       error: 'tool broke',
     })
@@ -438,13 +443,13 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain)
     const event = findEventViaDrain(spies.drain, () => true)
-    expect(event?.ai?.tools?.[0]).toMatchObject({
+    expect(event?.gen_ai?.tools?.[0]).toMatchObject({
       name: 'docs__list-pages',
-      inputTokens: 65_000,
+      input_tokens: 65_000,
     })
-    expect(event?.ai?.tools?.[1]).toMatchObject({
+    expect(event?.gen_ai?.tools?.[1]).toMatchObject({
       name: 'get_weather',
-      inputTokens: 2_000,
+      input_tokens: 2_000,
     })
   })
 
@@ -475,8 +480,8 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain)
     const event = findEventViaDrain(spies.drain, () => true)
-    expect(event?.ai?.tools?.[0]?.inputTokens).toBe(1_000)
-    expect(event?.ai?.tools?.[1]?.inputTokens).toBe(1_000)
+    expect(event?.gen_ai?.tools?.[0]?.input_tokens).toBe(1_000)
+    expect(event?.gen_ai?.tools?.[1]?.input_tokens).toBe(1_000)
   })
 
   it('re-bases tool attribution after a compaction', async () => {
@@ -511,7 +516,7 @@ describe('evlog/eve', () => {
     await waitForDrainCalls(spies.drain)
     const event = findEventViaDrain(spies.drain, () => true)
     // big_search returned before the compaction; its linear contribution is gone
-    expect(event?.ai?.tools?.[0]?.inputTokens).toBeUndefined()
+    expect(event?.gen_ai?.tools?.[0]?.input_tokens).toBeUndefined()
   })
 
   it('emits a valid wide event on turn.completed', async () => {
@@ -699,7 +704,7 @@ describe('evlog/eve', () => {
         deployedAt: '2026-08-05T00:00:00Z',
       },
     })
-    expect(event?.ai).toMatchObject({ model: 'anthropic/claude-opus-5' })
+    expect(event?.gen_ai).toMatchObject({ request: { model: 'anthropic/claude-opus-5' } })
   })
 
   it('reads the model from step.started when session.started reports none', async () => {
@@ -726,7 +731,7 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain)
     const event = findEventViaDrain(spies.drain, () => true)
-    expect(event?.ai).toMatchObject({ model: 'anthropic/claude-sonnet-5', provider: 'anthropic' })
+    expect(event?.gen_ai).toMatchObject({ request: { model: 'anthropic/claude-sonnet-5' }, provider: { name: 'anthropic' } })
   })
 
   it('prefers the step model over the configured model fallback', async () => {
@@ -744,7 +749,7 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain)
     const event = findEventViaDrain(spies.drain, () => true)
-    expect(event?.ai).toMatchObject({ model: 'openai/gpt-5', provider: 'openai' })
+    expect(event?.gen_ai).toMatchObject({ request: { model: 'openai/gpt-5' }, provider: { name: 'openai' } })
   })
 
   it('records parent lineage for a subagent session', async () => {
@@ -878,8 +883,8 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain)
     const event = findEventViaDrain(spies.drain, () => true)
-    expect(event?.ai).toMatchObject({ costUsd: 0.025 })
-    expect((event?.ai as Record<string, unknown>).estimatedCost).toBeUndefined()
+    expect(event?.gen_ai).toMatchObject({ usage: { cost: 0.025 } })
+    expect(event?.gen_ai?.usage?.estimated_cost).toBeUndefined()
   })
 
   it('records failed model steps on a turn that still completes', async () => {
@@ -1182,9 +1187,9 @@ describe('evlog/eve', () => {
       status: 'failed',
       error: 'billing agent unreachable',
     })
-    const { tools } = (event?.ai as { tools?: Array<{ name: string, durationMs: number }> })
+    const { tools } = (event?.gen_ai as { tools?: Array<{ name: string, duration_ms: number }> })
     expect(tools?.map(t => t.name)).toEqual(['researcher', 'billing'])
-    expect(tools?.[0]?.durationMs).toBeGreaterThanOrEqual(10)
+    expect(tools?.[0]?.duration_ms).toBeGreaterThanOrEqual(10)
   })
 
   it('records one subagent when eve emits both subagent.called and a subagent-call action', async () => {
@@ -1295,12 +1300,13 @@ describe('evlog/eve', () => {
       turns: 2,
       cancelledTurns: 1,
     })
-    expect(sessionEvent?.ai).toMatchObject({
+    expect(sessionEvent?.gen_ai).toMatchObject({
       calls: 2,
-      inputTokens: 200,
-      outputTokens: 100,
-      costUsd: 0.03,
-      toolCalls: ['search'],
+      usage: { input_tokens: 200, output_tokens: 100, cost: 0.03 },
+      tool_calls: ['search'],
+      operation: { name: 'invoke_agent' },
+      conversation: { id: SESSION_ID },
+      agent: { name: 'test-agent' },
     })
   })
 
@@ -1356,8 +1362,8 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain, 2)
     const sessionEvent = findEventViaDrain(spies.drain, e => e.path === `/sessions/${SESSION_ID}`)
-    expect(sessionEvent?.ai).toMatchObject({ estimatedCost: 0.2 })
-    expect((sessionEvent?.ai as Record<string, unknown>).costUsd).toBeUndefined()
+    expect(sessionEvent?.gen_ai).toMatchObject({ usage: { estimated_cost: 0.2 } })
+    expect(sessionEvent?.gen_ai?.usage?.cost).toBeUndefined()
   })
 
   it('reports both cost sources when a session mixes them', async () => {
@@ -1375,7 +1381,7 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain, 3)
     const sessionEvent = findEventViaDrain(spies.drain, e => e.path === `/sessions/${SESSION_ID}`)
-    expect(sessionEvent?.ai).toMatchObject({ costUsd: 0.01, estimatedCost: 0.2 })
+    expect(sessionEvent?.gen_ai).toMatchObject({ usage: { cost: 0.01, estimated_cost: 0.2 } })
   })
 
   it('emits no session wide event by default', async () => {
@@ -1636,7 +1642,7 @@ describe('evlog/eve', () => {
       status: 'approved',
       tool: 'issue_refund',
     })
-    expect(secondTurn?.ai?.tools?.[0]?.durationMs).toBeGreaterThan(0)
+    expect(secondTurn?.gen_ai?.tools?.[0]?.duration_ms).toBeGreaterThan(0)
   })
 
   it('consumes the matching callId when multiple pending approvals share a toolName', async () => {
@@ -1741,9 +1747,9 @@ describe('evlog/eve', () => {
     const thirdTurn = findEventViaDrain(spies.drain, e => e.path?.includes('turn_2'))
 
     expect(secondTurn?.approval).toMatchObject({ status: 'approved', tool: 'issue_refund' })
-    expect(secondTurn?.ai?.tools?.[0]?.success).toBe(true)
+    expect(secondTurn?.gen_ai?.tools?.[0]?.success).toBe(true)
     expect(thirdTurn?.approval).toMatchObject({ status: 'approved', tool: 'issue_refund' })
-    expect(thirdTurn?.ai?.tools?.[0]?.success).toBe(true)
+    expect(thirdTurn?.gen_ai?.tools?.[0]?.success).toBe(true)
   })
 
   it('tracks session turn count and phase across approval turns', async () => {
@@ -1846,7 +1852,7 @@ describe('evlog/eve', () => {
       status: 'rejected',
       tool: 'issue_refund',
     })
-    expect(event?.ai?.tools?.[0]).toMatchObject({
+    expect(event?.gen_ai?.tools?.[0]).toMatchObject({
       name: 'issue_refund',
       success: false,
       error: 'rejected',
@@ -1865,8 +1871,8 @@ describe('evlog/eve', () => {
 
     await waitForDrainCalls(spies.drain)
     const event = findEventViaDrain(spies.drain, () => true)
-    expect(event?.ai?.model).toBe('anthropic/claude-sonnet-4.6')
-    expect(event?.ai?.estimatedCost).toBeGreaterThan(0)
+    expect(event?.gen_ai?.request?.model).toBe('anthropic/claude-sonnet-4.6')
+    expect(event?.gen_ai?.usage?.estimated_cost).toBeGreaterThan(0)
   })
 
   it('records subagent.called and subagent.completed', async () => {
@@ -1900,7 +1906,7 @@ describe('evlog/eve', () => {
     const hook = defineEvlogHook({
       drain: spies.drain,
       keep: (ctx) => {
-        const tools = (ctx.context.ai as { tools?: Array<{ success: boolean }> } | undefined)?.tools
+        const tools = (ctx.context.gen_ai as { tools?: Array<{ success: boolean }> } | undefined)?.tools
         if (tools?.some(t => !t.success)) ctx.shouldKeep = true
       },
     })

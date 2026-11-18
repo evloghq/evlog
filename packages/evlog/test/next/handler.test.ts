@@ -564,7 +564,7 @@ describe('withEvlog', () => {
       const { stream, close } = createDeferredStream()
       closeStream = close
       queueMicrotask(() => {
-        log.set({ ai: { calls: 1, totalTokens: 42 } })
+        log.set({ gen_ai: { calls: 1, usage: { total_tokens: 42 } } })
       })
       return new Response(stream, {
         status: 200,
@@ -581,8 +581,8 @@ describe('withEvlog', () => {
       expect(drainMock).toHaveBeenCalledTimes(1)
     })
 
-    expect(warnSpy.mock.calls.some(([message]) => String(message).includes('Keys dropped: ai'))).toBe(false)
-    expect(drainMock.mock.calls[0]?.[0]?.event?.ai).toEqual({ calls: 1, totalTokens: 42 })
+    expect(warnSpy.mock.calls.some(([message]) => String(message).includes('Keys dropped: gen_ai'))).toBe(false)
+    expect(drainMock.mock.calls[0]?.[0]?.event?.gen_ai).toEqual({ calls: 1, usage: { total_tokens: 42 } })
   })
 
   describe('shared middleware pipeline', () => {

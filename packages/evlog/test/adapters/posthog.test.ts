@@ -453,28 +453,28 @@ describe('posthog adapter', () => {
     })
 
     it('flattens nested properties by default', () => {
-      const event = createTestEvent({ ai: { costUsd: 0.01 } })
+      const event = createTestEvent({ gen_ai: { usage: { cost: 0.01 } } })
       const result = toPostHogEvent(event, { apiKey: 'phc_test' })
 
-      expect(result.properties['ai.costUsd']).toBe(0.01)
-      expect(result.properties).not.toHaveProperty('ai')
+      expect(result.properties['gen_ai.usage.cost']).toBe(0.01)
+      expect(result.properties).not.toHaveProperty('gen_ai')
     })
 
     it('keeps nested properties nested in json shape', () => {
-      const event = createTestEvent({ ai: { costUsd: 0.01 } })
+      const event = createTestEvent({ gen_ai: { usage: { cost: 0.01 } } })
       const result = toPostHogEvent(event, { apiKey: 'phc_test', recordShape: 'json' })
 
-      expect(result.properties.ai).toEqual({ costUsd: 0.01 })
+      expect(result.properties.gen_ai).toEqual({ usage: { cost: 0.01 } })
     })
 
     it('flattens nested properties in compact shape', () => {
-      const event = createTestEvent({ ai: { costUsd: 0.01, tools: ['search'] }, eve: { caller: { principalId: 'github:1' } } })
+      const event = createTestEvent({ gen_ai: { usage: { cost: 0.01 }, tool_calls: ['search'] }, eve: { caller: { principalId: 'github:1' } } })
       const result = toPostHogEvent(event, { apiKey: 'phc_test', recordShape: 'compact' })
 
-      expect(result.properties['ai.costUsd']).toBe(0.01)
-      expect(result.properties['ai.tools']).toEqual(['search'])
+      expect(result.properties['gen_ai.usage.cost']).toBe(0.01)
+      expect(result.properties['gen_ai.tool_calls']).toEqual(['search'])
       expect(result.properties['eve.caller.principalId']).toBe('github:1')
-      expect(result.properties).not.toHaveProperty('ai')
+      expect(result.properties).not.toHaveProperty('gen_ai')
     })
 
     it('reads the identity from a dot path', () => {
