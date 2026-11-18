@@ -1,5 +1,146 @@
 # evlog
 
+## 3.0.0-beta.3
+
+### Major Changes
+
+- [#1111](https://github.com/evloghq/evlog/pull/1111) [`c3cf3e1`](https://github.com/evloghq/evlog/commit/c3cf3e1f9145d740961e963b0b8d5dd0db333695) Thanks [@HugoRCD](https://github.com/HugoRCD)! - A second `log.error()` on the same request or job logger now replaces the first error instead of merging into it. Before, the event took the second error's `message` and `code` but kept fields only the first had, such as its `fix` or `cause`, so it described neither error. Fields you set on `error` yourself with `log.set()`, or through the `error()` context argument, are kept.
+
+  To keep both failures, record the earlier one under its own key: `log.set({ receipt: { error } })`.
+
+- [#1002](https://github.com/evloghq/evlog/pull/1002) [`8d0cbde`](https://github.com/evloghq/evlog/commit/8d0cbde8277b31418479be3f8bf4eba7918ceb88) Thanks [@HugoRCD](https://github.com/HugoRCD)! - On macOS and Linux, the file system drain (`evlog/fs`) creates its directories with mode `0700` and its log files with mode `0600`, so only the account that runs the app can read the events. Before, both followed the process umask, usually `0755` and `0644`, which let every account on the machine read them. Windows is unchanged: Node applies only the write bit there, so the files keep the permissions inherited from their folder.
+
+  A directory or file that already exists keeps its mode. Run `chmod -R go= .evlog` to restrict logs written before the upgrade. Another account can no longer open the new files. A log shipper running as its own user should run as the app's account, or receive the events through an HTTP drain. A container running as root that writes into a bind-mounted project on Linux now leaves files your own account cannot read: run it with `--user "$(id -u):$(id -g)"`.
+
+- [#1131](https://github.com/evloghq/evlog/pull/1131) [`8219cdf`](https://github.com/evloghq/evlog/commit/8219cdf6628defe43083a69df65f6363dd8f7144) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The AI block on wide events moves from `ai` to `gen_ai`, for `evlog/ai` and `@evlog/eve`. Fields take the OpenTelemetry GenAI semantic convention names where the conventions define one (`gen_ai.request.model`, `gen_ai.provider.name`, `gen_ai.usage.input_tokens`, `gen_ai.usage.cache_read.input_tokens`, `gen_ai.response.finish_reasons`), and evlog's own fields sit under the same key in snake_case (`gen_ai.calls`, `gen_ai.usage.cost`, `gen_ai.usage.estimated_cost`, `gen_ai.tools[].duration_ms`). `AILogger.getMetadata()` and `onUpdate` return the same shape. eve turn events also carry `gen_ai.conversation.id`, `gen_ai.agent.name` and `gen_ai.operation.name`.
+
+  Migrate queries, dashboards and alerts: `ai.model` becomes `gen_ai.request.model`, `ai.inputTokens` becomes `gen_ai.usage.input_tokens`, `ai.costUsd` becomes `gen_ai.usage.cost`, `ai.estimatedCost` becomes `gen_ai.usage.estimated_cost`, and `ai.finishReason` becomes the array `gen_ai.response.finish_reasons`. The full table is on the AI SDK metadata page. The OTLP drain now sends `gen_ai.usage.cache_write.input_tokens` instead of `gen_ai.usage.cache_creation.input_tokens`.
+
+- [#1038](https://github.com/evloghq/evlog/pull/1038) [`fb90d8a`](https://github.com/evloghq/evlog/commit/fb90d8a57e3752cf720a4c9dd37ad5cd34da9433) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Three optional peer ranges stop at the majors evlog is tested on:
+
+  - `@nestjs/common` and `@nestjs/core` go from `>=11.2.8` to `^11.2.8 || ^12.0.0`.
+  - `react-router` goes from `>=7.18.5` to `^7.18.5 || ^8.0.0`.
+  - `hono` goes from `>=4.13.12` to `^4.13.12 || ^5.0.0-rc.1`. `evlog/hono` runs on Hono 4 and on the Hono 5 release candidates. Hono 5 calls `app.onError` as middleware, `(c, next)` with the error on `c.error`, so update your own error handler when you move to it.
+
+  NestJS 13, React Router 9 and Hono 6 now produce a peer warning until a release of evlog adds them.
+
+- [#1134](https://github.com/evloghq/evlog/pull/1134) [`6e1b1ac`](https://github.com/evloghq/evlog/commit/6e1b1aca76ba20ed1fad78bf47c49226b8f83afc) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Removes the `evlog/eve` entry point. Install `@evlog/eve`, replace `agent/hooks/evlog.ts` (`defineEvlogHook(config)`) with `agent/extensions/evlog.ts` (`export default evlog(config)` from `@evlog/eve`), and import `useLogger` from `@evlog/eve/logger`. The migration guide lists the removed options.
+
+  `evlog/toolkit` adds `onErrorCreated(listener)`, called with every `EvlogError` as it is built, and `createMiddlewareLogger().finish()` accepts `durationMs` for an integration that knows when the work started.
+
+### Minor Changes
+
+- [#1036](https://github.com/evloghq/evlog/pull/1036) [`9663cdd`](https://github.com/evloghq/evlog/commit/9663cdd360c0abd07f8ded504ff243a13ce5e419) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The Better Stack adapter now sends a `message`, as Better Stack's own `@logtail/node` client does. Live tail headlines a line with it and Better Stack builds `_pattern` from it, so request events now group by route. An event without `message` gets the headline the pretty console prints, followed by the error message, for example `POST /api/checkout 402 in 104ms Payment failed`. An event with nothing to headline gets no `message`. A `message` already on the event, from a tagged log or `log.set({ message })`, is sent unchanged.
+
+- [#1020](https://github.com/evloghq/evlog/pull/1020) [`a3385c7`](https://github.com/evloghq/evlog/commit/a3385c73a1243ae4284d2ff5fca41da9e67b8704) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog/fastify` attaches the request logger to `request.evlog`, typed as `ForkableLogger`, so `request.evlog.set()`, `.fork()` and `.audit()` type-check. Fastify types `request.log` as its own logger, and a module augmentation cannot change the type of an existing property: `request.log.set()` failed with TS2339 even though it worked at runtime, and with `skipLibCheck: false` the published declarations reported TS2717. `request.log` still holds the evlog logger at runtime, so existing code keeps working. On a route that `include` or `exclude` filters out, or with `enabled: false`, `request.evlog` accepts every call and emits nothing. On `@nestjs/platform-fastify`, `evlog/nestjs` sets `request.evlog` the same way.
+
+- [#1110](https://github.com/evloghq/evlog/pull/1110) [`e2ac261`](https://github.com/evloghq/evlog/commit/e2ac2610ae5605469ef7794d7c787d4cdbc11b08) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Add `errorHandler: false` to the `evlog/nuxt`, `evlog/nitro` and `evlog/nitro/v2` modules. evlog's Nitro error handler is then not registered, so your own Nitro `errorHandler` or the framework's default answers errors. The framework default can include the error's `data`, which carries `why`, `fix` and `link`, for example in development, so set your own `errorHandler` when they must stay private. Errors still reach the wide event. The default is unchanged.
+
+- [#1119](https://github.com/evloghq/evlog/pull/1119) [`854529a`](https://github.com/evloghq/evlog/commit/854529a9206adf0ffa0bc1cf7e308057c3e9089c) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Nitro v3, Nitro v2 and Nuxt: the request logger now has `log.fork(label, fn)`, and `useLogger()` works without the event.
+
+  `log.fork()` runs background work under a forked logger, passed to `fn`, that emits its own wide event with `operation` and `_parentRequestId`. The child goes through the `evlog:enrich` and `evlog:drain` hooks like the request event, and is registered with `waitUntil` where the runtime provides one:
+
+  ```ts
+  export default defineEventHandler(async (event) => {
+    const log = useLogger(event);
+    log.fork("send_receipt", async (child) => {
+      child.set({ receipt: { sent: true } });
+      await sendReceipt();
+    });
+    return { ok: true };
+  });
+  ```
+
+  With Nitro's request context turned on (`experimental: { asyncContext: true }` in `nitro.config.ts`, or `nitro.experimental` in `nuxt.config.ts`), `useLogger()` with no argument returns the current request logger, so services can reach it without the event. Without the flag it throws an error that names it. `useLogger(event)` is unchanged and works on every runtime.
+
+- [#1067](https://github.com/evloghq/evlog/pull/1067) [`b8eb0de`](https://github.com/evloghq/evlog/commit/b8eb0deacf2b9b2095e7cbdecc810eb6058ba1c4) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Nuxt and Nitro now run the request hooks of evlog plugins. A plugin listed in `plugins` of `evlog.config.ts` gets `extendLogger` and `onRequestStart` when the request logger is created, and `onRequestFinish` after the wide event is emitted, with the status, duration and error. Before, those apps ran only a plugin's `enrich`, `drain` and `keep`, so a plugin such as `createOtelPlugin()` from `evlog/otel` did nothing there.
+
+  ```ts
+  // evlog.config.ts
+  import { defineEvlog } from "evlog";
+  import { createOtelPlugin } from "evlog/otel";
+
+  export default defineEvlog({ plugins: [createOtelPlugin()] });
+  ```
+
+- [#1099](https://github.com/evloghq/evlog/pull/1099) [`3f0ba6b`](https://github.com/evloghq/evlog/commit/3f0ba6b3631a6f008635236dd40b62aaf7632b45) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The `evlog/nuxt` module takes `client: false` for server-only apps: `evlog: { client: false }` in `nuxt.config.ts` skips the browser plugin, the client auto-imports (`log`, `setIdentity`, `clearIdentity`, `setMinLevel`) and `runtimeConfig.public.evlog`. The Nitro plugin, the error handler and the server auto-imports (`useLogger`, `log`, `createEvlogError`) stay registered, and `createEvlogError` and `parseError` stay auto-imported in app code. The default, `true`, keeps the current behavior.
+
+- [#1066](https://github.com/evloghq/evlog/pull/1066) [`cc213da`](https://github.com/evloghq/evlog/commit/cc213dafc19c1062e5d1008edba68a8d2a71f2c0) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Add `evlog/otel`. `createOtelPlugin()` reads the OpenTelemetry span active when a request starts and sets `traceId` and `spanId` on that request's wide event, so the OTLP drain links the log record to its trace.
+
+  ```ts
+  import { createOtelPlugin } from "evlog/otel";
+
+  app.use(evlog({ plugins: [createOtelPlugin()] }));
+  ```
+
+  `@opentelemetry/api` is a new optional peer at `>=1.9.0 <2`, which covers apps on OpenTelemetry JS SDK 2 and SDK 3. evlog adds no runtime dependency, and an app that does not import `evlog/otel` does not load `@opentelemetry/api`. The plugin runs on every integration with a `plugins` option, and on Nuxt and Nitro from the `plugins` of `evlog.config.ts`.
+
+- [#1044](https://github.com/evloghq/evlog/pull/1044) [`e1e6dfe`](https://github.com/evloghq/evlog/commit/e1e6dfe36296bb8454e238163343abe60d27e1ea) Thanks [@Mystery01092000](https://github.com/Mystery01092000)! - `createRequestLogger()` now accepts `operation` in its options and puts it on the wide event, so a task, queue worker or cron job can name itself at creation time: `createRequestLogger({ operation: 'billing:sync', requestId })`. It is the same field `log.fork()` sets on a child. Before, the option was not part of `RequestLoggerOptions` and a cast that passed it was silently dropped.
+
+- [#1045](https://github.com/evloghq/evlog/pull/1045) [`2d1e756`](https://github.com/evloghq/evlog/commit/2d1e7565d203604ae77132bbd4428d707c52a17a) Thanks [@Mystery01092000](https://github.com/Mystery01092000)! - Add `sampling.minLevel`, a severity floor for wide events. `initLogger({ sampling: { minLevel: 'warn' } })` drops trace, debug and info wide events before sampling, from request loggers and from standalone `createLogger()` loggers such as jobs and workflows, and a `sampling.keep` rule or `keep` callback cannot bring them back. `error` and `fatal` events, and audit events, always pass this floor (error events still follow `sampling.rates`; fatal events are always kept). It works everywhere `sampling` is accepted: `initLogger()`, `evlog.config.ts`, the Nuxt and Nitro `evlog` options, the Vite plugin and Next.js. The top-level `minLevel` is unchanged and still applies to the `log` API only.
+
+- [#1112](https://github.com/evloghq/evlog/pull/1112) [`cc25f54`](https://github.com/evloghq/evlog/commit/cc25f54107daf42aef9bec7566c432c5f330a70f) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog/workers`: the logger `withEvlog` passes to the handler now has `log.fork(label, fn)`. Workers has no `useLogger()`, so `fn` receives the forked logger as its argument. The child emits its own wide event with `operation` and `_parentRequestId`, and the fork is registered with `ctx.waitUntil`:
+
+  ```ts
+  export default withEvlog(async (request, env, ctx, log) => {
+    log.fork("send_receipt", async (child) => {
+      child.set({ receipt: { orderId } });
+      await sendReceipt(orderId);
+    });
+    return Response.json({ ok: true });
+  });
+  ```
+
+  The toolkit's `forkBackgroundLogger` now runs without `storage`, for an integration without `AsyncLocalStorage`, and passes the forked logger to `fn` in every case.
+
+### Patch Changes
+
+- [#1005](https://github.com/evloghq/evlog/pull/1005) [`b1a2570`](https://github.com/evloghq/evlog/commit/b1a25706ed2d9ec1a251c3da957f316710ee4afd) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Split adapter batches at each provider's documented per-request limits. A batch above a limit was sent as one request and rejected (usually `413`), and the pipeline dropped it. It is now sent as several requests that each fit:
+
+  - Datadog: 1000 entries and 5 MB uncompressed per request (the byte cap is new).
+  - Sentry: 100 logs and 1 MiB of log payload per envelope (the byte cap is new).
+  - Axiom: 10,000 events per request.
+  - Better Stack: 10 MiB per request.
+  - PostHog `mode: 'events'`: request bodies under 20 MB on `/batch/`.
+
+  Batches within the limits send the same single request as before. Retry behavior is unchanged: the drain path keeps its default retries and the pipeline path sends one attempt unless `retries` is set. A single event larger than the limit is still sent on its own, so the provider decides what to do with it.
+
+- [#1060](https://github.com/evloghq/evlog/pull/1060) [`fb3df82`](https://github.com/evloghq/evlog/commit/fb3df82526dc7402c5d0aff663c78dac6721bfc3) Thanks [@orshih6](https://github.com/orshih6)! - `auditDiff` now reports changes to `Date`, `Set`, `Map` and `RegExp` fields as a `replace` (a `Date` is compared by timestamp, so an equal one emits nothing). Patch paths are now valid RFC 6901 JSON Pointers: `~` and `/` in keys are escaped as `~0` and `~1`, and operations on the root value use `''` instead of `'/'`. `redactPaths` still matches keys that contain `/` or `~`.
+
+- [#1042](https://github.com/evloghq/evlog/pull/1042) [`79882a2`](https://github.com/evloghq/evlog/commit/79882a2536fef4df8329817219062b843748adc1) Thanks [@onmax](https://github.com/onmax)! - The `creditCard` built-in no longer masks the digit groups of a UUID. A path such as `/api/orders/00000000-0000-4000-8000-000000000000` used to come out as `/api/orders/****4000-****0000`; it is now left as is. Card numbers written with spaces, hyphens or no separator are still masked to `****1111`.
+
+- [#1103](https://github.com/evloghq/evlog/pull/1103) [`b5ed6cd`](https://github.com/evloghq/evlog/commit/b5ed6cdb6f82f5d5dc9aa2188cf8ed960242fc48) Thanks [@HugoRCD](https://github.com/HugoRCD)! - A custom error's own `toJSON` now decides how its `data` and `internal` fields are logged. A value it rewrites, such as `data: '[REDACTED]'`, is logged as rewritten, and a value it sets to `undefined` is not logged. Before, only a key that `toJSON` left out was hidden, and a rewritten value was logged raw. `EvlogError` is unchanged: logs keep its `internal`.
+
+- [#1101](https://github.com/evloghq/evlog/pull/1101) [`84873d5`](https://github.com/evloghq/evlog/commit/84873d5c1b38d550ff7ef6213f93736b21338adc) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The `evlog` executable runs from a directory whose `package.json` does not parse. Before, it stopped with `ERR_INVALID_PACKAGE_CONFIG` before reaching the CLI.
+
+- [#1011](https://github.com/evloghq/evlog/pull/1011) [`6ab90fd`](https://github.com/evloghq/evlog/commit/6ab90fd2a824e1ac2234d6266bc50699e3728b48) Thanks [@adelrodriguez](https://github.com/adelrodriguez)! - Type `log.fork()` as always present on the request logger that an integration attaches: `c.get('log')` on Hono, `req.log` on Express and NestJS, `log` in Elysia handlers, `context.get(loggerContext)` on React Router and `context.log` on oRPC. Before, `fork` was optional there, so `c.get('log').fork(...)` failed a strict type check and needed `fork!` or `fork?.`. The new `ForkableLogger` type from `evlog` describes this logger, for example in SvelteKit's `App.Locals`. `useLogger()` still returns `AuditableLogger` with an optional `fork`, because inside `log.fork()` work it returns the forked logger, which has no `fork`.
+
+- [#1108](https://github.com/evloghq/evlog/pull/1108) [`af7f8b4`](https://github.com/evloghq/evlog/commit/af7f8b4d278f51f469d5a4c7b09c56b26b355c2b) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Fix the fs drain losing events when `maxFiles` and `maxSizePerFile` are both set. Once cleanup deleted the day's unsuffixed file (`2026-03-14.jsonl`), the next write recreated it, and because that file sorts oldest, the same cleanup deleted it straight away, so every later event that day was lost. The drain now appends to the day's newest file and rotates to the next index from there.
+
+- [#1117](https://github.com/evloghq/evlog/pull/1117) [`66b1ed7`](https://github.com/evloghq/evlog/commit/66b1ed7063be0f3d50489751f7ade14600033b6d) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The AI section of pretty output (`gen_ai.usage`, `gen_ai.tools`, `gen_ai.response`, ...) now loads on demand with the pretty-error formatter, so production bundles no longer contain it: about 3.6 kB minified and 1 kB gzipped less for an app that calls `initLogger()` and `log`. Pretty output is unchanged once it has loaded. An event with `gen_ai` logged in the same tick as `initLogger()` prints as soon as it has, and if the process exits before that, `gen_ai` prints as a plain field.
+
+- [#1116](https://github.com/evloghq/evlog/pull/1116) [`99c6610`](https://github.com/evloghq/evlog/commit/99c66109e60f9e65e7f3f98b7ef089bb06286723) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The pretty-error formatter (the `Why:` / `Fix:` / code-frame block in pretty output) now loads on demand with a dynamic `import()`, so production bundles no longer contain it: about 3.7 kB minified and 600 B gzipped less for an app that calls `initLogger()` and `log`. Pretty output is unchanged once the formatter has loaded. An error logged in the same tick as `initLogger()` prints as soon as it has, and if the process exits before that, it prints with the error message only.
+
+- [#1115](https://github.com/evloghq/evlog/pull/1115) [`bfec97f`](https://github.com/evloghq/evlog/commit/bfec97f4345272b3570e88fe30ba633e6dfa8e59) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Framework entries (`evlog/hono`, `evlog/express`, `evlog/next`, `evlog/nitro`, `evlog/nuxt`, `evlog/workers`, ...) and `evlog/toolkit` no longer load the audit helpers (`withAudit`, `signed`, `auditDiff`, `auditOnly`, `auditEnricher`, `mockAudit`). Without a bundler, each of those entries now loads about 15 kB less from `dist/` (about 5 kB gzipped). `log.audit()` works as before, and the root `evlog` entry still exports every audit helper.
+
+- [#1072](https://github.com/evloghq/evlog/pull/1072) [`9aba917`](https://github.com/evloghq/evlog/commit/9aba91729960585f4e6f2f8279a1d2f344341881) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `createDrainPipeline` from `evlog/pipeline`, and the `AuditActor` and `AuditFields` types from `evlog`, show their documentation again in the published types and in editor hovers. Each doc block sat directly on top of another one, so TypeScript attached it to nothing. `createDrainPipeline` gets its description and usage example back, `AuditActor` the meaning of each actor field, and `AuditFields` the description of each reserved audit field.
+
+- [#1035](https://github.com/evloghq/evlog/pull/1035) [`6a5f8ab`](https://github.com/evloghq/evlog/commit/6a5f8ab3a48df514bf946a98398be59b2e33c11d) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The Nitro plugin (`evlog/nitro` and `evlog/nitro/v2`, so the Nuxt module too) no longer clears a drain that another Nitro plugin set with `initLogger({ drain })`. Nitro does not await plugins, so evlog's plugin finished after a synchronous plugin and reset the global drain. Request events still reached `evlog:drain` hooks, but standalone loggers (`createLogger`, or `createRequestLogger` in a scheduled task or queue worker) drained nowhere. The drain registered before evlog's plugin settles is now kept.
+
+- [#1080](https://github.com/evloghq/evlog/pull/1080) [`beb0f47`](https://github.com/evloghq/evlog/commit/beb0f47bad133744f94a150761fab1adda38b204) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Widen the optional `nitro` peer range so that `nitro@3.0.261103-rc` installs without a peer conflict. Before, npm failed with ERESOLVE and pnpm printed a peer warning when a project used that release candidate with the evlog 3 beta.
+
+- [#1109](https://github.com/evloghq/evlog/pull/1109) [`44ed576`](https://github.com/evloghq/evlog/commit/44ed576432a06628264bb704cd02376dd833f3d5) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The Nitro v2, Nitro v3 and Nuxt integrations now use the incoming `x-request-id` header as the event's `requestId`, as every other integration does. Before, they ignored it and generated a UUID (or used `cf-ray` on Cloudflare, which is now the fallback when no `x-request-id` is sent).
+
+- [#1098](https://github.com/evloghq/evlog/pull/1098) [`7f6748a`](https://github.com/evloghq/evlog/commit/7f6748a3bd36ce45550e59b48361169de05d5d4b) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog/nitro` (Nitro 3) now emits a streamed response's wide event (`text/event-stream`, NDJSON, chunked, AI SDK UI streams) once its body ends or the client leaves, instead of when the headers are sent. Fields set with `log.set()` and errors recorded while the body streams now land on the event instead of being dropped with a `log.set() called after the wide event was emitted` warning, and the event keeps the status the response was sent with. This uses h3's `onDispose`, so it needs h3 2.0.1 or later; older Nitro v3 prereleases keep the header-time emit.
+
+- [#1011](https://github.com/evloghq/evlog/pull/1011) [`6ab90fd`](https://github.com/evloghq/evlog/commit/6ab90fd2a824e1ac2234d6266bc50699e3728b48) Thanks [@adelrodriguez](https://github.com/adelrodriguez)! - `log.fork(label, fn)` now runs `fn` on a request that evlog does not log. Before, on an Elysia route that `exclude` or `include` filters out, or with `enabled: false`, `log` had no `fork`, so `log.fork!(...)` threw `log.fork is not a function` and the route answered 500. The work runs and emits no event. With `waitUntil`, evlog registers the work there, as it does on a logged request. If the work throws, evlog reports the error with `console.error` and `log.fork()` still resolves.
+
+- [#1043](https://github.com/evloghq/evlog/pull/1043) [`c87e32f`](https://github.com/evloghq/evlog/commit/c87e32fd1661a30e95f4bba8744231f4c19eeccc) Thanks [@onmax](https://github.com/onmax)! - `parseError()` now keeps the `why`, `fix` and `link` an `Error` carries as its own properties. An error class that sets `fix` on itself and also has a `data` property, even `undefined`, used to come back with `fix: undefined`. Guidance found in the payload still wins.
+
+- [#1061](https://github.com/evloghq/evlog/pull/1061) [`8c313b5`](https://github.com/evloghq/evlog/commit/8c313b51c6436c649a4ab31b63166eb2ecc15bab) Thanks [@evlogai](https://github.com/apps/evlogai)! - Sentry logs now carry the reserved `user.id` attribute when the wide event has a user, the same attribute the official Sentry SDK sets from its user scope. The log item container also carries `version: 2`, as the Sentry logs protocol recommends. Before, the id only appeared under the `userId` key.
+
+- [#1015](https://github.com/evloghq/evlog/pull/1015) [`64bac43`](https://github.com/evloghq/evlog/commit/64bac43b0d5153b41ef01fa56304937643b8f70f) Thanks [@HugoRCD](https://github.com/HugoRCD)! - On Hono, React Router and SvelteKit, a request that evlog does not log now gets a logger that accepts every call and emits nothing, on `c.get('log')`, `context.get(loggerContext)` and `event.locals.log`. This covers a route that `include` or `exclude` filters out, and every route after `initLogger({ enabled: false })`. Before, nothing was attached: `c.get('log').set(...)` threw a `TypeError`, the documented Hono `onError` handler threw as well so the request got no response, and `context.get(loggerContext)` threw in React Router loaders. `log.fork()` still runs its work on these requests. `useLogger()` still throws on them.
+
 ## 3.0.0-beta.2
 
 ### Major Changes
