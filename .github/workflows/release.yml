@@ -66,14 +66,11 @@ jobs:
 
       # changesets sets `published` before it exits on a failed package, so these steps still
       # run for the packages that did reach npm. The job stays failed either way.
-      # The action creates each released tag through the API as a lightweight ref, while changeset
-      # publish made an annotated one under the same name; pushing that again is refused.
-      - name: Push tags
+      # With commitMode github-api the action sets no git identity, so changeset publish cannot create
+      # its annotated tags here; the action creates them through the API. Fetch them for the next step.
+      - name: Fetch release tags
         if: ${{ !cancelled() && steps.changesets.outputs.published == 'true' }}
-        run: |
-          for tag in $(git tag --points-at HEAD); do
-            git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null || git push origin "refs/tags/$tag"
-          done
+        run: git fetch --force --tags origin
 
       # Rebuilds each release body from that package's PRs and changesets, then moves Latest
       # back to evlog. The header of scripts/release-notes/index.mjs says why.
