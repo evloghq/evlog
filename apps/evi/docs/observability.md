@@ -96,8 +96,8 @@ produces `invoke_agent` → `agent.step` per step → `chat` for the model call 
 `agent.action` → `execute_tool` per tool. That is the only place per-tool timing
 and per-step model input are visible; the wide event says a turn called six
 tools, the span tree says which step each ran in and what the model saw first.
-`evlogRuntimeContext`, spread into the destination's `runtimeContext`, stamps
-`evlog.request_id` and `evlog.session_id` on every span, so a slow span resolves
+The destination's `runtimeContext` stamps `evlog.request_id` (`sessionId:turnId`,
+the turn event's id) and `evlog.session_id` on every span, so a slow span resolves
 to its wide event and back. Without `POSTHOG_API_KEY` the destination disables
 itself and eve keeps traces local.
 
@@ -110,7 +110,7 @@ configured, not confirmed. Check it against a real GitHub thread that ends.
 
 ## Who asked: the caller on the turn
 
-A turn event says what happened and what it cost. `evlog/eve` also records **who asked** as `eve.caller`.
+A turn event says what happened and what it cost. `@evlog/eve` also records **who asked** as `eve.caller`.
 On a repository bot that is the dimension you most want to group by: cost per
 user, volume per user, refusals per user, and after the tier work in
 [authorization.md](./authorization.md), which tier a turn ran at.
@@ -132,7 +132,7 @@ registers the turn logger on `turn.started` itself, so two hooks race on the sam
 event. The attempt was removed rather than shipped: an annotation present on 6%
 of turns is worse than none, because it looks like data and is a biased sample.
 
-`evlog/eve` now records `eve.caller` itself, and `agent/instrumentation/posthog.ts`
+`@evlog/eve` now records `eve.caller` itself, and `agent/instrumentation/posthog.ts`
 puts the same principal on the spans. Two things follow from that. The principal is a
 stable per-person identifier duplicated across logs and traces, so it inherits
 whatever retention the drain has. Decide that before adding a drain that keeps
@@ -142,7 +142,7 @@ to be empty.
 
 ## Proposals
 
-### eve + evlog/eve: per-turn cost on BYOK traffic
+### eve + @evlog/eve: per-turn cost on BYOK traffic
 
 eve's `extractGatewayCostUsd` reads `providerMetadata.gateway.cost`, which is
 what the gateway billed. On BYOK that is the gateway fee alone, so a
@@ -159,7 +159,7 @@ A tool that throws an error carrying `code` (evlog's `EvlogError`, any
 `Error` subclass with the field) loses it at the harness boundary:
 `createRuntimeToolResultFromToolError` keeps `message` only, and
 a failed `turn.settled` carries the harness's own code. Keeping `code` on the runtime
-tool result (and as the `error.code` of the failure events) would let `evlog/eve`
+tool result (and as the `error.code` of the failure events) would let `@evlog/eve`
 record it on `ai.tools[]`, and let a channel's failure comment print the
 application's code rather than `EVENT_HANDLER_FAILED`. Until then, Evi's
 catalog is visible through refusal results and `reason` fields only.
@@ -188,7 +188,7 @@ terminal state "completed"`.
 ## When volume justifies it
 
 Nothing here samples: every turn is kept. That is correct at current volume and
-would not be at 100x. `defineEvlogHook` takes a `keep` predicate for tail
+would not be at 100x. The `@evlog/eve` mount takes a `keep` predicate for tail
 sampling. The shape to reach for is retain-everything-interesting: tool
 failures, step failures, approvals, authorizations, and turns above a cost
 threshold, sampling the rest. Adding it before there is volume to shed would just

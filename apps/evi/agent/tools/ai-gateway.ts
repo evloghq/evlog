@@ -1,4 +1,4 @@
-import { useLogger } from 'evlog/eve'
+import { useLogger } from '@evlog/eve/logger'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { eviErrors, refusal } from '../lib/errors'
@@ -56,7 +56,7 @@ export default defineDynamic(ctx => {
           tags_match: query.tagsMatch,
         })
         const report = scopedReport(payload, query)
-        useLogger(toolCtx).set({
+        useLogger().set({
           gateway: {
             report: {
               mode: report.scope.mode,

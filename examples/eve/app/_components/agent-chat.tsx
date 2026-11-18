@@ -1,6 +1,6 @@
 "use client";
 
-import { useEveAgent } from "eve/react";
+import { useEveAgent, type UseEveAgentReturn } from "eve/react";
 import { AlertCircleIcon } from "lucide-react";
 import { useEffect } from "react";
 import {
@@ -40,7 +40,13 @@ const STARTER_PROMPTS = [
   },
 ] as const;
 
-type AgentStatus = ReturnType<typeof useEveAgent>["status"];
+type ChatStatus = "submitted" | "streaming" | "ready" | "error";
+
+function chatStatus(agent: UseEveAgentReturn): ChatStatus {
+  if (agent.error) return "error";
+  if (agent.status !== "busy") return "ready";
+  return agent.messages.at(-1)?.metadata?.status === "streaming" ? "streaming" : "submitted";
+}
 
 export function AgentChat({
   embedded = false,
@@ -50,38 +56,39 @@ export function AgentChat({
   readonly onStatusChange?: (label: string) => void;
 }) {
   const agent = useEveAgent();
-  const isBusy = agent.status === "submitted" || agent.status === "streaming";
-  const isEmpty = agent.data.messages.length === 0;
+  const status = chatStatus(agent);
+  const isBusy = agent.status !== "idle";
+  const isEmpty = agent.messages.length === 0;
 
   useEffect(() => {
     if (!onStatusChange) return;
     const label =
-      agent.status === "streaming"
+      status === "streaming"
         ? "Streaming"
-        : agent.status === "submitted"
+        : status === "submitted"
           ? "Thinking"
-          : agent.status === "error"
+          : status === "error"
             ? "Error"
             : "Ready";
     onStatusChange(label);
-  }, [agent.status, onStatusChange]);
+  }, [status, onStatusChange]);
 
   const handleSubmit = async (message: PromptInputMessage) => {
     const text = message.text.trim();
     if (!text || isBusy) return;
 
-    await agent.send({ message: text });
+    await agent.send(text);
   };
 
   const sendStarter = async (message: string) => {
     if (isBusy) return;
-    await agent.send({ message });
+    await agent.send(message);
   };
 
   const composer = (
     <PromptInput onSubmit={handleSubmit}>
       <PromptInputTextarea placeholder="Describe a refund request…" />
-      <PromptInputSubmit onStop={agent.stop} status={agent.status} />
+      <PromptInputSubmit onStop={() => void agent.cancel()} status={status} />
     </PromptInput>
   );
 
@@ -97,7 +104,7 @@ export function AgentChat({
           <span className="flex min-w-0 items-center gap-2.5">
             <EveLogo size={22} />
             <span className="truncate text-muted-foreground text-sm">{AGENT_NAME}</span>
-            <StatusDot status={agent.status} />
+            <StatusDot status={status} />
           </span>
           <a
             className="rounded-full border border-amber-500/30 px-2 py-0.5 font-medium text-amber-700 text-xs transition-colors hover:bg-amber-500/10 dark:text-amber-300"
@@ -135,15 +142,15 @@ export function AgentChat({
               embedded ? "max-w-none px-4 sm:px-5" : "max-w-3xl px-4 py-6 sm:px-6",
             )}
           >
-            {agent.data.messages.map((message, index) => (
+            {agent.messages.map((message, index) => (
               <AgentMessage
-                canRespond={!isBusy}
-                isStreaming={
-                  agent.status === "streaming" && index === agent.data.messages.length - 1
-                }
+                canRespond={agent.status !== "resuming"}
+                isStreaming={status === "streaming" && index === agent.messages.length - 1}
                 key={message.id}
                 message={message}
-                onInputResponses={(inputResponses) => agent.send({ inputResponses })}
+                onAnswers={async (answers) => {
+                  await agent.respond(answers);
+                }}
               />
             ))}
           </ConversationContent>
@@ -225,7 +232,7 @@ export function AgentChat({
   );
 }
 
-function StatusDot({ status }: { readonly status: AgentStatus }) {
+function StatusDot({ status }: { readonly status: ChatStatus }) {
   const isLive = status === "submitted" || status === "streaming";
   const tone =
     status === "error"

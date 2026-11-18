@@ -1,4 +1,4 @@
-import { useLogger } from 'evlog/eve'
+import { useLogger } from '@evlog/eve/logger'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { uploadSandboxImage } from '../lib/blob'
@@ -18,7 +18,7 @@ export default defineDynamic(ctx => {
         if (!canAccessAdminTools(toolCtx.session.auth.current)) {
           return refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool: 'blob__upload_image' }))
         }
-        const log = useLogger(toolCtx)
+        const log = useLogger()
         const uploaded = await uploadSandboxImage(await toolCtx.getSandbox(), input.path)
         if ('error' in uploaded) {
           const refused = refusal(eviErrors.BLOB_UPLOAD_FAILED({ message: uploaded.error }))

@@ -48,10 +48,10 @@ jobs:
           node-version: '24'
           filters: '--filter=evi...'
 
-      # apps/evi resolves `evlog/eve` and `evlog/posthog` through the workspace
-      # link, which points at dist.
-      - name: Build evlog
-        run: pnpm --filter evlog run build
+      # apps/evi resolves `evlog/posthog` and `@evlog/eve` through the workspace
+      # links, which point at dist.
+      - name: Build evlog and @evlog/eve
+        run: pnpm exec turbo run build --filter=evlog --filter=@evlog/eve
 
       # Evi reaches GitHub through Vercel Connect, which authenticates with a
       # Vercel OIDC token. That token is issued to a deployment or to a linked

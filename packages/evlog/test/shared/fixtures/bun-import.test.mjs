@@ -2,7 +2,6 @@ import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test'
 import { Elysia } from 'elysia'
 import { evlog, useLogger } from '../../../src/elysia/index.ts'
 import { initLogger } from '../../../src/logger.ts'
-import '../../../src/eve/index.ts'
 
 initLogger({ silent: true })
 

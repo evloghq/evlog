@@ -1,0 +1,76 @@
+{
+  "name": "@evlog/eve",
+  "version": "0.0.0",
+  "description": "evlog for eve agents: one redacted wide event per turn, from an eve extension",
+  "author": "HugoRCD <contact@evlog.dev>",
+  "homepage": "https://evlog.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evloghq/evlog.git",
+    "directory": "packages/eve"
+  },
+  "bugs": {
+    "url": "https://github.com/evloghq/evlog/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "eve": {
+    "extension": {
+      "source": "./extension",
+      "dist": "./dist/extension"
+    }
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "default": "./dist/tools/index.mjs"
+    },
+    "./logger": {
+      "types": "./dist/extension/lib/logger.d.ts",
+      "default": "./dist/extension/lib/logger.mjs"
+    }
+  },
+  "keywords": [
+    "evlog",
+    "eve",
+    "agents",
+    "observability",
+    "wide-events"
+  ],
+  "scripts": {
+    "build": "eve extension build",
+    "dev:prepare": "eve extension build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.5",
+    "eve": "1.0.2",
+    "evlog": "workspace:*",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.12"
+  },
+  "peerDependencies": {
+    "eve": "*",
+    "evlog": "^3.0.0-beta.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

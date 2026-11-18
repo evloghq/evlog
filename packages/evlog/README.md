@@ -519,7 +519,7 @@ In production (`pretty: false`), logs are emitted as JSON for machine parsing.
 | **Elysia** | `.use(evlog())` with `import { evlog } from 'evlog/elysia'` ([docs](https://evlog.dev/integrate/frameworks/elysia)) |
 | **oRPC** | `withEvlog(handler)` + `os.use(evlog())` with `import { evlog, withEvlog } from 'evlog/orpc'` ([docs](https://evlog.dev/integrate/frameworks/orpc)) |
 | **Effect** (beta) | `Layer.provide(routerLayer())` with `import { routerLayer } from 'evlog/effect'` ([docs](https://evlog.dev/integrate/frameworks/effect)) |
-| **eve** | `defineEvlogHook()` in `agent/hooks/evlog.ts` with `import { defineEvlogHook, useLogger } from 'evlog/eve'` ([docs](https://evlog.dev/use-cases/eve)) |
+| **eve** | `export { default } from '@evlog/eve'` in `agent/extensions/evlog.ts`, `useLogger` from `@evlog/eve/logger` ([docs](https://evlog.dev/use-cases/eve)) |
 | **Cloudflare Workers** | Manual setup with `import { initWorkersLogger, createWorkersLogger } from 'evlog/workers'` ([docs](https://evlog.dev/integrate/frameworks/cloudflare-workers)) |
 | **Custom** | Build your own with `import { createMiddlewareLogger } from 'evlog/toolkit'` ([guide](https://evlog.dev/extend/custom-framework)) |
 | **Analog** | Nitro v2 module setup |

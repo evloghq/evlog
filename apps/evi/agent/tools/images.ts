@@ -1,5 +1,5 @@
 import { getToken } from '@vercel/connect'
-import { useLogger } from 'evlog/eve'
+import { useLogger } from '@evlog/eve/logger'
 import { defineDynamic, defineTool, toolOutput, toolOutputPart } from 'eve/tools'
 import { z } from 'zod'
 import { eviErrors, refusal } from '../lib/errors'
@@ -26,7 +26,7 @@ export default defineDynamic(() => {
           }
           authorization = `Bearer ${await getToken('linear/evi', { subject: { type: 'app' } })}`
         }
-        const log = useLogger(toolCtx)
+        const log = useLogger()
         const fetched = await fetchImage(classified.url, { authorization })
         if ('error' in fetched) {
           const refused = refusal(eviErrors.IMAGE_FETCH_FAILED({ message: fetched.error }))

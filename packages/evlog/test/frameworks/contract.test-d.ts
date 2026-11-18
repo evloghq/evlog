@@ -79,7 +79,6 @@ type NotAFrameworkIntegration =
   | './datadog'
   | './diagnostics'
   | './enrichers'
-  | './eve'
   | './fs'
   | './http'
   | './hyperdx'
