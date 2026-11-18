@@ -55,6 +55,19 @@ describe('expectLinearTime', () => {
     }, n => 'x'.repeat(1_024 * n))
   })
 
+  it('measures again when one measurement of linear work misses the ratio', () => {
+    let now = 0
+    let longTimed = false
+    let firstAttempt = true
+    mockCpuClock(() => now)
+    expectLinearTime((input) => {
+      const isLong = input.length > 1_024
+      if (!isLong && longTimed) firstAttempt = false
+      if (isLong) longTimed = true
+      now += (input.length / 1_000) * (isLong && firstAttempt ? 4 : 1)
+    }, n => 'x'.repeat(1_024 * n))
+  })
+
   it('ignores CPU time other threads use while the long input runs', () => {
     let thread = 0
     let processCpu = 0

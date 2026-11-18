@@ -56,6 +56,12 @@ const MAX_TIME_RATIO = 24
 const MIN_SAMPLE_MS = 1
 /** Safety valve for a clock that does not advance: stop repeating after this many calls. */
 const MAX_SAMPLE_CALLS = 100_000
+/**
+ * A ratio over {@link MAX_TIME_RATIO} is measured again up to this many times in
+ * total before it fails. Quadratic work misses the ratio on every measurement;
+ * a pause that lands on one long sample does not repeat.
+ */
+const MAX_ATTEMPTS = 3
 /** Hang / ReDoS backstop on the long input. Linear work of a ~64k string stays well under this; a quadratic scan does not. */
 const LINEAR_TIME_BUDGET_MS = 2_000
 
@@ -98,9 +104,9 @@ function fastestPerCallMs(fn: () => unknown, runs = 3): number {
  * Assert `fn` stays linear in input length. `build(n)` returns the adversarial
  * input at scale `n`; both sizes must have the same shape, which a prefix of
  * the long input does not guarantee. Times `build(1)` and `build(8)` in the
- * calling thread's CPU time, each as the fastest per-call average. The longer run may be at most
- * 24x the shorter; a 2 s cap on the long run catches a hang that is already
- * slow at scale 1.
+ * calling thread's CPU time, each as the fastest per-call average. The longer
+ * run may be at most 24x the shorter, on at least one of three measurements; a
+ * 2 s cap on the long run catches a hang that is already slow at scale 1.
  *
  * @example
  * ```ts
@@ -110,12 +116,15 @@ function fastestPerCallMs(fn: () => unknown, runs = 3): number {
 export function expectLinearTime(fn: (input: string) => unknown, build: (n: number) => string, label?: string): void {
   const short = build(1)
   const long = build(SIZE_RATIO)
-  const shortMs = fastestPerCallMs(() => fn(short))
-  const longMs = fastestPerCallMs(() => fn(long))
-  const detail = `${longMs.toFixed(1)}ms / ${shortMs.toFixed(1)}ms`
-  const named = label ? `${label} (${detail})` : detail
-  expect(longMs, named).toBeLessThan(LINEAR_TIME_BUDGET_MS)
-  expect(longMs / shortMs, named).toBeLessThan(MAX_TIME_RATIO)
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const shortMs = fastestPerCallMs(() => fn(short))
+    const longMs = fastestPerCallMs(() => fn(long))
+    const detail = `${longMs.toFixed(1)}ms / ${shortMs.toFixed(1)}ms`
+    const named = label ? `${label} (${detail})` : detail
+    expect(longMs, named).toBeLessThan(LINEAR_TIME_BUDGET_MS)
+    if (longMs / shortMs < MAX_TIME_RATIO) return
+    if (attempt === MAX_ATTEMPTS) expect(longMs / shortMs, named).toBeLessThan(MAX_TIME_RATIO)
+  }
 }
 
 /**
