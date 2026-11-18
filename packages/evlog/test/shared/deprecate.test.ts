@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineEvlogHook } from '../../src/eve'
 import { warnDeprecated } from '../../src/shared/deprecate'
 import { resetGlobalRegistry } from '../../src/shared/globalRegistry'
 import { enableDeprecationWarnings } from '../helpers/deprecations'
@@ -50,27 +49,5 @@ describe('warnDeprecated', () => {
     vi.stubEnv('NODE_ENV', 'development')
     warnDeprecated('test:later', '[evlog/test] later')
     expect(warnSpy).toHaveBeenCalledOnce()
-  })
-})
-
-describe('deprecated entry points warn on call', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>
-
-  beforeEach(() => {
-    enableDeprecationWarnings()
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-    vi.unstubAllEnvs()
-    resetGlobalRegistry()
-  })
-
-  it('warns when redactMessage is passed to defineEvlogHook()', () => {
-    defineEvlogHook({ redactMessage: true })
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[evlog/eve] redactMessage is deprecated and removed in v3. Use message: \'omit\' (was true) or \'preview\' (was false).',
-    )
   })
 })

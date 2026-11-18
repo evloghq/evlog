@@ -2,7 +2,6 @@ import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { PostHogTraceExporter } from '@posthog/ai/otel'
 import { disableInstrumentation } from 'eve/instrumentation'
 import { otelIntegration } from 'eve/instrumentation/otel'
-import { evlogRuntimeContext } from 'evlog/eve'
 import { environment } from '../lib/environment'
 import { createPostHogAttributeProcessor } from '../lib/posthog-spans'
 
@@ -27,12 +26,12 @@ export default projectToken
       const caller = input.session.auth.current
       // Attributed to whoever opened the session, not to this turn's caller.
       const distinctId = input.session.auth.initiator?.principalId ?? caller?.principalId
-      const evlog = evlogRuntimeContext(input)
+      // The id @evlog/eve gives the turn's wide event, so a trace joins back to it.
+      const requestId = input.turn ? `${input.session.id}:${input.turn.id}` : undefined
       return {
-        ...evlog,
+        ...(requestId ? { 'evlog.request_id': requestId, 'evlog.session_id': input.session.id } : {}),
         // PostHog keeps only `posthog_`-prefixed attributes, and strips the prefix.
-        ...(evlog ? { posthog_evlog_request_id: evlog['evlog.request_id'] } : {}),
-        ...(evlog ? { posthog_evlog_session_id: evlog['evlog.session_id'] } : {}),
+        ...(requestId ? { posthog_evlog_request_id: requestId, posthog_evlog_session_id: input.session.id } : {}),
         posthog_environment: environment(),
         // Omitted rather than blank: an empty attribute reads as an empty id.
         ...(distinctId ? { posthog_distinct_id: distinctId } : {}),

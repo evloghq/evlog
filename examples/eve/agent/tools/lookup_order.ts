@@ -1,5 +1,5 @@
 import { defineTool } from 'eve/tools'
-import { useLogger } from 'evlog/eve'
+import { useLogger } from '@evlog/eve/logger'
 import { z } from 'zod'
 import { findOrder } from '../lib/support-data.js'
 import { fakeLatency } from '../lib/fake-latency.js'

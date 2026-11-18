@@ -6,11 +6,6 @@
       "gzip": 59604
     },
     {
-      "entry": "evlog/eve",
-      "raw": 201993,
-      "gzip": 57032
-    },
-    {
       "entry": "evlog/vite",
       "raw": 194294,
       "gzip": 55927

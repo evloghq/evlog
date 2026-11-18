@@ -1,6 +1,6 @@
 import { getVercelOidcToken } from '@vercel/oidc'
 import { EvlogError } from 'evlog'
-import { useLogger } from 'evlog/eve'
+import { useLogger } from '@evlog/eve/logger'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { eviErrors, refusal } from '../lib/errors'
@@ -20,7 +20,7 @@ export default defineDynamic(ctx => {
         if (!canAccessAdminTools(toolCtx.session.auth.current)) {
           return refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool: 'turbo__enable_remote_cache' }))
         }
-        const log = useLogger(toolCtx)
+        const log = useLogger()
         const refuse = (error: EvlogError) => {
           const refused = refusal(error)
           log.set({ turbo: { remoteCache: false, reason: refused.code } })

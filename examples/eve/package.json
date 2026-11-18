@@ -17,6 +17,7 @@
     "dev:tui": "eve dev"
   },
   "dependencies": {
+    "@evlog/eve": "workspace:*",
     "@radix-ui/react-use-controllable-state": "1.2.2",
     "@shikijs/core": "4.1.0",
     "@shikijs/engine-javascript": "4.1.0",
@@ -31,7 +32,7 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
-    "eve": "^0.30.8",
+    "eve": "1.0.2",
     "evlog": "workspace:*",
     "lucide-react": "1.16.0",
     "motion": "12.40.0",

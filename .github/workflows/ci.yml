@@ -94,9 +94,11 @@ jobs:
         with:
           bun-version: 1.4.4
 
-      # evlog and @evlog/cli run once below, under coverage, which enforces their thresholds
+      # evlog and @evlog/cli run once below, under coverage, which enforces their thresholds.
+      # The eve CLI refuses to start below Node 24, so the packages that build
+      # with it only run on the 24 leg.
       - name: Test workspace
-        run: pnpm exec turbo run test --affected --filter='!evlog' --filter='!@evlog/cli'
+        run: pnpm exec turbo run test --affected --filter='!evlog' --filter='!@evlog/cli' ${{ matrix.node-version == '22' && '--filter=!@evlog/eve --filter=!evi --filter=!evlog-eve-example' || '' }}
 
       # content-lint lives in scripts/, outside the workspace graph, so turbo
       # never sees it. Its fixture test is what keeps the content pass honest.
@@ -392,7 +394,7 @@ jobs:
         env:
           # renovate: datasource=npm depName=pkg-pr-new
           PKG_PR_NEW_VERSION: 0.0.93
-        run: pnpx "pkg-pr-new@${PKG_PR_NEW_VERSION}" publish --compact --no-template --pnpm './packages/evlog' './packages/nuxthub' './packages/telemetry' './packages/cli' './packages/signals'
+        run: pnpx "pkg-pr-new@${PKG_PR_NEW_VERSION}" publish --compact --no-template --pnpm './packages/evlog' './packages/nuxthub' './packages/telemetry' './packages/cli' './packages/signals' './packages/eve'
 
   # Single required check, so branch protection survives job renames
   ci:

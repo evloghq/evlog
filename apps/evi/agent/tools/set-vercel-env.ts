@@ -1,6 +1,6 @@
 import { getToken } from '@vercel/connect'
 import type { EvlogError } from 'evlog'
-import { useLogger } from 'evlog/eve'
+import { useLogger } from '@evlog/eve/logger'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { eviErrors, refusal } from '../lib/errors'
@@ -46,7 +46,7 @@ export default defineDynamic(ctx => {
         // approval: reaching execute means either the policy auto-
         // approved or a human answered the card, so only a denial
         // (secret-shaped key) still blocks here.
-        const log = useLogger(toolCtx)
+        const log = useLogger()
         const refuse = (error: EvlogError, fields: Record<string, unknown> = {}) => {
           const refused = refusal(error)
           log.set({ vercel: { env: false, reason: refused.code, ...fields } })

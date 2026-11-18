@@ -1,6 +1,7 @@
 import type { ErrorOptions, EvlogErrorData } from './types'
 import { colors, isServer } from './utils'
 import { evlogErrorBrand, evlogErrorDataKey, isEvlogError as hasEvlogErrorBrand } from './shared/error-brand'
+import { notifyErrorCreated } from './shared/error-created'
 
 /** Non-enumerable storage so `JSON.stringify(error)` never exposes internal context */
 const evlogErrorInternalKey = Symbol.for('evlog.error.internal')
@@ -86,6 +87,8 @@ export class EvlogError extends Error {
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, EvlogError)
     }
+
+    notifyErrorCreated(this)
   }
 
   /**

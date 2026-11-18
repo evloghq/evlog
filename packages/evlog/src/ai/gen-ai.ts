@@ -2,7 +2,7 @@ import type { AIFieldData, GenAIEventData } from './index'
 
 /**
  * Convert the accumulator's fields to the `gen_ai` event shape.
- * Shared by `evlog/ai` and `evlog/eve`; not a package export.
+ * Used by `evlog/ai`; not a package export.
  */
 export function toGenAIField(data: AIFieldData): GenAIEventData {
   const usage: GenAIEventData['usage'] = {

@@ -699,6 +699,17 @@ describe('createMiddlewareLogger', () => {
         expect(event.durationMs).toBe(40)
       })
     })
+
+    it('hands keep hooks the duration the caller passes to finish()', async () => {
+      const keep = vi.fn()
+      const { finish } = createMiddlewareLogger({ method: 'EVE', path: '/turns', keep })
+
+      const event = defined(await finish({ status: 200, durationMs: 1500 }), 'emitted event')
+
+      expect(event.durationMs).toBe(1500)
+      expect(event.duration).toBe('1.50s')
+      expect(keep.mock.calls[0]![0].duration).toBe(1500)
+    })
   })
 
   describe('console output', () => {

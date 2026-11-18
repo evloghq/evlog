@@ -12,7 +12,7 @@ Add a new framework integration to evlog. The recommended path is the **manifest
 ## Two paths
 
 - **Manifest mode** (preferred, ~30–80 lines of glue). Call `defineFrameworkIntegration({ name, extractRequest, attachLogger, storage? })` once at module level, then write a tiny middleware that calls `integration.start(ctx, options)` and runs the framework's `next()` inside `runWith`. Reference implementations: all of `packages/evlog/src/{hono,express,fastify,elysia,nestjs,orpc,react-router,sveltekit,workers}/index.ts` use it.
-- **Custom mode**: use `createMiddlewareLogger` directly when the framework's lifecycle doesn't fit a standard middleware. Current custom-mode integrations: Next.js (`src/next/`), Nitro v2/v3 (`src/nitro/`, `src/nitro-v3/`), Eve (`src/eve/`).
+- **Custom mode**: use `createMiddlewareLogger` directly when the framework's lifecycle doesn't fit a standard middleware. Current custom-mode integrations: Next.js (`src/next/`), Nitro v2/v3 (`src/nitro/`, `src/nitro-v3/`). eve is not a framework integration: it ships as an eve extension in `packages/eve` (`@evlog/eve`), because eve finds extensions by package.
 
 Manifest mode now covers all classic HTTP frameworks. Use custom mode only when you can't extract a request synchronously at the start of the lifecycle (server actions, module-level hooks, agent turns).
 

@@ -1,6 +1,6 @@
 import { ConnectorInstallationRequiredError, getToken } from '@vercel/connect'
 import { EvlogError } from 'evlog'
-import { useLogger } from 'evlog/eve'
+import { useLogger } from '@evlog/eve/logger'
 import { executeGitHubShell } from 'eve/extensions/git/sandbox'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
@@ -25,7 +25,7 @@ export default defineDynamic((ctx) => {
         repository: z.string().optional().describe(`owner/repo to push to; defaults to ${home}`),
       }),
       async execute(input, toolCtx) {
-        const log = useLogger(toolCtx)
+        const log = useLogger()
         const refuse = (refused: ToolRefusal) => {
           log.set({ git: { branch: input.branch, pushed: false, reason: refused.code } })
           return refused

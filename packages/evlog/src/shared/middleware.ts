@@ -78,7 +78,12 @@ export interface MiddlewareLoggerOptions extends BaseEvlogOptions {
 
 export interface MiddlewareLoggerResult {
   logger: AuditableLogger
-  finish: (opts?: { status?: number; error?: Error }) => Promise<WideEvent | null>
+  /**
+   * Finish request logging. `durationMs` replaces the time measured since this
+   * logger was created, for an integration that knows when the work started,
+   * such as a resumed agent turn.
+   */
+  finish: (opts?: { status?: number; error?: Error; durationMs?: number }) => Promise<WideEvent | null>
   /**
    * Finish request logging, deferring emit until a streaming response body completes.
    * Returns the original response or a wrapped copy when the body is a stream.
@@ -274,7 +279,7 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
     })
   }
 
-  const finish = (opts?: { status?: number; error?: Error }): Promise<WideEvent | null> => {
+  const finish = (opts?: { status?: number; error?: Error; durationMs?: number }): Promise<WideEvent | null> => {
     return performFinish(logger, opts)
   }
 
@@ -318,7 +323,7 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
 
   async function performFinish(
     requestLogger: RequestLogger,
-    opts?: { status?: number; error?: Error },
+    opts?: { status?: number; error?: Error; durationMs?: number },
     drainOptions: MiddlewareLoggerOptions = options,
   ): Promise<WideEvent | null> {
     const { status, error } = opts ?? {}
@@ -331,7 +336,7 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
       requestLogger.set({ status })
     }
 
-    const durationMs = elapsedMs(startTime)
+    const durationMs = opts?.durationMs ?? elapsedMs(startTime)
 
     const resolvedStatus = error
       ? extractErrorStatus(error)

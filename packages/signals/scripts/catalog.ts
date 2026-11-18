@@ -73,7 +73,7 @@ export const validationBug = defineSignal({
   keep: v => v.value && v.confidence > 0.85,
 })
 
-/** Agent turns from evlog/eve. The judge that used to be sampled at a few percent. */
+/** Agent turns from @evlog/eve. The judge that used to be sampled at a few percent. */
 export const turnResolved = defineSignal({
   name: 'turn-resolved',
   when: e => e.method === 'EVE' && typeof (e.eve as { turnId?: string } | undefined)?.turnId === 'string',

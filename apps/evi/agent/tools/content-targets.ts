@@ -1,5 +1,5 @@
 import type { EvlogError } from 'evlog'
-import { useLogger } from 'evlog/eve'
+import { useLogger } from '@evlog/eve/logger'
 import { defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { eviErrors, refusal } from '../lib/errors'
@@ -23,7 +23,7 @@ export default defineTool({
   }),
   async execute(input, toolCtx) {
     const sandbox = await toolCtx.getSandbox()
-    const log = useLogger(toolCtx)
+    const log = useLogger()
     const refuse = (error: EvlogError) => {
       const refused = refusal(error)
       log.set({ content: { scanned: false, reason: refused.code } })

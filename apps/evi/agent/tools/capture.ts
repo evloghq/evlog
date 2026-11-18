@@ -1,5 +1,5 @@
 import type { EvlogError } from 'evlog'
-import { useLogger } from 'evlog/eve'
+import { useLogger } from '@evlog/eve/logger'
 import { defineDynamic, defineTool } from 'eve/tools'
 import { z } from 'zod'
 import { missingBlobTokenError, uploadSandboxImage } from '../lib/blob'
@@ -42,7 +42,7 @@ export default defineDynamic(ctx => {
         if (!canAccessAdminTools(toolCtx.session.auth.current)) {
           return refusal(eviErrors.TOOL_NOT_AVAILABLE({ tool: 'capture__before_after' }))
         }
-        const log = useLogger(toolCtx)
+        const log = useLogger()
         const refuse = (error: EvlogError) => {
           const refused = refusal(error)
           log.set({ capture: { published: false, reason: refused.code } })
