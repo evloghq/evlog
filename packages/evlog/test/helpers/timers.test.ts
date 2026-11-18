@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectLinearTime } from './timers'
 
-/** Make `process.cpuUsage()` report `ms()` milliseconds of CPU time. */
+/** Make `process.threadCpuUsage()` report `ms()` milliseconds of CPU time. */
 function mockCpuClock(ms: () => number) {
-  vi.spyOn(process, 'cpuUsage').mockImplementation(() => ({ user: ms() * 1_000, system: 0 }))
+  vi.spyOn(process, 'threadCpuUsage').mockImplementation(() => ({ user: ms() * 1_000, system: 0 }))
 }
 
 describe('expectLinearTime', () => {
@@ -68,6 +68,18 @@ describe('expectLinearTime', () => {
     }, n => 'x'.repeat(1_024 * n))
   })
 
+  it('ignores CPU time other threads use while the long input runs', () => {
+    let thread = 0
+    let processCpu = 0
+    mockCpuClock(() => thread)
+    vi.spyOn(process, 'cpuUsage').mockImplementation(() => ({ user: processCpu * 1_000, system: 0 }))
+    expectLinearTime((input) => {
+      thread += input.length / 1_000
+      // V8's GC and compiler threads can run alongside the long call only.
+      processCpu += (input.length / 1_000) * (input.length > 1_024 ? 4 : 1)
+    }, n => 'x'.repeat(1_024 * n))
+  })
+
   it('rejects work whose time grows with the square of input length', () => {
     let now = 0
     mockCpuClock(() => now)
@@ -76,6 +88,23 @@ describe('expectLinearTime', () => {
         now += (input.length * input.length) / 50_000
       }, n => 'x'.repeat(1_024 * n), 'quadratic')
     }).toThrow(/quadratic/)
+  })
+
+  it('times on process CPU time where Node has no threadCpuUsage', () => {
+    const { threadCpuUsage } = process
+    // @ts-expect-error removed to run as Node before 22.19
+    delete process.threadCpuUsage
+    try {
+      let now = 0
+      vi.spyOn(process, 'cpuUsage').mockImplementation(() => ({ user: now * 1_000, system: 0 }))
+      expect(() => {
+        expectLinearTime((input) => {
+          now += (input.length * input.length) / 50_000
+        }, n => 'x'.repeat(1_024 * n), 'quadratic')
+      }).toThrow(/quadratic/)
+    } finally {
+      process.threadCpuUsage = threadCpuUsage
+    }
   })
 
   it('rejects quadratic work whose short run is below one millisecond', () => {

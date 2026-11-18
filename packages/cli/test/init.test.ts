@@ -33,6 +33,23 @@ vi.mock('../src/lib/agents/skills', async (importOriginal) => {
   }
 })
 
+/** Never spawns a package manager: a test that forgot `--no-install` would run a real `npm install` in its scratch project. */
+const installs = vi.hoisted(() => ({
+  result: { ok: true } as { ok: true } | { ok: false, error: string },
+  calls: [] as string[],
+}))
+
+vi.mock('../src/lib/init/pm', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/lib/init/pm')>()
+  return {
+    ...actual,
+    runInstall: (manager: string) => {
+      installs.calls.push(manager)
+      return Promise.resolve(installs.result)
+    },
+  }
+})
+
 const tempDirs: string[] = []
 
 async function project(files: Record<string, string>): Promise<string> {
@@ -89,6 +106,8 @@ afterEach(async () => {
   process.exitCode = undefined
   skills.spawnResult = null
   skills.calls = 0
+  installs.result = { ok: true }
+  installs.calls = []
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
 })
 
@@ -1400,5 +1419,185 @@ describe('planWiring — express and fastify', () => {
     expect(contents).toContain('export const evlogOptions: EvlogFastifyOptions = toMiddlewareOptions(config)')
     expect(action(plan, 'evlog.config.ts').contents).toContain('createAxiomDrain')
     expect(plan.manual.map(step => step.snippet).join('\n')).toContain('await app.register(evlog, evlogOptions)')
+  })
+})
+
+describe('init command', () => {
+  const NUXT = {
+    'package.json': JSON.stringify({ name: 'shop', dependencies: { nuxt: '^4.0.0', evlog: '^2.35.1' } }),
+    'nuxt.config.ts': 'export default defineNuxtConfig({})\n',
+    'server/api/health.get.ts': 'export default defineEventHandler(() => ({ ok: true }))\n',
+  }
+
+  /** Runs `evlog init` from its raw arguments, the way a shell hands them over. */
+  async function run(cwd: string, rawArgs: string[]): Promise<{ stdout: string, stderr: string, json: () => Record<string, any> }> {
+    const chunks = { stdout: [] as string[], stderr: [] as string[] }
+    for (const stream of ['stdout', 'stderr'] as const) {
+      vi.spyOn(process[stream], 'write').mockImplementation(((chunk: string | Uint8Array) => {
+        chunks[stream].push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString())
+        return true
+      }) as typeof process.stdout.write)
+    }
+    vi.stubEnv('HOME', join(cwd, '__home'))
+    vi.stubEnv('USERPROFILE', join(cwd, '__home'))
+
+    await runCommand(init, { rawArgs: ['--cwd', cwd, '--no-header', ...rawArgs] })
+
+    const stdout = chunks.stdout.join('')
+    return { stdout, stderr: chunks.stderr.join(''), json: () => JSON.parse(stdout) }
+  }
+
+  it('carries every choice flag into the plan', async () => {
+    const cwd = await project(NUXT)
+
+    const choices = '--service checkout-api --drain none --prod-drain axiom,sentry --extras pipeline,enrichers,sampling --enrichers geo --sampling high'
+    const { json } = await run(cwd, ['--json', '--dry-run', '--no-agents', ...choices.split(' ')])
+
+    expect(json()).toMatchObject({
+      framework: 'nuxt',
+      service: 'checkout-api',
+      devDrain: 'none',
+      prodDrains: ['axiom', 'sentry'],
+      extras: ['pipeline', 'enrichers', 'sampling'],
+      enrichers: ['geo'],
+      sampling: 'high',
+      agentGuide: null,
+      dryRun: true,
+    })
+    expect(process.exitCode).toBeUndefined()
+  })
+
+  it('writes nothing and runs nothing under --dry-run', async () => {
+    const cwd = await project({ ...NUXT, 'package.json': JSON.stringify({ name: 'shop', dependencies: { nuxt: '^4.0.0' } }) })
+
+    const { json } = await run(cwd, ['--json', '--dry-run'])
+
+    expect(json().install).toMatchObject({ status: 'skipped', command: 'npm install evlog' })
+    expect(json().agentGuide).toMatchObject({ status: 'pending' })
+    expect(installs.calls).toEqual([])
+    expect(skills.calls).toBe(0)
+    expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(false)
+    expect(existsSync(join(cwd, 'AGENTS.md'))).toBe(false)
+    expect(await readFile(join(cwd, 'nuxt.config.ts'), 'utf8')).toBe(NUXT['nuxt.config.ts'])
+  })
+
+  it('stops on a mistyped --dry-run instead of writing for real', async () => {
+    const cwd = await project(NUXT)
+
+    const { json } = await run(cwd, ['--json', '--dryrun', '--no-agents'])
+
+    expect(json().error.code).toBe('cli.UNKNOWN_FLAG')
+    expect(process.exitCode).toBe(2)
+    expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(false)
+    expect(await readFile(join(cwd, 'nuxt.config.ts'), 'utf8')).toBe(NUXT['nuxt.config.ts'])
+  })
+
+  it.each([
+    { flag: ['--framework', 'rails'], code: 'cli.INIT_INVALID_FRAMEWORK' },
+    { flag: ['--drain', 'console'], code: 'cli.INIT_INVALID_DRAIN' },
+    { flag: ['--enrichers', 'geo,browser'], code: 'cli.INIT_INVALID_ENRICHER' },
+    { flag: ['--sampling', '0.1'], code: 'cli.INIT_INVALID_SAMPLING' },
+  ])('exits 2 on $flag.0 $flag.1 before it writes anything', async ({ flag, code }) => {
+    const cwd = await project(NUXT)
+
+    const { json } = await run(cwd, ['--json', '--no-agents', '--no-install', ...flag])
+
+    expect(json().error.code).toBe(code)
+    expect(process.exitCode).toBe(2)
+    expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(false)
+  })
+
+  it('installs evlog with the project\'s package manager, and not at all with --no-install', async () => {
+    const cwd = await project({ ...NUXT, 'pnpm-lock.yaml': '' })
+
+    const installed = await run(cwd, ['--json', '--yes', '--no-agents'])
+    expect(installed.json().install).toEqual({ status: 'installed', command: 'pnpm add evlog' })
+    expect(installs.calls).toEqual(['pnpm'])
+
+    vi.restoreAllMocks()
+    const skipped = await run(await project({ ...NUXT, 'pnpm-lock.yaml': '' }), ['--json', '--yes', '--no-agents', '--no-install'])
+    expect(skipped.json().install).toEqual({ status: 'skipped', command: 'pnpm add evlog' })
+    expect(installs.calls).toEqual(['pnpm'])
+  })
+
+  it('exits 1 when the install fails, with the wiring written and the error in the JSON', async () => {
+    installs.result = { ok: false, error: 'Command failed: npm install evlog' }
+    const cwd = await project(NUXT)
+
+    const { json } = await run(cwd, ['--json', '--yes', '--no-agents'])
+
+    expect(json().install).toEqual({ status: 'failed', command: 'npm install evlog', error: 'Command failed: npm install evlog' })
+    expect(process.exitCode).toBe(1)
+    expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(true)
+  })
+
+  it('writes the wiring, then reports it as already there on a second run', async () => {
+    const cwd = await project(NUXT)
+
+    const first = await run(cwd, ['--json', '--yes', '--no-agents', '--no-install'])
+    expect(first.json().written.map((entry: { file: string }) => entry.file)).toEqual(['evlog.config.ts', 'nuxt.config.ts'])
+    expect(await readFile(join(cwd, 'nuxt.config.ts'), 'utf8')).toContain('evlog/nuxt')
+
+    vi.restoreAllMocks()
+    const second = await run(cwd, ['--json', '--yes', '--no-agents', '--no-install'])
+    expect(second.json().written).toEqual([])
+    expect(second.json().already.length).toBeGreaterThan(0)
+    expect(process.exitCode).toBeUndefined()
+  })
+
+  it('prints the report on stderr and leaves stdout empty without --json', async () => {
+    const cwd = await project(NUXT)
+
+    const { stdout, stderr } = await run(cwd, ['--yes', '--no-agents', '--no-install'])
+
+    expect(stdout).toBe('')
+    expect(stderr).toContain('evlog.config.ts')
+  })
+
+  describe('at a workspace root', () => {
+    const WORKSPACE = {
+      'pnpm-workspace.yaml': 'packages:\n  - apps/*\n',
+      'package.json': JSON.stringify({ name: 'mono', private: true }),
+      'apps/web/package.json': JSON.stringify({ name: 'web', dependencies: { nuxt: '^4.0.0', evlog: '^2.35.1' } }),
+      'apps/web/nuxt.config.ts': 'export default defineNuxtConfig({})\n',
+      'apps/api/package.json': JSON.stringify({ name: '@acme/api', type: 'module', dependencies: { hono: '^4.0.0', evlog: '^2.35.1' } }),
+      'apps/api/src/index.ts': 'import { Hono } from \'hono\'\nexport default new Hono()\n',
+    }
+    const flags = ['--json', '--yes', '--no-agents', '--no-install']
+
+    it('sets up every app when --apps is left out', async () => {
+      const cwd = await project(WORKSPACE)
+
+      const { json } = await run(cwd, flags)
+
+      expect(json().workspace).toBe(true)
+      expect(json().apps.map((app: { app: string, framework: string }) => [app.app, app.framework])).toEqual([['apps/api', 'hono'], ['apps/web', 'nuxt']])
+      expect(existsSync(join(cwd, 'apps/web/evlog.config.ts'))).toBe(true)
+      expect(existsSync(join(cwd, 'apps/api/evlog.config.ts'))).toBe(true)
+      expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(false)
+    })
+
+    it.each([
+      { by: 'its directory', value: 'apps/web', kept: 'apps/web', left: 'apps/api' },
+      { by: 'its package name', value: '@acme/api', kept: 'apps/api', left: 'apps/web' },
+    ])('sets up only the app --apps names by $by', async ({ value, kept, left }) => {
+      const cwd = await project(WORKSPACE)
+
+      const { json } = await run(cwd, [...flags, '--apps', value])
+
+      expect(json().apps.map((app: { app: string }) => app.app)).toEqual([kept])
+      expect(existsSync(join(cwd, kept, 'evlog.config.ts'))).toBe(true)
+      expect(existsSync(join(cwd, left, 'evlog.config.ts'))).toBe(false)
+    })
+
+    it('exits 2 and sets up nothing when one of the names matches no app', async () => {
+      const cwd = await project(WORKSPACE)
+
+      const { json } = await run(cwd, [...flags, '--apps', 'apps/web,shopp'])
+
+      expect(json().error).toMatchObject({ code: 'cli.INIT_NO_APPS', message: expect.stringContaining('"shopp"') })
+      expect(process.exitCode).toBe(2)
+      expect(existsSync(join(cwd, 'apps/web/evlog.config.ts'))).toBe(false)
+    })
   })
 })

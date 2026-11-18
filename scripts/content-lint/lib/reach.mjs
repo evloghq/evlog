@@ -40,7 +40,7 @@ export function routeOf(path) {
  * removed rather than collapsed, which is why `Drain & Enrichers` anchors as
  * `drain--enrichers` and `The ratchet: --baseline` as `the-ratchet---baseline`.
  */
-const NOT_IN_A_SLUG = /[`*_~[\]()!"'#$%^&+=,.:;?<>{}|\\/@]/g
+const NOT_IN_A_SLUG = /[`*~[\]()!"'#$%^&+=,.:;?<>{}|\\/@]/g
 
 /**
  * The fragment a heading answers to.

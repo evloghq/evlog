@@ -37,7 +37,7 @@
     "risk-score:test": "vitest run --root scripts/risk-score",
     "risk-score:record": "node scripts/risk-score/record.mjs",
     "cli:sandbox": "node scripts/cli-sandbox.mjs",
-    "test:coverage": "pnpm --filter evlog run test:coverage",
+    "test:coverage": "pnpm --filter evlog --filter @evlog/cli run test:coverage",
     "test:coverage:open": "pnpm --filter evlog run test:coverage && open packages/evlog/coverage/index.html",
     "mutate": "pnpm --filter evlog run mutate",
     "mutate:open": "pnpm --filter evlog run mutate && open packages/evlog/reports/mutation/mutation.html",
