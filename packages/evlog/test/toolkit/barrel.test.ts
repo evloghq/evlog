@@ -46,8 +46,8 @@ describe('evlog/toolkit/storage', () => {
     expect(toolkitStorage.createLoggerStorage).toBeTypeOf('function')
   })
 
-  it('is the same helper as the toolkit barrel re-export', () => {
-    expect(toolkitStorage.createLoggerStorage).toBe(toolkit.createLoggerStorage)
+  it('shares its storage with the deprecated toolkit barrel re-export', () => {
+    expect(toolkit.createLoggerStorage('barrel test').storage).toBe(toolkitStorage.createLoggerStorage('barrel test').storage)
   })
 })
 
