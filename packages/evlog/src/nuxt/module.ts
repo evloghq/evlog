@@ -349,7 +349,7 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
     const isNitroV3 = getNitroVersionSafe(nuxt) === 3
 
     if (options.axiom?.token !== undefined) {
-      warnDeprecated('nuxt:axiom.token', '[evlog/nuxt] evlog.axiom.token is deprecated and removed in v3, use evlog.axiom.apiKey.')
+      warnDeprecated('nuxt:axiom.token', '[evlog/nuxt] evlog.axiom.token is deprecated and removed in v3, use evlog.axiom.apiKey.', 'credential-aliases-removed')
     }
 
     const clientEnabled = options.client ?? true

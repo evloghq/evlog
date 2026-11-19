@@ -323,7 +323,7 @@ describe('axiom adapter', () => {
       const drain = createAxiomDrain({ token: 'legacy-key', dataset: 'logs' })
       await drain(createDrainContext())
       expect(warnSpy).toHaveBeenCalledWith(
-        '[evlog/axiom] \'token\' is deprecated and removed in v3, use \'apiKey\' instead.',
+        '[evlog/axiom] \'token\' is deprecated and removed in v3, use \'apiKey\' instead. See https://www.evlog.dev/reference/migrate-v3#credential-aliases-removed',
       )
     })
 

@@ -1358,6 +1358,14 @@ interface V26SubagentEvents {
   'subagent.completed': V26Handler<{ readonly callId: string, readonly subagentName: string, readonly output?: string }>
 }
 
+function warnEveEntry(): void {
+  warnDeprecated(
+    'eve:entry',
+    '[evlog/eve] \'evlog/eve\' is removed in v3. Agents move to the evlog() extension from \'@evlog/eve\', which requires eve 1.0.',
+    'eve-moves-to-evlogeve',
+  )
+}
+
 /**
  * Create an eve stream hook that emits one evlog wide event per agent turn.
  *
@@ -1391,11 +1399,12 @@ interface V26SubagentEvents {
  * export default defineEvlogHook({ ...config, message: 'preview' })
  * ```
  *
- * @deprecated Removed in evlog v3. Use the `evlog()` lifecycle provider.
+ * @deprecated Removed in evlog v3. Use the `evlog()` extension from `@evlog/eve`, which requires eve 1.0.
  */
 export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {
+  warnEveEntry()
   if (options.redactMessage !== undefined) {
-    warnDeprecated('eve:redactMessage', '[evlog/eve] redactMessage is deprecated and removed in v3. Use message: \'omit\' (was true) or \'preview\' (was false).')
+    warnDeprecated('eve:redactMessage', '[evlog/eve] redactMessage is deprecated. On evlog 2, use message: \'omit\' (was true) or \'preview\' (was false). v3 removes both options with evlog/eve.', 'eve-moves-to-evlogeve')
   }
   const messageMode = resolveMessageMode(options)
   const messageSettings: MessageSettings = {
@@ -2098,6 +2107,8 @@ interface EveModelAttemptInput {
  *
  * Returns `undefined` outside a tracked turn — spreading that adds nothing,
  * which is the point.
+ *
+ * @deprecated Removed in evlog v3 with no replacement. `@evlog/eve` documents how to stamp the turn id yourself.
  */
 export function evlogRuntimeContext(input: EveModelAttemptInput): Record<string, string> | undefined {
   if (!input.turn) return undefined
@@ -2150,11 +2161,12 @@ function buildInstrumentationContext(
  * eve 0.84 and later no longer emit `step.started`: the runtime context comes
  * from an OTel integration instead, see {@link evlogRuntimeContext}.
  *
- * @deprecated Removed in evlog v3. Use the `evlog()` lifecycle provider.
+ * @deprecated Removed in evlog v3 with no replacement, along with `setup` and `traceChannelRequests`. eve 1.0 agents move to the `evlog()` extension from `@evlog/eve`.
  */
 export function defineEvlogInstrumentation(
   options: EvlogEveInstrumentationOptions = {},
 ): InstrumentationDefinition {
+  warnEveEntry()
   // eve's typings describe v27 events only; this provider serves the eve versions that emit `step.started`.
   const events = { 'step.started': buildInstrumentationContext } as unknown as InstrumentationEvents
   return defineInstrumentation({

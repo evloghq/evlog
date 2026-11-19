@@ -45,7 +45,7 @@ describe('applyDeprecatedAlias', () => {
       },
     )
     expect(warnSpy).toHaveBeenCalledWith(
-      '[evlog/test-config-warn] \'sourceToken\' is deprecated and removed in v3, use \'apiKey\' instead.',
+      '[evlog/test-config-warn] \'sourceToken\' is deprecated and removed in v3, use \'apiKey\' instead. See https://www.evlog.dev/reference/migrate-v3#credential-aliases-removed',
     )
   })
 
