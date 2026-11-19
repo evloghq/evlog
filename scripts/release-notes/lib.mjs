@@ -61,6 +61,42 @@ export function latestStableTag(tags, name) {
   return stable[0]?.tag ?? null
 }
 
+/** Semver order: `x.y.z` by number, a prerelease before its release, `beta.10` after `beta.9`. */
+function compareVersions(a, b) {
+  const [coreA, preA] = a.split(/-(.*)/s)
+  const [coreB, preB] = b.split(/-(.*)/s)
+  const [x, y] = [parseVersion(coreA), parseVersion(coreB)]
+  const core = x[0] - y[0] || x[1] - y[1] || x[2] - y[2]
+  if (core || preA === preB) return core
+  if (preA === undefined) return 1
+  if (preB === undefined) return -1
+  const [idsA, idsB] = [preA.split('.'), preB.split('.')]
+  for (let i = 0; i < Math.max(idsA.length, idsB.length); i++) {
+    if (idsA[i] === undefined) return -1
+    if (idsB[i] === undefined) return 1
+    const [numA, numB] = [/^\d+$/.test(idsA[i]), /^\d+$/.test(idsB[i])]
+    if (numA && numB && idsA[i] !== idsB[i]) return Number(idsA[i]) - Number(idsB[i])
+    if (numA !== numB) return numA ? -1 : 1
+    if (idsA[i] !== idsB[i]) return idsA[i] < idsB[i] ? -1 : 1
+  }
+  return 0
+}
+
+/**
+ * The `<name>@` tag with the highest version below `version`. Creation date
+ * would pick the wrong one on `v3`, where `main` is merged in and its 2.x tags
+ * are newer than the last beta.
+ */
+export function previousVersionTag(tags, name, version) {
+  const prefix = `${name}@`
+  const lower = tags
+    .filter(t => t.startsWith(prefix) && /^\d+\.\d+\.\d+(?:-.+)?$/.test(t.slice(prefix.length)))
+    .map(t => t.slice(prefix.length))
+    .filter(v => compareVersions(v, version) < 0)
+  lower.sort(compareVersions)
+  return lower.length > 0 ? `${prefix}${lower.at(-1)}` : null
+}
+
 /** The body of the `## <version>` section of a changesets CHANGELOG, or `null`. */
 export function changelogSection(changelog, version) {
   const lines = changelog.split('\n')
