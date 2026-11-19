@@ -15,6 +15,8 @@ interface TurnEvent {
   status: number
   requestId: string
   idempotencyKey: string
+  traceId?: string
+  spanId?: string
   eve: { sessionId: string, turnId: string, outcome: string, failedCalls?: number, caller?: { principalType: string } }
   order: { id: string }
   customer: { email: string }
@@ -28,6 +30,10 @@ interface TurnEvent {
     usage: { input_tokens: number, output_tokens: number, total_tokens: number }
     tools: Array<{ name: string, success: boolean, error?: string }>
   }
+}
+
+interface OtlpTrace {
+  resourceSpans: Array<{ scopeSpans: Array<{ spans: Array<{ name: string, spanId: string, attributes: Array<{ key: string, value: unknown }> }> }> }>
 }
 
 // The fixture agent answers from a scripted model, so `eve eval` drives the
@@ -61,6 +67,18 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
       expect(event.idempotencyKey).toBe(event.requestId)
       expect(event.gen_ai.conversation.id).toBe(event.eve.sessionId)
       expect(event.gen_ai.operation.name).toBe('invoke_agent')
+    }
+  })
+
+  it('carries the trace and invoke_agent span eve recorded for the turn', () => {
+    for (const event of events) {
+      const segments = join(fixture, '.eve/traces/v1', event.traceId ?? 'missing', 'segments')
+      const spans = readdirSync(segments).flatMap(file =>
+        (JSON.parse(readFileSync(join(segments, file), 'utf8')) as OtlpTrace).resourceSpans
+          .flatMap(resource => resource.scopeSpans.flatMap(scope => scope.spans)))
+      const root = spans.find(span => span.name.startsWith('invoke_agent '))
+      expect(root?.spanId).toBe(event.spanId)
+      expect(root?.attributes).toContainEqual({ key: 'agent.turn.id', value: { stringValue: event.eve.turnId } })
     }
   })
 

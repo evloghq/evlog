@@ -39,6 +39,10 @@
     "./logger": {
       "types": "./dist/extension/lib/logger.d.ts",
       "default": "./dist/extension/lib/logger.mjs"
+    },
+    "./instrumentation": {
+      "types": "./dist/extension/lib/traces.d.ts",
+      "default": "./dist/extension/lib/traces.mjs"
     }
   },
   "keywords": [

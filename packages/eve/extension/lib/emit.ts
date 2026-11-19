@@ -3,6 +3,7 @@ import { createError, initLogger, toLoggerConfig, toMiddlewareOptions } from 'ev
 import { createMiddlewareLogger, isLoggerInitialized, isLoggerLocked } from 'evlog/toolkit'
 import extension from '../extension'
 import type { RecordedError, TurnSlot } from './state'
+import { takeTurnTrace } from './traces'
 import { turnFields } from './turn'
 
 let initialized = false
@@ -89,7 +90,7 @@ export async function emitTurn(turnId: string, slot: Pick<TurnSlot, 'calls' | 'c
     record,
     tools,
   })
-  logger.set({ idempotencyKey: id, ...turn.fields })
+  logger.set({ idempotencyKey: id, ...turn.fields, ...takeTurnTrace(ctx.session.id, turnId) })
   if (record !== 'minimal') logger.set({ eve: lineage(ctx) })
 
   let errors = 0
