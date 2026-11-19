@@ -1,6 +1,7 @@
 import type { SessionView } from 'eve/events'
 import { calls, interactions, reply, runs, turn } from 'eve/events'
 import type { EvlogEveRecord, EvlogEveToolRule } from '../extension'
+import type { RecordedError } from './state'
 
 const REPLY_PREVIEW_LENGTH = 200
 
@@ -12,6 +13,8 @@ export interface TurnInput {
   channel?: string
   record: EvlogEveRecord
   tools: Record<string, EvlogEveToolRule>
+  /** The evlog errors built during the turn, matched to failed calls by message. */
+  created: RecordedError[]
 }
 
 function resolveRule(name: string, record: EvlogEveRecord, rules: Record<string, EvlogEveToolRule>): { input: boolean, output: boolean } | false {
@@ -60,14 +63,21 @@ export function turnFields(input: TurnInput): { fields: Record<string, unknown>,
       const rule = resolveRule(call.name, record, input.tools)
       if (!rule) return []
       const duration = durationMs(call)
+      const created = call.error && input.created.findLast(error => error.message === call.error!.message)
       return [
         {
+          call_id: call.callId,
           name: call.name,
           kind: call.kind,
           ...(duration !== undefined && { duration_ms: duration }),
           success: call.state !== 'failed',
           ...(call.outcome && { outcome: call.outcome }),
           ...(call.error && { error: call.error.message }),
+          ...(created && {
+            ...(created.code && { code: created.code }),
+            ...(created.why && { why: created.why }),
+            ...(created.fix && { fix: created.fix }),
+          }),
           ...(rule.input && call.input !== undefined && { input: call.input }),
           ...(rule.output && call.output !== undefined && { output: call.output }),
         }

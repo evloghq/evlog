@@ -28,7 +28,7 @@ interface TurnEvent {
     calls: number
     response: { finish_reasons: string[] }
     usage: { input_tokens: number, output_tokens: number, total_tokens: number }
-    tools: Array<{ name: string, success: boolean, error?: string }>
+    tools: Array<{ call_id: string, name: string, success: boolean, error?: string, code?: string, why?: string, fix?: string }>
   }
 }
 
@@ -70,12 +70,16 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
     }
   })
 
+  const spansOf = (event: TurnEvent) => {
+    const segments = join(fixture, '.eve/traces/v1', event.traceId ?? 'missing', 'segments')
+    return readdirSync(segments).flatMap(file =>
+      (JSON.parse(readFileSync(join(segments, file), 'utf8')) as OtlpTrace).resourceSpans
+        .flatMap(resource => resource.scopeSpans.flatMap(scope => scope.spans)))
+  }
+
   it('carries the trace and invoke_agent span eve recorded for the turn', () => {
     for (const event of events) {
-      const segments = join(fixture, '.eve/traces/v1', event.traceId ?? 'missing', 'segments')
-      const spans = readdirSync(segments).flatMap(file =>
-        (JSON.parse(readFileSync(join(segments, file), 'utf8')) as OtlpTrace).resourceSpans
-          .flatMap(resource => resource.scopeSpans.flatMap(scope => scope.spans)))
+      const spans = spansOf(event)
       const root = spans.find(span => span.name.startsWith('invoke_agent '))
       expect(root?.spanId).toBe(event.spanId)
       expect(root?.attributes).toContainEqual({ key: 'agent.turn.id', value: { stringValue: event.eve.turnId } })
@@ -111,7 +115,24 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
     // The stack is the tool's, not the hook's that wrote the event.
     expect(event.error!.stack.split('\n')[1]).toContain('execute')
     expect(event.error!.stack).not.toContain('emitTurn')
-    expect(event.gen_ai.tools).toEqual([expect.objectContaining({ name: 'issue_refund', success: false })])
+    expect(event.gen_ai.tools).toEqual([
+      expect.objectContaining({
+        name: 'issue_refund',
+        success: false,
+        code: 'REFUND_DECLINED',
+        why: 'The card issuer rejected the reversal',
+        fix: 'Ask the customer for another payment method',
+      })
+    ])
+  })
+
+  it('names each tool call by the id on its execute_tool span', () => {
+    for (const event of events.filter(e => e.gen_ai.tools)) {
+      const ids = spansOf(event)
+        .filter(span => span.name.startsWith('execute_tool '))
+        .flatMap(span => span.attributes.filter(a => a.key === 'gen_ai.tool.call.id').map(a => (a.value as { stringValue: string }).stringValue))
+      expect(event.gen_ai.tools.map(tool => tool.call_id).sort()).toEqual(ids.sort())
+    }
   })
 
   // The logs-errors eval gates on the tool's output: this session's declined refund, and only it.

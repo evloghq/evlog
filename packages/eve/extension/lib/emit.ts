@@ -89,6 +89,7 @@ export async function emitTurn(turnId: string, slot: Pick<TurnSlot, 'calls' | 'c
     channel: ctx.channel.kind,
     record,
     tools,
+    created: slot.created,
   })
   logger.set({ idempotencyKey: id, ...turn.fields, ...takeTurnTrace(ctx.session.id, turnId) })
   if (record !== 'minimal') logger.set({ eve: lineage(ctx) })
