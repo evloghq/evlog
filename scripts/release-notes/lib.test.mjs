@@ -8,6 +8,7 @@ import {
   isExcluded,
   latestStableTag,
   parseReleaseConfig,
+  previousVersionTag,
   renderNotes,
 } from './lib.mjs'
 
@@ -77,6 +78,29 @@ describe('latestStableTag', () => {
 
   it('returns null when the package has no stable tag', () => {
     expect(latestStableTag(['evlog@3.0.0-beta.0', ''], 'evlog')).toBeNull()
+  })
+})
+
+describe('previousVersionTag', () => {
+  // Creation order on v3 at 3.0.0-beta.3: main's 2.35.1 was tagged after beta.2 and merged in.
+  const tags = ['evlog@3.0.0-beta.3', 'evlog@2.35.1', 'evlog@3.0.0-beta.2', 'evlog@2.35.0', 'evlog@3.0.0-beta.1', '@evlog/cli@1.0.0-beta.2', '']
+
+  it('picks the previous beta over a newer 2.x tag merged from main', () => {
+    expect(previousVersionTag(tags, 'evlog', '3.0.0-beta.3')).toBe('evlog@3.0.0-beta.2')
+  })
+
+  it('picks the last 2.x release for the first beta', () => {
+    expect(previousVersionTag(['evlog@2.35.1', 'evlog@2.4.0', 'evlog@2.35.0'], 'evlog', '3.0.0-beta.0')).toBe('evlog@2.35.1')
+  })
+
+  it('orders prerelease numbers numerically and puts the release after its betas', () => {
+    expect(previousVersionTag(['evlog@3.0.0-beta.9', 'evlog@3.0.0-beta.10', 'evlog@2.36.0'], 'evlog', '3.0.0-beta.11')).toBe('evlog@3.0.0-beta.10')
+    expect(previousVersionTag(['evlog@3.0.0-beta.10', 'evlog@3.0.0-beta.9', 'evlog@2.36.0'], 'evlog', '3.0.0')).toBe('evlog@3.0.0-beta.10')
+  })
+
+  it('ignores higher versions and other packages, and returns null without a lower one', () => {
+    expect(previousVersionTag(['evlog@3.0.0-beta.2', 'evlog@2.35.1', '@evlog/cli@2.35.9'], 'evlog', '2.36.0')).toBe('evlog@2.35.1')
+    expect(previousVersionTag(['@evlog/eve@1.0.0-beta.0'], '@evlog/eve', '1.0.0-beta.0')).toBeNull()
   })
 })
 

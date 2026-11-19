@@ -59,6 +59,7 @@ import {
   isExcluded,
   latestStableTag,
   parseReleaseConfig,
+  previousVersionTag,
   renderNotes,
 } from './lib.mjs'
 
@@ -96,11 +97,9 @@ function packageDirs() {
  * tags, so an early per-package release still gets a bounded range instead of
  * the entire history.
  */
-function previousTag(name, currentTag, head) {
-  const scoped = git('tag', '--list', `${name}@*`, '--merged', head, '--sort=-creatordate')
-    .split('\n')
-    .filter(t => t && t !== currentTag)
-  if (scoped.length > 0) return scoped[0]
+function previousTag(name, version, head) {
+  const scoped = previousVersionTag(git('tag', '--list', `${name}@*`, '--merged', head).split('\n'), name, version)
+  if (scoped) return scoped
 
   const legacy = git('tag', '--list', 'v*', '--merged', head, '--sort=-creatordate').split('\n').filter(Boolean)
   return legacy[0] ?? null
@@ -189,7 +188,7 @@ async function main() {
     if (!dir) throw new Error(`no directory for ${name}`)
 
     const head = process.env.RELEASE_NOTES_REF ?? tag
-    const previous = previousTag(name, tag, head)
+    const previous = previousTag(name, version, head)
     const section = changelogSection(changelogAt(head, dir), version)
     if (section === null) throw new Error(`${dir}/CHANGELOG.md has no ## ${version} section at ${head}`)
     const entries = changesetEntries(section)
