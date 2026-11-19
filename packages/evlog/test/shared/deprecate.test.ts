@@ -10,7 +10,12 @@ import { applyDeprecatedAlias, createLoggerStorage } from '../../src/shared'
 import { createLoggerStorage as createLoggerStorageFromStorageEntry } from '../../src/shared/storage'
 import { warnDeprecated } from '../../src/shared/deprecate'
 import { resetGlobalRegistry } from '../../src/shared/globalRegistry'
+import { defined } from '../helpers/defined'
 import { enableDeprecationWarnings } from '../helpers/deprecations'
+
+function aliasFixture(): { token?: string, apiKey?: string } {
+  return { token: 'k' }
+}
 
 describe('warnDeprecated', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>
@@ -108,7 +113,7 @@ describe('deprecated entry points warn on call', () => {
   it('warns when redactMessage is passed to defineEvlogHook()', () => {
     defineEvlogHook({ redactMessage: true })
     expect(warnSpy).toHaveBeenCalledWith(
-      '[evlog/eve] redactMessage is deprecated and removed in v3. Use message: \'omit\' (was true) or \'preview\' (was false). See https://www.evlog.dev/reference/migrate-v3#eve-moves-to-evlogeve',
+      '[evlog/eve] redactMessage is deprecated. On evlog 2, use message: \'omit\' (was true) or \'preview\' (was false). v3 removes both options with evlog/eve. See https://www.evlog.dev/reference/migrate-v3#eve-moves-to-evlogeve',
     )
   })
 
@@ -133,7 +138,7 @@ describe('deprecated entry points warn on call', () => {
   })
 
   it('warns for applyDeprecatedAlias from evlog/toolkit and still copies the field', () => {
-    const config = applyDeprecatedAlias({ token: 'k' } as { token?: string, apiKey?: string }, { adapter: 'custom', from: 'token', to: 'apiKey' })
+    const config = applyDeprecatedAlias(aliasFixture(), { adapter: 'custom', from: 'token', to: 'apiKey' })
     expect(config.apiKey).toBe('k')
     expect(warnSpy.mock.calls[0]).toEqual(['[evlog/toolkit] applyDeprecatedAlias() is removed from \'evlog/toolkit\' in v3. Copy the deprecated field in your adapter\'s config resolver. See https://www.evlog.dev/reference/migrate-v3#credential-aliases-removed',])
   })
@@ -167,6 +172,16 @@ describe('default changes warn when the option is unset', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       '[evlog/otlp] v3 changes the default of semanticConventions to true. Set semanticConventions: false to keep this output. See https://www.evlog.dev/reference/migrate-v3#compact-output-by-default',
     )
+  })
+
+  it('warns separately for drains that leave different OTLP options unset', async () => {
+    await createOTLPDrain({ endpoint: 'http://localhost:4318', recordShape: 'compact' })(ctx)
+    await createOTLPDrain({ endpoint: 'http://localhost:4318', recordShape: 'compact' })(ctx)
+    await createOTLPDrain({ endpoint: 'http://localhost:4318', semanticConventions: false })(ctx)
+    expect(warnSpy.mock.calls.map(([message]) => String(message).split('.')[0])).toEqual([
+      '[evlog/otlp] v3 changes the default of semanticConventions to true',
+      '[evlog/otlp] v3 changes the default of recordShape to \'compact\'',
+    ])
   })
 
   it('stays silent when both OTLP options are set', async () => {
@@ -205,13 +220,13 @@ describe('migration page links', () => {
     createAxiomDrain({ token: 'k', dataset: 'logs' })
     createPostHogEventsDrain({ apiKey: 'k' })
     createLoggerStorage('links')
-    applyDeprecatedAlias({ token: 'k' } as { token?: string, apiKey?: string }, { adapter: 'custom', from: 'token', to: 'apiKey' })
+    applyDeprecatedAlias(aliasFixture(), { adapter: 'custom', from: 'token', to: 'apiKey' })
     defineEvlogHook({ redactMessage: true })
     await createOTLPDrain({ endpoint: 'http://localhost:4318' })({ event: { timestamp: '2026-11-19T00:00:00.000Z', level: 'info', service: 'api', environment: 'development' } })
 
     const page = readFileSync(new URL('../../../../apps/docs/content/7.reference/9.migrate-v3.md', import.meta.url), 'utf8')
     const anchors = new Set(
-      [...page.matchAll(/^#{2,3} (.+)$/gm)].map(([, heading]) => heading!.toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s/g, '-')),
+      [...page.matchAll(/^#{2,3} (.+)$/gm)].map(([, heading]) => defined(heading, 'migration heading').toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s/g, '-')),
     )
     const linked = warnSpy.mock.calls.map(([message]) => String(message).match(/migrate-v3#([\w-]+)$/)?.[1])
     expect(new Set(linked)).toEqual(new Set([

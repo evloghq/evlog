@@ -1404,7 +1404,7 @@ function warnEveEntry(): void {
 export function defineEvlogHook(options: EvlogEveOptions = {}): HookDefinition {
   warnEveEntry()
   if (options.redactMessage !== undefined) {
-    warnDeprecated('eve:redactMessage', '[evlog/eve] redactMessage is deprecated and removed in v3. Use message: \'omit\' (was true) or \'preview\' (was false).', 'eve-moves-to-evlogeve')
+    warnDeprecated('eve:redactMessage', '[evlog/eve] redactMessage is deprecated. On evlog 2, use message: \'omit\' (was true) or \'preview\' (was false). v3 removes both options with evlog/eve.', 'eve-moves-to-evlogeve')
   }
   const messageMode = resolveMessageMode(options)
   const messageSettings: MessageSettings = {
@@ -2161,7 +2161,7 @@ function buildInstrumentationContext(
  * eve 0.84 and later no longer emit `step.started`: the runtime context comes
  * from an OTel integration instead, see {@link evlogRuntimeContext}.
  *
- * @deprecated Removed in evlog v3. Use the `evlog()` extension from `@evlog/eve`, which requires eve 1.0.
+ * @deprecated Removed in evlog v3 with no replacement, along with `setup` and `traceChannelRequests`. eve 1.0 agents move to the `evlog()` extension from `@evlog/eve`.
  */
 export function defineEvlogInstrumentation(
   options: EvlogEveInstrumentationOptions = {},

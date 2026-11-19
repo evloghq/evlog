@@ -408,7 +408,7 @@ function warnUnsetV3Defaults(config: Partial<OTLPConfig>): void {
   const changes = unset.map(key => `${key} to ${V3_DEFAULT_CHANGES[key].v3}`).join(' and ')
   const keep = unset.map(key => `${key}: ${V3_DEFAULT_CHANGES[key].current}`).join(', ')
   warnDeprecated(
-    'otlp:v3-defaults',
+    `otlp:v3-defaults:${unset.join(',')}`,
     `[evlog/otlp] v3 changes the default of ${changes}. Set ${keep} to keep this output.`,
     'compact-output-by-default',
   )
