@@ -33,6 +33,7 @@
     "error-replaces-error",
     "error-status-field",
     "error-tojson-payload",
+    "eve-peer-floor-beta-install",
     "evlog-bin-broken-package-json",
     "evlog-eve-extension",
     "evlog-upgrade-scaffold",

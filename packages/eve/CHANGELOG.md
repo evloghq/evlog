@@ -1,5 +1,11 @@
 # @evlog/eve
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- [#1139](https://github.com/evloghq/evlog/pull/1139) [`43f5994`](https://github.com/evloghq/evlog/commit/43f59941ecba51560949709df60c159eb669c1c8) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The `eve` peer range is now `>=1.0.0` (was `*`), the floor the README and the docs already state. A package manager flags an eve 0.x install as an unmet peer, and npm 7 and later stops the install. Upgrade eve to 1.0 or later. The install commands use the `beta` tags until evlog 3.0 is stable.
+
 ## 1.0.0-beta.0
 
 ### Major Changes

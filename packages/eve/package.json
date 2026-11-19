@@ -1,6 +1,6 @@
 {
   "name": "@evlog/eve",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.1",
   "description": "evlog for eve agents: one redacted wide event per turn, from an eve extension",
   "author": "HugoRCD <contact@evlog.dev>",
   "homepage": "https://evlog.dev",
