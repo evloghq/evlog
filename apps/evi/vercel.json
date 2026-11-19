@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --filter evi...",
-  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh evi",
+  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh apps/evi packages/evlog",
   "git": {
     "deploymentEnabled": {
       "changeset-release/**": false,
