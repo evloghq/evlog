@@ -55,7 +55,7 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
   }
 
   it('emits one event per turn, keyed by session and turn', () => {
-    expect(events).toHaveLength(2)
+    expect(events).toHaveLength(4)
     for (const event of events) {
       expect(event.requestId).toBe(`${event.eve.sessionId}:${event.eve.turnId}`)
       expect(event.idempotencyKey).toBe(event.requestId)
@@ -94,6 +94,14 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
     expect(event.error!.stack.split('\n')[1]).toContain('execute')
     expect(event.error!.stack).not.toContain('emitTurn')
     expect(event.gen_ai.tools).toEqual([expect.objectContaining({ name: 'issue_refund', success: false })])
+  })
+
+  // The logs-errors eval gates on the tool's output: this session's declined refund, and only it.
+  it('reads the session back through the logs tool on its next turn', () => {
+    const read = events.find(e => e.gen_ai.tools.some(tool => tool.name === 'evlog__logs'))
+    expect(read?.eve.turnId).toBe('turn_1')
+    expect(read?.gen_ai.tools).toEqual([expect.objectContaining({ name: 'evlog__logs', success: true })])
+    expect(events.filter(e => e.eve.sessionId === read?.eve.sessionId).map(e => e.error?.code)).toEqual(['REFUND_DECLINED', undefined])
   })
 
   it('marks a completed turn with a failed call as a warning', () => {
