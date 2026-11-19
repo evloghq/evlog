@@ -58,6 +58,17 @@ export interface HttpPostOptions {
    * `messages` fields).
    */
   onResponse?: (response: Response) => void | Promise<void>
+  /**
+   * Reclassify a non-2xx response before the retry decision, e.g. to stop
+   * retrying while a provider-specific rate-limit header is in force.
+   */
+  onErrorResponse?: (error: DrainDeliveryError) => DrainDeliveryError
+  /**
+   * Called after the backoff wait, right before each retry. Return an error to
+   * throw it instead of retrying, e.g. when a limit announced by a concurrent
+   * request is now in force.
+   */
+  beforeRetry?: () => DrainDeliveryError | undefined
 }
 
 function hasHeader(headers: Record<string, string>, target: string): boolean {
@@ -164,7 +175,7 @@ async function gzip(body: string | Uint8Array<ArrayBuffer>): Promise<Uint8Array<
  * POST a body with timeout + retry. Throws label-prefixed errors with a
  * truncated response body. Safe to call from any drain `send()`.
  */
-export async function httpPost({ url, headers, body, compression, timeout, label, retries = 2, retryStatuses, userAgent, source, onResponse }: HttpPostOptions): Promise<void> {
+export async function httpPost({ url, headers, body, compression, timeout, label, retries = 2, retryStatuses, userAgent, source, onResponse, onErrorResponse, beforeRetry }: HttpPostOptions): Promise<void> {
   const normalizedRetries = Number.isFinite(retries) && retries >= 0 ? Math.floor(retries) : 2
   const finalHeaders = withEvlogIdentityHeaders(headers, { userAgent, source })
   const payload = compression === 'gzip' ? await gzip(body) : body
@@ -187,12 +198,13 @@ export async function httpPost({ url, headers, body, compression, timeout, label
       if (!response.ok) {
         const text = await response.text().catch(() => 'Unknown error')
         const safeText = text.length > 200 ? `${text.slice(0, 200)}...[truncated]` : text
-        throw new DrainDeliveryError(`${label} API error: ${response.status} ${response.statusText} - ${safeText}`, {
+        const error = new DrainDeliveryError(`${label} API error: ${response.status} ${response.statusText} - ${safeText}`, {
           status: response.status,
           retryable: RETRYABLE_STATUSES.includes(response.status) || (retryStatuses?.includes(response.status) ?? false),
           retryAfterMs: parseRetryAfter(response.headers.get('retry-after')),
           headers: response.headers,
         })
+        throw onErrorResponse ? onErrorResponse(error) : error
       }
 
       await onResponse?.(response)
@@ -213,6 +225,8 @@ export async function httpPost({ url, headers, body, compression, timeout, label
       }
 
       await new Promise<void>(r => setTimeout(r, Math.max(withJitter(200 * 2 ** attempt), retryAfterMs ?? 0)))
+      const stop = beforeRetry?.()
+      if (stop) throw stop
     }
   }
 
