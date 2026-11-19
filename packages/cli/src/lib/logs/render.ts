@@ -178,9 +178,11 @@ export function formatEvent(style: Style, event: WideEvent): string {
 }
 
 export interface LogsResult extends Selected<Sourced> {
-  /** Where the events came from: a directory per line, or the URL. */
+  /** Where the events came from: a directory per line, the URL, or the Vercel project. */
   sources: string[]
   query: LogsQuery
+  /** What the read could not cover, such as log lines Vercel cut. */
+  notes?: string[]
 }
 
 function describe(query: LogsQuery): string {
@@ -224,11 +226,16 @@ export function formatLogsReport(ctx: CliContext, result: LogsResult): string {
     return [...lines, ...formatStats(style, result.stats)].join('\n')
   }
   const shown = events.length === matched ? `${matched} event${matched === 1 ? '' : 's'}` : `${events.length} of ${matched} events`
-  lines.push(style.paint('dim', `${shown} · ${where}${filters ? ` · ${filters}` : ''}`), '')
+  lines.push(style.paint('dim', `${shown} · ${where}${filters ? ` · ${filters}` : ''}`))
+  for (const note of result.notes ?? []) lines.push(style.paint('yellow', note))
+  lines.push('')
 
   if (events.length === 0) {
     lines.push(query.view === 'trace' ? `no event carries the id ${query.id}` : 'no event matches')
-    lines.push('', style.paint('dim', 'the fs drain writes on every request · evlog logs -f follows new events'))
+    const hint = result.sources[0]?.startsWith('vercel ')
+      ? '--since reaches further back, up to the plan\'s log retention'
+      : 'the fs drain writes on every request · evlog logs -f follows new events'
+    lines.push('', style.paint('dim', hint))
     return lines.join('\n')
   }
 

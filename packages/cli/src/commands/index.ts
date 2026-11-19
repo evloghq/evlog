@@ -32,6 +32,10 @@ export const subCommands = {
     { name: 'logs', description: 'Read the wide events your app wrote to .evlog/logs' },
     () => import('./logs'),
   ),
+  setup: lazyCommand(
+    { name: 'setup', description: 'Let a platform\'s logs be read back: evlog setup vercel' },
+    () => import('./setup'),
+  ),
   map: lazyCommand(
     { name: 'map', description: 'Static observability map — Lighthouse for wide events' },
     () => import('./map'),

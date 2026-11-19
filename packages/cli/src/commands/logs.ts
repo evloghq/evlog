@@ -16,6 +16,8 @@ import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'
 import type { LogsResult, Sourced } from '../lib/logs/render'
 import { findConfiguredFsDrain, findLogsSink, prettyPath, resolveProject } from '../lib/project'
 import type { ProjectInfo } from '../lib/project'
+import { DEFAULT_VERCEL_CONNECTOR, findVercelProject, readVercelLogs, resolveVercelAccess, VercelReadError } from '../lib/logs/vercel'
+import type { VercelAccess, VercelLogsSummary, VercelProject } from '../lib/logs/vercel'
 
 export type { LogsResult } from '../lib/logs/render'
 
@@ -79,6 +81,56 @@ export interface RunLogsOptions {
   fetchFn?: typeof fetch
   /** How often a followed `--url` is re-read. The endpoint is a snapshot, so there is nothing to wait on. */
   pollIntervalMs?: number
+  /** `files` (the default) or `vercel`, the linked project's runtime logs. */
+  source?: string
+  /** How the Vercel source gets its token and scope; tests stand in for Vercel Connect. */
+  vercelAccess?: (project: VercelProject, connector: string) => Promise<VercelAccess>
+}
+
+const DAY_MS = 86_400_000
+
+/** Log lines the Vercel source reads at most, newest first: ten pages of the API. */
+const VERCEL_MAX_LINES = 10_000
+
+/**
+ * The linked project's runtime logs over `--since` (a day back by default,
+ * Pro's retention) to `--until`. A session id narrows the read on Vercel's
+ * side before evlog parses anything.
+ */
+async function readVercel(ctx: CliContext, options: RunLogsOptions, read: { query: LogsQuery, search?: string, connector: string, inRange: (event: WideEvent) => boolean }): Promise<LogsResult> {
+  const { query, search, connector, inRange } = read
+  const project = await resolveProject(ctx.cwd)
+  const linked = await findVercelProject(project.packageDir, project.root)
+  if (!linked) throw cliErrors.LOGS_VERCEL_NOT_LINKED({ cwd: ctx.cwd })
+  const { token, scope } = await (options.vercelAccess ?? resolveVercelAccess)(linked, connector)
+  const now = options.now ?? new Date()
+  const reader = readVercelLogs({
+    token,
+    scope,
+    since: query.since ?? new Date(now.getTime() - DAY_MS),
+    until: query.until ?? now,
+    search,
+    maxLines: VERCEL_MAX_LINES,
+    fetchFn: options.fetchFn,
+  })
+  const selection = createSelection<Sourced>(query, true)
+  let summary: VercelLogsSummary
+  try {
+    for (let step = await reader.next(); ; step = await reader.next()) {
+      if (step.done) {
+        summary = step.value
+        break
+      }
+      if (inRange(step.value)) selection.add(step.value)
+    }
+  } catch (error) {
+    if (error instanceof VercelReadError) throw cliErrors.LOGS_VERCEL_READ_FAILED({ httpStatus: error.status, reason: error.message })
+    throw error
+  }
+  const notes: string[] = []
+  if (summary.truncated > 0) notes.push(`${summary.truncated} log line${summary.truncated === 1 ? ' was' : 's were'} cut by Vercel's size limit and skipped`)
+  if (summary.more) notes.push(`read the newest ${summary.lines} log lines; narrow --since or pass --session to reach older ones`)
+  return { sources: [`vercel ${scope.projectId} (${scope.environment})`], query, ...selection.done(), ...(notes.length > 0 && { notes }) }
 }
 
 function tag(event: WideEvent, name: string | undefined): Sourced {
@@ -114,6 +166,15 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
     if (query.until && at > query.until.getTime()) return false
     if (query.level && !query.level.includes(event.level)) return false
     return query.filter(event)
+  }
+
+  if (options.source !== undefined && options.source !== 'files' && options.source !== 'vercel') {
+    throw cliErrors.LOGS_INVALID_SOURCE({ value: options.source })
+  }
+  if (options.source === 'vercel') {
+    const conflict = options.follow ? 'follow' : options.dir !== undefined ? 'dir' : options.url !== undefined ? 'url' : undefined
+    if (conflict) throw cliErrors.LOGS_SOURCE_CONFLICT({ flag: conflict })
+    return readVercel(ctx, options, { query, search: args.session, connector: config?.logs.vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR, inRange })
   }
 
   /* The endpoint answers with every event at once, so those are in memory
@@ -274,6 +335,7 @@ export default defineEvlogCommand('logs', {
     where: { type: 'string', description: 'Only events where a field matches: user.id=42, payment.amount>5000, error.message~declined, audit, !error (repeatable)' },
     over: { type: 'string', description: 'For `slow`: the duration a request has to exceed (default 500ms)' },
     limit: { type: 'string', description: 'Most events to show (default 50)' },
+    source: { type: 'string', description: 'Where to read: files (default), or vercel for the linked project\'s runtime logs (set up once with evlog setup vercel)' },
     dir: { type: 'string', description: 'Log directory (default: the project\'s .evlog/logs, or every app\'s in a workspace)' },
     url: { type: 'string', description: 'Read the memory drain\'s dev endpoint instead of files (a JSON array of events)' },
   },
@@ -288,6 +350,7 @@ export default defineEvlogCommand('logs', {
       result = await runLogs(cli, { ...(args as LogsArgs), where: flagValues(rawArgs, 'where') }, {
         dir: args.dir,
         url: args.url,
+        source: args.source,
         follow: args.follow,
         signal: controller.signal,
         onEvent: (event) => {
@@ -324,6 +387,7 @@ export default defineEvlogCommand('logs', {
         view: result.query.view,
         count: result.events.length,
         matched: result.matched,
+        ...(result.notes && { notes: result.notes }),
         ...(result.stats ? { stats: result.stats } : { events: result.events }),
       },
       human: args.json ? undefined : formatLogsReport(cli, result),

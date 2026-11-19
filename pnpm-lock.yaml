@@ -990,6 +990,9 @@ importers:
       '@evlog/telemetry':
         specifier: workspace:*
         version: link:../telemetry
+      '@vercel/oidc':
+        specifier: ^4.0.9
+        version: 4.0.9
       citty:
         specifier: ^0.2.2
         version: 0.2.2

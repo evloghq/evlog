@@ -30,6 +30,10 @@ export interface LogsSettings {
   /** Absolute. */
   dir?: string
   limit?: number
+  vercel?: {
+    /** The Vercel Connect connector `--source vercel` reads through. */
+    connector?: string
+  }
 }
 
 /** The `evlog.config` that applies to a project, as the CLI reads it. */
@@ -63,7 +67,8 @@ const MODULE_CONFIG_FILES = ['nuxt.config', 'nitro.config'].flatMap(base => ['ts
 const MAP_KEYS = ['rules', 'ignore', 'minScore', 'baseline']
 /** The map sorts entry points into instrumented, partial and dark by these, so neither can be turned off. */
 const CORE_RULES: ReadonlySet<string> = new Set<CheckId>(['wide-event', 'context'])
-const LOGS_KEYS = ['dir', 'limit']
+const LOGS_KEYS = ['dir', 'limit', 'vercel']
+const LOGS_VERCEL_KEYS = ['connector']
 
 /** Lists `mergeEvlogConfig` appends the child's items to instead of replacing. */
 const APPENDED_LISTS: readonly (readonly string[])[] = [['redact', 'paths'], ['redact', 'patterns'], ['sampling', 'keep']]
@@ -173,9 +178,15 @@ function readLogs(value: unknown, packageDir: string, at: At): LogsSettings {
   if (dir !== undefined && (typeof dir !== 'string' || dir.length === 0)) {
     throw cliErrors.CONFIG_INVALID({ key: 'logs.dir', at: at('logs.dir'), problem: 'must be a path' })
   }
+  const vercel = section(logs.vercel, ['logs', 'vercel'], LOGS_VERCEL_KEYS, at)
+  const connector = staticValue(vercel.connector, 'logs.vercel.connector', at)
+  if (connector !== undefined && (typeof connector !== 'string' || !/^[^/\s]+\/[^/\s]+$/.test(connector))) {
+    throw cliErrors.CONFIG_INVALID({ key: 'logs.vercel.connector', at: at('logs.vercel.connector'), problem: 'must be a connector UID such as vercel/evlog' })
+  }
   return {
     dir: dir === undefined ? undefined : resolve(packageDir, dir),
     limit: wholeNumber(logs.limit, 'logs.limit', at, { min: 1 }),
+    ...(connector !== undefined && { vercel: { connector } }),
   }
 }
 

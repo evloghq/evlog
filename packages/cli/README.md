@@ -74,6 +74,7 @@ pnpm evlog map
 | `evlog logs --where 'payment.amount>5000' --where audit.outcome=failure` | Any field on the event: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~regex`, present, `!absent` |
 | `evlog logs --url http://localhost:8787/_evlog/logs` | Read the memory drain's dev endpoint instead of files |
 | `evlog logs -f` | Follow new events as the app writes them |
+| `evlog logs --source vercel` | Read the linked Vercel project's runtime logs, after `npx evlog setup vercel` once |
 | `evlog logs --since 15m --path /api/x --status 5xx --level error` | Filters, composable with every view |
 | `evlog logs --json` | The events as JSON on stdout (one line per event with `-f`) |
 | `evlog doctor` | Monorepo-aware diagnosis: Node, project/workspace, stack, evlog install, `.evlog/logs` |
