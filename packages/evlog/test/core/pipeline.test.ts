@@ -451,7 +451,7 @@ describe('createDrainPipeline', () => {
       await vi.runAllTimersAsync()
 
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[evlog/pipeline] Dropped 1 event(s) after 1 attempt(s)'),
+        expect.stringContaining('[evlog/pipeline] Dropped 1 event(s): 1 retries-exhausted.'),
         expect.any(Error),
       )
       errorSpy.mockRestore()
@@ -655,6 +655,78 @@ describe('createDrainPipeline', () => {
 
       expect(fetchSpy).toHaveBeenCalledTimes(3)
       expect(onDropped).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('drop reporting', () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('passes the reason of every drop to onDropped and counts it in stats()', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response('bad', { status: 400 }))
+        .mockResolvedValueOnce(new Response('down', { status: 503 }))
+        .mockResolvedValueOnce(new Response(null, { status: 200 }))
+        .mockResolvedValueOnce(new Response('quota', { status: 429, headers: { 'Retry-After': '600' } }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({
+        batch: { size: 1, intervalMs: 60_000 },
+        retry: { maxAttempts: 1 },
+        maxBufferSize: 1,
+        onDropped,
+      })(defineHttpDrain<{ url: string }>({
+        name: 'unit-http',
+        resolve: () => ({ url: 'https://ingest.example.com' }),
+        encode: (events, config) => ({ url: config.url, headers: {}, body: JSON.stringify(events) }),
+      }))
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(0)
+      hook(createTestContext(2))
+      await vi.advanceTimersByTimeAsync(0)
+      hook(createTestContext(3))
+      await vi.advanceTimersByTimeAsync(0)
+      hook(createTestContext(4))
+      await vi.advanceTimersByTimeAsync(0)
+      hook(createTestContext(5))
+      hook(createTestContext(6))
+      await hook.flush()
+
+      const reasons = onDropped.mock.calls.map(([events, , reason]) => [reason, (events as DrainContext[]).map(c => c.event.id)])
+      expect(reasons).toEqual([
+        ['rejected', [1]],
+        ['retries-exhausted', [2]],
+        ['buffer-full', [4]],
+        ['buffer-full', [5]],
+        ['rate-limited', [6]],
+      ])
+      expect(hook.stats()).toEqual({
+        delivered: 1,
+        dropped: { 'buffer-full': 2, 'rejected': 1, 'retries-exhausted': 1, 'rate-limited': 1 },
+      })
+    })
+
+    it('logs buffer-full drops without onDropped, at most once per minute, and the rest on flush()', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const drain = vi.fn().mockResolvedValue(undefined)
+      const hook = createDrainPipeline({ batch: { size: 100, intervalMs: 600_000 }, maxBufferSize: 2 })(drain)
+
+      for (let id = 1; id <= 5; id++) hook(createTestContext(id))
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy.mock.calls[0]?.[0]).toContain('Dropped 1 event(s): 1 buffer-full.')
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      hook(createTestContext(6))
+      expect(errorSpy).toHaveBeenCalledTimes(2)
+      expect(errorSpy.mock.calls[1]?.[0]).toContain('Dropped 3 event(s): 3 buffer-full.')
+
+      hook(createTestContext(7))
+      expect(errorSpy).toHaveBeenCalledTimes(2)
+      await hook.flush()
+      expect(errorSpy).toHaveBeenCalledTimes(3)
+      expect(errorSpy.mock.calls[2]?.[0]).toContain('Dropped 1 event(s): 1 buffer-full.')
+      expect(hook.stats().dropped['buffer-full']).toBe(5)
     })
   })
 

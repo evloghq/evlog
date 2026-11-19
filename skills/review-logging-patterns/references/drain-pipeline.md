@@ -43,9 +43,9 @@ const pipeline = createDrainPipeline<DrainContext>({
     maxDelayMs: 30000,        // Upper bound for any retry delay (default: 30000)
   },
   maxBufferSize: 1000,  // Max buffered events; oldest dropped on overflow (default: 1000)
-  onDropped: (events, error) => {
-    // Called when events are dropped (overflow or retry exhaustion)
-    console.error(`[evlog] Dropped ${events.length} events:`, error?.message)
+  onDropped: (events, error, reason) => {
+    // reason: 'buffer-full' | 'rejected' | 'retries-exhausted' | 'rate-limited'
+    console.error(`[evlog] Dropped ${events.length} events (${reason}):`, error?.message)
   },
 })
 ```
@@ -58,8 +58,8 @@ const pipeline = createDrainPipeline<DrainContext>({
 4. On flush, the drain function receives `T[]` (always an array)
 5. Adapter drains built with `defineDrain` / `defineHttpDrain` are unwrapped to their throwing `raw` variant, which defaults to one HTTP attempt per pipeline attempt: the pipeline owns retries, unless `retries` is explicitly configured on the adapter, which then still applies inside each pipeline attempt
 6. If the drain throws, the batch is retried with the configured backoff (jittered), or after the provider's `Retry-After` when it sends one. Built-in HTTP drains only mark network errors, timeouts, `408`, `429`, `502`, `503`, `504` and provider-documented statuses (Datadog `500`) as retryable; any other status, or a `DrainDeliveryError` thrown with `retryable: false`, drops the batch after one attempt
-7. After `maxAttempts` failures, `onDropped` is called and the batch is discarded (logged when no `onDropped` is configured). A `Retry-After` longer than `retry.maxDelayMs` pauses the pipeline and keeps the batch buffered instead; `flush()` drops a paused batch rather than waiting
-8. If the buffer exceeds `maxBufferSize`, the oldest event is dropped and `onDropped` is called
+7. After `maxAttempts` failures, `onDropped` is called with reason `retries-exhausted` and the batch is discarded. Without `onDropped`, drops of every reason are logged at most once a minute and on `flush()`. A `Retry-After` longer than `retry.maxDelayMs` pauses the pipeline and keeps the batch buffered instead; `flush()` drops a paused batch rather than waiting
+8. If the buffer exceeds `maxBufferSize`, the oldest event is dropped and `onDropped` is called with reason `buffer-full`
 
 ## Backoff Strategies
 
@@ -78,6 +78,7 @@ drain(ctx)            // Push a single event (synchronous, non-blocking)
 await drain.flush()   // Force-flush all buffered events
 await drain.settled() // Resolves once everything buffered is delivered or dropped, without forcing a flush
 drain.pending         // Number of events currently buffered (readonly)
+drain.stats()         // { delivered, dropped: { 'buffer-full', rejected, 'retries-exhausted', 'rate-limited' } }
 ```
 
 ## Serverless

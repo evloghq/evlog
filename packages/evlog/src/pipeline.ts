@@ -1,3 +1,18 @@
+/**
+ * Why the pipeline dropped events:
+ * - `buffer-full`: `maxBufferSize` was reached and the oldest events made room.
+ * - `rejected`: the provider answered with a status that fails the same way on every attempt, such as a `400`.
+ * - `retries-exhausted`: every one of `retry.maxAttempts` failed.
+ * - `rate-limited`: `flush()` ran while the provider's `Retry-After` was still in force.
+ */
+export type DrainDropReason = 'buffer-full' | 'rejected' | 'retries-exhausted' | 'rate-limited'
+
+/** Counters returned by {@link PipelineDrainFn.stats}, in events since the pipeline was created. */
+export interface DrainPipelineStats {
+  delivered: number
+  dropped: Record<DrainDropReason, number>
+}
+
 export interface DrainPipelineOptions<T = unknown> {
   batch?: {
     /** Maximum number of events per batch sent to the drain function. @default 50 */
@@ -22,8 +37,12 @@ export interface DrainPipelineOptions<T = unknown> {
   }
   /** Maximum number of events held in the buffer. When exceeded, the oldest event is dropped. @default 1000 */
   maxBufferSize?: number
-  /** Called when a batch is dropped after all retry attempts are exhausted, or when the buffer overflows. */
-  onDropped?: (events: T[], error?: Error) => void
+  /**
+   * Called with every event the pipeline drops, the delivery error when there
+   * is one, and the reason. Without it, drops are logged with `console.error`
+   * at most once a minute, with the count per reason.
+   */
+  onDropped?: (events: T[], error: Error | undefined, reason: DrainDropReason) => void
 }
 
 export interface PipelineDrainFn<T> {
@@ -37,7 +56,11 @@ export interface PipelineDrainFn<T> {
    */
   settled: () => Promise<void>
   readonly pending: number
+  /** Events delivered and dropped (per reason) since the pipeline was created. */
+  stats: () => DrainPipelineStats
 }
+
+const DROP_LOG_INTERVAL_MS = 60_000
 
 /**
  * Unref a timer on runtimes that support it (Node, Bun) so an idle flush
@@ -130,6 +153,11 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     let settleWaiters: Array<() => void> = []
     let activeFlushCalls = 0
     let pausedUntil = 0
+    let delivered = 0
+    const dropped: Record<DrainDropReason, number> = { 'buffer-full': 0, 'rejected': 0, 'retries-exhausted': 0, 'rate-limited': 0 }
+    let unlogged: Partial<Record<DrainDropReason, number>> = {}
+    let unloggedError: Error | undefined
+    let lastDropLogAt = Number.NEGATIVE_INFINITY
 
     function pauseRemainingMs(): number {
       return Math.max(0, pausedUntil - Date.now())
@@ -182,12 +210,27 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       return capped / 2 + Math.random() * (capped / 2)
     }
 
-    function dropBatch(batch: T[], why: string, error: Error): void {
+    function logUnlogged(): void {
+      const entries = Object.entries(unlogged)
+      if (entries.length === 0) return
+      lastDropLogAt = Date.now()
+      const total = entries.reduce((sum, [, count]) => sum + count, 0)
+      const breakdown = entries.map(([reason, count]) => `${count} ${reason}`).join(', ')
+      console.error(`[evlog/pipeline] Dropped ${total} event(s): ${breakdown}. Pass onDropped to handle drops; drain.stats() has the totals.`, ...(unloggedError ? [unloggedError] : []))
+      unlogged = {}
+      unloggedError = undefined
+    }
+
+    function drop(events: T[], reason: DrainDropReason, error?: Error): void {
+      if (events.length === 0) return
+      dropped[reason] += events.length
       if (onDropped) {
-        onDropped(batch, error)
-      } else {
-        console.error(`[evlog/pipeline] Dropped ${batch.length} event(s) ${why}:`, error)
+        onDropped(events, error, reason)
+        return
       }
+      unlogged[reason] = (unlogged[reason] ?? 0) + events.length
+      unloggedError = error ?? unloggedError
+      if (Date.now() - lastDropLogAt >= DROP_LOG_INTERVAL_MS) logUnlogged()
     }
 
     /**
@@ -200,12 +243,13 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
         if (attempt > 1 && pauseRemainingMs() > 0) return 'paused'
         try {
           await send(batch)
+          delivered += batch.length
           return 'done'
         } catch (error) {
           const lastError = error instanceof Error ? error : new Error(String(error))
           const failure = error as DeliveryFailure | null | undefined
           if (failure?.retryable === false) {
-            dropBatch(batch, `after ${attempt} attempt(s)`, lastError)
+            drop(batch, 'rejected', lastError)
             return 'done'
           }
           const retryAfterMs = typeof failure?.retryAfterMs === 'number' ? failure.retryAfterMs : undefined
@@ -214,7 +258,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
             return 'paused'
           }
           if (attempt >= maxAttempts) {
-            dropBatch(batch, `after ${attempt} attempt(s)`, lastError)
+            drop(batch, 'retries-exhausted', lastError)
             return 'done'
           }
           await new Promise<void>(r => setTimeout(r, retryAfterMs ?? getRetryDelay(attempt)))
@@ -224,8 +268,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
 
     function dropOverflow(): void {
       if (buffer.length <= maxBufferSize) return
-      const dropped = buffer.splice(0, buffer.length - maxBufferSize)
-      onDropped?.(dropped)
+      drop(buffer.splice(0, buffer.length - maxBufferSize), 'buffer-full')
     }
 
     async function drainBuffer(): Promise<void> {
@@ -258,8 +301,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
 
     function push(ctx: T): void {
       if (buffer.length >= maxBufferSize) {
-        const dropped = buffer.splice(0, 1)
-        onDropped?.(dropped)
+        drop(buffer.splice(0, 1), 'buffer-full')
       }
       buffer.push(ctx)
 
@@ -288,11 +330,13 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
             // flush() delivers now or gives up: a pause left by the provider drops the batch instead of holding shutdown.
             if (pauseRemainingMs() > 0 || await sendWithRetry(batch) === 'paused') {
               const seconds = Math.ceil(pauseRemainingMs() / 1000)
-              dropBatch(batch, 'on flush', new Error(`Provider asked to retry in ${seconds}s`))
+              drop(batch, 'rate-limited', new Error(`Provider asked to retry in ${seconds}s`))
             }
           }
         }
       } finally {
+        // flush() usually precedes exit: report drops still waiting for the next log window.
+        logUnlogged()
         activeFlushCalls--
         notifySettled()
       }
@@ -308,6 +352,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     const hookFn = push as PipelineDrainFn<T>
     hookFn.flush = flush
     hookFn.settled = settled
+    hookFn.stats = () => ({ delivered, dropped: { ...dropped } })
     Object.defineProperty(hookFn, 'pending', {
       get: () => buffer.length,
       enumerable: true,
