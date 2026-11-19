@@ -5,6 +5,7 @@
   "git": {
     "deploymentEnabled": {
       "changeset-release/**": false,
+      "changesets-ghcommit-temp/**": false,
       "renovate/**": false
     }
   }
