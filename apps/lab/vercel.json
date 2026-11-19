@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --filter render-labs...",
-  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh render-labs",
+  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh apps/lab apps/docs/app apps/docs/public",
   "git": {
     "deploymentEnabled": {
       "changeset-release/**": false,
