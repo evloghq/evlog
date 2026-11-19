@@ -67,7 +67,7 @@
     "vitest": "^4.1.12"
   },
   "peerDependencies": {
-    "eve": "*",
+    "eve": ">=1.0.0",
     "evlog": "^3.0.0-beta.0"
   },
   "publishConfig": {

@@ -3,8 +3,10 @@
 [evlog](https://evlog.dev) for [eve](https://eve.dev) agents: one wide event per agent turn, from an eve extension.
 
 ```bash
-pnpm add evlog @evlog/eve
+pnpm add evlog@beta @evlog/eve@beta
 ```
+
+The `beta` tags are needed until evlog 3.0 is stable: plain `evlog` still resolves to 2.x on npm, which does not satisfy the `@evlog/eve` peer. Once 3.0 is stable, the plain names work.
 
 ```ts
 // agent/extensions/evlog.ts
