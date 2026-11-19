@@ -4,9 +4,10 @@
 # Package dependencies alone over-build (a test-only evlog change rebuilt every app
 # that imports it) and miss what an app reads outside them (docs serves `skills/`).
 cd "$(git rev-parse --show-toplevel)" || exit 1
-# Vercel's clone has no `origin` remote, so fetch from the repository URL.
-repo="https://github.com/$VERCEL_GIT_REPO_OWNER/$VERCEL_GIT_REPO_SLUG.git"
-git fetch --unshallow "$repo" >/dev/null 2>&1
+# Vercel's clone has no `origin` remote and stops ten commits deep, so fetch the
+# deployed branch's full history from the repository URL.
+repo="https://github.com/${VERCEL_GIT_REPO_OWNER:?}/${VERCEL_GIT_REPO_SLUG:?}.git"
+git fetch --unshallow "$repo" "$VERCEL_GIT_COMMIT_REF" >/dev/null 2>&1
 base=$VERCEL_GIT_PREVIOUS_SHA
 # A new branch has no previous deployment and a rebase orphans the one it had:
 # compare with where the branch left its trunk rather than build every app. The
