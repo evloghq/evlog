@@ -92,6 +92,8 @@ export function createSazabiDrain(overrides?: Partial<SazabiConfig>) {
       return config as SazabiConfig
     },
     send: sendBatchToSazabi,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToSazabi(events, { ...config, retries: config.retries ?? 0 }),
   })
 }
 

@@ -57,8 +57,8 @@ const pipeline = createDrainPipeline<DrainContext>({
 3. If the batch isn't full, a timer starts; after `intervalMs`, whatever is buffered gets flushed
 4. On flush, the drain function receives `T[]` (always an array)
 5. Adapter drains built with `defineDrain` / `defineHttpDrain` are unwrapped to their throwing `raw` variant, which defaults to one HTTP attempt per pipeline attempt: the pipeline owns retries, unless `retries` is explicitly configured on the adapter, which then still applies inside each pipeline attempt
-6. If the drain throws, the batch is retried with the configured backoff
-7. After `maxAttempts` failures, `onDropped` is called and the batch is discarded (logged when no `onDropped` is configured)
+6. If the drain throws, the batch is retried with the configured backoff (jittered), or after the provider's `Retry-After` when it sends one. Built-in HTTP drains only mark network errors, timeouts, `408`, `429`, `502`, `503`, `504` and provider-documented statuses (Datadog `500`) as retryable; any other status, or a `DrainDeliveryError` thrown with `retryable: false`, drops the batch after one attempt
+7. After `maxAttempts` failures, `onDropped` is called and the batch is discarded (logged when no `onDropped` is configured). A `Retry-After` longer than `retry.maxDelayMs` pauses the pipeline and keeps the batch buffered instead; `flush()` drops a paused batch rather than waiting
 8. If the buffer exceeds `maxBufferSize`, the oldest event is dropped and `onDropped` is called
 
 ## Backoff Strategies

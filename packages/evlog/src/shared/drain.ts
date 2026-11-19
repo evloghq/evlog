@@ -141,6 +141,7 @@ export async function sendEncodedDrainRequest(
     source: string
     timeout?: number
     retries?: number
+    retryStatuses?: readonly number[]
     onResponse?: (response: Response) => void | Promise<void>
   },
 ): Promise<void> {
@@ -151,6 +152,7 @@ export async function sendEncodedDrainRequest(
     compression: request.compression,
     timeout: options.timeout ?? DEFAULT_HTTP_TIMEOUT,
     retries: options.retries,
+    retryStatuses: options.retryStatuses,
     label: options.label,
     source: options.source,
     onResponse: options.onResponse,

@@ -239,6 +239,8 @@ export function createPostHogDrain(overrides?: Partial<PostHogConfig>) {
       return config as PostHogConfig
     },
     send: sendBatchToPostHog,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToPostHog(events, { ...config, retries: config.retries ?? 0 }),
   })
 }
 
