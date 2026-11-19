@@ -9,11 +9,18 @@ repo="https://github.com/$VERCEL_GIT_REPO_OWNER/$VERCEL_GIT_REPO_SLUG.git"
 git fetch --unshallow "$repo" >/dev/null 2>&1
 base=$VERCEL_GIT_PREVIOUS_SHA
 # A new branch has no previous deployment and a rebase orphans the one it had:
-# compare with where the branch left main rather than build every app.
+# compare with where the branch left its trunk rather than build every app. The
+# trunk is whichever of main and v3 the branch is fewest commits ahead of.
 if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-  [ "$VERCEL_GIT_COMMIT_REF" = "main" ] && exit 1
-  git fetch "$repo" main >/dev/null 2>&1
-  base=$(git merge-base FETCH_HEAD HEAD) || exit 1
+  case "$VERCEL_GIT_COMMIT_REF" in main | v3) exit 1 ;; esac
+  base= ahead=
+  for trunk in main v3; do
+    git fetch "$repo" "$trunk" >/dev/null 2>&1 || continue
+    fork=$(git merge-base FETCH_HEAD HEAD) || continue
+    n=$(git rev-list --count "$fork..HEAD")
+    if [ -z "$ahead" ] || [ "$n" -lt "$ahead" ]; then base=$fork ahead=$n; fi
+  done
+  [ -n "$base" ] || exit 1
 fi
 git diff --quiet "$base" HEAD -- "$@" \
   ':(exclude,glob)**/test/**' \
