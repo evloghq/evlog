@@ -83,7 +83,7 @@ Every event that passes a signal's `when` gets judged. All due signals for one e
 }
 ```
 
-Every column has `value`, the answer. `confidence` is its probability: always on a yes/no, on choice and score when the model returns a distribution. Score signals add `score`, the weighted position between levels. `kept: true` marks the signal that promoted the event past sampling.
+Every column has `value`, the answer. `confidence` is its probability: always on a yes/no, on choice and score when the model returns a distribution. Score signals add `score`, the weighted position between levels. `kept: true` marks the signal that promoted the event past sampling. `rate` appears when the budget skipped events before this one: the verdict stands for `1 / rate` events, so `sum(1 / rate)` estimates a count during a spike.
 
 | Signal shape | `value` | Extra |
 | --- | --- | --- |
@@ -106,7 +106,7 @@ Columns are written before the console line, so they show in the dev terminal, i
 | `score` | `[level, level, ...]` | Ordered, lowest first, at least two. Makes a score signal. |
 | `criteria` | `{ true?, false? }` | Boolean signals only: what makes each answer true. |
 | `keep` | `(verdict) => boolean`, or a number on yes/no signals | Promote the event past sampling when `true`. Never drops. `keep: 0.8` keeps a yes with confidence above 0.8. |
-| `cacheKey` | `(event) => string \| undefined` | Reuse the verdict for events sharing a key. |
+| `cacheKey` | `(event) => string \| undefined` | Reuse the verdict for events sharing a key. `errorFingerprint` keys on the error with its ids and numbers stripped. |
 
 `keep` is typed on the verdict the shape produces: `v.value === 'app'` autocompletes to the options of a choice signal.
 
@@ -126,7 +126,9 @@ Returns an evlog plugin.
 | --- | --- | --- |
 | `signals` | | The signals to run. Names must be unique. |
 | `model` | `'typesafe-ai/jev'` | AI SDK evaluation model. A gateway id (`'liquid/d1'`), or a provider instance such as `typeSafeAi.evaluationModel('jev-latest')` or `openai.evaluationModel('gpt-6-luna')`. |
-| `budget.perMinute` | `600` | Model calls per minute, shared by all signals. |
+| `budget.perMinute` | `600` | Model calls per minute, shared by all signals, per process. At most 10 seconds of it is spent at once. |
+| `budget.keepShare` | `0.25` | Share of `perMinute` that only keep signals spend, so an error storm judged in `enrich` cannot starve them. |
+| `budget.maxConcurrent` | `16` | Model calls in flight at once. Past it, events pass through unjudged instead of queueing. |
 | `budget.cooldownMs` | `30000` | Pause after three failed calls in a row. |
 | `cacheTtlMs` | `300000` | How long a `cacheKey` verdict is reused. |
 | `timeoutMs` | `2000` | Per call. |
