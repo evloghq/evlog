@@ -888,6 +888,7 @@ const noopAudit = Object.assign(() => {}, { deny: () => {} }) as AuditMethod
 export const noopLogger: ForkableLogger = {
   set() {},
   setLevel() {},
+  discard() {},
   error() {},
   fatal() {},
   info() {},
@@ -949,6 +950,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
   let hasFatal = false
   let hasWarn = false
   let manualLevel: LogLevel | undefined
+  let discarded = false
   let emitted = false
   let pendingWideEvent: WideEvent | null = null
 
@@ -1009,6 +1011,14 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
         return
       }
       manualLevel = level
+    },
+
+    discard(): void {
+      if (emitted) {
+        warnPostEmit('log.discard()', 'Ignoring discard.')
+        return
+      }
+      discarded = true
     },
 
     error(error: Error | string, errorContext?: FieldContext<T>): void {
@@ -1120,6 +1130,12 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
 
       const durationMs = overrides?._durationMs ?? elapsedMs(startTime)
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
+
+      if (discarded && !hasError && !hasFatal) {
+        emitted = true
+        pendingWideEvent = null
+        return null
+      }
 
       const auditForceKeep = consumeAuditForceKeep(context)
       // error and fatal are checked by level, not through the floor, so an untyped floor ('WARN', 'fatal') cannot drop them.

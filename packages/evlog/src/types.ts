@@ -769,6 +769,19 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
   setLevel: (level: LogLevel) => void
 
   /**
+   * Drop this unit's wide event unless it records an error before the logger
+   * finishes. Use it for jobs that are usually idle, so empty runs do not emit
+   * an event while failures still do.
+   *
+   * Takes precedence over `sampling.keep` and head sampling. A logger that calls
+   * `error()` or `fatal()` after `discard()` emits normally, because a failure
+   * must not be dropped silently.
+   *
+   * No-ops with a console warning after the wide event has been emitted.
+   */
+  discard: () => void
+
+  /**
    * Log an error and capture its details.
    *
    * No-ops with a console warning after the wide event has been emitted.
