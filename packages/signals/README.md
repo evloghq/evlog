@@ -129,7 +129,7 @@ Returns an evlog plugin.
 | `evaluate` | AI SDK `experimental_evaluate` | Replace the model call. Tests, record and replay. |
 | `stampModel` | `false` | Also write the answering model's id on `event.signalsModel`. For comparing models. |
 
-`plugin.stats()` returns `{ calls, skipped, errors, cached, inputTokens }`.
+`plugin.stats()` returns `{ calls, skipped, errors, refused, cached, inputTokens }`.
 
 ### `knownError(errors)`
 

@@ -118,6 +118,27 @@ describe('evaluate', () => {
     expect(result.findings.map(finding => finding.id)).toContain('T-15')
   })
 
+  it('spares a rule that names the public replacement beside the retired path', () => {
+    const source = 'No `evlog/shared` import (`evlog/toolkit` is the public name).'
+    const result = evaluate(page('apps/evi/agent/skills/self-review/SKILL.md', source), quiet)
+
+    expect(result.findings.map(finding => finding.id)).not.toContain('T-15')
+  })
+
+  it('flags a retired entry point presented as the public one', () => {
+    const source = 'Import `evlog/shared` as the public entry point.'
+    const result = evaluate(page('apps/docs/content/2.learn/a.md', source), quiet)
+
+    expect(result.findings.map(finding => finding.id)).toContain('T-15')
+  })
+
+  it('flags a sentence that only names an import restriction', () => {
+    const source = 'There is no `evlog/shared` import restriction in this package.'
+    const result = evaluate(page('apps/docs/content/2.learn/a.md', source), quiet)
+
+    expect(result.findings.map(finding => finding.id)).toContain('T-15')
+  })
+
   it('still spares the sentence that retires it', () => {
     const source = 'Never use `evlog/shared`; the public entry point is `evlog/toolkit`.'
 

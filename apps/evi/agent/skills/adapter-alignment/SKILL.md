@@ -1,6 +1,6 @@
 ---
 name: adapter-alignment
-description: Twice-monthly check that evlog's drain adapters match what each provider's own client sends, and that users get the most from each provider's features. Opens ready PRs for mechanical mismatches, files the rest in Linear, and moves the upstream pins. Load this when the adapter-alignment schedule fires, or when Hugo asks whether an adapter is still aligned with Sentry, Datadog, Axiom, PostHog, Loki, ClickHouse, Better Stack, HyperDX, Sazabi, or OTLP, or whether evlog uses everything one of them offers.
+description: Twice-monthly check that evlog's drain adapters match what each provider's own client sends, and that users get the most from each provider's features. Opens ready PRs for mechanical mismatches, files the rest in Linear, and moves the upstream pins. Load this when the adapter-alignment schedule fires, or when a maintainer asks whether an adapter is still aligned with Sentry, Datadog, Axiom, PostHog, Loki, ClickHouse, Better Stack, HyperDX, Sazabi, or OTLP, or whether evlog uses everything one of them offers.
 ---
 
 # Adapter alignment
@@ -18,7 +18,7 @@ The first question keeps what we send correct. The second makes sure an evlog us
 
 Read `.agents/skills/create-adapter/references/upstream-alignment.md` in `/workspace/repo`. Take the two rows with the oldest `Aligned to`, treating `unset` as oldest. Break a tie with the reference's "First in line" list, then table order. Skip a row only when a run in the last two weeks already covered it and record why.
 
-When Hugo names adapters, compare those and no others: the rotation is for scheduled runs, and a request never swaps a named adapter for an older row.
+When a maintainer names adapters, compare those and no others: the rotation is for scheduled runs, and a request never swaps a named adapter for an older row.
 
 ## 2. Read both sides
 
@@ -46,11 +46,11 @@ The e2e test is part of the comparison. An adapter with no e2e file (Datadog and
 
 ## 4. Deliver
 
-**Mechanical mismatch → ready PR.** A wrong default, a missing or renamed field, a stale endpoint, a limit to lower. Follow `contributing`: branch off `main` in `/workspace/repo`, write the failing regression test first, fix, run `pnpm run lint`, `pnpm run typecheck`, and `pnpm --filter evlog exec vitest run test/adapters/<name>.test.ts`, then the full suite. Add a changeset; an adapter change is user-facing. Update the adapter docs page when it states the old value. The PR body shows the upstream line and ours side by side, names the client version, and states what the provider will store differently after the change. Read CI, fix what fails, request `hugorcd` as reviewer. One mismatch per PR unless several are the same kind on one adapter; then one PR for that adapter. At most two PRs per run.
+**Mechanical mismatch → ready PR.** A wrong default, a missing or renamed field, a stale endpoint, a limit to lower. Follow `contributing`: branch off `main` in `/workspace/repo`, write the failing regression test first, fix, run `pnpm run lint`, `pnpm run typecheck`, and `pnpm --filter evlog exec vitest run test/adapters/<name>.test.ts`, then the full suite. Add a changeset; an adapter change is user-facing. Update the adapter docs page when it states the old value. The PR body shows the upstream line and ours side by side, names the client version, and states what the provider will store differently after the change. Read CI, fix what fails, request the code owners as reviewers. One mismatch per PR unless several are the same kind on one adapter; then one PR for that adapter. At most two PRs per run.
 
 **Philosophy mismatch or question → Linear issue** via `linear__save_issue` on the evlog team. State what the client does, what evlog does, the upstream evidence, who would notice, and the decision to make. Search `linear__list_issues` first; a recurring mismatch updates its issue.
 
-**Capability gap → Linear proposal, never a PR.** A new feature is Hugo's call, whatever its size. Search open pull requests with `github__searchIssues` and Linear with `linear__list_issues` first: a gap already covered by an open PR or issue gets the link in the thread and nothing new. Otherwise file one issue per gap, stating what the feature gives the user, the provider page, the client file that feeds it when there is one, the evlog fields that would feed it, whether it would be opt-in, and what a user of both the provider's SDK and evlog would see twice. Rank the gaps in the thread by what a user of that provider would miss most.
+**Capability gap → Linear proposal, never a PR.** A new feature is the maintainers' call, whatever its size. Search open pull requests with `github__searchIssues` and Linear with `linear__list_issues` first: a gap already covered by an open PR or issue gets the link in the thread and nothing new. Otherwise file one issue per gap, stating what the feature gives the user, the provider page, the client file that feeds it when there is one, the evlog fields that would feed it, whether it would be opt-in, and what a user of both the provider's SDK and evlog would see twice. Rank the gaps in the thread by what a user of that provider would miss most.
 
 **Move the pin.** In a real run, once every mismatch and every gap on an adapter is in a PR, in an issue, or recorded as a choice, update that row's `Aligned to` to `<package> <version> @ <short SHA of main>`, or `docs <YYYY-MM-DD> @ <short SHA of main>` for a row with no client, in the same PR as the fixes, or in its own `docs:` PR when nothing needed fixing. A pin never moves past a mismatch or a gap that has no destination.
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionAuthContext } from 'eve/context'
+import { MCP_PRINCIPAL } from './maintainer-auth'
 
 function auth(overrides: Partial<SessionAuthContext>): SessionAuthContext {
   return {
@@ -115,9 +116,9 @@ describe('local dev grant', () => {
 describe('mcp principal', () => {
   it('is trusted only while the mcp token is configured', async () => {
     const withToken = await loadTrust({ EVI_MAINTAINER_TOKEN: 'tok' })
-    expect(withToken.isMaintainer(auth({ principalId: 'mcp:hugo' }))).toBe(true)
+    expect(withToken.isMaintainer(auth({ principalId: MCP_PRINCIPAL }))).toBe(true)
     const without = await loadTrust({ EVI_MAINTAINER_TOKEN: undefined })
-    expect(without.isMaintainer(auth({ principalId: 'mcp:hugo' }))).toBe(false)
+    expect(without.isMaintainer(auth({ principalId: MCP_PRINCIPAL }))).toBe(false)
   })
 })
 

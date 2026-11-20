@@ -42,7 +42,7 @@ export type EnvVarWriteDecision =
   | 'not-applicable'
 
 /**
- * The write policy, as Hugo specified it: allowlisted non-secret keys on
+ * The write policy, as the maintainer specified it: allowlisted non-secret keys on
  * allowlisted projects run on their own, everything else pauses for a human,
  * and secret-shaped keys are refused outright. An unlisted project never
  * auto-approves even for a known key: the project list is the boundary.
