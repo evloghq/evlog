@@ -84,10 +84,10 @@ const MEASURED = /(?:^duration|Ms$|tokens$|Tokens$)/
  * Every other value, ids a question can name included, must match exactly.
  */
 export function askFingerprint(event: Record<string, unknown>): string {
-  return JSON.stringify(event, (key, value) => {
+  return JSON.stringify(event, function (this: Record<string, unknown>, key, value) {
     if (PER_EVENT.has(key)) return undefined
-    // The printed form of durationMs, as in "412ms".
-    if (key === 'duration' && typeof value === 'string') return undefined
+    // The printed form of a durationMs beside it, as in "412ms", which the bucketed durationMs already stands for.
+    if (key === 'duration' && typeof value === 'string' && typeof this.durationMs === 'number') return undefined
     if (typeof value === 'number' && MEASURED.test(key) && value >= 100) {
       const step = 10 ** (Math.floor(Math.log10(value)) - 1)
       return Math.floor(value / step) * step

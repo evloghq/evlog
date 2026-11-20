@@ -754,6 +754,21 @@ describe('evlog logs --ask', () => {
     expect(sent).toBe(`${'x'.repeat(256)}… 99755 more characters\n… 2 more lines`)
   })
 
+  it('compares a printed duration when no durationMs stands for it', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-ask-'))
+    tempDirs.push(cwd)
+    await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'shop' }))
+    await mkdir(join(cwd, '.evlog/logs'), { recursive: true })
+    const job = (duration: string) => {
+      const { durationMs: _ms, ...rest } = event({ requestId: duration, path: '/jobs/sync', duration })
+      return rest
+    }
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${[job('100ms'), job('900ms')].map(e => JSON.stringify(e)).join('\n')}\n`)
+    const { evaluate, calls } = await scripted()
+    await runLogs(fakeContext(cwd), { ask: 'q' }, { now: NOW, evaluate })
+    expect(calls).toHaveLength(2)
+  })
+
   it('asks separately for events that differ only past what is cut', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-ask-'))
     tempDirs.push(cwd)
