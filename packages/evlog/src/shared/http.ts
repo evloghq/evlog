@@ -1,7 +1,7 @@
 /**
- * Minimal HTTP transport for drain adapters: abort-based timeouts, exponential
- * backoff on `5xx` / `429` / network errors, response bodies truncated in error
- * messages.
+ * Minimal HTTP transport for drain adapters: abort-based timeouts, jittered
+ * exponential backoff on transient failures, `Retry-After`, response bodies
+ * truncated in error messages.
  *
  * Identifies every outgoing request as coming from evlog via:
  * - `User-Agent: evlog/<version>` (Node / server runtimes only — browsers strip this)
@@ -32,11 +32,14 @@ export interface HttpPostOptions {
   /** Prefix used in error messages. */
   label: string
   /**
-   * Retries network errors, aborts, and `5xx` / `429` responses with
-   * exponential backoff.
+   * Retries network errors, timeouts, and `408`, `429`, `502`, `503`, `504`
+   * responses (plus {@link HttpPostOptions.retryStatuses}) with jittered
+   * exponential backoff, never sooner than the response's `Retry-After`.
    * @default 2
    */
   retries?: number
+  /** Extra statuses the provider documents as retryable, e.g. Datadog's `500`. */
+  retryStatuses?: readonly number[]
   /**
    * Override the default `User-Agent: evlog/<version>` header. Pass `false` or
    * an empty string to suppress it entirely (e.g. when the underlying transport
@@ -55,6 +58,17 @@ export interface HttpPostOptions {
    * `messages` fields).
    */
   onResponse?: (response: Response) => void | Promise<void>
+  /**
+   * Reclassify a non-2xx response before the retry decision, e.g. to stop
+   * retrying while a provider-specific rate-limit header is in force.
+   */
+  onErrorResponse?: (error: DrainDeliveryError) => DrainDeliveryError
+  /**
+   * Called after the backoff wait, right before each retry. Return an error to
+   * throw it instead of retrying, e.g. when a limit announced by a concurrent
+   * request is now in force.
+   */
+  beforeRetry?: () => DrainDeliveryError | undefined
 }
 
 function hasHeader(headers: Record<string, string>, target: string): boolean {
@@ -86,17 +100,70 @@ export function withEvlogIdentityHeaders(
   return out
 }
 
-function isRetryable(error: unknown): boolean {
-  if (error instanceof DOMException && error.name === 'AbortError') return true
-  if (error instanceof TypeError) return true
-  if (error instanceof Error) {
-    const match = error.message.match(/API error: (\d+)/)
-    if (match) {
-      const status = Number.parseInt(match[1])
-      return status >= 500 || status === 429 || status === 408
-    }
+/** Statuses retried for every drain: the request may succeed unchanged later. */
+const RETRYABLE_STATUSES: readonly number[] = [408, 429, 502, 503, 504]
+
+/**
+ * Longest `Retry-After` that `httpPost` waits for between its own attempts.
+ * A longer one ends the call, and the error carries the delay so a caller such
+ * as `createDrainPipeline` can hold the events until then.
+ */
+const MAX_INLINE_RETRY_AFTER_MS = 10_000
+
+/**
+ * A drain request that failed. `retryable` says whether sending the same
+ * request again may succeed; `retryAfterMs` is the provider's `Retry-After`.
+ * `createDrainPipeline` reads both, so a custom drain can throw one to stop
+ * retries for a request the provider will never accept.
+ *
+ * @example
+ * ```ts
+ * if (response.status === 413) {
+ *   throw new DrainDeliveryError('Payload too large', { status: 413, retryable: false })
+ * }
+ * ```
+ */
+export class DrainDeliveryError extends Error {
+  /** HTTP status, when the provider answered. */
+  readonly status?: number
+  readonly retryable: boolean
+  /** Delay the provider asked for in `Retry-After`, in milliseconds. */
+  readonly retryAfterMs?: number
+  /** Response headers, when the provider answered. */
+  readonly headers?: Headers
+
+  constructor(message: string, options: { status?: number, retryable: boolean, retryAfterMs?: number, headers?: Headers, cause?: unknown }) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause })
+    this.name = 'DrainDeliveryError'
+    this.status = options.status
+    this.retryable = options.retryable
+    this.retryAfterMs = options.retryAfterMs
+    this.headers = options.headers
   }
-  return false
+}
+
+/**
+ * Parse a `Retry-After` header (delay in seconds or an HTTP date) into
+ * milliseconds from `now`. Returns `undefined` when the header is missing or
+ * malformed.
+ */
+export function parseRetryAfter(value: string | null | undefined, now: number = Date.now()): number | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10) * 1000
+  const date = Date.parse(trimmed)
+  if (Number.isNaN(date)) return undefined
+  return Math.max(0, date - now)
+}
+
+/** Half the delay plus a random share of the other half, so clients that failed together do not retry together. */
+function withJitter(delayMs: number): number {
+  return delayMs / 2 + Math.random() * (delayMs / 2)
+}
+
+function isRetryable(error: unknown): boolean {
+  if (error instanceof DrainDeliveryError) return error.retryable
+  return error instanceof TypeError
 }
 
 async function gzip(body: string | Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
@@ -108,7 +175,7 @@ async function gzip(body: string | Uint8Array<ArrayBuffer>): Promise<Uint8Array<
  * POST a body with timeout + retry. Throws label-prefixed errors with a
  * truncated response body. Safe to call from any drain `send()`.
  */
-export async function httpPost({ url, headers, body, compression, timeout, label, retries = 2, userAgent, source, onResponse }: HttpPostOptions): Promise<void> {
+export async function httpPost({ url, headers, body, compression, timeout, label, retries = 2, retryStatuses, userAgent, source, onResponse, onErrorResponse, beforeRetry }: HttpPostOptions): Promise<void> {
   const normalizedRetries = Number.isFinite(retries) && retries >= 0 ? Math.floor(retries) : 2
   const finalHeaders = withEvlogIdentityHeaders(headers, { userAgent, source })
   const payload = compression === 'gzip' ? await gzip(body) : body
@@ -131,7 +198,13 @@ export async function httpPost({ url, headers, body, compression, timeout, label
       if (!response.ok) {
         const text = await response.text().catch(() => 'Unknown error')
         const safeText = text.length > 200 ? `${text.slice(0, 200)}...[truncated]` : text
-        throw new Error(`${label} API error: ${response.status} ${response.statusText} - ${safeText}`)
+        const error = new DrainDeliveryError(`${label} API error: ${response.status} ${response.statusText} - ${safeText}`, {
+          status: response.status,
+          retryable: RETRYABLE_STATUSES.includes(response.status) || (retryStatuses?.includes(response.status) ?? false),
+          retryAfterMs: parseRetryAfter(response.headers.get('retry-after')),
+          headers: response.headers,
+        })
+        throw onErrorResponse ? onErrorResponse(error) : error
       }
 
       await onResponse?.(response)
@@ -141,16 +214,19 @@ export async function httpPost({ url, headers, body, compression, timeout, label
       clearTimeout(timeoutId)
 
       if (error instanceof DOMException && error.name === 'AbortError') {
-        lastError = new Error(`${label} request timed out after ${timeout}ms`)
+        lastError = new DrainDeliveryError(`${label} request timed out after ${timeout}ms`, { retryable: true, cause: error })
       } else {
         lastError = error as Error
       }
 
-      if (!isRetryable(error) || attempt === normalizedRetries) {
+      const retryAfterMs = lastError instanceof DrainDeliveryError ? lastError.retryAfterMs : undefined
+      if (!isRetryable(lastError) || attempt === normalizedRetries || (retryAfterMs ?? 0) > MAX_INLINE_RETRY_AFTER_MS) {
         throw lastError
       }
 
-      await new Promise<void>(r => setTimeout(r, 200 * 2 ** attempt))
+      await new Promise<void>(r => setTimeout(r, Math.max(withJitter(200 * 2 ** attempt), retryAfterMs ?? 0)))
+      const stop = beforeRetry?.()
+      if (stop) throw stop
     }
   }
 

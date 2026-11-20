@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sendBatchToAxiom } from '../../src/adapters/axiom'
 import { sendBatchToDatadog } from '../../src/adapters/datadog'
 import { sendBatchToOTLP } from '../../src/adapters/otlp'
-import { EVLOG_USER_AGENT, EVLOG_VERSION, httpPost, withEvlogIdentityHeaders } from '../../src/shared/http'
+import { DrainDeliveryError, EVLOG_USER_AGENT, EVLOG_VERSION, httpPost, parseRetryAfter, withEvlogIdentityHeaders } from '../../src/shared/http'
 import type { WideEvent } from '../../src/types'
 import { withFakeTimers } from '../helpers/timers'
 
@@ -145,6 +145,58 @@ describe('shared/http evlog identity', () => {
       })).rejects.toThrow('API error: 400')
 
       expect(fetchSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not retry a 500 unless the provider lists it', async () => {
+      await withFakeTimers(async () => {
+        fetchSpy.mockResolvedValue(new Response('boom', { status: 500 }))
+        const post = { url: 'https://example.com/ingest', headers: {}, body: '[]', timeout: 5000, label: 'test' }
+
+        await expect(httpPost(post)).rejects.toMatchObject({ status: 500, retryable: false })
+        expect(fetchSpy).toHaveBeenCalledTimes(1)
+
+        fetchSpy.mockClear()
+        const listed = httpPost({ ...post, retryStatuses: [500] })
+        const assertion = expect(listed).rejects.toMatchObject({ status: 500, retryable: true })
+        await vi.runAllTimersAsync()
+        await assertion
+        expect(fetchSpy).toHaveBeenCalledTimes(3)
+      })
+    })
+
+    it('waits for Retry-After before retrying', async () => {
+      await withFakeTimers(async () => {
+        fetchSpy
+          .mockResolvedValueOnce(new Response('slow down', { status: 429, headers: { 'Retry-After': '3' } }))
+          .mockResolvedValueOnce(new Response(null, { status: 200 }))
+
+        const promise = httpPost({ url: 'https://example.com/ingest', headers: {}, body: '[]', timeout: 5000, label: 'test' })
+        await vi.advanceTimersByTimeAsync(2999)
+        expect(fetchSpy).toHaveBeenCalledTimes(1)
+        await vi.advanceTimersByTimeAsync(1)
+        await promise
+        expect(fetchSpy).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    it('stops at a Retry-After longer than it waits inline and reports the delay', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('slow down', { status: 503, headers: { 'Retry-After': '60' } }))
+
+      const error = await httpPost({ url: 'https://example.com/ingest', headers: {}, body: '[]', timeout: 5000, label: 'test' }).catch(e => e)
+
+      expect(error).toBeInstanceOf(DrainDeliveryError)
+      expect(error).toMatchObject({ status: 503, retryable: true, retryAfterMs: 60_000 })
+      expect(error.message).toBe('test API error: 503  - slow down')
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('parses Retry-After as seconds or an HTTP date', () => {
+      const now = Date.parse('2026-11-19T12:00:00Z')
+      expect(parseRetryAfter('30', now)).toBe(30_000)
+      expect(parseRetryAfter('Thu, 19 Nov 2026 12:00:45 GMT', now)).toBe(45_000)
+      expect(parseRetryAfter('Thu, 19 Nov 2026 11:00:00 GMT', now)).toBe(0)
+      expect(parseRetryAfter('soon', now)).toBeUndefined()
+      expect(parseRetryAfter(null, now)).toBeUndefined()
     })
 
     it('calls onResponse with the successful response', async () => {

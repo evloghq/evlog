@@ -1,4 +1,5 @@
 import type { DrainContext, WideEvent } from '../types'
+import type { DrainDeliveryError } from './http'
 import { httpPost } from './http'
 
 /**
@@ -141,7 +142,10 @@ export async function sendEncodedDrainRequest(
     source: string
     timeout?: number
     retries?: number
+    retryStatuses?: readonly number[]
     onResponse?: (response: Response) => void | Promise<void>
+    onErrorResponse?: (error: DrainDeliveryError) => DrainDeliveryError
+    beforeRetry?: () => DrainDeliveryError | undefined
   },
 ): Promise<void> {
   await httpPost({
@@ -151,9 +155,12 @@ export async function sendEncodedDrainRequest(
     compression: request.compression,
     timeout: options.timeout ?? DEFAULT_HTTP_TIMEOUT,
     retries: options.retries,
+    retryStatuses: options.retryStatuses,
     label: options.label,
     source: options.source,
     onResponse: options.onResponse,
+    onErrorResponse: options.onErrorResponse,
+    beforeRetry: options.beforeRetry,
   })
 }
 
