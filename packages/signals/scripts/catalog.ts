@@ -40,7 +40,7 @@ export const silentFailure = defineSignal({
   when: e => e.status === 200 && e.path === '/api/checkout',
   ask: 'The request returned 200, but the customer did not get what they came for',
   criteria: { true: 'No order or confirmation, a fallback path, an empty or partial result', false: 'Order created and confirmed' },
-  keep: v => v.value && v.confidence > 0.8,
+  keep: 0.8,
 })
 
 /** Acknowledged webhooks. A 200 to the provider means nothing if the event was dropped. */
@@ -49,7 +49,7 @@ export const webhookIgnored = defineSignal({
   when: e => e.status === 200 && (e.path ?? '').startsWith('/api/webhooks/'),
   ask: 'The webhook was acknowledged but not acted on',
   criteria: { true: 'Unhandled event type, skipped, no side effect recorded', false: 'The event was processed' },
-  keep: v => v.value && v.confidence > 0.85,
+  keep: 0.85,
 })
 
 /** Slow requests. Points at the component to blame before anyone opens a trace. */
@@ -70,7 +70,7 @@ export const validationBug = defineSignal({
   name: 'validation-bug',
   when: e => e.status === 400,
   ask: 'The rejected input was actually valid and our validation is wrong',
-  keep: v => v.value && v.confidence > 0.85,
+  keep: 0.85,
 })
 
 /** Agent turns from evlog/eve. The judge that used to be sampled at a few percent. */
@@ -84,14 +84,14 @@ export const turnLooping = defineSignal({
   name: 'turn-looping',
   when: e => e.method === 'EVE' && typeof (e.eve as { turnId?: string } | undefined)?.turnId === 'string',
   ask: 'The agent repeated the same tool call without making progress',
-  keep: v => v.value && v.confidence > 0.85,
+  keep: 0.85,
 })
 
 export const turnOffScript = defineSignal({
   name: 'turn-off-script',
   when: e => e.method === 'EVE' && typeof (e.eve as { turnId?: string } | undefined)?.turnId === 'string',
   ask: 'The agent took an action the user did not ask for',
-  keep: v => v.value && v.confidence > 0.85,
+  keep: 0.85,
 })
 
 /** Audit events. Flags the handful of actions a reviewer should read. */
@@ -103,7 +103,7 @@ export const auditReview = defineSignal({
     true: 'Privilege change, bulk deletion, export of personal data, action outside business hours by a non-admin',
     false: 'Routine self-service action',
   },
-  keep: v => v.value && v.confidence > 0.8,
+  keep: 0.8,
 })
 
 /** Background jobs forked from a request. Retries that succeed still hide a problem. */

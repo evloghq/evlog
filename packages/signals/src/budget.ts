@@ -1,7 +1,7 @@
 export interface BudgetOptions {
   /** Model calls allowed per minute across all signals. */
   perMinute: number
-  /** How long to stop calling the model after a failure, in milliseconds. */
+  /** How long to stop calling the model once it is unhealthy, in milliseconds. */
   cooldownMs: number
 }
 
@@ -12,32 +12,38 @@ export interface Budget {
   fail: () => void
 }
 
+/** Consecutive failed calls that open the breaker. One slow call is not an outage. */
+const FAILURES_TO_OPEN = 3
+
 /**
- * Fixed one-minute window plus a circuit breaker. Both fail open: when the
- * budget is spent or the model is unhealthy, events flow through unjudged.
+ * Token bucket refilled continuously at `perMinute`, plus a circuit breaker.
+ * Both fail open: when the budget is spent or the model is unhealthy, events
+ * flow through unjudged.
  */
 export function createBudget(options: BudgetOptions, now: () => number = Date.now): Budget {
-  let windowStart = now()
-  let used = 0
+  const perMs = options.perMinute / 60_000
+  let tokens = options.perMinute
+  let refilledAt = now()
+  let failures = 0
   let openUntil = 0
 
   return {
     take() {
       const t = now()
       if (t < openUntil) return false
-      if (t - windowStart >= 60_000) {
-        windowStart = t
-        used = 0
-      }
-      if (used >= options.perMinute) return false
-      used++
+      tokens = Math.min(options.perMinute, tokens + (t - refilledAt) * perMs)
+      refilledAt = t
+      if (tokens < 1) return false
+      tokens--
       return true
     },
     succeed() {
+      failures = 0
       openUntil = 0
     },
     fail() {
-      openUntil = now() + options.cooldownMs
+      failures++
+      if (failures >= FAILURES_TO_OPEN) openUntil = now() + options.cooldownMs
     },
   }
 }
