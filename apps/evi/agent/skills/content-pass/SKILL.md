@@ -1,13 +1,13 @@
 ---
 name: content-pass
-description: Pass over evlog's written surfaces, run twice a week. Reviews the worst-ranked files against the content doctrine, applies what holds, and opens one ready PR when a fix holds and the readiness gate passes; otherwise it reports in one line. Also runs the enrichment half when nothing needs a rewrite. Load this when the content-pass schedule fires, or when Hugo asks for a content pass on one surface, or for what is worth writing next.
+description: Pass over evlog's written surfaces, run twice a week. Reviews the worst-ranked files against the content doctrine, applies what holds, and opens one ready PR when a fix holds and the readiness gate passes; otherwise it reports in one line. Also runs the enrichment half when nothing needs a rewrite. Load this when the content-pass schedule fires, or when a maintainer asks for a content pass on one surface, or for what is worth writing next.
 ---
 
 # Content pass
 
 One pass, one group, one pull request. The corpus is roughly 150 files: the docs tree and the landing, the package READMEs, the internal and published skills, and the three AGENTS.md files. When the scanner's own count differs, the scanner wins. None of that gets fixed in a day, and trying is how a rewriter starts rewriting for its own sake.
 
-Half the corpus is read by people and half by agents, and the pass treats them differently. A skill or an AGENTS.md governs the agent running this pass, so it may fix a house rule there (punctuation, a dead link, a retired entry point, a wrong term) and nothing else. Procedure, bounds, and a skill's `description` come back as findings for Hugo. That is `M-09` in the doctrine, and `content-targets` enforces it by returning those files with mode `report`.
+Half the corpus is read by people and half by agents, and the pass treats them differently. A skill or an AGENTS.md governs the agent running this pass, so it may fix a house rule there (punctuation, a dead link, a retired entry point, a wrong term) and nothing else. Procedure, bounds, and a skill's `description` come back as findings for the maintainers. That is `M-09` in the doctrine, and `content-targets` enforces it by returning those files with mode `report`.
 
 The doctrine lives in the repository, at `.agents/skills/write-evlog-content/`. This file is the procedure; that skill is the standard. Never restate its rules here. Read them there, and when they are wrong, fix them there.
 
@@ -15,7 +15,7 @@ The doctrine lives in the repository, at `.agents/skills/write-evlog-content/`. 
 
 **Rewrite** is the default: the scanner ranks the corpus, the worst pages get reviewed, and what survives review gets applied.
 
-**Enrich** is what runs when the rewrite half comes back empty, with no page above the bar or everything ranked inside its cooldown. That is a good day, not a wasted one. Switch to the second half rather than lowering the bar. It also runs when Hugo asks what is worth writing next.
+**Enrich** is what runs when the rewrite half comes back empty, with no page above the bar or everything ranked inside its cooldown. That is a good day, not a wasted one. Switch to the second half rather than lowering the bar. It also runs when a maintainer asks what is worth writing next.
 
 Never run both in one pass. A PR that rewrites two pages and adds a third is a PR nobody reviews properly.
 
@@ -25,9 +25,9 @@ Never run both in one pass. A PR that rewrites two pages and adds a third is a P
 
 Call `content-targets`. It runs the scanner over the whole corpus, drops files changed inside the cooldown, and returns the top files from a single group with their candidates. A group is one docs section, one skill's directory, or a flat surface (`readme`, `agents`, `landing`).
 
-Pass `surface` when Hugo asked for one, or when the weekly corpus check found a surface drifting. Otherwise take what ranks.
+Pass `surface` when a maintainer asked for one, or when the weekly corpus check found a surface drifting. Otherwise take what ranks.
 
-**Read `eligible` before deciding anything.** It is the count of files with findings that are outside the cooldown, and it is the only number that says whether there is work. `eligible: 0` sends you to **Enrich**. Anything above zero means the rewrite half has targets, and the pass rewrites, unless Hugo asked what is worth writing next: that request runs **Enrich** whatever `eligible` says.
+**Read `eligible` before deciding anything.** It is the count of files with findings that are outside the cooldown, and it is the only number that says whether there is work. `eligible: 0` sends you to **Enrich**. Anything above zero means the rewrite half has targets, and the pass rewrites, unless a maintainer asked what is worth writing next: that request runs **Enrich** whatever `eligible` says.
 
 Write the three numbers into the PR body verbatim: `scanned`, `candidates`, `eligible`. A pass that says the rewrite half was empty without them is asserting, not reporting, and a corpus of 120 files with 47 eligible pages has been called empty before.
 
@@ -67,7 +67,7 @@ For every target whose snapshot loaded successfully, whose verdict is not `pass`
 
 The rewriter returns full replacement text and the original digest. Wait for all readers to finish. Before each edit, call `content_snapshot` again and compare both the revision and digest with the rewrite input. If either changed, capture and review the current page again. Otherwise, read the file and apply only the reviewed changes serially with the parent’s existing editing tools. Do not run other file writes or Git changes concurrently. This check is not an atomic write guard: if another writer is active, stop editing until access is coordinated. After saving, capture a fresh snapshot of the actual file for verification; the proposed text is not evidence of what was saved.
 
-Targets with mode `report` skip this step: the landing page absent a critical finding, and any skill or AGENTS.md whose findings go past the house rules. Their findings go in the PR body for Hugo to decide on. Do not edit the landing page for voice or rhythm, and do not touch a procedure, a bound, or a `description`.
+Targets with mode `report` skip this step: the landing page absent a critical finding, and any skill or AGENTS.md whose findings go past the house rules. Their findings go in the PR body for the maintainers to decide on. Do not edit the landing page for voice or rhythm, and do not touch a procedure, a bound, or a `description`.
 
 ### 6. Verify
 
@@ -97,7 +97,7 @@ Before opening the PR, read the changed pages together: state the reader questio
 
 ### 7. Open the pull request
 
-Commit with a conventional subject naming the group, push with `git__push`, and open a normal, ready PR with `github__createPullRequest`. Read CI, fix required failures, then request `hugorcd` as reviewer. If the readiness gate cannot be completed, report the blocker instead of opening a draft.
+Commit with a conventional subject naming the group, push with `git__push`, and open a normal, ready PR with `github__createPullRequest`. Read CI, fix required failures, then request the code owners as reviewers. If the readiness gate cannot be completed, report the blocker instead of opening a draft.
 
 **The title is validated by CI and a wrong scope means the PR cannot merge.** The accepted list is `scopes:` in `.github/workflows/semantic-pull-request.yml`. Read it rather than guessing, and note what is not in it:
 
@@ -140,16 +140,16 @@ Report to the thread: what group, how many files, the PR link. Two lines maximum
 
 ## Enrich
 
-Run this when `eligible` is 0, or when Hugo asks what is worth writing next. It needs an observation, not an opinion: name the gap you found and where you found it, or drop it.
+Run this when `eligible` is 0, or when a maintainer asks what is worth writing next. It needs an observation, not an opinion: name the gap you found and where you found it, or drop it.
 
 **Whatever file you end up editing, run `--fix` on it first.** A page you are already opening does not have "pre-existing" findings, it has findings, and the mechanical ones cost one command. Leaving a wrong term on a page you just edited, and writing that it was out of scope, is the pass explaining why it did less than the tool it was given.
 
-Look, in this order, and stop at the first thing that holds. When Hugo asked what is worth writing next, skip the checks that end in a report instead of something to write (a skill that outran the repository) and keep going until one names a page, a paragraph, a rule, or a post:
+Look, in this order, and stop at the first thing that holds. When a maintainer asked what is worth writing next, skip the checks that end in a report instead of something to write (a skill that outran the repository) and keep going until one names a page, a paragraph, a rule, or a post:
 
 - **A promise with no page.** A section index, a card group, or a `links:` block pointing at something thin or missing. The scanner's `U-16` findings are the mechanical version; the interesting cases are pages that exist and do not deliver what the index said.
 - **An integration documented at half its contract.** Every framework page owes `evlog()`, `useLogger()`, `log.fork()`, and the framework-native accessor. `evlog/workers` is the documented exception. A page missing half of that is a real gap in the docs, not a style problem.
 - **Source that outran the docs.** A recent export, option, or adapter in `packages/evlog/src` with no page. `git log --since='30 days ago' -- packages/evlog/src` against the content tree.
-- **A skill that outran the repository.** `AGENTS.md` says a skill describing the old behavior is worse than no skill. Take one skill, check every path, command, and symbol in it against the checkout (`M-03`, `M-07`), and report what no longer exists. This is a finding for Hugo, not an edit.
+- **A skill that outran the repository.** `AGENTS.md` says a skill describing the old behavior is worse than no skill. Take one skill, check every path, command, and symbol in it against the checkout (`M-03`, `M-07`), and report what no longer exists. This is a finding for the maintainers, not an edit.
 - **A dossier nobody refreshed.** `references/landscape/*.md` carries a `Checked:` date. Older than six months and every `U-12` review this quarter leaned on stale facts. Re-reading one tool's docs and updating its dossier is a better day's work than a rewrite.
 - **A correction that should be a rule.** `references/corrections.md` with the same lesson written three times is a rule waiting to be added to `references/rules/`. That is a PR against the skill, and it is worth more than any single page.
 - **A blog post that has a reason.** Only when something happened: a release with a real behavior change, a decision with a cost worth explaining, a measurement that surprised us. Read `references/rules/blog.md` and `references/surfaces/blog.md` first, and answer its four questions in the issue before drafting anything. A post with no event behind it does not get written.

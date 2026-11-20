@@ -3,6 +3,7 @@ import type { ForkableLogger } from '../audit'
 import { registerDiskPrettyErrorSnippetReader } from '../shared/register-disk-snippet'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
+import { flushPendingDrains } from '../shared/shutdown'
 import { createLoggerStorage } from '../shared/storage'
 
 const { storage, useLogger } = createLoggerStorage(
@@ -50,6 +51,8 @@ const integration = defineFrameworkIntegration<FastifyRequest>({
 const evlogPlugin: FastifyPluginCallback<EvlogFastifyOptions> = (fastify, options, done) => {
   const emitted = new WeakSet<object>()
   const requestState = new WeakMap<object, RequestState>()
+
+  fastify.addHook('onClose', () => flushPendingDrains())
 
   fastify.addHook('onRequest', (request, _reply, next) => {
     const { logger, finish, skipped, runWith } = integration.start(request, options)

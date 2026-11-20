@@ -484,9 +484,6 @@ export interface LoggerConfig {
    * const drain = pipeline(createAxiomDrain({ dataset: 'logs', token: '...' }))
    *
    * initLogger({ drain })
-   *
-   * // Flush on shutdown
-   * process.on('beforeExit', () => drain.flush())
    * ```
    */
   drain?: (ctx: DrainContext) => void | Promise<void>

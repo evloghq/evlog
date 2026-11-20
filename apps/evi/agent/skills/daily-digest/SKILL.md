@@ -7,7 +7,7 @@ description: Build and deliver the daily activity digest, covering GitHub activi
 
 A summary of the last 24 hours, most attention-worthy first. Gathering is read-only; the only write is the Linear document below.
 
-**Delivery: a Linear document, not a chat wall.** Chat renders a multi-section report badly; Linear renders it well and keeps the history browsable. On the scheduled run (and whenever Hugo asks for "the digest"):
+**Delivery: a Linear document, not a chat wall.** Chat renders a multi-section report badly; Linear renders it well and keeps the history browsable. On the scheduled run (and whenever a maintainer asks for "the digest"):
 
 1. Write the full digest as a Linear document via `linear__save_document`, on the evlog team, titled `Daily digest: YYYY-MM-DD`, with real markdown headings per section.
 2. Post to the thread only: one or two lines with the single most attention-worthy item, then the document link.
@@ -23,7 +23,7 @@ When the request names a different window ("this week", "since Monday"), keep th
 3. **AI Gateway spend (last 24h).** `ai_gateway__report` totals, with a one-line callout only when spend is unusual against recent days.
 4. **Traffic (last 24h).** Browser pageviews: `vercel__count_pageviews`, one call per project (`projectId`, `teamId`, `since`, `until`), labeled as browser traffic. Agent-facing requests (MCP transport, `.md`, negotiated Markdown): the ecosystem-usage skill, reported in its own line, never mixed with browser counts.
 5. **CLI usage (last 7d).** `telemetry-stats` and `telemetry-adoption`: runs, success rate, top command, and one interesting signal when there is one, such as a CLI version rolling out, a flag gaining traction, an error code creeping up, or a source-mix shift. One or two lines; one word when the numbers are flat.
-6. **Worth reading.** 2 or 3 short items of AI or ecosystem news worth Hugo's time today, each with a link and a date.
+6. **Worth reading.** 2 or 3 short items of AI or ecosystem news worth the maintainers' time today, each with a link and a date.
 
 ## Form
 

@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import type { SessionAuthContext } from 'eve/context'
 
 /** The principal maintainer bearer sessions run under; trusted as the maintainer when the token is configured. */
-export const MCP_PRINCIPAL = 'mcp:hugo'
+export const MCP_PRINCIPAL = 'mcp:maintainer'
 
 /**
  * The `EVI_MAINTAINER_TOKEN` bearer admits the maintainer on the MCP and web
@@ -10,7 +10,7 @@ export const MCP_PRINCIPAL = 'mcp:hugo'
  * eve has no stock static-bearer strategy, so this AuthFn is ours:
  * constant-time comparison via digests (so neither token length nor prefix
  * leaks through timing), nobody admitted while the token is unconfigured. The
- * minted `mcp:hugo` principal is what agent/lib/trust.ts trusts as the
+ * minted `mcp:maintainer` principal is what agent/lib/trust.ts trusts as the
  * maintainer, and eve binds invocation ownership to it.
  */
 export function maintainerBearerAuth(request: Request): SessionAuthContext | null {

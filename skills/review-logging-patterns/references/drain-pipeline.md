@@ -26,7 +26,7 @@ export default defineNitroPlugin((nitroApp) => {
 })
 ```
 
-**Important:** Always call `drain.flush()` on server `close` hook. Without it, buffered events are lost when the process exits.
+**Shutdown:** evlog flushes every pipeline that holds events on `SIGTERM` and `SIGINT` (up to 400 ms, then the signal's default exit runs unless the app has its own listener), on `beforeExit`, and on the close hooks of Nitro, Fastify and NestJS. `process.exit()` skips all of these, so call `await drain.flush()` before it.
 
 ## Full Configuration
 
@@ -141,25 +141,36 @@ const drain = pipeline(async (batch) => { await fetch(...) })
 nitroApp.hooks.hook('close', () => drain.flush())
 ```
 
-### Missing flush on shutdown
+### Missing flush before `process.exit()`
 
 ```typescript
-// ❌ Buffered events lost on process exit
-nitroApp.hooks.hook('evlog:drain', drain)
+// ❌ process.exit() ends the process before the signal and beforeExit flushes run
+await main()
+process.exit(0)
 ```
 
 **Fix:**
 
 ```typescript
-// ✅ Always flush on close
-nitroApp.hooks.hook('evlog:drain', drain)
-nitroApp.hooks.hook('close', () => drain.flush())
+// ✅ Flush first
+await main()
+await drain.flush()
+process.exit(0)
 ```
+
+### A signal listener that only flushes
+
+```typescript
+// ❌ The listener cancels Node's default exit: the server flushes, then keeps running
+process.on('SIGTERM', () => drain.flush())
+```
+
+**Fix:** remove it. evlog flushes pending pipelines on `SIGTERM` and `SIGINT` itself and then lets the default exit run.
 
 ## Review Checklist
 
 - [ ] Pipeline wraps the adapter for production use
-- [ ] `drain.flush()` called on server `close` hook (long-lived servers)
+- [ ] `await drain.flush()` before any `process.exit()`; no `process.on('SIGTERM', () => drain.flush())` listener that blocks the default exit
 - [ ] On serverless, the pipeline is passed as the integration's `drain` option (settled() registration is automatic); Nitro-on-Cloudflare wires `drain.settled()` into `waitUntil` manually
 - [ ] `onDropped` callback logs or reports dropped events
 - [ ] Retries are owned by one layer: no explicit `retries` on the adapter config when the pipeline wraps it

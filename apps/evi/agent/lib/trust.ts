@@ -1,19 +1,20 @@
 import type { SessionAuthContext } from 'eve/context'
 import { environment } from './environment'
+import { MCP_PRINCIPAL } from './maintainer-auth'
 
 /**
- * Hugo's identity on each channel, read from the environment so the public
- * repo carries no personal identifiers. A missing variable removes that
+ * The maintainer's identity on each channel, read from the environment so the
+ * public repo carries no personal identifiers. A missing variable removes that
  * channel from the trusted set, so its writes fall back to asking.
  */
 export const { MAINTAINER_PHONE, MAINTAINER_GITHUB_ID } = process.env
 /**
  * The one Slack workspace the connector is installed in. Private, and only
- * Hugo can install or invite there, so every human in it is trusted as him.
+ * the maintainer can install or invite there, so every human in it is trusted.
  */
 export const { EVI_SLACK_TEAM_ID } = process.env
-/** Hugo's GitHub login, used to assign escalated issues to him. Public handle, not a credential. */
-export const MAINTAINER_GITHUB_LOGIN = 'hugorcd'
+/** The GitHub login escalated issues are assigned to. Unset, escalation labels the issue and the assignment fails. */
+export const ESCALATION_GITHUB_LOGIN = process.env.ESCALATION_GITHUB_LOGIN?.toLowerCase()
 
 /** Exported for memory identity seeding, which needs the members, not the answer. */
 export const MAINTAINER_PRINCIPALS: ReadonlySet<string> = new Set(
@@ -23,7 +24,7 @@ export const MAINTAINER_PRINCIPALS: ReadonlySet<string> = new Set(
     MAINTAINER_PHONE && `imessage:${MAINTAINER_PHONE}`,
     // The MCP and web channels only mint this principal after verifying the
     // maintainer bearer token, so configuring the token is what admits them.
-    process.env.EVI_MAINTAINER_TOKEN && 'mcp:hugo',
+    process.env.EVI_MAINTAINER_TOKEN && MCP_PRINCIPAL,
   ].filter((principal): principal is string => Boolean(principal)),
 )
 
