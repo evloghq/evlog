@@ -70,7 +70,9 @@ export async function askEvents<T extends WideEvent>(events: T[], question: stri
     if (failure !== undefined) throw cliErrors.LOGS_ASK_FAILED({ reason: message(failure) })
     const verdict = (copy.signals as Record<string, { value: boolean, confidence: number }> | undefined)?.ask
     if (!verdict) continue
-    answered.push({ event, probability: verdict.value ? verdict.confidence : 1 - verdict.confidence })
+    // The column holds the confidence of the answer given; `1 - 0.97` would print as 0.030000000000000027.
+    const probability = verdict.value ? verdict.confidence : 1 - verdict.confidence
+    answered.push({ event, probability: Math.round(probability * 10_000) / 10_000 })
   }
   answered.sort((a, b) => b.probability - a.probability)
   return { answered, stats: plugin.stats() }

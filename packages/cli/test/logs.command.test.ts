@@ -673,6 +673,14 @@ describe('evlog logs --ask', () => {
     expect(result.events.every(event => !('signals' in event))).toBe(true)
   })
 
+  it('reports P(yes) without float noise when the answer is no', async () => {
+    const cwd = await makeSink()
+    const { answers, scriptedEvaluate } = await import('@evlog/signals/testing')
+    const { evaluate } = scriptedEvaluate(() => answers.boolean(0.03))
+    const result = await runLogs(fakeContext(cwd), { ask: 'q', limit: '1' }, { now: NOW, evaluate })
+    expect(result.asked!.answered[0]!.probability).toBe(0.03)
+  })
+
   it('applies the filters before the model sees anything', async () => {
     const cwd = await makeSink()
     const { evaluate, calls } = await scripted()
