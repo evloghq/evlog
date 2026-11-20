@@ -70,7 +70,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Prepare
-        run: pnpm run dev:prepare
+        run: pnpm exec turbo run dev:prepare --filter=evlog
       - name: Run e2e tests
         run: pnpm run test:e2e
         env:
