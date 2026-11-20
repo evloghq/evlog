@@ -50,7 +50,9 @@ export default defineEvlogCommand('setup', {
         human: [
           ...steps.map(step => `${style.paint('green', '✓')} ${step}`),
           '',
-          ...(result.reused ? [`Add logs: { vercel: { connector: '${result.connector}' } } to evlog.config.ts so evlog logs reads through it`, ''] : []),
+          ...(result.reused
+            ? [`Add logs: { vercel: { connector: '${result.connector}' } } to evlog.config.ts, and to the evlog mount of an eve agent, so reads go through it`, '']
+            : []),
           style.paint('dim', 'evlog logs --source vercel reads them from here; deployed agents read them through the same connector'),
         ].join('\n'),
       })

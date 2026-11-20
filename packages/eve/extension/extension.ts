@@ -1,4 +1,5 @@
 import { defineExtension } from 'eve/extension'
+import type { DynamicContext } from 'eve/tools'
 import type { EvlogConfig, LoggerConfig } from 'evlog'
 import { z } from 'zod'
 
@@ -14,7 +15,30 @@ export type EvlogEveRecord = 'minimal' | 'standard' | 'debug'
 /** Per-tool override of the preset. `false` leaves the tool out of the event. */
 export type EvlogEveToolRule = boolean | { input?: boolean, output?: boolean }
 
+/** What the `logs` tool reads for a caller: every turn, the caller's own session, or nothing, which hides the tool. */
+export type EvlogEveLogsAccess = 'agent' | 'session' | false
+
 export interface EvlogEveConfig extends Omit<EvlogConfig, 'extends' | 'map' | 'logs'> {
+  /**
+   * Where the `logs` tool reads the agent's events. On Vercel it reads the
+   * project's runtime logs through `vercel.connector`; elsewhere the files in `dir`.
+   */
+  logs?: {
+    /** @default '.evlog/logs' */
+    dir?: string
+    vercel?: {
+      /** @default 'vercel/evlog' */
+      connector?: string
+    }
+    /**
+     * Decides, before each model call, what the tool reads for the caller.
+     * What the tool returns enters the model's context, so the caller can
+     * have it repeated: grant `agent` only to callers who may see every turn.
+     * @default schedules (`isScheduleAuth`) read `agent`, signed-in callers `session`, anonymous ones `false`
+     * @example access: ctx => isAdmin(ctx.session.auth.current) ? 'agent' : 'session'
+     */
+    access?: (ctx: DynamicContext) => EvlogEveLogsAccess
+  }
   /** @default 'standard' */
   record?: EvlogEveRecord
   /**

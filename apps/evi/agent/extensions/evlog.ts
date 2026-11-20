@@ -3,6 +3,7 @@ import { createFsDrain } from 'evlog/fs'
 import { createPostHogDrain } from 'evlog/posthog'
 import { createFanOutDrain } from '../lib/drains'
 import { environment } from '../lib/environment'
+import { canAccessAdminTools } from '../lib/trust'
 
 const batch = { batch: { size: 5, intervalMs: 2000 } }
 
@@ -34,4 +35,13 @@ export default evlog({
     ...(jobDrain ? { drain: jobDrain } : {}),
   },
   ...(turnDrain ? { drain: turnDrain } : {}),
+  // Every human in the Slack workspace DMs evi in a private conversation, so
+  // audience cannot gate reading other callers' turns: only admins and schedules do.
+  logs: {
+    access: (ctx) => {
+      const caller = ctx.session.auth.current ?? null
+      if (canAccessAdminTools(caller)) return 'agent'
+      return caller && caller.principalType !== 'anonymous' ? 'session' : false
+    },
+  },
 })

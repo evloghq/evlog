@@ -49,12 +49,12 @@
     "wide-events"
   ],
   "scripts": {
-    "build": "eve extension build",
-    "dev:prepare": "eve extension build",
+    "build": "node scripts/vendor-logs.mjs && eve extension build",
+    "dev:prepare": "node scripts/vendor-logs.mjs && eve extension build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "node scripts/vendor-logs.mjs && tsc --noEmit",
+    "test": "node scripts/vendor-logs.mjs && vitest run"
   },
   "dependencies": {
     "zod": "^4.6.7"

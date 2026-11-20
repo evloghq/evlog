@@ -18,6 +18,21 @@ export function parseDuration(value: string): number | undefined {
   return Number(match[1]) * DURATION_UNITS[match[2] ?? 'ms']!
 }
 
+/**
+ * `500` matches that status; `5xx` the whole class. `undefined` for a value
+ * that is neither; the caller reports it.
+ */
+export function parseStatus(value: string): ((status: number) => boolean) | undefined {
+  const clazz = /^([1-5])xx$/i.exec(value)
+  if (clazz) {
+    const hundreds = Number(clazz[1])
+    return status => Math.floor(status / 100) === hundreds
+  }
+  const exact = Number(value)
+  if (!Number.isInteger(exact) || exact < 100 || exact > 599) return undefined
+  return status => status === exact
+}
+
 /** One `where` clause: a dotted field, an operator, and the value it is held against. */
 export interface Where {
   path: string[]

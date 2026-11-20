@@ -1,5 +1,5 @@
 import type { LogLevel } from 'evlog'
-import { buildQuery as buildEngineQuery, parseDuration, parseWhere as parseEngineWhere, VIEWS } from '../../../../evlog/src/logs-query'
+import { buildQuery as buildEngineQuery, parseDuration, parseStatus as parseEngineStatus, parseWhere as parseEngineWhere, VIEWS } from '../../../../evlog/src/logs-query'
 import type { LogsQuery, LogsView, Where } from '../../../../evlog/src/logs-query'
 import { cliErrors } from '../errors'
 
@@ -42,14 +42,9 @@ export function parseLevels(value: unknown): LogLevel[] | undefined {
 /** `500` matches that status; `5xx` the whole class. */
 export function parseStatus(value: unknown): ((status: number) => boolean) | undefined {
   if (typeof value !== 'string' || value.length === 0) return undefined
-  const clazz = /^([1-5])xx$/i.exec(value)
-  if (clazz) {
-    const hundreds = Number(clazz[1])
-    return status => Math.floor(status / 100) === hundreds
-  }
-  const exact = Number(value)
-  if (!Number.isInteger(exact) || exact < 100 || exact > 599) throw cliErrors.LOGS_INVALID_STATUS({ value })
-  return status => status === exact
+  const matches = parseEngineStatus(value)
+  if (!matches) throw cliErrors.LOGS_INVALID_STATUS({ value })
+  return matches
 }
 
 export function parseOver(value: unknown): number | undefined {
