@@ -14,7 +14,7 @@ import { profileOf, surfaceOf } from './surfaces.mjs'
 
 // Deprecation vocabulary, not a bare negation: `not` alone let "do not forget
 // to import from `evlog/shared`" through, and T-15 is the one critical tell.
-const DOCUMENTING_A_DEPRECATION = /\b(deprecat\w*|removed|retired|renamed|legacy|no longer|instead of|prefer|migrat\w*|never use|never import|do(es)? not (use|exist|ship)|not an entry point|public (name|entry point))\b/i
+const DOCUMENTING_A_DEPRECATION = /\b(deprecat\w*|removed|retired|renamed|legacy|no longer|instead of|prefer|migrat\w*|never use|never import|do(es)? not (use|exist|ship)|not an entry point|no code import)\b/i
 
 /** Below this, a surface cannot speak for itself and answers to the whole-corpus median. */
 const MIN_SURFACE_SAMPLE = 5
