@@ -1,7 +1,7 @@
 import { defineAgent } from 'eve'
 import { mockModel } from 'eve/evals'
 
-// "refund <order>" calls the refund tool once, then answers from its result;
+// "refund <order> [<order>...]" calls the refund tool once per order in one step, then answers from the first result;
 // "logs <view>" does the same with the evlog logs tool.
 export default defineAgent({
   model: mockModel({
@@ -14,9 +14,9 @@ export default defineAgent({
         if (!read) return { toolCalls: [{ name: 'evlog__logs', input: { view } }] }
         return `Logs: ${JSON.stringify(read.output)}`
       }
-      const order = /refund (\S+)/.exec(lastUserMessage ?? '')?.[1]
-      if (!order) return 'Hello'
-      if (toolResults.length === 0) return { toolCalls: [{ name: 'issue_refund', input: { order } }] }
+      const orders = /refund (.+)/.exec(lastUserMessage ?? '')?.[1]?.split(' ')
+      if (!orders) return 'Hello'
+      if (toolResults.length === 0) return { toolCalls: orders.map(order => ({ name: 'issue_refund', input: { order } })) }
       return `Refund result: ${JSON.stringify(toolResults[0]?.output)}`
     },
   }),

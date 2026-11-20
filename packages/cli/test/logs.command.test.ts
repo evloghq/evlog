@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import logs, { runLogs } from '../src/commands/logs'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
-import { buildQuery, matchesId, matchesWhere, parseDuration, parseTime, parseWhere } from '../src/lib/logs/query'
+import { buildQuery, createSelection, matchesId, matchesWhere, parseDuration, parseTime, parseWhere } from '../src/lib/logs/query'
 import { formatEvent, formatLine, formatLogsReport } from '../src/lib/logs/render'
 import { createStyle } from '../src/core/output'
 
@@ -212,6 +212,24 @@ describe('runLogs', () => {
     expect(slow.events.map(e => e.durationMs)).toEqual([1200, 700])
     const slower = await runLogs(fakeContext(cwd), { what: 'slow', over: '1s' }, { now: NOW })
     expect(slower.events.map(e => e.durationMs)).toEqual([1200])
+  })
+
+  it('trace: a complete id selects its own request, not the longer ids it is a prefix of', () => {
+    const select = (id: string) => {
+      const query = buildQuery({ what: id })
+      const selection = createSelection(query)
+      for (const turn of ['turn_1', ...Array.from({ length: 10 }, (_, i) => `turn_1${i}`)]) {
+        const e = event({ requestId: `wrun_demo:${turn}` })
+        if (query.filter(e)) selection.add(e)
+      }
+      return selection.done()
+    }
+    const exact = select('wrun_demo:turn_1')
+    expect(exact.matched).toBe(1)
+    expect(exact.events.map(e => e.requestId)).toEqual(['wrun_demo:turn_1'])
+    /* No event carries the id whole, so it is still read as a prefix. */
+    expect(select('wrun_demo:turn_10').matched).toBe(1)
+    expect(select('wrun_demo:turn').matched).toBe(11)
   })
 
   it('trace: every event carrying the id, by prefix', async () => {

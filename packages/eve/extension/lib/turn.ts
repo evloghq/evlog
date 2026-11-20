@@ -1,6 +1,7 @@
 import type { SessionView } from 'eve/events'
 import { calls, interactions, reply, runs, turn } from 'eve/events'
 import type { EvlogEveRecord, EvlogEveToolRule } from '../extension'
+import type { RecordedError } from './state'
 
 const REPLY_PREVIEW_LENGTH = 200
 
@@ -12,6 +13,8 @@ export interface TurnInput {
   channel?: string
   record: EvlogEveRecord
   tools: Record<string, EvlogEveToolRule>
+  /** The evlog errors built during the turn, matched to failed calls by message when the match is unambiguous. */
+  created: RecordedError[]
 }
 
 function resolveRule(name: string, record: EvlogEveRecord, rules: Record<string, EvlogEveToolRule>): { input: boolean, output: boolean } | false {
@@ -27,6 +30,22 @@ function resolveRule(name: string, record: EvlogEveRecord, rules: Record<string,
   return { input: rule.input ?? io, output: rule.output ?? io }
 }
 
+/**
+ * The evlog error a failed call threw. eve keeps only the call's message, so
+ * the error is found by it. When several failed calls share the message and
+ * the errors built with it differ, or fewer were built than calls failed,
+ * which call threw which is unknown, and no call gets one.
+ */
+function thrownBy(message: string, failed: Array<{ error?: { message: string } }>, created: RecordedError[]): RecordedError | undefined {
+  const candidates = created.filter(error => error.message === message)
+  const last = candidates.at(-1)
+  if (!last) return undefined
+  const sharing = failed.filter(call => call.error?.message === message).length
+  if (sharing <= 1) return last
+  if (candidates.length < sharing) return undefined
+  return candidates.every(error => error.code === last.code && error.why === last.why && error.fix === last.fix) ? last : undefined
+}
+
 function durationMs(timing: { startedAt?: string, endedAt?: string }): number | undefined {
   if (!timing.startedAt || !timing.endedAt) return undefined
   return Date.parse(timing.endedAt) - Date.parse(timing.startedAt)
@@ -36,7 +55,7 @@ function durationMs(timing: { startedAt?: string, endedAt?: string }): number | 
  * The fields of one turn's event, read from the session view eve stores. No
  * process memory is involved, so a turn resumed elsewhere is recorded whole.
  */
-export function turnFields(input: TurnInput): { fields: Record<string, unknown>, durationMs?: number, status: number, failedMessages: string[] } {
+export function turnFields(input: TurnInput): { fields: Record<string, unknown>, durationMs?: number, status: number, failures: Array<{ name?: string, message: string }> } {
   const { view, sessionId, turnId, agent, record } = input
   const observed = turn(view, turnId)
   const turnRuns = runs(view, { turnId })
@@ -60,14 +79,21 @@ export function turnFields(input: TurnInput): { fields: Record<string, unknown>,
       const rule = resolveRule(call.name, record, input.tools)
       if (!rule) return []
       const duration = durationMs(call)
+      const created = call.error && thrownBy(call.error.message, failed, input.created)
       return [
         {
+          call_id: call.callId,
           name: call.name,
           kind: call.kind,
           ...(duration !== undefined && { duration_ms: duration }),
           success: call.state !== 'failed',
           ...(call.outcome && { outcome: call.outcome }),
           ...(call.error && { error: call.error.message }),
+          ...(created && {
+            ...(created.code && { code: created.code }),
+            ...(created.why && { why: created.why }),
+            ...(created.fix && { fix: created.fix }),
+          }),
           ...(rule.input && call.input !== undefined && { input: call.input }),
           ...(rule.output && call.output !== undefined && { output: call.output }),
         }
@@ -117,6 +143,6 @@ export function turnFields(input: TurnInput): { fields: Record<string, unknown>,
   }
   const outcome = observed?.outcome
   const status = outcome === 'failed' ? 500 : outcome === 'cancelled' ? 499 : 200
-  const failedMessages = failed.flatMap(call => call.error ? [call.error.message] : [])
-  return { fields, status, failedMessages, ...(duration !== undefined && { durationMs: duration }) }
+  const failures = failed.flatMap(call => call.error ? [{ name: call.error.name, message: call.error.message }] : [])
+  return { fields, status, failures, ...(duration !== undefined && { durationMs: duration }) }
 }
