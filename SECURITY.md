@@ -1,5 +1,13 @@
 # Security
 
+## Supported versions
+
+| Version | Supported |
+| --- | --- |
+| 3.x (beta) | Fixes ship in the next beta |
+| 2.x | Yes. Features and fixes until evlog 3.0 ships on January 18, 2027, then security and critical bug fixes until July 18, 2027 |
+| < 2.0 | No |
+
 ## Reporting a vulnerability
 
 **Please do not** open a public issue or discussion for security-sensitive bugs.

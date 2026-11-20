@@ -326,6 +326,16 @@ describe('datadog adapter', () => {
         sendToDatadog(event, { apiKey: 'test-key' }),
       ).rejects.toThrow('Datadog API error: 403 Forbidden')
     })
+
+    it('retries a 500, which Datadog documents as retryable', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(new Response('oops', { status: 500 }))
+        .mockResolvedValueOnce(new Response(null, { status: 202 }))
+
+      await sendToDatadog(createTestEvent(), { apiKey: 'test-key', retries: 1 })
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('sendBatchToDatadog', () => {
