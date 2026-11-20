@@ -7,11 +7,12 @@ export type {
   DefineSignal,
   ScoreSignalInput,
   ScoreVerdict,
+  SignalColumn,
   Signal,
   SignalInput,
   SignalKind,
   Verdict,
 } from './define'
 export { createSignals } from './plugin'
-export type { SignalColumn, SignalsOptions, SignalsPlugin, SignalsStats } from './plugin'
+export type { SignalsOptions, SignalsPlugin, SignalsStats } from './plugin'
 export type { EvaluateFn, EvaluateRequest, EvaluateResponse, EvaluationModel, SignalState } from './evaluate'

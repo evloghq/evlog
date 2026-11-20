@@ -32,19 +32,19 @@ export const signals = [
     when: e => e.status === 200 && (e.path ?? '').startsWith('/api/signals/checkout'),
     ask: 'The request returned 200, but the customer did not get what they came for',
     criteria: { true: 'No order or confirmation, a fallback path, an empty or partial result', false: 'Order created and confirmed' },
-    keep: v => v.value && v.confidence > 0.8,
+    keep: 0.8,
   }),
   defineSignal({
     name: 'webhook-ignored',
     when: e => e.status === 200 && (e.path ?? '').startsWith('/api/signals/webhook'),
     ask: 'The webhook was acknowledged but not acted on',
     criteria: { true: 'Unhandled event type, skipped, no side effect recorded', false: 'The event was processed' },
-    keep: v => v.value && v.confidence > 0.85,
+    keep: 0.85,
   }),
   defineSignal({
     name: 'validation-bug',
     when: e => e.status === 400,
     ask: 'The rejected input was actually valid and our validation is wrong',
-    keep: v => v.value && v.confidence > 0.85,
+    keep: 0.85,
   }),
 ]
