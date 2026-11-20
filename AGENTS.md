@@ -184,13 +184,14 @@ Default: anything that stays on the local clone is fine, anything that touches t
 - Write a **PR title** (Conventional Commits, see above) and a **PR body**: keep the body factual, mirror the changeset, reference the issue (`Closes #X`); no marketing copy
 - Show the change in the PR body: a code snippet or captured output is evidence, not filler. A new API gets a usage snippet, a bug fix its before/after output, a CLI change its real terminal output, a rendered change a capture. Keep the prose short, not the proof
 - `gh pr merge <number>`: only for PRs the maintainer named in the current task, after reading the diff and confirming CI is green and there is no unresolved review thread. Use `--squash`. Never merge a PR the maintainer did not point at, and never merge `changeset-release/*` (the version-packages PR) or a PR that deletes tests without the maintainer saying so for that PR
+- `gh pr close <number>`: only for PRs the maintainer named in the current task. Add `--delete-branch` only when they asked for the branch to go too. Never close a PR the maintainer did not point at
 - `gh issue create` and `gh issue pin`: only for an issue whose title and body the maintainer approved word for word in the current task. Show the draft first, create it exactly as approved, and pin it only when the maintainer asked for that issue to be pinned
 
 **Never (no exceptions, even when asked):**
 - Push directly to `main` (or `master`): protected, always goes through a PR
 - `git push --force` without `--with-lease`, `git push --tags`
-- `gh pr close`, `gh pr review`, `gh issue edit`, `gh release create`
-- `gh pr merge` without an explicit instruction naming the PR (see above)
+- `gh pr review`, `gh issue edit`, `gh release create`
+- `gh pr merge` or `gh pr close` without an explicit instruction naming the PR (see above)
 - Write a changelog entry, release note, or commit message **body** with multi-paragraph narrative. The changeset is the source of truth; commit subjects stay single-line, PR bodies stay short
 - Add a `Co-authored-by`, `Signed-off-by`, "Generated with…", "🤖", or any signature/attribution that names an agent, model, or tool: **the work is the maintainer's, full stop**
 

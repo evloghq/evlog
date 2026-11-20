@@ -56,6 +56,8 @@ export interface SignalsStats {
   skipped: number
   /** Model calls that failed or timed out. */
   errors: number
+  /** Model calls the model declined to answer. They record no verdict and do not open the breaker. */
+  refused: number
   /** Verdicts served from `cacheKey` without a call. */
   cached: number
   inputTokens: number
@@ -124,31 +126,67 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   const keepSignals = options.signals.filter(s => s.keep)
 
   const cache = createLru<Verdict>(1_000)
+  const inflight = new Map<string, Promise<Judged | undefined>>()
   const pending = createLru<Judged>(1_000)
-  const stats: SignalsStats = { calls: 0, skipped: 0, errors: 0, cached: 0, inputTokens: 0 }
+  const stats: SignalsStats = { calls: 0, skipped: 0, errors: 0, refused: 0, cached: 0, inputTokens: 0 }
 
   async function judge(signals: Signal[], input: SignalInput): Promise<Judged> {
     const verdicts = new Map<string, Verdict>()
-    const toAsk: Array<[signal: Signal, cacheKey: string | undefined]> = []
+    const shared: Array<[signal: Signal, call: Promise<Judged | undefined>]> = []
+    const toAsk: Array<[signal: Signal, cacheId: string | undefined]> = []
     for (const signal of signals) {
       const key = signal.cacheKey?.(input)
-      const hit = key === undefined ? undefined : cache.get(`${signal.name}\0${key}`)
+      const id = key === undefined ? undefined : `${signal.name}\0${key}`
+      const hit = id === undefined ? undefined : cache.get(id)
+      const running = id === undefined ? undefined : inflight.get(id)
       if (hit) {
         verdicts.set(signal.name, hit)
         stats.cached++
+      } else if (running) {
+        shared.push([signal, running])
       } else {
-        toAsk.push([signal, key])
+        toAsk.push([signal, id])
       }
     }
-    if (toAsk.length === 0) return { verdicts }
 
+    const [fresh, joined] = await Promise.all([
+      toAsk.length > 0 ? ask(toAsk, input) : undefined,
+      Promise.all(shared.map(([, call]) => call)),
+    ])
+    let modelId = fresh?.modelId
+    for (const [name, verdict] of fresh?.verdicts ?? []) verdicts.set(name, verdict)
+    shared.forEach(([signal], i) => {
+      const verdict = joined[i]?.verdicts.get(signal.name)
+      if (!verdict) return
+      verdicts.set(signal.name, verdict)
+      modelId ??= joined[i]!.modelId
+      stats.cached++
+    })
+    return { verdicts, modelId }
+  }
+
+  // Registered before the call is awaited, so concurrent events with the same cache key join it instead of calling again.
+  // Only calls that reach the model are registered: a skip belongs to this event's state, not to its key.
+  function ask(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, input: SignalInput): Promise<Judged> {
     const raw = buildState(input)
     const json = typeof raw === 'string' ? raw : JSON.stringify(raw)
     if (json.length > maxStateChars || !budget.take()) {
       stats.skipped++
-      return { verdicts }
+      return Promise.resolve({ verdicts: new Map() })
     }
-    const state: SignalState = typeof raw === 'string' ? raw : JSON.parse(json)
+    const call = callModel(toAsk, typeof raw === 'string' ? raw : JSON.parse(json))
+    // The caller gets the rejection; events that joined get no verdict, and the entry is cleared either way so the next event can retry.
+    const settled = call.catch(() => undefined)
+    for (const [, id] of toAsk) {
+      if (id === undefined) continue
+      inflight.set(id, settled)
+      void settled.then(() => inflight.delete(id))
+    }
+    return call
+  }
+
+  async function callModel(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, state: SignalState): Promise<Judged> {
+    const verdicts = new Map<string, Verdict>()
 
     const questions: Record<string, EvaluationQuestion> = {}
     for (const [signal] of toAsk) questions[signal.name] = toQuestion(signal)
@@ -159,16 +197,20 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       const response = await evaluate({ model, state, questions, abortSignal: controller.signal, providerOptions: options.providerOptions })
       stats.calls++
       stats.inputTokens += response.inputTokens ?? 0
-      for (const [signal, key] of toAsk) {
+      for (const [signal, id] of toAsk) {
         const answer = response.answers[signal.name]
         if (!answer) continue
         const verdict = toVerdict(signal, answer)
         verdicts.set(signal.name, verdict)
-        if (key !== undefined) cache.set(`${signal.name}\0${key}`, verdict)
+        if (id !== undefined) cache.set(id, verdict)
       }
       budget.succeed()
       return { verdicts, modelId: response.modelId }
     } catch (err) {
+      if (isRefusal(err)) {
+        stats.refused++
+        return { verdicts }
+      }
       stats.errors++
       budget.fail()
       console.warn('[evlog/signals] model call failed, events pass through unjudged:', err)
@@ -225,6 +267,13 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       if (modelId) event.signalsModel = modelId
     },
   }
+}
+
+// The AI SDK's own cross-version brand check; importing `Experimental_DecisionRefusalError` would fail to load on `ai` below 7.0.130.
+const REFUSAL_MARKER = Symbol.for('vercel.ai.error.AI_DecisionRefusalError')
+
+function isRefusal(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as Record<symbol, unknown>)[REFUSAL_MARKER] === true
 }
 
 function markKept(verdicts: Map<string, Verdict>, kept: Set<string>): Map<string, Verdict> {
