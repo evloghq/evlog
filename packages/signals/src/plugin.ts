@@ -8,6 +8,12 @@ import { aiSdkEvaluate, toQuestion, toVerdict } from './evaluate'
 export interface SignalsOptions {
   signals: Signal[]
   /**
+   * Plugin name. evlog keeps one plugin per name, so a second instance, such
+   * as one with its own budget for client events, needs its own.
+   * @default 'signals'
+   */
+  name?: string
+  /**
    * AI SDK evaluation model: a gateway id or a provider instance.
    * @default 'typesafe-ai/jev'
    */
@@ -173,7 +179,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   }
 
   return {
-    name: 'signals',
+    name: options.name ?? 'signals',
     stats: () => ({ ...stats }),
 
     async keep(ctx: TailSamplingContext) {
