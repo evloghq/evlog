@@ -9,6 +9,6 @@ import { HONO_METHODS } from './index'
 export default codeRoutesAdapter({
   framework: 'hono',
   methods: HONO_METHODS,
-  on: 'on',
+  on: ['on'],
   middleware: { source: 'evlog/hono', register: ['use'] },
 })

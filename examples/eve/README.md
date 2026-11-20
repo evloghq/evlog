@@ -47,7 +47,7 @@ Finance opens PostHog (or your drain) and gets **one JSON object** per turn — 
     "target": { "type": "order", "id": "4821" },
     "outcome": "success"
   },
-  "ai": { "calls": 3, "tools": […] }
+  "gen_ai": { "calls": 3, "tools": […] }
 }
 ```
 
@@ -55,7 +55,7 @@ Compare with order **#1102** ($49) — same flow, **no approval** (under the $10
 
 ## Run
 
-From the monorepo root (Turbo runs `evlog` dev:prepare so `evlog/eve` resolves):
+From the monorepo root (Turbo runs dev:prepare so `evlog` and `@evlog/eve` resolve):
 
 ```bash
 pnpm install
@@ -74,6 +74,6 @@ Requires `POSTHOG_API_KEY` in the repo root `.env` for the drain (events still l
 | `agent/lib/support-data.ts` | Acme Corp & Startup Inc fake data |
 | `agent/tools/lookup_*.ts` | CRM lookups → `useLogger()` |
 | `agent/tools/issue_refund.ts` | Refund + approval gate + audit fields |
-| `agent/hooks/evlog.ts` | Wide event per turn, tail-keep on refunds/audit |
+| `agent/extensions/evlog.ts` | Wide event per turn, tail-keep on failed tools and large refunds |
 
 Docs: https://evlog.dev/use-cases/eve

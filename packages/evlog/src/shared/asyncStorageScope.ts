@@ -2,7 +2,7 @@ import { getSharedStorage } from './globalRegistry'
 
 /**
  * Structural stand-in for `AsyncLocalStorage` so this module does not import
- * `node:async_hooks`. Callers that construct storage (Elysia, eve) keep their
+ * `node:async_hooks`. Callers that construct storage (Elysia) keep their
  * own value imports.
  */
 export interface AsyncLocalStorageLike<T> {
@@ -55,7 +55,7 @@ export function clearAsyncLocalStorage<T>(storage: AsyncLocalStorageLike<T>): vo
 
 /**
  * Registry-shared storage for integrations that bind with `enterWith()` rather
- * than `run()` (Elysia, eve). The `enterWith` polyfill is applied once, by
+ * than `run()` (Elysia). The `enterWith` polyfill is applied once, by
  * whichever copy of evlog wins the race to register `id`.
  *
  * @param create - Passed in so this module stays free of `node:async_hooks`.

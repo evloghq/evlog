@@ -1,5 +1,6 @@
 export { default } from './module'
 export { useLogger } from './useLogger'
+export type { NitroRequestLogger } from '../nitro'
 export { evlogErrorHandler } from './middleware'
 export { EvlogError, createError, createEvlogError } from '../error'
 export { parseError } from '../runtime/utils/parseError'

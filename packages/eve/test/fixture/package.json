@@ -1,0 +1,11 @@
+{
+  "name": "evlog-eve-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@evlog/eve": "workspace:*",
+    "eve": "1.0.2",
+    "evlog": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

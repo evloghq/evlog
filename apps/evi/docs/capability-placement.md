@@ -108,7 +108,11 @@ shared checkout and a mismatch ends the run. The parent chooses bounded cohorts
 from the compact coverage ledger `agent/ledgers/repo-health-sweep.md`, searches
 the rejected-findings file `agent/ledgers/repo-health-sweep-rejected.jsonl` for
 the scoped paths, opens `agent/ledgers/archive/` only for a specific detail, and
-remains the only writer. All five children share its checkout through
+remains the only writer. The tool's result is written to
+`/workspace/sweep-results/` by `agent/hooks/sweep-record.ts` the moment it
+returns (`agent/lib/simplification/record.ts`), including the rendered archive
+section and rejected lines, so the ledger never depends on the parent's
+context surviving compaction. All five children share its checkout through
 `agent/lib/review-sandbox.ts`; shell and file writes are disabled.
 
 ## Review checklist

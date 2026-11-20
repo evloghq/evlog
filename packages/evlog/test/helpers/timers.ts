@@ -45,8 +45,12 @@ export function fastestRunMs(fn: () => unknown, runs = 3): number {
 
 /** The long input is built at this scale, the short one at 1. Linear work is ~this times slower; quadratic is ~this squared. */
 const SIZE_RATIO = 8
-/** Max allowed (long ms / short ms) at {@link SIZE_RATIO}. Linear at 8x size is ~8; quadratic is ~64. */
-const MAX_TIME_RATIO = 24
+/**
+ * Max allowed (long ms / short ms) at {@link SIZE_RATIO}. Linear at 8x size is ~8; quadratic is ~64.
+ * Node 22 with a large heap limit makes strings past about 16k characters up to ~3.5x slower per
+ * character, so linear work there can reach ~28.
+ */
+const MAX_TIME_RATIO = 32
 /**
  * Each timed sample repeats the call until at least this much time has elapsed,
  * then divides by the number of calls. A single sub-millisecond call is mostly
@@ -56,16 +60,24 @@ const MAX_TIME_RATIO = 24
 const MIN_SAMPLE_MS = 1
 /** Safety valve for a clock that does not advance: stop repeating after this many calls. */
 const MAX_SAMPLE_CALLS = 100_000
+/**
+ * A ratio over {@link MAX_TIME_RATIO} is measured again up to this many times in
+ * total before it fails. Quadratic work misses the ratio on every measurement;
+ * a pause that lands on one long sample does not repeat.
+ */
+const MAX_ATTEMPTS = 3
 /** Hang / ReDoS backstop on the long input. Linear work of a ~64k string stays well under this; a quadratic scan does not. */
 const LINEAR_TIME_BUDGET_MS = 2_000
 
 /**
- * CPU time this process has used, in ms. Wall time also counts the time the
- * scheduler hands the core to other processes, which on a loaded machine hits
- * a long call far more often than a short one and skews the ratio.
+ * CPU time the calling thread has used, in ms. Wall time also counts the time
+ * the scheduler hands the core to other processes, and process CPU time also
+ * counts V8's GC and compiler threads; either can land on the long run alone
+ * and skew the ratio. Node before 22.19 has no `threadCpuUsage()` and falls
+ * back to process CPU time.
  */
 function cpuMs(): number {
-  const { user, system } = process.cpuUsage()
+  const { user, system } = process.threadCpuUsage?.() ?? process.cpuUsage()
   return (user + system) / 1_000
 }
 
@@ -95,10 +107,10 @@ function fastestPerCallMs(fn: () => unknown, runs = 3): number {
 /**
  * Assert `fn` stays linear in input length. `build(n)` returns the adversarial
  * input at scale `n`; both sizes must have the same shape, which a prefix of
- * the long input does not guarantee. Times `build(1)` and `build(8)` in process
- * CPU time, each as the fastest per-call average. The longer run may be at most
- * 24x the shorter; a 2 s cap on the long run catches a hang that is already
- * slow at scale 1.
+ * the long input does not guarantee. Times `build(1)` and `build(8)` in the
+ * calling thread's CPU time, each as the fastest per-call average. The longer
+ * run may be at most 32x the shorter, on at least one of three measurements; a
+ * 2 s cap on the long run catches a hang that is already slow at scale 1.
  *
  * @example
  * ```ts
@@ -108,12 +120,15 @@ function fastestPerCallMs(fn: () => unknown, runs = 3): number {
 export function expectLinearTime(fn: (input: string) => unknown, build: (n: number) => string, label?: string): void {
   const short = build(1)
   const long = build(SIZE_RATIO)
-  const shortMs = fastestPerCallMs(() => fn(short))
-  const longMs = fastestPerCallMs(() => fn(long))
-  const detail = `${longMs.toFixed(1)}ms / ${shortMs.toFixed(1)}ms`
-  const named = label ? `${label} (${detail})` : detail
-  expect(longMs, named).toBeLessThan(LINEAR_TIME_BUDGET_MS)
-  expect(longMs / shortMs, named).toBeLessThan(MAX_TIME_RATIO)
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const shortMs = fastestPerCallMs(() => fn(short))
+    const longMs = fastestPerCallMs(() => fn(long))
+    const detail = `${longMs.toFixed(1)}ms / ${shortMs.toFixed(1)}ms`
+    const named = label ? `${label} (${detail})` : detail
+    expect(longMs, named).toBeLessThan(LINEAR_TIME_BUDGET_MS)
+    if (longMs / shortMs < MAX_TIME_RATIO) return
+    if (attempt === MAX_ATTEMPTS) expect(longMs / shortMs, named).toBeLessThan(MAX_TIME_RATIO)
+  }
 }
 
 /**

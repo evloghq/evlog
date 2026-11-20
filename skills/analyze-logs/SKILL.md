@@ -32,7 +32,7 @@ pnpm evlog logs stats --json                 # per route: count, errors, p50, p9
 pnpm evlog logs --where 'payment.amount>5000' --where audit.outcome=failure --json
 ```
 
-`--json` is an envelope (`sources`, `view`, `matched`, `events`; `stats` carries `stats` instead); filters are `--since`, `--until`, `--level`, `--path`, `--status` (`500` or `5xx`), `--where field=value|field>n|field~regex|field|!field` on any dotted field (repeatable), `--limit`, `--dir` for a non-default directory, and `--url` for an app on the memory drain that exposes `readMemoryLogs()` over HTTP. From a monorepo root it reads every app's `.evlog/logs` and labels each event. Docs: https://www.evlog.dev/cli/logs. If the CLI is unavailable or the user declines it, read the files directly as below.
+`--json` is an envelope (`sources`, `view`, `matched`, `events`; `stats` carries `stats` instead); filters are `--since`, `--until`, `--level`, `--path`, `--status` (`500` or `5xx`), `--where field=value|field>n|field~regex|field|!field` on any dotted field (repeatable), `--session <id>` for one AI conversation (`gen_ai.conversation.id`), `--limit`, `--dir` for a non-default directory, and `--url` for an app on the memory drain that exposes `readMemoryLogs()` over HTTP. From a monorepo root it reads every app's `.evlog/logs` and labels each event. Docs: https://www.evlog.dev/cli/logs. If the CLI is unavailable or the user declines it, read the files directly as below.
 
 Logs are written by evlog's file system drain as `.jsonl` files, organized by date.
 
@@ -65,7 +65,7 @@ Files are named by date: `2026-03-14.jsonl`. Start with the most recent file.
 
 Before wiring a new drain, you can try `npx evlog doctor --json`, which checks whether `evlog` is installed and whether a local `.evlog/logs` drain already exists (read-only). Optional; skip if the CLI is unavailable.
 
-The file system drain may not be enabled. On Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, or Fastify, the fastest path is the CLI, which detects the framework and wires the fs drain (its default dev drain) in one pass:
+The file system drain may not be enabled. On Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify, or Effect, the fastest path is the CLI, which detects the framework and wires the fs drain (its default dev drain) in one pass:
 
 ```bash
 npx evlog init --dry-run --yes   # preview first

@@ -1,3 +1,4 @@
+import { sep } from 'node:path'
 import { EXIT_FAIL } from '../core/output'
 import { defineEvlogCommand, failWith } from '../lib/command'
 import { cliErrors } from '../lib/errors'
@@ -91,7 +92,7 @@ export default defineEvlogCommand('init', {
 
     if (targets.length > 0) {
       const requested = typeof args.apps === 'string' && args.apps.length > 0
-        ? args.apps.split(',').map(entry => entry.trim()).filter(Boolean)
+        ? args.apps.split(',').map(entry => entry.trim().split(sep).join('/')).filter(Boolean)
         : null
 
       if (requested) {

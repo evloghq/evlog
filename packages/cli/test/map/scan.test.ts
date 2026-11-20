@@ -258,6 +258,72 @@ describe('hono checks', () => {
   })
 })
 
+describe('effect', () => {
+  const root = join(FIXTURES, 'effect-basic')
+  let result: ScanResult
+
+  beforeAll(async () => {
+    result = await scan(await ctx(root, 'effect'))
+  })
+
+  async function detectIn(dependencies: Record<string, string>): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'evlog-cli-effect-'))
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'app', dependencies }), 'utf8')
+    try {
+      return detectFramework(await resolveProject(dir)).framework
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('detects an Effect 4 app from its effect dependency', async () => {
+    expect(detectFramework(await resolveProject(root)).framework).toBe('effect')
+  })
+
+  it('leaves an Effect 3 app, which serves HTTP from @effect/platform, undetected', async () => {
+    await expect(detectIn({ 'effect': '^3.10.0', '@effect/platform': '^0.90.0' })).rejects.toMatchObject({ code: 'cli.MAP_FRAMEWORK_NOT_DETECTED', message: expect.stringContaining('fastify, effect') })
+  })
+
+  it('keeps the web framework of an app that also uses Effect', async () => {
+    expect(await detectIn({ effect: '^4.0.0', next: '^16.0.0' })).toBe('next')
+    expect(await detectIn({ effect: '^4.0.0', hono: '^4.0.0' })).toBe('hono')
+  })
+
+  it('reads HttpRouter.add and HttpRouter.route, with * as every method', () => {
+    const paths = result.map.routes.map(r => `${r.method ?? '*'} ${r.path} (${r.file})`).sort()
+    expect(paths).toEqual([
+      '* /ping (src/routes/health.ts)',
+      'GET /health (src/routes/health.ts)',
+      'GET /users/:id (src/routes/users.ts)',
+      'POST /checkout (src/routes/checkout.ts)',
+    ])
+  })
+
+  it('credits yield* EvlogLogger and yield* useLogger() as the request logger', () => {
+    const checkout = result.map.routes.find(r => r.path === '/checkout')
+    expect(checkout?.checks['wide-event']?.status).toBe('pass')
+    expect(checkout?.checks['context']?.status).toBe('pass')
+    expect(checkout?.checks['audit']?.status).toBe('pass')
+    expect(checkout?.score).toBe(100)
+
+    const user = result.map.routes.find(r => r.path === '/users/:id')
+    expect(user?.checks['wide-event']?.status).toBe('pass')
+    expect(user?.checks['context']?.status).toBe('pass')
+  })
+
+  it('reads a route without a logger as an event routerLayer emits with no context', async () => {
+    const adapter = await getFramework('effect').map()
+    expect(adapter.resolveRequestLogger?.(await ctx(root, 'effect'))).toBe('ambient')
+
+    const health = result.map.routes.find(r => r.path === '/health')
+    expect(health?.checks['wide-event']).toMatchObject({ status: 'fail', message: expect.stringContaining('only method, path and status') })
+  })
+
+  it('effect-basic map snapshot', () => {
+    expect(mapForSnapshot(result.map)).toMatchSnapshot()
+  })
+})
+
 /* The setup from EVL-659: a Next.js app in a pnpm workspace that only ever
    imports a shared `@acme/logger` package, with evlog installed in that package
    and not in the app. */
@@ -448,5 +514,288 @@ describe('entry points a scan must not lose', () => {
     expect(new Set(ids).size).toBe(ids.length)
     /* An entry point nothing collides with keeps the id older maps recorded. */
     expect(result.map.routes.find(route => route.path === '/ok')!.id).toBe(routeId({ framework: 'express', kind: 'api', method: 'GET', path: '/ok' }))
+  })
+})
+
+describe('a file that declares several entry points', () => {
+  const roots: string[] = []
+
+  async function scanned(framework: ScanContext['framework'], dependencies: Record<string, string>, files: Record<string, string>): Promise<ScanResult> {
+    const root = await mkdtemp(join(tmpdir(), 'evlog-cli-handlers-'))
+    roots.push(root)
+    const all = { 'package.json': JSON.stringify({ name: 'shop', dependencies }), ...files }
+    for (const [path, source] of Object.entries(all)) {
+      const file = join(root, path)
+      await mkdir(dirname(file), { recursive: true })
+      await writeFile(file, source, 'utf8')
+    }
+    return scan(await ctx(root, framework))
+  }
+
+  afterAll(async () => {
+    await Promise.all(roots.map(root => rm(root, { recursive: true, force: true })))
+  })
+
+  /** `METHOD path` → the status of `check`, for every entry point. */
+  function statuses(result: ScanResult, check: 'wide-event' | 'context' | 'audit' | 'structured-errors' | 'error-handling'): Record<string, string | undefined> {
+    return Object.fromEntries(result.map.routes.map(route => [`${route.method} ${route.path}`, route.checks[check]?.status]))
+  }
+
+  const EXPRESS_DEPS = { express: '^5.0.0', evlog: '^2.0.0' }
+  const EXPRESS_HEAD = [
+    'import express from \'express\'',
+    'import { evlog } from \'evlog/express\'',
+    'const app = express()',
+    'app.use(evlog())',
+  ]
+
+  it('judges each handler on its own code', async () => {
+    const result = await scanned('express', EXPRESS_DEPS, {
+      'src/app.ts': [
+        ...EXPRESS_HEAD,
+        'app.get(\'/health\', (req, res) => { req.log.set({ health: { ok: true } }); res.json({}) })',
+        'app.get(\'/users\', async (req, res) => { res.json(await db.users.list()) })',
+        'app.post(\'/users\', async (req, res) => { res.json(await db.users.add(req.body)) })',
+      ].join('\n'),
+    })
+
+    expect(statuses(result, 'wide-event')).toEqual({ 'GET /health': 'pass', 'GET /users': 'fail', 'POST /users': 'fail' })
+    expect(statuses(result, 'context')).toEqual({ 'GET /health': 'pass', 'GET /users': 'fail', 'POST /users': 'fail' })
+    expect(result.map.routes.map(route => route.event?.fields)).toEqual([['health.ok'], undefined, undefined])
+    expect(result.map.routes.map(route => route.score)).toEqual([100, 45, 45])
+  })
+
+  it('follows a handler passed by name, and the helpers it calls in the same file', async () => {
+    const result = await scanned('express', EXPRESS_DEPS, {
+      'src/app.ts': [
+        ...EXPRESS_HEAD,
+        'function describeOrder(req) { req.log.set({ order: { id: req.params.id } }) }',
+        'const showOrder = async (req, res) => { describeOrder(req); res.json({}) }',
+        'async function listOrders(req, res) { res.json([]) }',
+        'app.get(\'/orders/:id\', requireUser, showOrder)',
+        'app.get(\'/orders\', requireUser, listOrders)',
+      ].join('\n'),
+    })
+
+    expect(statuses(result, 'context')).toEqual({ 'GET /orders/:id': 'pass', 'GET /orders': 'fail' })
+    expect(result.map.routes[0]!.event).toEqual({ fields: ['order.id'], audit: [] })
+  })
+
+  it('keeps crediting a logger the file creates once for all its handlers', async () => {
+    const result = await scanned('hono', { hono: '^4.0.0', evlog: '^2.0.0' }, {
+      'src/app.ts': [
+        'import { Hono } from \'hono\'',
+        'import { createLogger } from \'evlog\'',
+        'const log = createLogger()',
+        'const app = new Hono()',
+        'app.get(\'/a\', (c) => { log.set({ a: 1 }); return c.json({}) })',
+        'app.get(\'/b\', c => c.json({}))',
+      ].join('\n'),
+    })
+
+    expect(statuses(result, 'context')).toEqual({ 'GET /a': 'pass', 'GET /b': 'fail' })
+  })
+
+  it('reads a chained registration one call at a time', async () => {
+    const result = await scanned('hono', { hono: '^4.0.0', evlog: '^2.0.0' }, {
+      'src/app.ts': [
+        'import { Hono } from \'hono\'',
+        'export default new Hono()',
+        '  .get(\'/a\', (c) => { const log = c.get(\'log\'); log.set({ a: 1 }); return c.json({}) })',
+        '  .post(\'/b\', c => c.json({}))',
+      ].join('\n'),
+    })
+
+    expect(statuses(result, 'wide-event')).toEqual({ 'GET /a': 'pass', 'POST /b': 'fail' })
+  })
+
+  it('flags as sensitive only the handler that uses the import or the field', async () => {
+    const result = await scanned('express', { ...EXPRESS_DEPS, stripe: '^18.0.0' }, {
+      'src/app.ts': [
+        ...EXPRESS_HEAD,
+        'import Stripe from \'stripe\'',
+        'const stripe = new Stripe(process.env.STRIPE_KEY)',
+        'app.post(\'/orders\', async (req, res) => { res.json(await stripe.charges.create({ amount: 1 })) })',
+        'app.post(\'/profile\', async (req, res) => { res.json(await db.users.update({ email: req.body.email })) })',
+        'app.get(\'/health\', (req, res) => { res.json({ ok: true }) })',
+      ].join('\n'),
+    })
+
+    expect(result.map.routes.map(route => [route.path, route.sensitivity.level])).toEqual([['/orders', 'high'], ['/profile', 'medium'], ['/health', 'none']])
+    expect(statuses(result, 'audit')).toEqual({ 'POST /orders': 'fail', 'POST /profile': 'n/a', 'GET /health': 'n/a' })
+  })
+
+  it('keeps a thrown error and a swallowed one with the handler that wrote them', async () => {
+    const result = await scanned('fastify', { fastify: '^5.0.0', evlog: '^2.0.0' }, {
+      'src/app.ts': [
+        'import Fastify from \'fastify\'',
+        'const app = Fastify()',
+        'app.get(\'/a\', async () => { throw new Error(\'nope\') })',
+        'app.get(\'/b\', async () => { try { await work() } catch {} })',
+        'app.route({ method: \'GET\', url: \'/c\', handler: async () => ({ ok: true }) })',
+      ].join('\n'),
+    })
+
+    expect(statuses(result, 'structured-errors')).toEqual({ 'GET /a': 'fail', 'GET /b': 'n/a', 'GET /c': 'n/a' })
+    expect(statuses(result, 'error-handling')).toEqual({ 'GET /a': 'n/a', 'GET /b': 'fail', 'GET /c': 'n/a' })
+  })
+
+  it('judges each method a Next route file exports, however it is exported', async () => {
+    const result = await scanned('next', { next: '^16.0.0', evlog: '^2.0.0' }, {
+      'app/api/orders/route.ts': [
+        'import { useLogger, withEvlog } from \'evlog/next\'',
+        'export async function GET() { const log = useLogger(); log.set({ orders: { listed: true } }); return Response.json([]) }',
+        'export const POST = async () => Response.json({})',
+        'const remove = withEvlog(async () => Response.json({}))',
+        'const replace = async () => Response.json({})',
+        'export { remove as DELETE, replace as PUT }',
+      ].join('\n'),
+    })
+
+    expect(statuses(result, 'wide-event')).toEqual({ 'GET /api/orders': 'pass', 'POST /api/orders': 'fail', 'DELETE /api/orders': 'pass', 'PUT /api/orders': 'fail' })
+    expect(statuses(result, 'context')).toEqual({ 'GET /api/orders': 'pass', 'POST /api/orders': 'fail', 'DELETE /api/orders': 'fail', 'PUT /api/orders': 'fail' })
+  })
+
+  it('judges each action a server module exports', async () => {
+    const result = await scanned('next', { next: '^16.0.0', evlog: '^2.0.0' }, {
+      'app/page.tsx': 'export default function Page() { return <main /> }\n',
+      'app/actions.ts': [
+        '\'use server\'',
+        'import { useLogger } from \'evlog/next\'',
+        'export async function createOrder() { useLogger().set({ order: { id: 1 } }) }',
+        'export const cancelOrder = async () => {}',
+      ].join('\n'),
+    })
+
+    const actions = Object.fromEntries(result.map.routes.filter(route => route.kind === 'server-action').map(route => [route.path, route.checks.context?.status]))
+    expect(actions).toEqual({ 'action:createOrder': 'pass', 'action:cancelOrder': 'fail' })
+  })
+
+  it('judges each method a TanStack Start route handles', async () => {
+    const result = await scanned('tanstack-start', { '@tanstack/react-start': '^1.0.0', 'evlog': '^2.0.0' }, {
+      'src/routes/api/orders.ts': [
+        'import { createFileRoute } from \'@tanstack/react-router\'',
+        'import { useRequest } from \'nitro/context\'',
+        'export const Route = createFileRoute(\'/api/orders\')({ server: { handlers: {',
+        '  GET: async () => { useRequest().context.log.set({ orders: { listed: true } }); return Response.json([]) },',
+        '  POST: async () => Response.json({}),',
+        '} } })',
+      ].join('\n'),
+    })
+
+    expect(statuses(result, 'context')).toEqual({ 'GET /api/orders': 'pass', 'POST /api/orders': 'fail' })
+  })
+
+  it('writes nothing about where a handler sits into the map', async () => {
+    const result = await scanned('express', EXPRESS_DEPS, {
+      'src/app.ts': [...EXPRESS_HEAD, 'app.get(\'/ok\', (req, res) => { res.json({}) })'].join('\n'),
+    })
+
+    expect(Object.keys(result.map.routes[0]!).sort()).toEqual(['checks', 'file', 'framework', 'handler', 'id', 'kind', 'method', 'path', 'score', 'sensitivity', 'suggestions'])
+  })
+})
+
+describe('the logger an integration parks on the request', () => {
+  const roots: string[] = []
+
+  async function fastify(dependencies: Record<string, string>, lines: string[]): Promise<ScanResult> {
+    const root = await mkdtemp(join(tmpdir(), 'evlog-cli-request-'))
+    roots.push(root)
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'shop', dependencies }), 'utf8')
+    await writeFile(join(root, 'src/app.ts'), lines.join('\n'), 'utf8')
+    return scan(await ctx(root, 'fastify'))
+  }
+
+  afterAll(async () => {
+    await Promise.all(roots.map(root => rm(root, { recursive: true, force: true })))
+  })
+
+  it('does not take Fastify\'s own request.log for evlog in an app without evlog', async () => {
+    const result = await fastify({ fastify: '^5.0.0' }, [
+      'import Fastify from \'fastify\'',
+      'const app = Fastify({ logger: true })',
+      'app.get(\'/orders\', async (request) => { request.log.info(\'listing orders\'); return [] })',
+    ])
+
+    expect(result.map.routes[0]!.checks['wide-event']).toMatchObject({ status: 'fail', message: 'evlog not installed — adopt evlog for wide events' })
+    expect(result.map.routes[0]!.score).toBe(45)
+  })
+
+  it('takes request.log for evlog once the app registers the plugin', async () => {
+    const result = await fastify({ fastify: '^5.0.0', evlog: '^2.0.0' }, [
+      'import Fastify from \'fastify\'',
+      'import { evlog } from \'evlog/fastify\'',
+      'const app = Fastify()',
+      'await app.register(evlog)',
+      'app.get(\'/orders\', async (request) => { request.log.info(\'listing orders\'); return [] })',
+    ])
+
+    expect(result.map.routes[0]!.checks['wide-event']?.status).toBe('pass')
+  })
+
+  it('credits request.evlog', async () => {
+    const result = await fastify({ fastify: '^5.0.0', evlog: '^2.0.0' }, [
+      'import Fastify from \'fastify\'',
+      'import { evlog } from \'evlog/fastify\'',
+      'const app = Fastify()',
+      'await app.register(evlog)',
+      'app.get(\'/orders\', async (request) => { request.evlog.set({ orders: { listed: true } }); return [] })',
+    ])
+
+    expect(result.map.routes[0]!.score).toBe(100)
+    expect(result.map.routes[0]!.event).toEqual({ fields: ['orders.listed'], audit: [] })
+  })
+})
+
+describe('the event an entry point carries', () => {
+  let root: string
+  let result: ScanResult
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'evlog-cli-event-'))
+    const files: Record<string, string> = {
+      'package.json': JSON.stringify({ name: 'shop', dependencies: { evlog: '^2.0.0', nuxt: '^4.0.0' } }),
+      'server/api/checkout.post.ts': [
+        'export default defineEventHandler(async (event) => {',
+        '  const log = useLogger(event)',
+        '  const cache = new Map()',
+        '  cache.set(\'k\', 1)',
+        '  log.set({ user: { id: 1, plan: \'pro\' }, cart: { items: 3 }, ...extra, [dynamic]: 1 })',
+        '  log.set({ user: { id: 1 }, total: 42 })',
+        '  log.set({ order: { id: 1, payment: { method: \'card\' } as const } } as Context)',
+        '  log.set({ shipping: { zone: \'eu\' } } satisfies Context)',
+        '  log.audit({ action: \'checkout.completed\', actor: { type: \'user\', id: 1 } })',
+        '  log.audit({ action: kind })',
+        '  log.audit({ [action]: \'refund.issued\' })',
+        '  log.audit({ action: \'order.refunded\' } as const)',
+        '  log.audit({ action: \'order.cancelled\' as const } satisfies AuditInput)',
+        '  return { ok: true }',
+        '})',
+      ].join('\n'),
+      'server/api/health.get.ts': 'export default defineEventHandler(() => ({ ok: true }))',
+    }
+    for (const [path, source] of Object.entries(files)) {
+      const file = join(root, path)
+      await mkdir(dirname(file), { recursive: true })
+      await writeFile(file, source, 'utf8')
+    }
+    result = await scan(await ctx(root, 'nuxt'))
+  })
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('lists the dotted paths log.set() writes, once each, and the literal audit actions', () => {
+    const checkout = result.map.routes.find(r => r.path === '/api/checkout')
+    expect(checkout?.event).toEqual({
+      fields: ['user.id', 'user.plan', 'cart.items', 'total', 'order.id', 'order.payment.method', 'shipping.zone'],
+      audit: ['checkout.completed', 'order.refunded', 'order.cancelled'],
+    })
+  })
+
+  it('leaves the event out of an entry point that sets nothing', () => {
+    expect(result.map.routes.find(r => r.path === '/api/health')).not.toHaveProperty('event')
   })
 })

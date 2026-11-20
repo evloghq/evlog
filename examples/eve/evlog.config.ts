@@ -4,7 +4,7 @@ import { createFsDrain } from 'evlog/fs'
 import { createDrainPipeline } from 'evlog/pipeline'
 
 /**
- * Settings for the support agent, read by `agent/hooks/evlog.ts` and by the
+ * Settings for the support agent, read by `agent/extensions/evlog.ts` and by the
  * evlog CLI.
  *
  * @see https://evlog.dev/cli/config

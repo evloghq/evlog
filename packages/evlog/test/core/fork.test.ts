@@ -126,6 +126,50 @@ describe('forkBackgroundLogger', () => {
       expect(setWarns.length).toBe(0)
     })
   })
+
+  it('passes the child to fn and drains it through middlewareOptions without storage', async () => {
+    const drain = vi.fn<(ctx: DrainContext) => void>()
+    const parent = createRequestLogger({ method: 'POST', path: '/orders', requestId: 'parent-req-id' })
+    let received: RequestLogger | undefined
+    let storeInFn: RequestLogger | undefined
+
+    await forkBackgroundLogger({
+      parent,
+      middlewareOptions: { method: 'POST', path: '/orders', drain },
+      label: 'send_receipt',
+      fn: (child) => {
+        received = child
+        storeInFn = storage.getStore()
+        child.set({ receipt: { sent: true } })
+      },
+    })
+
+    const event = defined(drain.mock.calls[0]?.[0].event, 'child event')
+    expect(event).toMatchObject({ operation: 'send_receipt', _parentRequestId: 'parent-req-id', receipt: { sent: true } })
+    expect(defined(received, 'fn argument').getContext().requestId).toBe(event.requestId)
+    expect(received).not.toBe(parent)
+    expect(storeInFn).toBeUndefined()
+  })
+
+  it('passes fn the same child useLogger() resolves to when storage is set', async () => {
+    const parent = createRequestLogger({ method: 'GET', path: '/a', requestId: 'parent-req-id' })
+    let received: RequestLogger | undefined
+    let fromStorage: RequestLogger | undefined
+
+    await forkBackgroundLogger({
+      storage,
+      parent,
+      middlewareOptions: { method: 'GET', path: '/a', drain: () => {} },
+      label: 'op',
+      fn: (child) => {
+        received = child
+        fromStorage = storage.getStore()
+      },
+    })
+
+    expect(received).toBeDefined()
+    expect(fromStorage).toBe(received)
+  })
 })
 
 describe('log.fork() lifetime', () => {

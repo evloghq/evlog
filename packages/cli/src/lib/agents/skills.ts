@@ -190,7 +190,8 @@ export function runSkills(
         resolve({ ok: true })
         return
       }
-      const line = stderr.trim().split('\n').filter(Boolean).at(-1)
+      /* npm closes a run with its update notice, which is not why it failed. */
+      const line = stderr.split('\n').map(text => text.trim()).filter(text => text && !text.startsWith('npm notice')).at(-1)
       resolve({ ok: false, error: line ?? `npx skills add exited ${code}` })
     })
   })

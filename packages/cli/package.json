@@ -1,6 +1,6 @@
 {
   "name": "@evlog/cli",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "description": "The official command line for evlog",
   "author": "HugoRCD <contact@evlog.dev>",
   "homepage": "https://evlog.dev",
@@ -51,14 +51,15 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clack/prompts": "^1.8.1",
+    "@clack/prompts": "^1.9.0",
     "@evlog/telemetry": "workspace:*",
     "citty": "^0.2.2",
-    "oxc-parser": "^0.157.0"
+    "oxc-parser": "^0.158.0"
   },
   "peerDependencies": {
     "evlog": "^2.31.0 || >=3.0.0-beta.0"

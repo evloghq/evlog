@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { defined } from '../helpers/defined'
 import { getFetchCall } from '../helpers/fetch'
-import { EVLOG_VERSION } from '../../src/shared/http'
+import { DrainDeliveryError, EVLOG_VERSION } from '../../src/shared/http'
+import { createDrainPipeline } from '../../src/pipeline'
 import { sendBatchToSentry, sendToSentry, toSentryErrorEvent, toSentryLog, createSentryDrain } from '../../src/adapters/sentry'
 
 describe('sentry adapter', () => {
@@ -533,7 +534,7 @@ describe('sentry adapter', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       fetchSpy
         .mockResolvedValueOnce(new Response(null, { status: 200 }))
-        .mockResolvedValueOnce(new Response('Too Many Requests', { status: 429, statusText: 'Too Many Requests' }))
+        .mockResolvedValueOnce(new Response('Service Unavailable', { status: 503, statusText: 'Service Unavailable' }))
 
       await expect(sendBatchToSentry([
         createTestEvent({ level: 'error', error: { name: 'Error', message: 'first' } }),
@@ -568,11 +569,147 @@ describe('sentry adapter', () => {
       expect(fetchSpy).toHaveBeenCalledTimes(6)
     })
 
+    it('keeps sending the other issues when Sentry rejects one', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      fetchSpy
+        .mockResolvedValueOnce(new Response(null, { status: 200 }))
+        .mockResolvedValueOnce(new Response('invalid event', { status: 400 }))
+        .mockResolvedValue(new Response(null, { status: 200 }))
+
+      await sendBatchToSentry(Array.from({ length: 3 }, () => createTestEvent({ level: 'error' })), { dsn, issues: true, retries: 0 })
+
+      expect(envelopes().map(e => e.item.type)).toEqual(['log', 'event', 'event', 'event'])
+      expect(consoleSpy).toHaveBeenCalledWith('[evlog/sentry] Sentry rejected an issue:', expect.any(DrainDeliveryError))
+    })
+
     it('reads issues from the drain config', async () => {
       const drain = createSentryDrain({ dsn, issues: true })
       await drain({ event: createTestEvent({ level: 'error', traceId }) })
 
       expect(envelopes().map(e => e.item.type)).toEqual(['log', 'event'])
+    })
+  })
+
+  describe('rate limits', () => {
+    function itemTypes(): string[] {
+      return fetchSpy.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body).split('\n')[1] ?? '').type)
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('skips issues while Sentry limits error events, keeps sending logs, and resumes after the limit', async () => {
+      const dsn = 'https://public@o0.ingest.sentry.io/1001'
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      fetchSpy
+        .mockResolvedValueOnce(new Response(null, { status: 200 }))
+        .mockResolvedValueOnce(new Response('limited', { status: 429, headers: { 'X-Sentry-Rate-Limits': '60:error:organization:quota' } }))
+        .mockResolvedValue(new Response(null, { status: 200 }))
+      const burst = () => Array.from({ length: 50 }, () => createTestEvent({ level: 'error' }))
+
+      await sendBatchToSentry(burst(), { dsn, issues: true, retries: 0 })
+      expect(itemTypes()).toEqual(['log', 'event'])
+
+      await vi.advanceTimersByTimeAsync(30_000)
+      await sendBatchToSentry(burst(), { dsn, issues: true, retries: 0 })
+      expect(itemTypes()).toEqual(['log', 'event', 'log'])
+      expect(warnSpy).toHaveBeenCalledOnce()
+      expect(warnSpy.mock.calls[0]?.[0]).toContain('skipped 49 issue(s)')
+
+      await vi.advanceTimersByTimeAsync(30_000)
+      await sendBatchToSentry([createTestEvent({ level: 'error' })], { dsn, issues: true, retries: 0 })
+      expect(itemTypes()).toEqual(['log', 'event', 'log', 'log', 'event'])
+    })
+
+    it('reads a rate limit announced on an accepted envelope', async () => {
+      const dsn = 'https://public@o0.ingest.sentry.io/1002'
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      fetchSpy
+        .mockResolvedValueOnce(new Response(null, { status: 200, headers: { 'X-Sentry-Rate-Limits': '120::organization' } }))
+        .mockResolvedValue(new Response(null, { status: 200 }))
+
+      await sendBatchToSentry([createTestEvent({ level: 'error' })], { dsn, issues: true })
+
+      expect(itemTypes()).toEqual(['log'])
+      const error = await sendBatchToSentry([createTestEvent()], { dsn }).catch(e => e)
+      expect(error).toBeInstanceOf(DrainDeliveryError)
+      expect(error).toMatchObject({ retryable: true, retryAfterMs: 120_000 })
+      expect(fetchSpy).toHaveBeenCalledOnce()
+    })
+
+    it('holds a pipeline batch while logs are limited and delivers it once the limit expires', async () => {
+      const dsn = 'https://public@o0.ingest.sentry.io/1003'
+      fetchSpy
+        .mockResolvedValueOnce(new Response('limited', { status: 429, headers: { 'X-Sentry-Rate-Limits': '90:log_item:project' } }))
+        .mockResolvedValue(new Response(null, { status: 200 }))
+      const onDropped = vi.fn()
+      const drain = createDrainPipeline<{ event: WideEvent }>({ batch: { size: 1 }, onDropped })(
+        events => sendBatchToSentry(events.map(c => c.event), { dsn, retries: 0 }),
+      )
+
+      drain({ event: createTestEvent({ requestId: 'kept' }) })
+      await vi.advanceTimersByTimeAsync(89_999)
+      expect(fetchSpy).toHaveBeenCalledOnce()
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+      expect(onDropped).not.toHaveBeenCalled()
+    })
+
+    it('honours a fractional rate-limit delay', async () => {
+      const dsn = 'https://public@o0.ingest.sentry.io/1004'
+      fetchSpy.mockResolvedValueOnce(new Response(null, { status: 200, headers: { 'X-Sentry-Rate-Limits': '0.5:log_item:project' } }))
+
+      await sendBatchToSentry([createTestEvent()], { dsn })
+      await expect(sendBatchToSentry([createTestEvent()], { dsn })).rejects.toMatchObject({ retryAfterMs: 500 })
+      expect(fetchSpy).toHaveBeenCalledOnce()
+
+      await vi.advanceTimersByTimeAsync(500)
+      await sendBatchToSentry([createTestEvent()], { dsn })
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not retry into a limit announced on a 429, even with transport retries on', async () => {
+      const dsn = 'https://public@o0.ingest.sentry.io/1005'
+      fetchSpy
+        .mockResolvedValueOnce(new Response('limited', { status: 429, headers: { 'X-Sentry-Rate-Limits': '90:log_item:project' } }))
+        .mockResolvedValue(new Response(null, { status: 200 }))
+
+      const sending = sendBatchToSentry([createTestEvent()], { dsn, retries: 2 }).catch(e => e)
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(await sending).toMatchObject({ status: 429, retryable: true, retryAfterMs: 90_000 })
+      expect(fetchSpy).toHaveBeenCalledOnce()
+    })
+
+    it('does not retry into a limit another request announced while it waited', async () => {
+      const dsn = 'https://public@o0.ingest.sentry.io/1007'
+      fetchSpy
+        .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+        .mockResolvedValueOnce(new Response('limited', { status: 429, headers: { 'X-Sentry-Rate-Limits': '90:log_item:project' } }))
+        .mockResolvedValue(new Response(null, { status: 200 }))
+
+      const first = sendBatchToSentry([createTestEvent()], { dsn, retries: 2 }).catch(e => e)
+      await vi.advanceTimersByTimeAsync(0)
+      const second = sendBatchToSentry([createTestEvent()], { dsn, retries: 0 }).catch(e => e)
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(await second).toMatchObject({ status: 429, retryAfterMs: 90_000 })
+      expect(await first).toMatchObject({ retryable: true })
+      expect((await first).retryAfterMs).toBeGreaterThan(89_000)
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps a 400 a rejection when it also announces a limit', async () => {
+      const dsn = 'https://public@o0.ingest.sentry.io/1006'
+      fetchSpy.mockResolvedValueOnce(new Response('bad envelope', { status: 400, headers: { 'X-Sentry-Rate-Limits': '60:log_item:project' } }))
+
+      await expect(sendBatchToSentry([createTestEvent()], { dsn, retries: 0 })).rejects.toMatchObject({ status: 400, retryable: false })
     })
   })
 

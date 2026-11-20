@@ -1,11 +1,18 @@
-import type { AuditableLogger } from '../../audit'
+import type { NitroRequestLogger } from '../../nitro'
+import { resolveNitroRequestLogger } from '../../shared/globalRegistry'
 import type { FieldContext, ServerEvent } from '../../types'
 
 /**
- * Returns the request logger attached to the given server event.
+ * Returns the request logger of the current Nitro or Nuxt request.
+ *
+ * Without `event`, it reads the request from Nitro's async context, which needs
+ * `experimental: { asyncContext: true }` in the Nitro config (`nitro.experimental`
+ * in `nuxt.config.ts`) and runs on Node and runtimes with `AsyncLocalStorage`.
+ * Passing `event` works everywhere.
  *
  * @param service - Optional service name to override the default service.
- * @throws Error if the logger is not initialized on the event context.
+ * @throws Error if no logger is attached to the request, or if `event` is omitted
+ *   and Nitro's async context holds no request.
  *
  * @example
  * export default defineEventHandler((event) => {
@@ -31,14 +38,15 @@ import type { FieldContext, ServerEvent } from '../../types'
  * log.set({ user: { id: '123', plan: 'pro' } }) // OK
  * log.set({ foo: 'bar' })                        // TS error
  */
-export function useLogger<T extends object = Record<string, unknown>>(event: ServerEvent, service?: string): AuditableLogger<T> {
-  const log = event.context.log as AuditableLogger<T> | undefined
+export function useLogger<T extends object = Record<string, unknown>>(event?: ServerEvent, service?: string): NitroRequestLogger<T> {
+  const log = (event ? event.context.log : resolveNitroRequestLogger()) as NitroRequestLogger<T> | undefined
 
   if (!log) {
-    throw new Error(
-      '[evlog] Logger not initialized. Make sure the evlog Nitro plugin is registered. '
-      + 'If using Nuxt, add "evlog" to your modules.',
-    )
+    throw new Error(event
+      ? '[evlog] Logger not initialized. Make sure the evlog Nitro plugin is registered. '
+      + 'If using Nuxt, add "evlog" to your modules.'
+      : '[evlog] useLogger() without an event needs Nitro\'s request context: set `experimental: { asyncContext: true }` '
+      + 'in nitro.config.ts (`nitro.experimental` in nuxt.config.ts), or pass the event: useLogger(event).')
   }
 
   if (service) {

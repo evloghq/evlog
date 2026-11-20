@@ -1,5 +1,27 @@
 # @evlog/telemetry
 
+## 1.0.0-beta.1
+
+### Minor Changes
+
+- [#1052](https://github.com/evloghq/evlog/pull/1052) [`777e3bb`](https://github.com/evloghq/evlog/commit/777e3bbfb9f9433ee539393d6bf0f37300ef8ff7) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `run()` writes every event to the on-disk outbox and POSTs only when the last successful flush is older than 15 minutes (60 minutes in CI) or 20 events have queued, capped at 50 per POST. Failed uploads stay on disk for the next command. `flush()` still sends immediately. Override the window with `flushIntervalMs` or `EVLOG_TELEMETRY_FLUSH_INTERVAL_MS`. `createGitHubActionsTelemetry()` keeps flushing after every `run()`, since runners discard the outbox when the job ends.
+
+### Patch Changes
+
+- [#1059](https://github.com/evloghq/evlog/pull/1059) [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035) Thanks [@HugoRCD](https://github.com/HugoRCD)! - New `telemetry.fail(code?)` for a command that handles its own failure: it prints the error, sets an exit code and returns, so the run used to be recorded as `outcome: "success"`. Call it where the error is handled and the event carries `outcome: "error"` with `code` as its `errorCode`.
+
+  The evlog CLI calls it for every error it reports, so `evlog logs` with no log directory, `evlog config` on an invalid file and a mistyped flag are sent as errors with their `cli.*` code. A failed `--min-score` or `--baseline` gate stays a successful run with `mapGateFailed: true`.
+
+- [#1059](https://github.com/evloghq/evlog/pull/1059) [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Telemetry now does what its docs say.
+
+  - The run that opts out is no longer queued: `telemetry disable`, or `disableTelemetry()` called inside a run, used to purge the outbox and then write its own event to it. `disableTelemetry()` turns off every handle created for the tool, and a `flush()` already sending stops at the batch in flight.
+  - `EVLOG_TELEMETRY_DEBUG=1` prints each run's event as the run ends and makes no request. The event is not queued either. It used to print at the next flush, and that flush sent the events.
+  - An endpoint that never answers no longer keeps the process alive for ten seconds. The drain closes its connection at the 400 ms timeout. It no longer follows redirects, so `endpoint` has to be the final URL.
+  - `DO_NOT_TRACK=true`, `yes` and `on` opt out like `1`, and `EVLOG_TELEMETRY=false`, `no` and `off` like `0`.
+  - `withTelemetry()` records only the flags a command declares. An undeclared flag used to be sent by name, and a positional as `<set>`.
+  - New `bin` option: the command people type, when it is not `name`. The first-run notice prints `<bin> telemetry disable`, so the evlog CLI's notice now says `evlog telemetry disable`, not `evlog-cli telemetry disable`.
+  - `evlog telemetry status` lists the allowlisted `init*`, `map*` and `logs*` values. The fields `evlog logs` records are documented.
+
 ## 1.0.0-beta.0
 
 ### Major Changes
@@ -11,6 +33,28 @@
 ### Patch Changes
 
 - [#860](https://github.com/evloghq/evlog/pull/860) [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21) Thanks [@evlogai](https://github.com/apps/evlogai)! - The published packages no longer ship `.map` files. They pointed to `src/`, which is not part of the package, so they only added to the install size. `evlog` drops from 330 files (about 2.0 MB unpacked) to 178 files (about 865 KB). No runtime or API change.
+
+## 0.4.0
+
+### Minor Changes
+
+- [#1052](https://github.com/evloghq/evlog/pull/1052) [`777e3bb`](https://github.com/evloghq/evlog/commit/777e3bbfb9f9433ee539393d6bf0f37300ef8ff7) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `run()` writes every event to the on-disk outbox and POSTs only when the last successful flush is older than 15 minutes (60 minutes in CI) or 20 events have queued, capped at 50 per POST. Failed uploads stay on disk for the next command. `flush()` still sends immediately. Override the window with `flushIntervalMs` or `EVLOG_TELEMETRY_FLUSH_INTERVAL_MS`. `createGitHubActionsTelemetry()` keeps flushing after every `run()`, since runners discard the outbox when the job ends.
+
+### Patch Changes
+
+- [#1059](https://github.com/evloghq/evlog/pull/1059) [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035) Thanks [@HugoRCD](https://github.com/HugoRCD)! - New `telemetry.fail(code?)` for a command that handles its own failure: it prints the error, sets an exit code and returns, so the run used to be recorded as `outcome: "success"`. Call it where the error is handled and the event carries `outcome: "error"` with `code` as its `errorCode`.
+
+  The evlog CLI calls it for every error it reports, so `evlog logs` with no log directory, `evlog config` on an invalid file and a mistyped flag are sent as errors with their `cli.*` code. A failed `--min-score` or `--baseline` gate stays a successful run with `mapGateFailed: true`.
+
+- [#1059](https://github.com/evloghq/evlog/pull/1059) [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Telemetry now does what its docs say.
+
+  - The run that opts out is no longer queued: `telemetry disable`, or `disableTelemetry()` called inside a run, used to purge the outbox and then write its own event to it. `disableTelemetry()` turns off every handle created for the tool, and a `flush()` already sending stops at the batch in flight.
+  - `EVLOG_TELEMETRY_DEBUG=1` prints each run's event as the run ends and makes no request. The event is not queued either. It used to print at the next flush, and that flush sent the events.
+  - An endpoint that never answers no longer keeps the process alive for ten seconds. The drain closes its connection at the 400 ms timeout. It no longer follows redirects, so `endpoint` has to be the final URL.
+  - `DO_NOT_TRACK=true`, `yes` and `on` opt out like `1`, and `EVLOG_TELEMETRY=false`, `no` and `off` like `0`.
+  - `withTelemetry()` records only the flags a command declares. An undeclared flag used to be sent by name, and a positional as `<set>`.
+  - New `bin` option: the command people type, when it is not `name`. The first-run notice prints `<bin> telemetry disable`, so the evlog CLI's notice now says `evlog telemetry disable`, not `evlog-cli telemetry disable`.
+  - `evlog telemetry status` lists the allowlisted `init*`, `map*` and `logs*` values. The fields `evlog logs` records are documented.
 
 ## 0.3.5
 

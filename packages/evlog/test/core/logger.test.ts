@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createError as h3CreateError } from 'h3'
+import { audit } from '../../src/audit'
 import { EvlogError, createError } from '../../src/error'
 import { createLogger, createRequestLogger, getEnvironment, initLogger, isEnabled, log } from '../../src/logger'
 import { withFakeTimers } from '../helpers/timers'
@@ -283,6 +284,29 @@ describe('log', () => {
     expect(JSON.stringify(event)).not.toContain('tok_secret')
   })
 
+  it.each([
+    ['an Error', (error: Error) => log.error(error)],
+    ['an object event', (error: Error) => log.error({ action: 'checkout', error })],
+    ['an h3 wrapper', (error: Error) => log.error({ action: 'checkout', error: h3CreateError(error) })],
+  ])('logs the data and internal values an error\'s own toJSON rewrites (%s)', (_name, logIt) => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, redact: false, drain })
+    class PaymentError extends Error {
+      data = { cardNumber: '4242424242424242', orderId: 'ord_1' }
+      internal = { token: 'tok_secret' }
+      toJSON() {
+        return { name: this.name, message: this.message, data: { orderId: this.data.orderId, cardNumber: '[REDACTED]' }, internal: undefined }
+      }
+    }
+    logIt(new PaymentError('Declined'))
+
+    const event = defined(findEventViaDrain(drain, event => event.level === 'error'))
+    expect(event.error).toMatchObject({ message: 'Declined', data: { orderId: 'ord_1', cardNumber: '[REDACTED]' } })
+    expect(event.error).not.toHaveProperty('internal')
+    expect(JSON.stringify(event)).not.toContain('4242424242424242')
+    expect(JSON.stringify(event)).not.toContain('tok_secret')
+  })
+
   it('keeps the data an h3 error carries', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, redact: false, drain })
@@ -493,6 +517,94 @@ describe('minLevel', () => {
     expect(infoSpy).not.toHaveBeenCalled()
   })
 })
+describe('sampling.minLevel', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('drops wide events below the floor and keeps the rest', () => {
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' } })
+
+    expect(createRequestLogger({ path: '/info' }).emit()).toBeNull()
+    expect(createLogger({ job: 'sync' }).emit()).toBeNull()
+
+    const warnLogger = createRequestLogger({ path: '/warn' })
+    warnLogger.warn('slow upstream')
+    expect(defined(warnLogger.emit()).level).toBe('warn')
+  })
+
+  it('always emits error and fatal events', () => {
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' } })
+
+    const errorLogger = createRequestLogger({ path: '/error' })
+    errorLogger.error(new Error('boom'))
+    expect(defined(errorLogger.emit()).level).toBe('error')
+
+    const fatalLogger = createRequestLogger({ path: '/fatal' })
+    fatalLogger.fatal('down')
+    expect(defined(fatalLogger.emit()).level).toBe('fatal')
+  })
+
+  it('emits error and fatal events when the floor arrives untyped, as from an env variable', () => {
+    for (const floor of ['WARN', 'fatal']) {
+      initLogger({ pretty: false, sampling: { minLevel: floor as 'warn' } })
+
+      const errorLogger = createRequestLogger({ path: '/error' })
+      errorLogger.error(new Error('boom'))
+      expect(defined(errorLogger.emit()).level).toBe('error')
+
+      const fatalLogger = createRequestLogger({ path: '/fatal' })
+      fatalLogger.fatal('down')
+      expect(defined(fatalLogger.emit()).level).toBe('fatal')
+    }
+  })
+
+  it('runs before sampling.keep, so a keep rule does not rescue an event below the floor', () => {
+    initLogger({ pretty: false, sampling: { minLevel: 'warn', keep: [{ duration: 0 }] } })
+
+    const logger = createRequestLogger({ path: '/slow' })
+    expect(logger.emit({ _durationMs: 5000 })).toBeNull()
+  })
+
+  it('runs before a tail-sampling force keep from middleware', () => {
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' } })
+
+    expect(createRequestLogger({ path: '/kept' }).emit({ _forceKeep: true })).toBeNull()
+  })
+
+  it('still emits audit events below the floor', () => {
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' } })
+
+    const event = defined(audit({
+      action: 'invoice.refund',
+      actor: { type: 'user', id: 'u1' },
+      target: { type: 'invoice', id: 'inv_1' },
+      outcome: 'success',
+    }))
+    expect(event.level).toBe('info')
+  })
+
+  it('does not apply to the global log API', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' }, drain })
+
+    log.info({ action: 'checkout' })
+    expect(drain).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps every level when unset', () => {
+    initLogger({ pretty: false })
+
+    expect(defined(createRequestLogger({ path: '/info' }).emit()).level).toBe('info')
+  })
+})
+
 describe('createLogger', () => {
   let infoSpy: ReturnType<typeof vi.spyOn>
 
@@ -537,6 +649,23 @@ describe('createLogger', () => {
     expect(event.error).toMatchObject({
       message: 'Upstream request failed',
       internal: { code: 'UPSTREAM_TIMEOUT' },
+    })
+  })
+
+  it('replaces the fields of an earlier error() call and keeps the error fields set() added', () => {
+    const logger = createLogger()
+    logger.set({ error: { step: 'receipt' } })
+    logger.error(createError({ message: 'Receipt email not sent', code: 'RECEIPT_EMAIL_FAILED', fix: 'The receipt job retries it', cause: new Error('ETIMEDOUT') }))
+    logger.error(createError({ message: 'Stock sync failed', code: 'STOCK_SYNC_FAILED', why: 'Warehouse API returned 503' }))
+
+    const event = defined(logger.emit(), 'emitted event')
+    const { stack: _, ...error } = event.error as Record<string, unknown>
+    expect(error).toEqual({
+      step: 'receipt',
+      name: 'EvlogError',
+      message: 'Stock sync failed',
+      code: 'STOCK_SYNC_FAILED',
+      why: 'Warehouse API returned 503',
     })
   })
 
@@ -1757,8 +1886,8 @@ describe('pretty-print tool input serialization', () => {
     circular.self = circular
     const logger = createRequestLogger({ method: 'GET', path: '/ai', requestId: 'r1' })
     logger.set({
-      ai: {
-        toolCalls: [
+      gen_ai: {
+        tool_calls: [
           { name: 'big', input: { n: 1n } },
           { name: 'circ', input: circular },
         ],
@@ -1781,10 +1910,10 @@ describe('pretty-print captured prompt and output', () => {
   it('renders captured prompt and output as tree lines', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r1' })
     logger.set({
-      ai: {
+      gen_ai: {
         calls: 1,
-        prompt: '[system] You are helpful\n\n[user] Hi there',
-        output: 'Hello! How can I help?',
+        input: { text: '[system] You are helpful\n\n[user] Hi there' },
+        output: { text: 'Hello! How can I help?' },
       },
     })
     logger.emit()
@@ -1792,19 +1921,28 @@ describe('pretty-print captured prompt and output', () => {
     const logSpy = vi.mocked(console.log)
     const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
 
-    expect(output).toContain('ai.prompt:')
+    expect(output).toContain('gen_ai.input:')
     expect(output).toContain('[system] You are helpful')
     expect(output).toContain('[user] Hi there')
-    expect(output).toContain('ai.output:')
+    expect(output).toContain('gen_ai.output:')
     expect(output).toContain('Hello! How can I help?')
+  })
+
+  it('names the agent and the conversation on the gen_ai line', () => {
+    const logger = createRequestLogger({ method: 'EVE', path: '/sessions/wrun_A/turns/turn_1', requestId: 'r3' })
+    logger.set({ gen_ai: { calls: 2, request: { model: 'anthropic/claude-opus-5.5' }, agent: { name: 'support' }, conversation: { id: 'wrun_A' } } })
+    logger.emit()
+
+    const output = vi.mocked(console.log).mock.calls.map(call => String(call[0])).join('\n')
+    expect(output).toMatch(/gen_ai:.*anthropic\/claude-opus-5\.5.*2 calls.*agent support.*conversation wrun_A/)
   })
 
   it('truncates long captured text in the console', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r2' })
     const longLine = 'x'.repeat(300)
     logger.set({
-      ai: {
-        output: longLine,
+      gen_ai: {
+        output: { text: longLine },
       },
     })
     logger.emit()
@@ -1812,7 +1950,7 @@ describe('pretty-print captured prompt and output', () => {
     const logSpy = vi.mocked(console.log)
     const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
 
-    expect(output).toContain('ai.output:')
+    expect(output).toContain('gen_ai.output:')
     expect(output).toContain(`${'x'.repeat(160)}…`)
     expect(output).not.toContain('x'.repeat(200))
   })
@@ -1821,8 +1959,8 @@ describe('pretty-print captured prompt and output', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r3' })
     const manyLines = Array.from({ length: 12 }, (_, i) => `line ${i}`)
     logger.set({
-      ai: {
-        prompt: manyLines.join('\n'),
+      gen_ai: {
+        input: { text: manyLines.join('\n') },
       },
     })
     logger.emit()
@@ -1836,15 +1974,15 @@ describe('pretty-print captured prompt and output', () => {
   it('omits entries when nothing was captured', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r4' })
     logger.set({
-      ai: { calls: 1 },
+      gen_ai: { calls: 1 },
     })
     logger.emit()
 
     const logSpy = vi.mocked(console.log)
     const output = logSpy.mock.calls.map(call => String(call[0])).join('\n')
 
-    expect(output).not.toContain('ai.prompt:')
-    expect(output).not.toContain('ai.output:')
+    expect(output).not.toContain('gen_ai.input:')
+    expect(output).not.toContain('gen_ai.output:')
   })
 })
 
@@ -1935,10 +2073,10 @@ describe('pretty-print control characters', () => {
   it('escapes control characters in AI fields', () => {
     const logger = createRequestLogger({ method: 'POST', path: '/chat', requestId: 'r3' })
     logger.set({
-      ai: {
-        model: 'gpt\x1B[2K',
-        toolCalls: [{ name: 'search\r', input: { q: 'x' } }],
-        prompt: '[user] hi\x1B[2K\rthere',
+      gen_ai: {
+        request: { model: 'gpt\x1B[2K' },
+        tool_calls: [{ name: 'search\r', input: { q: 'x' } }],
+        input: { text: '[user] hi\x1B[2K\rthere' },
       },
     })
     logger.emit()

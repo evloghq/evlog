@@ -62,7 +62,7 @@ export interface PostHogConfig {
    * Record shape. Default: `'compact'`.
    *
    * In `'events'` mode, `'compact'` flattens nested properties into dotted
-   * keys (`ai.costUsd`), which is what the PostHog UI filters and breaks down
+   * keys (`gen_ai.usage.cost`), which is what the PostHog UI filters and breaks down
    * by — a nested object is one opaque property there.
    *
    * @see {@link OTLPRecordShape}
@@ -243,6 +243,8 @@ export function createPostHogDrain(overrides?: Partial<PostHogConfig>) {
       return config as PostHogConfig
     },
     send: sendBatchToPostHog,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToPostHog(events, { ...config, retries: config.retries ?? 0 }),
   })
 }
 

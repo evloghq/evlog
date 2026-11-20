@@ -38,7 +38,7 @@ jobs:
       # rather than failing on unauthenticated GitHub calls.
       HAS_VERCEL: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_PROJECT_ID != '' }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -48,10 +48,10 @@ jobs:
           node-version: '24'
           filters: '--filter=evi...'
 
-      # apps/evi resolves `evlog/eve` and `evlog/posthog` through the workspace
-      # link, which points at dist.
-      - name: Build evlog
-        run: pnpm --filter evlog run build
+      # apps/evi resolves `evlog/posthog` and `@evlog/eve` through the workspace
+      # links, which point at dist.
+      - name: Build evlog and @evlog/eve
+        run: pnpm exec turbo run build --filter=evlog --filter=@evlog/eve
 
       # Evi reaches GitHub through Vercel Connect, which authenticates with a
       # Vercel OIDC token. That token is issued to a deployment or to a linked
@@ -73,7 +73,7 @@ jobs:
           fi
         env:
           # renovate: datasource=npm depName=vercel
-          VERCEL_PULL_CLI_VERSION: 65.12.1
+          VERCEL_PULL_CLI_VERSION: 65.16.0
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

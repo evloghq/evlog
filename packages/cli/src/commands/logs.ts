@@ -8,10 +8,10 @@ import type { CliContext } from '../core/context'
 import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
 import { loadCliConfig } from '../lib/config'
-import { cliErrors } from '../lib/errors'
+import { cliErrors, isUsageError } from '../lib/errors'
 import { flagValues } from '../lib/flags'
-import { buildQuery, computeStats, select } from '../lib/logs/query'
-import type { LogsArgs, LogsQuery } from '../lib/logs/query'
+import { buildQuery, createSelection, timeOf } from '../lib/logs/query'
+import type { LogsArgs, LogsQuery, Selected } from '../lib/logs/query'
 import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'
 import type { LogsResult, Sourced } from '../lib/logs/render'
 import { findConfiguredFsDrain, findLogsSink, prettyPath, resolveProject } from '../lib/project'
@@ -100,8 +100,6 @@ async function fetchEvents(url: string, fetchFn: typeof fetch, signal?: AbortSig
   return events as WideEvent[]
 }
 
-const timeOf = (event: WideEvent): number => Date.parse(event.timestamp) || 0
-
 /** Read the events the query asks for. Pure with respect to the context: nothing is written. */
 export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsOptions = {}): Promise<LogsResult> {
   /* `logs.dir` and `logs.limit` stand in for the flags, so a project that
@@ -118,31 +116,37 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
     return query.filter(event)
   }
 
-  let all: Sourced[]
+  /* The endpoint answers with every event at once, so those are in memory
+     either way; the files are read one event at a time. */
+  let fetched: WideEvent[] = []
+  let selected: Selected<Sourced>
   let sources: string[]
   if (options.url) {
-    all = (await fetchEvents(options.url, fetchFn, options.signal)).filter(inRange)
+    fetched = (await fetchEvents(options.url, fetchFn, options.signal)).filter(inRange)
+    const selection = createSelection<Sourced>(query)
+    for (const event of fetched) selection.add(event)
+    selected = selection.done()
     sources = [options.url]
   } else {
     const found = await resolveLogsSources(ctx, dir)
     if (!options.follow && !found.some(source => existsSync(source.dir))) throw cliErrors.LOGS_NO_SINK({ cwd: ctx.cwd })
-    all = []
+    const selection = createSelection<Sourced>(query, found.length > 1)
     for (const source of found) {
       for await (const event of readFsLogs({ dir: source.dir, since: query.since, until: query.until, level: query.level, filter: query.filter })) {
-        all.push(tag(event, found.length > 1 ? source.name : undefined))
+        selection.add(tag(event, found.length > 1 ? source.name : undefined))
       }
     }
-    if (found.length > 1) all.sort((a, b) => timeOf(a) - timeOf(b))
+    selected = selection.done()
     sources = found.map(source => prettyPath(ctx.cwd, source.dir))
   }
-  const result: LogsResult = { sources, query, matched: all.length, events: select(all, query), all }
+  const result: LogsResult = { sources, query, ...selected }
 
   if (options.follow) {
     /* `tail -f` shows the end of the file before it waits, and the caller only
        renders what it is handed, so the events already found go through the
        same path as the ones still to come. */
     for (const event of result.events) options.onEvent?.(event)
-    if (options.url) await followUrl(options.url, all, inRange, options)
+    if (options.url) await followUrl(options.url, fetched, inRange, options)
     else await followDirs(await resolveLogsSources(ctx, dir), query, options)
   }
   return result
@@ -260,6 +264,7 @@ export default defineEvlogCommand('logs', {
   meta: { name: 'logs' },
   args: {
     what: { type: 'positional', required: false, description: '`errors`, `slow`, `stats`, or a request id to show in full' },
+    session: { type: 'string', description: 'Only one AI conversation: its gen_ai.conversation.id, such as an eve session id' },
     follow: { type: 'boolean', alias: 'f', description: 'Keep reading as the app writes, like tail -f' },
     since: { type: 'string', description: 'Only events after this: a duration back (15m, 2h, 3d) or a date' },
     until: { type: 'string', description: 'Only events before this: a duration back or a date' },
@@ -299,8 +304,7 @@ export default defineEvlogCommand('logs', {
           json: { error: { code: error.code, message: error.message, why: error.why, fix: error.fix } },
           human: error.fix ? `${error.message}\n→ ${error.fix}` : error.message,
         })
-        const failed = error.code === cliErrors.LOGS_NO_SINK.code || error.code === cliErrors.LOGS_URL_UNREACHABLE.code
-        ui.exit(failed ? EXIT_FAIL : EXIT_USAGE)
+        ui.exit(isUsageError(error) ? EXIT_USAGE : EXIT_FAIL)
         return
       }
       throw error
@@ -320,7 +324,7 @@ export default defineEvlogCommand('logs', {
         view: result.query.view,
         count: result.events.length,
         matched: result.matched,
-        ...(result.query.view === 'stats' ? { stats: computeStats(result.all) } : { events: result.events }),
+        ...(result.stats ? { stats: result.stats } : { events: result.events }),
       },
       human: args.json ? undefined : formatLogsReport(cli, result),
     })

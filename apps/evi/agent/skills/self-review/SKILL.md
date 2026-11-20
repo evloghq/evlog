@@ -1,6 +1,6 @@
 ---
 name: self-review
-description: "Weekly pass over the evlog repository and Evi's own surface, in two halves: what has drifted out of coherence (a capability wired but never consumed, code contradicting a written guide, a description promising a tool the allowlist lacks), and what is missing (a capability worth having, a manual step worth automating, a gap in evlog users keep hitting). Load this when the self-review schedule fires, or when Hugo asks for a self-review, an audit, ideas for what Evi should do next, or what is inconsistent in the repo."
+description: Weekly review of the evlog repository and Evi's own surface, covering what has drifted out of coherence and what is missing. Load this when the self-review schedule fires, or when Hugo asks for a self-review, an audit of Evi or the repository, ideas for what Evi should do next, a convention drift review, or what is inconsistent in the repo.
 ---
 
 # Self review
@@ -112,7 +112,7 @@ These are pre-grounded: someone already did the reasoning. An entry that still h
 
 The failure mode of this run is a confident output that is wrong, and the expensive version is claiming something does not exist.
 
-- **Absence is proven by listing, never by recall.** Before writing that a tool, option, field or export is missing, enumerate the real surface: `connection_search` for a connection's tools, the file for an exports map, the docs index for a page, `eve registry list` for an integration. A name you do not remember seeing is not a name that is absent.
+- **Absence is proven by listing, never by recall.** Before writing that a tool, option, field or export is missing, enumerate the real surface: `eve__search` for `<connection>__` for a connection's tools, the file for an exports map, the docs index for a page, `eve registry list` for an integration. A name you do not remember seeing is not a name that is absent.
 - **Never describe a check you did not run.** If you could not verify something, say so in those words and file it as a question. It never enters a PR body as evidence.
 - **One counter-example kills a finding.** Before filing "nothing consumes X", grep the whole repo for X, not just the directory you were reading.
 - **A proposal names its cheapest form.** Walk `capability-placement.md` in order and say which rung it lands on and why not the one above. A proposal that arrives as "we should build a tool for this" without that walk is not ready.

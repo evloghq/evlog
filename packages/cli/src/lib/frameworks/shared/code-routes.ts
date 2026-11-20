@@ -1,8 +1,8 @@
 import type { Node } from 'oxc-parser'
 import { glob } from '../../glob'
-import type { ParseFn, ParseResult } from '../../map/parse'
-import { nodeLoc, parseFile, walkAst } from '../../map/parse'
-import type { RawRouteEntry, ScanContext } from '../../map/types'
+import type { ParseResult, SourceRange } from '../../map/parse'
+import { nodeLoc, nodeRange, parseFile, walkAst } from '../../map/parse'
+import type { ExtractedRoute, ScanContext } from '../../map/types'
 import { relativeFromRoot } from '../../map/utils'
 import type { Framework } from '../index'
 import type { MapAdapter } from '../types'
@@ -24,18 +24,23 @@ export interface CodeRoutesOptions {
   framework: Framework
   /** Callee member → HTTP verb; `null` for a member that matches every method. */
   methods: ReadonlyMap<string, string | null>
-  /** Member taking the method as its first argument: Hono's `app.on('GET', '/path', …)`. */
-  on?: string
+  /** Members taking the method as their first argument: Hono's `app.on('GET', '/path', …)`. */
+  on?: readonly string[]
   /** Member taking one options object: Fastify's `app.route({ method, url, handler })`. */
   routeObject?: { member: string, method: string, path: string }
-  /** evlog's middleware: the subpath it is imported from and the app members that register it. */
-  middleware: { source: string, register: readonly string[] }
+  /**
+   * evlog's middleware: the subpath it is imported from, its exports (default
+   * `evlog`), and the app members that register it. With no member, building
+   * it counts, as with Effect's `routerLayer()`, which is a layer and not a call on the app.
+   */
+  middleware: { source: string, exports?: readonly string[], register: readonly string[] }
 }
 
 interface FoundRoute {
   method: string | null
   path: string
   line: number
+  scope: SourceRange
 }
 
 /**
@@ -111,6 +116,10 @@ function property(object: Node, key: string): Node | undefined {
  * a handler. The handler is the last argument rather than the second so that
  * Express's `app.get('/x', auth, handler)` and Fastify's
  * `app.get('/x', { schema }, handler)` both count.
+ *
+ * A route's scope starts at the method name, not at the call: in a chain,
+ * `new Hono().get('/a', …).post('/b', …)`, the last call contains every
+ * registration before it.
  */
 function findRoutes(parsed: ParseResult, options: CodeRoutesOptions): FoundRoute[] {
   const found: FoundRoute[] = []
@@ -125,13 +134,14 @@ function findRoutes(parsed: ParseResult, options: CodeRoutesOptions): FoundRoute
     if (computed || member.type !== 'Identifier') return
     const { name } = member
     const line = () => nodeLoc(node, parsed.lines)?.line ?? 1
+    const scope: SourceRange = [nodeRange(member)[0], nodeRange(node)[1]]
 
-    if (name === options.on) {
-      const methods = stringLiterals(call.arguments[0]).map(method => method.toUpperCase())
+    if (options.on?.includes(name)) {
+      const methods = stringLiterals(call.arguments[0]).map(method => method === '*' ? null : method.toUpperCase())
       const paths = stringLiterals(call.arguments[1]).filter(isRoutePath)
       if (methods.length === 0 || paths.length === 0 || call.arguments.length < 3) return
       for (const method of methods) {
-        for (const path of paths) found.push({ method, path, line: line() })
+        for (const path of paths) found.push({ method, path, line: line(), scope })
       }
       return
     }
@@ -142,21 +152,21 @@ function findRoutes(parsed: ParseResult, options: CodeRoutesOptions): FoundRoute
       const path = stringLiteral(property(definition, options.routeObject.path))
       if (!path || !isRoutePath(path)) return
       const methods = stringLiterals(property(definition, options.routeObject.method)).map(method => method.toUpperCase())
-      for (const method of methods.length > 0 ? methods : [null]) found.push({ method, path, line: line() })
+      for (const method of methods.length > 0 ? methods : [null]) found.push({ method, path, line: line(), scope })
       return
     }
 
     if (!options.methods.has(name)) return
     const path = stringLiteral(call.arguments[0])
     if (!path || !isRoutePath(path) || call.arguments.length < 2 || !looksLikeHandler(call.arguments.at(-1))) return
-    found.push({ method: options.methods.get(name) ?? null, path, line: line() })
+    found.push({ method: options.methods.get(name) ?? null, path, line: line(), scope })
   })
 
   return found
 }
 
-/** Local names bound to `evlog` from the integration's subpath, alias included. */
-function middlewareNames(parsed: ParseResult, source: string): Set<string> {
+/** Local names bound to the middleware's exports from the integration's subpath, aliases included. */
+function middlewareNames(parsed: ParseResult, source: string, exports: readonly string[]): Set<string> {
   const names = new Set<string>()
   walkAst(parsed.program, (node) => {
     if (node.type !== 'ImportDeclaration') return
@@ -166,7 +176,7 @@ function middlewareNames(parsed: ParseResult, source: string): Set<string> {
     }
     if (declaration.source.value !== source) return
     for (const specifier of declaration.specifiers) {
-      if (specifier.imported?.name === 'evlog' && specifier.local) names.add(specifier.local.name)
+      if (specifier.imported?.name && exports.includes(specifier.imported.name) && specifier.local) names.add(specifier.local.name)
     }
   })
   return names
@@ -174,10 +184,11 @@ function middlewareNames(parsed: ParseResult, source: string): Set<string> {
 
 /**
  * Whether the file registers evlog's middleware: `app.use(evlog())` for
- * middleware frameworks, `app.register(evlog)` for Fastify's plugin.
+ * middleware frameworks, `app.register(evlog)` for Fastify's plugin,
+ * `routerLayer()` for Effect.
  */
 function registersMiddleware(parsed: ParseResult, options: CodeRoutesOptions['middleware']): boolean {
-  const names = middlewareNames(parsed, options.source)
+  const names = middlewareNames(parsed, options.source, options.exports ?? ['evlog'])
   if (names.size === 0) return false
 
   const isMiddleware = (argument: Node): boolean => {
@@ -190,6 +201,10 @@ function registersMiddleware(parsed: ParseResult, options: CodeRoutesOptions['mi
   let found = false
   walkAst(parsed.program, (node) => {
     if (found || node.type !== 'CallExpression') return
+    if (options.register.length === 0) {
+      found = isMiddleware(node)
+      return
+    }
     const call = node as { callee: Node, arguments: Node[] }
     if (call.callee.type !== 'MemberExpression') return
     const { property: member, computed } = call.callee as { property: Node, computed?: boolean }
@@ -219,9 +234,9 @@ export function codeRoutesAdapter(options: CodeRoutesOptions): MapAdapter {
       return 'explicit'
     },
     // eslint-disable-next-line require-await -- satisfies the async MapAdapter contract
-    async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
+    async extractRoutes(ctx: ScanContext): Promise<ExtractedRoute[]> {
       const parse = ctx.parse ?? parseFile
-      const routes: RawRouteEntry[] = []
+      const routes: ExtractedRoute[] = []
 
       for (const file of sourceFiles(ctx.projectRoot)) {
         const parsed = parse(file)
@@ -235,6 +250,7 @@ export function codeRoutesAdapter(options: CodeRoutesOptions): MapAdapter {
             path: route.path,
             file: rel,
             handler: { line: route.line, column: 0 },
+            scope: route.scope,
           })
         }
       }

@@ -57,3 +57,35 @@ describe('nitro modules avoid backslash paths', () => {
     expect(handlers[0]).toMatch(/\/nitro-v3\/errorHandler$/)
   })
 })
+
+describe('nitro modules with errorHandler: false', () => {
+  function makeNitroStub(errorHandler: string | string[]) {
+    return {
+      options: {
+        rootDir: mkdtempSync(join(tmpdir(), 'evlog-error-handler-')),
+        virtual: {} as Record<string, string>,
+        plugins: [] as string[],
+        errorHandler,
+        noExternals: undefined as undefined | true | string[],
+        runtimeConfig: {} as Record<string, unknown>,
+        replace: {} as Record<string, string>,
+      },
+    }
+  }
+
+  it('nitro v2 module leaves the app error handler alone and still registers the plugin', () => {
+    const nitro = makeNitroStub('~/error')
+    nitroV2Module({ errorHandler: false }).setup(nitro as never)
+
+    expect(nitro.options.errorHandler).toBe('~/error')
+    expect(nitro.options.plugins).toContainEqual(expect.stringMatching(/\/nitro\/plugin$/))
+  })
+
+  it('nitro v3 module leaves the app error handlers alone and still registers the plugin', () => {
+    const nitro = makeNitroStub(['~/error'])
+    nitroV3Module({ errorHandler: false }).setup(nitro as never)
+
+    expect(nitro.options.errorHandler).toEqual(['~/error'])
+    expect(nitro.options.plugins).toContainEqual(expect.stringMatching(/\/nitro-v3\/plugin$/))
+  })
+})

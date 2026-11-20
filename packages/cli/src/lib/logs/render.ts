@@ -2,14 +2,14 @@ import type { WideEvent } from 'evlog'
 import type { CliContext } from '../../core/context'
 import { createStyle } from '../../core/output'
 import type { Style, StyleCode } from '../../core/output'
-import { computeStats, field, isError } from './query'
-import type { LogsQuery, LogsStats } from './query'
+import { field, isError } from './query'
+import type { LogsQuery, LogsStats, Selected } from './query'
 
 /** Fields every request event carries, shown in the fixed columns rather than the summary. */
 const STANDARD = new Set([
   'timestamp', 'level', 'service', 'environment', 'version', 'commitHash', 'region',
   'duration', 'durationMs', 'method', 'path', 'status', 'requestId', 'traceId', 'spanId',
-  '_parentRequestId', 'operation', 'requestLogs', 'userAgent', 'source', 'error', 'audit',
+  '_parentRequestId', 'operation', 'requestLogs', 'userAgent', 'source', 'error', 'audit', 'idempotencyKey',
 ])
 
 function str(value: unknown): string | undefined {
@@ -177,16 +177,10 @@ export function formatEvent(style: Style, event: WideEvent): string {
   return lines.join('\n').trimEnd()
 }
 
-export interface LogsResult {
+export interface LogsResult extends Selected<Sourced> {
   /** Where the events came from: a directory per line, or the URL. */
   sources: string[]
   query: LogsQuery
-  /** Every event that matched, in the reader's order. */
-  matched: number
-  /** The events shown: `select()` applied to `matched`. */
-  events: Sourced[]
-  /** Every matched event, for `stats`. */
-  all: Sourced[]
 }
 
 function describe(query: LogsQuery): string {
@@ -224,10 +218,10 @@ export function formatLogsReport(ctx: CliContext, result: LogsResult): string {
   const lines: string[] = []
   const filters = describe(query)
   const where = result.sources.length === 1 ? result.sources[0] : `${result.sources.length} apps`
-  if (query.view === 'stats') {
+  if (result.stats) {
     lines.push(style.paint('dim', `${matched} event${matched === 1 ? '' : 's'} · ${where}${filters ? ` · ${filters}` : ''}`), '')
     if (matched === 0) return [...lines, 'no event matches'].join('\n')
-    return [...lines, ...formatStats(style, computeStats(result.all))].join('\n')
+    return [...lines, ...formatStats(style, result.stats)].join('\n')
   }
   const shown = events.length === matched ? `${matched} event${matched === 1 ? '' : 's'}` : `${events.length} of ${matched} events`
   lines.push(style.paint('dim', `${shown} · ${where}${filters ? ` · ${filters}` : ''}`), '')

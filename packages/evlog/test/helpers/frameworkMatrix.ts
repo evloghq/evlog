@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { BaseEvlogOptions } from '../../src/shared/middleware'
-import { assertHttpEventEmitted, createPipelineSpies, findEventViaDrain, waitForDrainCalls } from './framework'
+import type { WideEvent } from '../../src/types'
+import { createPipelineSpies, findEventViaDrain, waitForDrainCalls } from './framework'
 import { defined } from './defined'
+
+type MatrixRequest = { method?: string, path: string, headers?: Record<string, string> }
+type Fire = (req: MatrixRequest) => Promise<{ status: number }>
 
 /**
  * Minimal viable surface every framework adapter must expose for the shared
@@ -21,10 +25,101 @@ export interface FrameworkAdapter {
    * 200; tests use other paths only when relevant (e.g. include/exclude).
    */
   mount: (options: BaseEvlogOptions) => Promise<{
-    fire: (req: { method?: string, path: string, headers?: Record<string, string> }) => Promise<{ status: number }>
+    fire: Fire
     cleanup?: () => Promise<void>
   }>
 }
+
+/** Route a {@link BuiltAppAdapter} app serves its drained events on. The matrix excludes it. */
+export const DRAINED_PATH = '/matrix-drained'
+
+/** Options a built app takes in its config: the callbacks cannot cross the build. */
+export type BuiltAppOptions = Pick<BaseEvlogOptions, 'include' | 'exclude' | 'routes'>
+
+/**
+ * An integration that receives its options through a built app's config
+ * (Nitro, Nuxt). The app is built once per suite with every check's options
+ * merged, drains through an `evlog:drain` hook, and serves what it drained.
+ */
+export interface BuiltAppAdapter {
+  name: string
+  /**
+   * Build and serve the app with `options` in its evlog config. Besides
+   * `/api/users`, the app answers `GET` {@link DRAINED_PATH} with the events
+   * drained since the last call; `drained()` reads it.
+   */
+  start: (options: BuiltAppOptions) => Promise<{
+    fire: Fire
+    drained: () => Promise<WideEvent[]>
+    cleanup: () => Promise<void>
+  }>
+}
+
+interface MatrixCheck {
+  name: string
+  options: BuiltAppOptions
+  request: MatrixRequest
+  /** Picks the event to assert on. Defaults to the first one for `request.path`. */
+  match?: (event: WideEvent) => boolean
+  assert: (event: WideEvent) => void
+}
+
+const checks: MatrixCheck[] = [
+  {
+    name: 'drains an event with method, path, status, level',
+    options: {},
+    request: { method: 'GET', path: '/api/users' },
+    assert(event) {
+      expect(event).toMatchObject({ method: 'GET', path: '/api/users', status: 200, level: 'info' })
+      expect(event.duration).toBeDefined()
+    },
+  },
+  {
+    name: 'preserves x-request-id when provided',
+    options: {},
+    request: { method: 'GET', path: '/api/users', headers: { 'x-request-id': 'shared-matrix-id' } },
+    assert(event) {
+      expect(event.requestId).toBe('shared-matrix-id')
+    },
+  },
+  {
+    name: 'honors per-route service overrides',
+    options: { routes: { '/api/**': { service: 'matrix-service' } } },
+    request: { method: 'GET', path: '/api/users' },
+    assert(event) {
+      expect(event.service).toBe('matrix-service')
+    },
+  },
+]
+
+/**
+ * Checks only the built-app matrix runs: each fixture serves `GET /api/fork`,
+ * which sets `viaUseLogger: true` through a zero-argument `useLogger()` and
+ * forks `matrix_fork`, whose child sets `forked: true`.
+ */
+const builtAppChecks: MatrixCheck[] = [
+  {
+    name: 'returns the request logger from a zero-argument useLogger()',
+    options: {},
+    request: { method: 'GET', path: '/api/fork' },
+    match: event => event.path === '/api/fork' && event.operation === undefined,
+    assert(event) {
+      expect(event.viaUseLogger).toBe(true)
+    },
+  },
+  {
+    name: 'emits a child event from log.fork(), passing the child to fn',
+    options: {},
+    request: { method: 'GET', path: '/api/fork', headers: { 'x-request-id': 'matrix-fork-parent' } },
+    // The child of the previous check can still arrive while this one polls.
+    match: event => event.operation === 'matrix_fork' && event._parentRequestId === 'matrix-fork-parent',
+    assert(event) {
+      expect(event).toMatchObject({ path: '/api/fork', forked: true })
+      expect(event.requestId).not.toBe('matrix-fork-parent')
+      expect(event.viaUseLogger).toBeUndefined()
+    },
+  },
+]
 
 /**
  * Run the shared HTTP middleware spec against a framework adapter. Asserts
@@ -55,57 +150,53 @@ export interface FrameworkAdapter {
  */
 export function describeStandardHttpMatrix(adapter: FrameworkAdapter): void {
   describe(`shared http matrix (${adapter.name})`, () => {
-    it('drains an event with method, path, status, level', async () => {
-      const { drain } = createPipelineSpies()
-      const { fire, cleanup } = await adapter.mount({ drain })
-      try {
-        await fire({ method: 'GET', path: '/api/users' })
-        await waitForDrainCalls(drain)
-        const event = assertHttpEventEmitted(drain, {
-          path: '/api/users',
-          method: 'GET',
-          status: 200,
-          level: 'info',
-        })
-        expect(event.duration).toBeDefined()
-      } finally {
-        await cleanup?.()
-      }
-    })
-
-    it('preserves x-request-id when provided', async () => {
-      const { drain } = createPipelineSpies()
-      const { fire, cleanup } = await adapter.mount({ drain })
-      try {
-        await fire({ method: 'GET', path: '/api/users', headers: { 'x-request-id': 'shared-matrix-id' } })
-        await waitForDrainCalls(drain)
-        const event = defined(
-          findEventViaDrain(drain, e => e.path === '/api/users'),
-          'event with x-request-id',
-        )
-        expect(event.requestId).toBe('shared-matrix-id')
-      } finally {
-        await cleanup?.()
-      }
-    })
-
-    it('honors per-route service overrides', async () => {
-      const { drain } = createPipelineSpies()
-      const { fire, cleanup } = await adapter.mount({
-        drain,
-        routes: { '/api/**': { service: 'matrix-service' } },
+    for (const check of checks) {
+      it(check.name, async () => {
+        const { drain } = createPipelineSpies()
+        const { fire, cleanup } = await adapter.mount({ drain, ...check.options })
+        try {
+          await fire(check.request)
+          await waitForDrainCalls(drain)
+          check.assert(defined(findEventViaDrain(drain, e => e.path === check.request.path), `event for ${check.request.path}`))
+        } finally {
+          await cleanup?.()
+        }
       })
-      try {
-        await fire({ method: 'GET', path: '/api/users' })
-        await waitForDrainCalls(drain)
-        const event = defined(
-          findEventViaDrain(drain, e => e.path === '/api/users'),
-          'event with service override',
-        )
-        expect(event.service).toBe('matrix-service')
-      } finally {
-        await cleanup?.()
-      }
+    }
+  })
+}
+
+/**
+ * The same spec as {@link describeStandardHttpMatrix}, for an integration
+ * configured at build time. The checks run in order against one app built
+ * with all their options merged, so each check only asserts the field its own
+ * options control.
+ */
+export function describeBuiltAppMatrix(adapter: BuiltAppAdapter, timeout = 180_000): void {
+  describe.sequential(`shared http matrix (${adapter.name})`, () => {
+    const built: { app?: Awaited<ReturnType<BuiltAppAdapter['start']>> } = {}
+
+    beforeAll(async () => {
+      const options: BuiltAppOptions = Object.assign({}, ...checks.map(check => check.options))
+      built.app = await adapter.start({ ...options, exclude: [...options.exclude ?? [], DRAINED_PATH] })
+      await built.app.drained()
+    }, timeout)
+
+    afterAll(async () => {
+      await built.app?.cleanup()
     })
+
+    for (const check of [...checks, ...builtAppChecks]) {
+      it(check.name, async () => {
+        const { fire, drained } = defined(built.app, `${adapter.name} app`)
+        const { status } = await fire(check.request)
+        expect(status).toBe(200)
+        const event = await vi.waitFor(async () => {
+          const events = await drained()
+          return defined(events.find(check.match ?? (e => e.path === check.request.path)), `event for ${check.name}`)
+        }, { timeout: 5_000, interval: 50 })
+        check.assert(event)
+      })
+    }
   })
 }

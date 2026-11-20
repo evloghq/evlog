@@ -1,0 +1,106 @@
+import { execFile } from 'node:child_process'
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+const run = promisify(execFile)
+const fixture = join(import.meta.dirname, 'fixture')
+const nodeMajor = Number(process.versions.node.split('.')[0])
+
+interface TurnEvent {
+  [key: string]: unknown
+  level: string
+  status: number
+  requestId: string
+  idempotencyKey: string
+  eve: { sessionId: string, turnId: string, outcome: string, failedCalls?: number, caller?: { principalType: string } }
+  order: { id: string }
+  customer: { email: string }
+  audit?: { action: string, target: { id: string } }
+  error?: { code: string, status: number, why: string, fix: string, stack: string }
+  gen_ai: {
+    operation: { name: string }
+    conversation: { id: string }
+    calls: number
+    response: { finish_reasons: string[] }
+    usage: { input_tokens: number, output_tokens: number, total_tokens: number }
+    tools: Array<{ name: string, success: boolean, error?: string }>
+  }
+}
+
+// The fixture agent answers from a scripted model, so `eve eval` drives the
+// real extension through eve's runtime without a model provider.
+describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
+  const logs = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
+  let events: TurnEvent[] = []
+
+  beforeAll(async () => {
+    await run(join(import.meta.dirname, '../node_modules/.bin/eve'), ['eval'], {
+      cwd: fixture,
+      // Under Vitest's NODE_ENV=test the fixture agent never reaches its tool.
+      env: { ...process.env, NODE_ENV: 'development', EVE_TELEMETRY_DISABLED: '1', EVLOG_FIXTURE_LOGS: logs },
+    })
+    events = readdirSync(logs).filter(file => file.endsWith('.jsonl')).flatMap(file =>
+      readFileSync(join(logs, file), 'utf8').trim().split('\n').map(line => JSON.parse(line) as TurnEvent))
+  }, 180_000)
+
+  afterAll(() => rmSync(logs, { recursive: true, force: true }))
+
+  const byOrder = (id: string) => {
+    const event = events.find(e => e.order?.id === id)
+    expect(event, `no event for order ${id}`).toBeDefined()
+    return event!
+  }
+
+  it('emits one event per turn, keyed by session and turn', () => {
+    expect(events).toHaveLength(2)
+    for (const event of events) {
+      expect(event.requestId).toBe(`${event.eve.sessionId}:${event.eve.turnId}`)
+      expect(event.idempotencyKey).toBe(event.requestId)
+      expect(event.gen_ai.conversation.id).toBe(event.eve.sessionId)
+      expect(event.gen_ai.operation.name).toBe('invoke_agent')
+    }
+  })
+
+  it('reports one finish reason per model call and the tool calls', () => {
+    const event = byOrder('9001')
+    expect(event.gen_ai.calls).toBe(2)
+    expect(event.gen_ai.response.finish_reasons).toEqual(['tool-calls', 'stop'])
+    expect(event.gen_ai.usage.total_tokens).toBe(event.gen_ai.usage.input_tokens + event.gen_ai.usage.output_tokens)
+    expect(event.gen_ai.tools).toEqual([expect.objectContaining({ name: 'issue_refund', success: true })])
+    expect(event.level).toBe('info')
+    expect(event.error).toBeUndefined()
+  })
+
+  it('records an audit entry a tool adds', () => {
+    expect(byOrder('9001').audit).toMatchObject({ action: 'refund.issued', target: { id: '9001' } })
+  })
+
+  it('redacts the fields a tool adds, in development too', () => {
+    expect(byOrder('9001').customer.email).toBe('j***@***.com')
+  })
+
+  it('keeps the catalog fields of an error the tool threw', () => {
+    const event = byOrder('bad')
+    expect(event.error).toMatchObject({
+      code: 'REFUND_DECLINED',
+      status: 402,
+      why: 'The card issuer rejected the reversal',
+      fix: 'Ask the customer for another payment method',
+    })
+    // The stack is the tool's, not the hook's that wrote the event.
+    expect(event.error!.stack.split('\n')[1]).toContain('execute')
+    expect(event.error!.stack).not.toContain('emitTurn')
+    expect(event.gen_ai.tools).toEqual([expect.objectContaining({ name: 'issue_refund', success: false })])
+  })
+
+  it('marks a completed turn with a failed call as a warning', () => {
+    const event = byOrder('bad')
+    expect(event.eve.outcome).toBe('completed')
+    expect(event.eve.failedCalls).toBe(1)
+    expect(event.status).toBe(200)
+    expect(event.level).toBe('warn')
+  })
+})

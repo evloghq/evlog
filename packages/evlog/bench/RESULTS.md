@@ -10,7 +10,6 @@
 | Entry | Raw | Gzip |
 |-------|----:|-----:|
 | evlog/nuxt | 201.68 kB | 58.21 kB |
-| evlog/eve | 197.26 kB | 55.70 kB |
 | evlog/vite | 189.74 kB | 54.62 kB |
 | evlog/toolkit | 170.76 kB | 51.16 kB |
 | evlog/nitro/v3 | 169.61 kB | 50.70 kB |

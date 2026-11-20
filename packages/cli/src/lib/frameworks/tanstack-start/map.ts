@@ -1,20 +1,20 @@
 import { basename } from 'node:path'
 import type { Node } from 'oxc-parser'
-import type { ParseFn, ParseResult } from '../../map/parse'
-import { findHandlerLocation, nodeLoc, parseFile, walkAst } from '../../map/parse'
-import type { RawRouteEntry, ScanContext } from '../../map/types'
+import type { ParseFn, ParseResult, SourceRange } from '../../map/parse'
+import { findHandlerLocation, nodeLoc, nodeRange, parseFile, walkAst } from '../../map/parse'
+import type { ExtractedRoute, ScanContext } from '../../map/types'
 import type { MapAdapter } from '../types'
 import { relativeFromRoot, segmentsToPath, stripExtension } from '../../map/utils'
 import { glob } from '../../glob'
 
-function extractTanstackRoutes(file: string, root: string, parse: ParseFn): RawRouteEntry[] {
+function extractTanstackRoutes(file: string, root: string, parse: ParseFn): ExtractedRoute[] {
   const rel = relativeFromRoot(root, file)
   if (rel.includes('__root')) return []
 
   const segments = stripExtension(rel.replace(/^src\/routes\//, '')).split('/')
   const path = segmentsToPath(segments) || '/'
   const parsed = parse(file)
-  const routes: RawRouteEntry[] = []
+  const routes: ExtractedRoute[] = []
 
   if (!parsed) {
     routes.push({
@@ -30,7 +30,7 @@ function extractTanstackRoutes(file: string, root: string, parse: ParseFn): RawR
 
   const hasServerHandlers = detectServerHandlers(parsed)
   if (hasServerHandlers.length > 0) {
-    for (const { method, line } of hasServerHandlers) {
+    for (const { method, line, scope } of hasServerHandlers) {
       routes.push({
         framework: 'tanstack-start',
         kind: 'api',
@@ -38,6 +38,7 @@ function extractTanstackRoutes(file: string, root: string, parse: ParseFn): RawR
         path,
         file: rel,
         handler: { line, column: 0 },
+        scope,
       })
     }
   } else if (path.startsWith('/api/') || isApiStem(file)) {
@@ -82,8 +83,8 @@ function isApiStem(file: string): boolean {
  */
 const METHOD_KEYS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
 
-function detectServerHandlers(parsed: ParseResult): Array<{ method: string, line: number }> {
-  const handlers: Array<{ method: string, line: number }> = []
+function detectServerHandlers(parsed: ParseResult): Array<{ method: string, line: number, scope: SourceRange }> {
+  const handlers: Array<{ method: string, line: number, scope: SourceRange }> = []
   walkAst(parsed.program, (node) => {
     if (node.type !== 'Property') return
     const prop = node as { key: { type: string, name?: string }, value: { type: string } }
@@ -92,7 +93,7 @@ function detectServerHandlers(parsed: ParseResult): Array<{ method: string, line
       if (key && METHOD_KEYS.includes(key)) {
         if (prop.value.type === 'ArrowFunctionExpression' || prop.value.type === 'FunctionExpression') {
           const loc = nodeLoc(prop.value as Node, parsed.lines)
-          handlers.push({ method: key, line: loc?.line ?? 1 })
+          handlers.push({ method: key, line: loc?.line ?? 1, scope: nodeRange(prop.value as Node) })
         }
       }
     }
@@ -106,8 +107,8 @@ function detectServerHandlers(parsed: ParseResult): Array<{ method: string, line
  */
 export const tanstackStartAdapter: MapAdapter = {
   // eslint-disable-next-line require-await -- satisfies the async MapAdapter contract
-  async extractRoutes(ctx: ScanContext): Promise<RawRouteEntry[]> {
-    const routes: RawRouteEntry[] = []
+  async extractRoutes(ctx: ScanContext): Promise<ExtractedRoute[]> {
+    const routes: ExtractedRoute[] = []
     const root = ctx.projectRoot
     const parse = ctx.parse ?? parseFile
 

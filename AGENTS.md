@@ -108,7 +108,7 @@ These are the one-word product names for the v3 docs, README, landing and conten
 - **Bump type:** `patch` for fixes, `minor` for features, `major` for breaking changes.
 - **Description:** write from the consumer's perspective: what changed and how to use it. See existing changesets in `.changeset/` for tone and level of detail.
 
-A PR without a changeset for a user-facing change will not be merged. Changes confined to `apps/*` or `examples/*`, docs included, never need one. The test is the consumer, not the path: a diff under `packages/evlog/src/` with no observable change gets no changeset.
+Changes confined to `apps/*` or `examples/*`, docs included, never need one. The test is the consumer, not the path: a diff under `packages/evlog/src/` with no observable change gets no changeset.
 
 ### Commits & PR titles
 
@@ -163,15 +163,9 @@ A task is complete when **all** of the following pass:
 5. New exports are registered in `package.json#exports`, `package.json#typesVersions`, and `tsdown.config.ts`
 6. If adapter/enricher/integration: the matching `.agents/skills/create-*/SKILL.md` was followed
 7. Any skill (internal `.agents/skills/` or published `skills/`) documenting the changed behavior was updated in the same PR
-8. A changeset is included for any user-facing change (`pnpm changeset`)
+8. A changeset is included when [Changesets](#changesets) calls for one
 
 ## Boundaries
-
-**Always do:**
-- Run lint, typecheck, and test before reporting done
-- Follow existing code patterns: read neighboring files before writing new ones
-- Use the skills at `.agents/skills/` for new adapters, enrichers, or integrations
-- Add a changeset (`pnpm changeset`) for every user-facing change: features, bug fixes, breaking changes
 
 **Ask first:**
 - Adding new dependencies: note `pnpm-workspace.yaml` sets `minimumReleaseAge: 2880`: a package published less than 48h ago fails to install unless added to `minimumReleaseAgeExclude`
@@ -204,22 +198,17 @@ Default: anything that stays on the local clone is fine, anything that touches t
 - Write a **PR title** (Conventional Commits, see above) and a **PR body**: keep the body factual, mirror the changeset, reference the issue (`Closes #X`); no marketing copy
 - Show the change in the PR body: a code snippet or captured output is evidence, not filler. A new API gets a usage snippet, a bug fix its before/after output, a CLI change its real terminal output, a rendered change a capture. Keep the prose short, not the proof
 - `gh pr merge <number>`: only for PRs the maintainer named in the current task, after reading the diff and confirming CI is green and there is no unresolved review thread. Use `--squash`. Never merge a PR the maintainer did not point at, and never merge `changeset-release/*` (the version-packages PR) or a PR that deletes tests without the maintainer saying so for that PR
+- `gh issue create` and `gh issue pin`: only for an issue whose title and body the maintainer approved word for word in the current task. Show the draft first, create it exactly as approved, and pin it only when the maintainer asked for that issue to be pinned
 
 **Never (no exceptions, even when asked):**
 - Push directly to `main` (or `master`): protected, always goes through a PR
 - `git push --force` without `--with-lease`, `git push --tags`
-- `gh pr close`, `gh pr review`, `gh issue create`, `gh issue edit`, `gh release create`
+- `gh pr close`, `gh pr review`, `gh issue edit`, `gh release create`
 - `gh pr merge` without an explicit instruction naming the PR (see above)
 - Write a changelog entry, release note, or commit message **body** with multi-paragraph narrative. The changeset is the source of truth; commit subjects stay single-line, PR bodies stay short
 - Add a `Co-authored-by`, `Signed-off-by`, "Generated with…", "🤖", or any signature/attribution that names an agent, model, or tool: **the work is the maintainer's, full stop**
 
-## When Stuck
-- Unsure about architecture → read the relevant SKILL.md or ask
-- Unclear requirements → ask a clarifying question before making large speculative changes
-
-## Feedback & Self-Maintenance
-
-**You are expected to submit feedback.** Report DX friction, documentation gaps, or anything that made your task harder than it should be, mid-work rather than at the end. When in doubt, report it; no feedback being submitted is itself a problem.
+## Keeping this file true
 
 **This file is living documentation, so keep it true.** If you catch it contradicting the repo (a command that doesn't exist, a path that moved, a described workflow that isn't real), flag it immediately and propose the fix, even if it's unrelated to your task. Update it when you encounter:
 - A recurring mistake or easy-to-get-wrong pattern

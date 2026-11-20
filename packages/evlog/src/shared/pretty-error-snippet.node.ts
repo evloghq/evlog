@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { CodeSnippetLine } from './pretty-error'
-import { decodeFileUrl } from './pretty-error'
+import type { CodeSnippetLine } from './stack-frames'
+import { decodeFileUrl } from './stack-frames'
 
 /**
  * Read source lines around a stack frame from disk (Node.js only).

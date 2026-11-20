@@ -34,11 +34,13 @@ export function loadApiSurface(repoRoot) {
   const symbols = new Set()
   const entries = new Set()
 
-  for (const packageDir of ['packages/evlog', 'packages/cli', 'packages/nuxthub', 'packages/signals', 'packages/telemetry']) {
+  for (const packageDir of ['packages/evlog', 'packages/cli', 'packages/eve', 'packages/nuxthub', 'packages/signals', 'packages/telemetry']) {
     const root = join(repoRoot, packageDir)
     if (!exists(root)) continue
 
-    for (const file of walk(join(root, 'src'), name => name.endsWith('.ts') && !name.endsWith('.d.ts'))) {
+    // An eve extension keeps its source under `extension/`, the root eve builds from.
+    const sources = ['src', 'extension'].map(dir => join(root, dir)).filter(exists)
+    for (const file of sources.flatMap(dir => walk(dir, name => name.endsWith('.ts') && !name.endsWith('.d.ts')))) {
       const source = readFileSync(file, 'utf8')
       for (const match of source.matchAll(EXPORT_DECLARATION)) symbols.add(match[1])
       for (const match of source.matchAll(EXPORT_LIST)) {

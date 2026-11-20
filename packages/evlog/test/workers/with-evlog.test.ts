@@ -145,7 +145,7 @@ describe('evlog/workers withEvlog', () => {
     const { stream, close } = createDeferredStream()
 
     const worker = withEvlog((_req, _env, _ctx, log) => {
-      queueMicrotask(() => log.set({ ai: { calls: 1 } }))
+      queueMicrotask(() => log.set({ gen_ai: { calls: 1 } }))
       return new Response(stream, { headers: { 'content-type': 'text/event-stream' } })
     }, { drain })
 
@@ -156,6 +156,63 @@ describe('evlog/workers withEvlog', () => {
     await expect(res.text()).resolves.toBe('hello world')
     await vi.waitFor(() => expect(drain).toHaveBeenCalledTimes(1))
 
-    expect(drain.mock.calls[0][0].event.ai).toEqual({ calls: 1 })
+    expect(drain.mock.calls[0][0].event.gen_ai).toEqual({ calls: 1 })
+  })
+
+  describe('log.fork()', () => {
+    it('drains the child event through waitUntil, with the child passed to fn', async () => {
+      const { drain } = createPipelineSpies()
+      const pending: Promise<unknown>[] = []
+      const worker = withEvlog((_req, _env, _ctx, log) => {
+        log.fork('send_receipt', async (child) => {
+          await Promise.resolve()
+          child.set({ receipt: { sent: true } })
+        })
+        return new Response('ok')
+      }, { drain })
+
+      await fireWorker(worker, { path: '/api/orders', headers: { 'x-request-id': 'parent-id' } }, { waitUntil: p => pending.push(p) })
+      await Promise.all(pending)
+
+      const child = defined(findEventViaDrain(drain, e => e.operation === 'send_receipt'), 'child event')
+      expect(child).toMatchObject({ _parentRequestId: 'parent-id', path: '/api/orders', receipt: { sent: true } })
+      expect(child.requestId).not.toBe('parent-id')
+      const parent = defined(findEventViaDrain(drain, e => e.requestId === 'parent-id'), 'parent event')
+      expect(parent.receipt).toBeUndefined()
+    })
+
+    it('records a failure in fn on the child event and resolves', async () => {
+      const { drain } = createPipelineSpies()
+      let lifetime: Promise<void> | undefined
+      const worker = withEvlog((_req, _env, _ctx, log) => {
+        lifetime = log.fork('sync', () => {
+          throw new EvlogError({ message: 'upstream down', status: 503 })
+        })
+        return new Response('ok')
+      }, { drain })
+
+      await fireWorker(worker, { path: '/api/sync' })
+      await expect(defined(lifetime, 'fork lifetime')).resolves.toBeUndefined()
+
+      const child = defined(findEventViaDrain(drain, e => e.operation === 'sync'), 'child event')
+      expect(child).toMatchObject({ level: 'error', status: 503 })
+    })
+
+    it('still runs fn on an excluded route, registered with waitUntil', async () => {
+      const { drain } = createPipelineSpies()
+      const pending: Promise<unknown>[] = []
+      const ran = vi.fn()
+      const worker = withEvlog((_req, _env, _ctx, log) => {
+        log.fork('cleanup', ran)
+        return new Response('ok')
+      }, { drain, exclude: ['/health'] })
+
+      await fireWorker(worker, { path: '/health' }, { waitUntil: p => pending.push(p) })
+      expect(pending).toHaveLength(1)
+      await Promise.all(pending)
+
+      expect(ran).toHaveBeenCalledTimes(1)
+      expect(drain).not.toHaveBeenCalled()
+    })
   })
 })

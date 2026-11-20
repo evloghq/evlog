@@ -1,6 +1,6 @@
 ---
 name: review-logging-patterns
-description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, and Fastify. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Effect, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
+description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify, and Effect. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Effect, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
 license: MIT
 metadata:
   author: HugoRCD
@@ -54,7 +54,7 @@ Docs: https://www.evlog.dev/use-cases/audit/overview
 npm install evlog
 ```
 
-## Use the CLI (recommended on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify)
+## Use the CLI (recommended on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify, Effect)
 
 The `evlog` executable ships with the `evlog` package: `pnpm evlog`, `npx evlog`, `bunx evlog`. It runs `@evlog/cli` when installed and fetches it on demand otherwise (no dependency added to the project), so it works on a project with nothing yet. Early but worth trying. It reads the project on disk (no traffic, no config needed). On the seven supported frameworks it covers the whole loop: **wire evlog in** (`init`), **score coverage** (`map`), **lock the score in CI** (`--min-score`, `--baseline`). If the CLI is unavailable, the framework has no adapter yet, or the user declines, continue with the manual sections below; the skill does not depend on it. **Ask before installing anything**.
 
@@ -75,7 +75,7 @@ npx evlog init --yes \
   --sampling medium
 ```
 
-Useful flags: `--framework` (override detection: `nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`), `--prodDrain` (comma-separated: `axiom`, `otlp`, `posthog`, `sentry`, `better-stack`, `datadog`, `hyperdx`, `sazabi`, `loki`, `clickhouse`), `--extras` (`enrichers`, `pipeline`, `sampling`, `vite`, `error-catalog`, `audit-catalog`, `ai`, `better-auth`), `--enrichers`, `--sampling` (traffic tier: `all`, `low`, `medium`, `high`, `very-high`), `--apps` (monorepo: which workspace packages), `--no-install`. Review the `--dry-run` output with the user before applying. Docs: https://www.evlog.dev/cli/init
+Useful flags: `--framework` (override detection: `nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`, `effect`), `--prodDrain` (comma-separated: `axiom`, `otlp`, `posthog`, `sentry`, `better-stack`, `datadog`, `hyperdx`, `sazabi`, `loki`, `clickhouse`), `--extras` (`enrichers`, `pipeline`, `sampling`, `vite`, `error-catalog`, `audit-catalog`, `ai`, `better-auth`), `--enrichers`, `--sampling` (traffic tier: `all`, `low`, `medium`, `high`, `very-high`), `--apps` (monorepo: which workspace packages), `--no-install`. Review the `--dry-run` output with the user before applying. Docs: https://www.evlog.dev/cli/init
 
 ### 2. Score: `evlog map`
 
@@ -90,6 +90,7 @@ What you get:
 - **FIX FIRST**: the three most valuable places to fix
 - **GOING FURTHER**: opportunities (catalogs, audit coverage, AI logging, auth identity) that never cost points
 - Per-file inspect: `npx evlog map <file> --no-write` shows the shape the handler could take
+- Each route is scored on its own handler and the same-file helpers it calls. In an Express, Hono or Fastify routes file, inspect one route with `npx evlog map "GET /users/:id" --no-write`
 - Re-run after fixes and watch the score move
 
 Work FIX FIRST in order, keep changes minimal (`useLogger()`, `log.set()`, `log.audit()`, `createError({ why, fix })`), then re-run with `--no-write`. Omit `--no-write` only when the user wants `evlog.map.json` written.
@@ -139,6 +140,8 @@ export default defineEventHandler(async (event) => {
   return { success: true }
 })
 ```
+
+`log.fork(label, async (child) => { ... })` gives background work its own wide event, with the forked logger passed to `fn`. With `nitro: { experimental: { asyncContext: true } }`, `useLogger()` without the event works in services too.
 
 Drain, enrich, sampling and redaction can live in `evlog.config.ts` at the app root. The module loads it on the server, and the `evlog` key in `nuxt.config.ts` overrides it. The browser logger reads only the `evlog` key.
 
@@ -870,7 +873,7 @@ export default withEvlog(async (request, _env, _ctx, log) => {
 })
 ```
 
-`withEvlog` emits one wide event per request when the handler returns, with no manual `log.emit()`. Async drains are registered with `waitUntil` so they survive the response; streaming responses defer the emit until the body completes. `requestId` comes from `x-request-id` (fallback `cf-ray`); `method`, `path`, `cf-ray`, `traceparent`, and the safe subset of `request.cf` are captured automatically. It accepts the same options (`drain`, `enrich`, `keep`, `include`, `exclude`, `routes`) as every other integration. For manual control (scheduled handlers, queues), `createWorkersLogger(request)` + `log.emit()` remains available. No ALS-based `useLogger()` on Workers, so pass `log` explicitly.
+`withEvlog` emits one wide event per request when the handler returns, with no manual `log.emit()`. Async drains are registered with `waitUntil` so they survive the response; streaming responses defer the emit until the body completes. `requestId` comes from `x-request-id` (fallback `cf-ray`); `method`, `path`, `cf-ray`, `traceparent`, and the safe subset of `request.cf` are captured automatically. It accepts the same options (`drain`, `enrich`, `keep`, `include`, `exclude`, `routes`) as every other integration. For manual control (scheduled handlers, queues), `createWorkersLogger(request)` + `log.emit()` remains available. No ALS-based `useLogger()` on Workers, so pass `log` explicitly. `log.fork(label, async (child) => { ... })` hands the forked logger to `fn` and is registered with `waitUntil`.
 
 ### AWS Lambda
 
@@ -979,7 +982,8 @@ They can also live in `evlog.config.ts`, written with `defineEvlog()`. Nuxt and 
 | `include` | `string[]` | All routes | Route glob patterns to log |
 | `exclude` | `string[]` | None | Route patterns to exclude (takes precedence) |
 | `routes` | `Record<string, { service }>` | -- | Route-specific service names |
-| `minLevel` | `'debug' \| 'info' \| 'warn' \| 'error'` | `'debug'` | Hard threshold for the global `log` API and client `log` (not request wide events). Use `sampling.rates` for probabilistic volume on requests |
+| `minLevel` | `'debug' \| 'info' \| 'warn' \| 'error'` | `'debug'` | Hard threshold for the global `log` API and client `log` (not request wide events). Use `sampling.minLevel` for a floor on wide events, `sampling.rates` for probabilistic volume |
+| `sampling.minLevel` | `'trace' \| 'debug' \| 'info' \| 'warn'` | -- | Hard threshold for wide events, checked before `sampling.keep` and head rates. Error, fatal and audit events always pass |
 | `sampling.rates` | `object` | -- | Head sampling: `{ info: 10, warn: 50 }` (0-100%) |
 | `sampling.keep` | `array` | -- | Tail sampling: `[{ status: 400 }, { duration: 1000 }]` |
 | `drain` | `(ctx) => void` | -- | Drain callback (Next.js, standalone) |
@@ -1186,7 +1190,7 @@ const agent = new ToolLoopAgent({
 })
 ```
 
-This adds `ai.tools` (per-tool `{ name, durationMs, success, error? }`) and `ai.totalDurationMs` to the wide event.
+This adds `gen_ai.tools` (per-tool `{ name, duration_ms, success, error? }`) and `gen_ai.duration_ms` to the wide event.
 
 ### Embeddings
 
@@ -1203,7 +1207,7 @@ ai.captureEmbed({ usage, model: 'text-embedding-3-small', count: documents.lengt
 
 ### Cost estimation
 
-Pass a pricing map to get `ai.estimatedCost` in the wide event:
+Pass a pricing map to get `gen_ai.usage.estimated_cost` in the wide event:
 
 ```typescript
 const ai = createAILogger(log, {
@@ -1214,16 +1218,16 @@ const ai = createAILogger(log, {
 })
 ```
 
-### Wide event `ai` field
+### Wide event `gen_ai` field
 
-Includes: `calls`, `model`, `provider`, `inputTokens`, `outputTokens`, `totalTokens`, `cacheReadTokens`, `reasoningTokens`, `finishReason`, `toolCalls`, `steps`, `msToFirstChunk`, `msToFinish`, `tokensPerSecond`, `error`, `tools` (via telemetry integration), `totalDurationMs` (via telemetry integration), `embedding` (via `captureEmbed`), `estimatedCost` (via `cost` option).
+OpenTelemetry GenAI names where the conventions define one, evlog fields under the same key otherwise. Includes: `calls`, `provider.name`, `request.model`, `usage.input_tokens`, `usage.output_tokens`, `usage.total_tokens`, `usage.cache_read.input_tokens`, `usage.reasoning.output_tokens`, `response.finish_reasons`, `response.time_to_first_chunk` (seconds), `response.duration_ms`, `response.tokens_per_second`, `tool_calls`, `steps`, `error`, `tools` (via telemetry integration), `duration_ms` (via telemetry integration), `embedding` (via `captureEmbed`), `usage.estimated_cost` (via `cost` option).
 
 Anti-patterns to detect:
 
 | Anti-Pattern | Fix |
 |--------------|-----|
 | Manual token tracking in `onFinish` | `ai.wrap()`: middleware captures automatically |
-| `console.log('tokens:', result.usage)` | `ai.wrap()`: structured `ai.*` fields in wide event |
+| `console.log('tokens:', result.usage)` | `ai.wrap()`: structured `gen_ai.*` fields in wide event |
 | No AI observability | Add `createAILogger(log)` + `ai.wrap()` |
 | No tool execution timing | Add `createEvlogIntegration(ai)` to `telemetry.integrations` |
 | Manual cost calculation | Use `cost` option in `createAILogger()` |

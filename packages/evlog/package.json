@@ -1,6 +1,6 @@
 {
   "name": "evlog",
-  "version": "3.0.0-beta.2",
+  "version": "3.0.0-beta.3",
   "description": "Modern TypeScript logger — simple logs, wide events, structured errors. Built for scripts, libraries, jobs, edge, and HTTP. One drain pipeline everywhere.",
   "author": "HugoRCD <contact@evlog.dev>",
   "homepage": "https://evlog.dev",
@@ -25,7 +25,6 @@
     "elysia",
     "nestjs",
     "orpc",
-    "eve",
     "effect",
     "sveltekit",
     "react-router",
@@ -221,11 +220,6 @@
       "import": "./dist/orpc/index.mjs",
       "default": "./dist/orpc/index.mjs"
     },
-    "./eve": {
-      "types": "./dist/eve/index.d.mts",
-      "import": "./dist/eve/index.mjs",
-      "default": "./dist/eve/index.mjs"
-    },
     "./react-router": {
       "types": "./dist/react-router/index.d.mts",
       "import": "./dist/react-router/index.mjs",
@@ -386,9 +380,6 @@
       "orpc": [
         "./dist/orpc/index.d.mts"
       ],
-      "eve": [
-        "./dist/eve/index.d.mts"
-      ],
       "react-router": [
         "./dist/react-router/index.d.mts"
       ],
@@ -438,6 +429,7 @@
     "bench:events": "tsx bench/scripts/event-count.ts",
     "size": "tsx bench/scripts/size.ts",
     "size:json": "tsx bench/scripts/size.ts --json",
+    "size:budget": "tsx bench/scripts/size-budget.ts",
     "size:alternatives": "tsx bench/scripts/bundled-size.ts --write && tsx bench/scripts/report.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
@@ -457,26 +449,25 @@
     "@nestjs/testing": "^12.2.0",
     "@nuxt/devtools": "^3.4.4",
     "@nuxt/schema": "^4.6.4",
-    "@nuxt/test-utils": "^4.3.4",
+    "@nuxt/test-utils": "^4.4.0",
     "@opentelemetry/api": "^1.10.0",
     "@orpc/client": "^1.16.2",
     "@orpc/server": "^1.16.2",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
-    "@sveltejs/kit": "^3.1.1",
+    "@sveltejs/kit": "^3.2.0",
     "@swc/core": "^1.16.22",
     "@tanstack/start-client-core": "^1.170.39",
     "@types/express": "^5.0.6",
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^4.1.12",
     "acorn": "^8.19.0",
-    "ai": "^7.0.165",
+    "ai": "^7.0.173",
     "changelogen": "^0.6.2",
     "consola": "^3.4.2",
-    "effect": "^4.1.2",
-    "elysia": "^1.4.31",
+    "effect": "^4.1.4",
+    "elysia": "^1.4.32",
     "esbuild": "^0.28.2",
-    "eve": "^0.91.0",
     "express": "^5.3.0",
     "fastify": "^5.12.8",
     "h3": "^1.15.11",
@@ -497,7 +488,7 @@
     "typescript": "^6.0.3",
     "ufo": "^1.6.4",
     "unplugin-swc": "^1.6.0",
-    "vite": "^8.3.6",
+    "vite": "^8.3.8",
     "winston": "^3.19.0"
   },
   "peerDependencies": {
@@ -510,7 +501,6 @@
     "ai": ">=6.0.168 <8.0.0",
     "effect": "^4.1.2",
     "elysia": ">=1.4.31",
-    "eve": ">=0.72.0",
     "express": ">=5.3.0",
     "fastify": ">=5.12.8",
     "h3": "^1.15.11",
@@ -567,9 +557,6 @@
       "optional": true
     },
     "@orpc/server": {
-      "optional": true
-    },
-    "eve": {
       "optional": true
     },
     "effect": {

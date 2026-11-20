@@ -12,7 +12,7 @@ Add a new framework integration to evlog. The recommended path is the **manifest
 ## Two paths
 
 - **Manifest mode** (preferred, ~30–80 lines of glue). Call `defineFrameworkIntegration({ name, extractRequest, attachLogger, storage? })` once at module level, then write a tiny middleware that calls `integration.start(ctx, options)` and runs the framework's `next()` inside `runWith`. Reference implementations: all of `packages/evlog/src/{hono,express,fastify,elysia,nestjs,orpc,react-router,sveltekit,workers}/index.ts` use it.
-- **Custom mode**: use `createMiddlewareLogger` directly when the framework's lifecycle doesn't fit a standard middleware. Current custom-mode integrations: Next.js (`src/next/`), Nitro v2/v3 (`src/nitro/`, `src/nitro-v3/`), Eve (`src/eve/`).
+- **Custom mode**: use `createMiddlewareLogger` directly when the framework's lifecycle doesn't fit a standard middleware. Current custom-mode integrations: Next.js (`src/next/`), Nitro v2/v3 (`src/nitro/`, `src/nitro-v3/`). eve is not a framework integration: it ships as an eve extension in `packages/eve` (`@evlog/eve`), because eve finds extensions by package.
 
 Manifest mode now covers all classic HTTP frameworks. Use custom mode only when you can't extract a request synchronously at the start of the lifecycle (server actions, module-level hooks, agent turns).
 
@@ -22,8 +22,10 @@ Every framework integration must expose:
 
 1. `evlog()` middleware/plugin accepting the full `BaseEvlogOptions` (`drain`, `enrich`, `keep`, `include`, `exclude`, `routes`, `plugins`)
 2. `useLogger()` (ALS-backed). Two sanctioned exceptions: Workers (ALS needs a compat flag there; `defineWorkerFetch` attaches the logger instead) and Effect (the logger is the `EvlogLogger` service in the Effect context)
-3. `log.fork()` support (automatic when `storage` is provided to the manifest)
+3. `log.fork()` support (automatic when `storage` is provided to the manifest). Without storage, build it with `forkBackgroundLogger({ parent, middlewareOptions, label, fn })` and type `fn` to take the forked logger, as `evlog/workers` does
 4. The framework-native accessor (`c.get('log')`, `req.log`, `event.locals.log`, …)
+
+`references/contract.md` lists what every shipped integration exposes against this contract, with its known gaps. A new integration adds a row there and a matching `describe` in `packages/evlog/test/frameworks/contract.test-d.ts`, which fails to type-check until it does.
 
 ## PR Title
 
@@ -210,7 +212,7 @@ Create `packages/evlog/test/frameworks/{framework}.test.ts`. Read `packages/evlo
 Two non-negotiables:
 
 1. **Real request driver.** Use the framework's own driver: supertest (Express/NestJS), `app.request()` (Hono), `app.inject()` (Fastify), `app.handle(new Request(...))` (Elysia). If no Node-friendly driver exists, call the user-facing contract directly with realistic input shapes (see the SvelteKit and React Router tests). Never extract internals to test a substitute.
-2. **Wire the shared matrix.** Call `describeStandardHttpMatrix({ name, mount })` from `test/helpers/frameworkMatrix.ts`. It covers the standard sweep (event emission, `x-request-id`, route service) for every HTTP framework.
+2. **Wire the shared matrix.** Call `describeStandardHttpMatrix({ name, mount })` from `test/helpers/frameworkMatrix.ts`. It covers the standard sweep (event emission, `x-request-id`, route service) for every HTTP framework. An integration configured through a built app (Nitro, Nuxt) uses `describeBuiltAppMatrix({ name, start })` instead: the app is built once with the options in its config and serves its drained events on `DRAINED_PATH`.
 
 On top of the matrix, cover the framework-specific surface:
 

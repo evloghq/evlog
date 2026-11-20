@@ -18,7 +18,7 @@ The frameworks this app runs on move independently: eve and its satellites (@age
 - **eve APIs**: everything under `agent/` (channels, connections, extensions, schedules, sandbox.ts). `node_modules/eve/docs` is the framework reference.
 - **@vercel/connect/eve**: `channels/slack.ts`, `channels/photon.ts`, `channels/linear.ts`, `connections/vercel.ts`, `lib/github/credentials.ts`.
 - **@agent-browser/eve**: `sandbox.ts`, `extensions/browser.ts`. **@github-tools/eve-extension**: `extensions/github.ts`.
-- **packages/evlog/src/eve**: the evlog integration for eve. A change there is user-facing and needs a changeset.
+- **packages/eve** (`@evlog/eve`): the evlog extension for eve. A change there is user-facing and needs a changeset.
 - **docs/notes.md**: the "eve", "github-tools" and "Vercel Connect" sections record workarounds. A newer version that fixes one means the workaround goes and the note goes with it.
 
 ## 3. Deliver the PRs
