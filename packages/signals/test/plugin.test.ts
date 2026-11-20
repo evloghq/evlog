@@ -1,4 +1,5 @@
 import type { EnrichContext, TailSamplingContext, WideEvent } from 'evlog'
+import { Experimental_DecisionRefusalError } from 'ai'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineSignal } from '../src/define'
 import { createSignals } from '../src/plugin'
@@ -129,6 +130,32 @@ describe('createSignals enrich', () => {
     expect(plugin.stats()).toMatchObject({ calls: 2, cached: 2 })
     expect(other.event.signals).toEqual({ fault: { value: 'upstream', confidence: 0.9 } })
   })
+
+  it('makes one call for concurrent events sharing a cacheKey', async () => {
+    const cached = defineSignal({
+      name: 'fault',
+      when: e => (e.status ?? 0) >= 400,
+      ask: 'Who is responsible for this failure?',
+      choice: { upstream: 'A dependency failed', app: 'Our bug', client: 'Bad input' },
+      cacheKey: e => String(e.path),
+    })
+    const { evaluate, calls } = fakeEvaluate(yes)
+    const plugin = createSignals({
+      signals: [cached, severity],
+      evaluate: async (request) => {
+        await new Promise(resolve => setTimeout(resolve, 10))
+        return evaluate(request)
+      },
+    })
+
+    const storm = Array.from({ length: 50 }, (_, i) => enrichCtx({ status: 502, path: '/api/pay', requestId: `req-${i}` }))
+    await Promise.all(storm.map(ctx => plugin.enrich!(ctx)))
+
+    expect(calls.filter(c => 'fault' in c.questions)).toHaveLength(1)
+    expect(calls).toHaveLength(50)
+    expect(plugin.stats()).toMatchObject({ cached: 49 })
+    for (const ctx of storm) expect((ctx.event.signals as Record<string, unknown>).fault).toEqual({ value: 'upstream', confidence: 0.9 })
+  })
 })
 
 describe('createSignals keep', () => {
@@ -215,6 +242,29 @@ describe('createSignals fails open', () => {
     await plugin.enrich!(ok)
     expect(calls).toHaveLength(1)
     expect(ok.event.signals).toEqual({ fault: { value: 'upstream', confidence: 0.9 } })
+  })
+
+  it('records no verdict on a refusal and leaves the breaker closed', async () => {
+    const { evaluate, calls } = fakeEvaluate(yes)
+    let refuse = true
+    const plugin = createSignals({
+      signals: [fault],
+      evaluate: (request) => {
+        if (refuse) return Promise.reject(new Experimental_DecisionRefusalError({ questionIds: ['fault'], provider: 'test', modelId: 'test' }))
+        return evaluate(request)
+      },
+    })
+
+    const refused = enrichCtx({ status: 500, path: '/a' })
+    await plugin.enrich!(refused)
+    expect(refused.event.signals).toBeUndefined()
+
+    refuse = false
+    const next = enrichCtx({ status: 500, path: '/b' })
+    await plugin.enrich!(next)
+    expect(calls).toHaveLength(1)
+    expect(next.event.signals).toEqual({ fault: { value: 'upstream', confidence: 0.9 } })
+    expect(plugin.stats()).toMatchObject({ refused: 1, errors: 0, skipped: 0 })
   })
 
   it('aborts a slow call at the timeout', async () => {
