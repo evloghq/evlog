@@ -13,6 +13,7 @@ export type {
   SignalKind,
   Verdict,
 } from './define'
+export { errorFingerprint } from './fingerprint'
 export { knownError } from './known-error'
 export type { KnownErrorEntry, KnownErrors } from './known-error'
 export { createSignals } from './plugin'
