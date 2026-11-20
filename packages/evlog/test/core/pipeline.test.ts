@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DrainContext } from '../../src/types'
 import { createDrainPipeline } from '../../src/pipeline'
 import { createHyperDXDrain } from '../../src/adapters/hyperdx'
+import { createOTLPDrain } from '../../src/adapters/otlp'
 import { createPostHogDrain } from '../../src/adapters/posthog'
 import { createSazabiDrain } from '../../src/adapters/sazabi'
 import { defineDrain, defineHttpDrain } from '../../src/shared/drain'
@@ -746,6 +747,32 @@ describe('createDrainPipeline', () => {
         delivered: 1,
         dropped: { 'buffer-full': 2, 'rejected': 1, 'retries-exhausted': 1, 'rate-limited': 1 },
       })
+    })
+
+    it('counts only the records an OTLP collector rejected in a partial success', async () => {
+      // Adapter config resolves through a dynamic import, which fake timers never settle.
+      vi.useRealTimers()
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+        JSON.stringify({ partialSuccess: { rejectedLogRecords: 2, errorMessage: 'invalid record' } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 60_000 }, onDropped })(
+        createOTLPDrain({ endpoint: 'http://localhost:4318' }),
+      )
+
+      for (let id = 1; id <= 5; id++) hook(createTestContext(id))
+      await hook.flush()
+
+      expect(hook.stats()).toEqual({
+        delivered: 3,
+        dropped: { 'buffer-full': 0, 'rejected': 2, 'retries-exhausted': 0, 'rate-limited': 0 },
+      })
+      expect(onDropped).toHaveBeenCalledTimes(1)
+      const [batch, error, reason] = defined(onDropped.mock.calls[0], 'onDropped call')
+      expect((batch as DrainContext[]).map(c => c.event.id)).toEqual([1, 2, 3, 4, 5])
+      expect(error).toMatchObject({ rejected: 2 })
+      expect(reason).toBe('rejected')
     })
 
     it('logs buffer-full drops without onDropped, at most once per minute, and the rest on flush()', async () => {
