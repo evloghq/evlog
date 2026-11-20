@@ -1,3 +1,5 @@
+import { trackPendingDrain } from './shared/shutdown'
+
 /**
  * Why the pipeline dropped events:
  * - `buffer-full`: `maxBufferSize` was reached and the oldest events made room.
@@ -96,6 +98,10 @@ interface DeliveryFailure {
  * register `settled()` with `waitUntil` (the framework integrations do this
  * automatically) so buffered events are delivered before the instance freezes.
  *
+ * On Node and Bun, a pipeline holding events is flushed on `SIGTERM` and
+ * `SIGINT` (for up to 400 ms, then the signal's default exit runs unless the
+ * app handles it), on `beforeExit`, and when a framework integration closes.
+ *
  * @example
  * ```ts
  * const pipeline = createDrainPipeline({ batch: { size: 50 } })
@@ -105,9 +111,6 @@ interface DeliveryFailure {
  *
  * // Use as a hook
  * nitroApp.hooks.hook('evlog:drain', drain)
- *
- * // Flush on shutdown
- * nitroApp.hooks.hook('close', () => drain.flush())
  * ```
  */
 export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<T>): (drain: (batch: T[]) => void | Promise<void>) => PipelineDrainFn<T> {
@@ -169,7 +172,9 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     }
 
     function notifySettled(): void {
-      if (!isIdle() || settleWaiters.length === 0) return
+      if (!isIdle()) return
+      trackPendingDrain(flush, false)
+      if (settleWaiters.length === 0) return
       const waiters = settleWaiters
       settleWaiters = []
       for (const resolve of waiters) resolve()
@@ -309,6 +314,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     }
 
     function push(ctx: T): void {
+      trackPendingDrain(flush, true)
       if (buffer.length >= maxBufferSize) {
         drop(buffer.splice(0, 1), 'buffer-full')
       }

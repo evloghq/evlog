@@ -12,6 +12,7 @@ import { extendDeferredDrain } from '../nitro/deferred-drain'
 import { normalizeRedactConfig } from '../redact'
 import { shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
+import { flushPendingDrains } from '../shared/shutdown'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import type { EnrichContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
 import { elapsedMs, filterSafeHeaders } from '../utils'
@@ -235,6 +236,7 @@ export default definePlugin(async (nitroApp) => {
 
   const hooks = nitroApp.hooks as unknown as Hooks
   hooks.hook('close', flushEvlogFileConfigDrain)
+  hooks.hook('close', () => flushPendingDrains())
 
   // When globally disabled, createRequestLogger returns a no-op logger — still
   // attach it so handlers can call useLogger without throwing.
