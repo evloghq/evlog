@@ -1,5 +1,6 @@
+import { Experimental_DecisionRefusalError } from 'ai'
 import type { EnrichContext, EvlogPlugin, TailSamplingContext } from 'evlog'
-import type { Signal, SignalInput, Verdict } from './define'
+import type { Signal, SignalColumn, SignalInput, Verdict } from './define'
 import type { EvaluateFn, EvaluationModel, EvaluationQuestion, ProviderOptions, SignalState } from './evaluate'
 import { createBudget } from './budget'
 import { createLru } from './cache'
@@ -19,6 +20,12 @@ export interface SignalsOptions {
     /** Pause after a failed call, in milliseconds. @default 30000 */
     cooldownMs?: number
   }
+  /**
+   * How long a verdict cached by `cacheKey` is reused, in milliseconds. Past
+   * it, the next event with that key asks the model again, so an outage that
+   * cleared stops reading as one. @default 300000
+   */
+  cacheTtlMs?: number
   /** Per-call timeout, in milliseconds. @default 2000 */
   timeoutMs?: number
   /**
@@ -63,9 +70,6 @@ export interface SignalsPlugin extends EvlogPlugin {
   stats: () => SignalsStats
 }
 
-/** A verdict as written on the event. `kept` marks the signal that promoted it past sampling. */
-export type SignalColumn = Verdict & { kept?: true }
-
 interface Judged {
   verdicts: Map<string, Verdict>
   modelId?: string
@@ -107,6 +111,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   const maxStateChars = options.maxStateChars ?? 100_000
   const buildState = options.state ?? defaultState
   const evaluate = options.evaluate ?? aiSdkEvaluate
+  const cacheTtlMs = options.cacheTtlMs ?? 300_000
   const budget = createBudget({
     perMinute: options.budget?.perMinute ?? 600,
     cooldownMs: options.budget?.cooldownMs ?? 30_000,
@@ -119,7 +124,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   }
   const keepSignals = options.signals.filter(s => s.keep)
 
-  const cache = createLru<Verdict>(1_000)
+  const cache = createLru<{ verdict: Verdict, expiresAt: number }>(1_000)
   const inflight = new Map<string, Promise<Judged | undefined>>()
   const pending = createLru<Judged>(1_000)
   const stats: SignalsStats = { calls: 0, skipped: 0, errors: 0, refused: 0, cached: 0, inputTokens: 0 }
@@ -131,7 +136,8 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
     for (const signal of signals) {
       const key = signal.cacheKey?.(input)
       const id = key === undefined ? undefined : `${signal.name}\0${key}`
-      const hit = id === undefined ? undefined : cache.get(id)
+      const entry = id === undefined ? undefined : cache.get(id)
+      const hit = entry && entry.expiresAt > Date.now() ? entry.verdict : undefined
       const running = id === undefined ? undefined : inflight.get(id)
       if (hit) {
         verdicts.set(signal.name, hit)
@@ -196,12 +202,12 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
         if (!answer) continue
         const verdict = toVerdict(signal, answer)
         verdicts.set(signal.name, verdict)
-        if (id !== undefined) cache.set(id, verdict)
+        if (id !== undefined) cache.set(id, { verdict, expiresAt: Date.now() + cacheTtlMs })
       }
       budget.succeed()
       return { verdicts, modelId: response.modelId }
     } catch (err) {
-      if (isRefusal(err)) {
+      if (Experimental_DecisionRefusalError.isInstance(err)) {
         stats.refused++
         return { verdicts }
       }
@@ -222,10 +228,13 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       const input: SignalInput = { ...ctx.context }
       if (ctx.status !== undefined) input.status = ctx.status
       if (ctx.duration !== undefined) input.durationMs = ctx.duration
+      input.path ??= ctx.path
+      input.method ??= ctx.method
       const due = dueSignals(keepSignals, input)
       if (due.length === 0) return
 
-      const judged = await judge(due, input)
+      // The state is billed once per call and output is free, so the other due signals ride along instead of costing a second call in enrich.
+      const judged = await judge(dueSignals(options.signals, input), input)
       const kept = new Set<string>()
       for (const signal of due) {
         const verdict = judged.verdicts.get(signal.name)
@@ -261,13 +270,6 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       if (modelId) event.signalsModel = modelId
     },
   }
-}
-
-// The AI SDK's own cross-version brand check; importing `Experimental_DecisionRefusalError` would fail to load on `ai` below 7.0.130.
-const REFUSAL_MARKER = Symbol.for('vercel.ai.error.AI_DecisionRefusalError')
-
-function isRefusal(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as Record<symbol, unknown>)[REFUSAL_MARKER] === true
 }
 
 function markKept(verdicts: Map<string, Verdict>, kept: Set<string>): Map<string, Verdict> {

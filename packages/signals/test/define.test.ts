@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import type { BooleanVerdict, ChoiceVerdict, ScoreVerdict } from '../src/define'
+import type { BooleanVerdict, ChoiceVerdict, ScoreVerdict, SignalColumn } from '../src/define'
 import { defineSignal } from '../src/define'
 
 describe('defineSignal', () => {
@@ -48,6 +48,23 @@ describe('defineSignal', () => {
         return v.value && v.confidence > 0.8
       },
     })
+  })
+
+  it('keeps on a yes above the threshold when keep is a number', () => {
+    const signal = defineSignal({ name: 'flag', when: () => true, ask: 'Is this interesting?', keep: 0.8 })
+    expect(signal.keep!({ value: true, confidence: 0.81 })).toBe(true)
+    expect(signal.keep!({ value: true, confidence: 0.8 })).toBe(false)
+    expect(signal.keep!({ value: false, confidence: 0.95 })).toBe(false)
+    expect(() => defineSignal({ name: 'flag', when: () => true, ask: 'q', keep: 1 })).toThrow(/confidence threshold/)
+    expect(() => defineSignal({ name: 'flag', when: () => true, ask: 'q', keep: -0.1 })).toThrow(/confidence threshold/)
+  })
+
+  it('reads its own column, typed on the options', () => {
+    const signal = defineSignal({ name: 'fault', ask: 'Who?', choice: { client: 'c', app: 'a' } })
+    const verdict = signal.read({ signals: { fault: { value: 'app', confidence: 0.9, kept: true }, other: { value: true, confidence: 1 } } })
+    expectTypeOf(verdict).toEqualTypeOf<SignalColumn<ChoiceVerdict<'client' | 'app'>> | undefined>()
+    expect(verdict).toEqual({ value: 'app', confidence: 0.9, kept: true })
+    expect(signal.read({})).toBeUndefined()
   })
 
   it('rejects keep without when', () => {

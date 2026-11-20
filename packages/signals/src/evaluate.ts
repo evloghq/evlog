@@ -1,10 +1,10 @@
-import type { Experimental_EvaluationAnswer, Experimental_EvaluationModel, Experimental_EvaluationQuestion, JSONValue } from 'ai'
-import { experimental_evaluate } from 'ai'
+import type { Experimental_DecisionAnswer, Experimental_DecisionModel, Experimental_DecisionQuestion, Experimental_DecisionState, JSONValue } from 'ai'
+import { experimental_decide } from 'ai'
 import type { Signal, SignalKind, Verdict } from './define'
 
-export type EvaluationModel = Experimental_EvaluationModel
-export type EvaluationQuestion = Extract<Experimental_EvaluationQuestion, { type: SignalKind }>
-export type EvaluationAnswer = Experimental_EvaluationAnswer<EvaluationQuestion>
+export type EvaluationModel = Experimental_DecisionModel
+export type EvaluationQuestion = Extract<Experimental_DecisionQuestion, { type: SignalKind }>
+export type EvaluationAnswer = Experimental_DecisionAnswer<EvaluationQuestion>
 
 /** JSON the model can read. Built from the event by {@link SignalsOptions.state}. */
 export type SignalState = string | Record<string, unknown>
@@ -28,14 +28,14 @@ export interface EvaluateResponse {
 
 /**
  * The one call this package makes. Defaults to the AI SDK's
- * `experimental_evaluate`; replace it in tests or to record and replay.
+ * `experimental_decide`; replace it in tests or to record and replay.
  */
 export type EvaluateFn = (request: EvaluateRequest) => Promise<EvaluateResponse>
 
 export const aiSdkEvaluate: EvaluateFn = async (request) => {
-  const result = await experimental_evaluate({
+  const result = await experimental_decide({
     model: request.model,
-    state: request.state as Parameters<typeof experimental_evaluate>[0]['state'],
+    state: request.state as Experimental_DecisionState,
     questions: request.questions,
     abortSignal: request.abortSignal,
     providerOptions: request.providerOptions,
