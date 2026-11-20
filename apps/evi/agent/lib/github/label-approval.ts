@@ -1,6 +1,6 @@
 import type { SessionAuthContext } from 'eve/context'
 import type { ApprovalStatus } from 'eve/tools/approval'
-import { isAutonomous, isMaintainer } from '../trust'
+import { isAutonomous, isMaintainer, isScheduledTask } from '../trust'
 
 const LABEL_NAME_MAX = 50
 const LABEL_DESCRIPTION_MAX = 100
@@ -11,7 +11,7 @@ const LABEL_COLOR = /^[0-9a-fA-F]{6}$/
 const MULTILINE = /[\n\r\u2028\u2029]/
 
 /**
- * Default write gate: autonomous turns are denied; maintainers skip the card;
+ * Default write gate: autonomous turns and scheduled tasks are denied; maintainers skip the card;
  * everyone else needs approval.
  */
 export function writePolicy(auth: SessionAuthContext | null): ApprovalStatus {
@@ -20,6 +20,9 @@ export function writePolicy(auth: SessionAuthContext | null): ApprovalStatus {
       type: 'denied',
       reason: 'Autonomous turns may only create or apply labels, open a doc-gap issue, or assign the maintainer.',
     }
+  }
+  if (isScheduledTask(auth)) {
+    return { type: 'denied', reason: 'A scheduled task reads and reports; nobody is present to approve a write. Post what you would change instead.' }
   }
   return isMaintainer(auth) ? 'not-applicable' : 'user-approval'
 }

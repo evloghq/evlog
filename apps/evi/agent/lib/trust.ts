@@ -10,7 +10,8 @@ import { MCP_PRINCIPAL } from './maintainer-auth'
 export const { MAINTAINER_PHONE, MAINTAINER_GITHUB_ID } = process.env
 /**
  * The one Slack workspace the connector is installed in. Private, and only
- * the maintainer can install or invite there, so every human in it is trusted.
+ * the maintainer can install or invite there, so every full member is trusted;
+ * `channels/slack.ts` turns away its guests and Slack Connect users.
  */
 export const { EVI_SLACK_TEAM_ID } = process.env
 /** The GitHub login escalated issues are assigned to. Unset, escalation labels the issue and the assignment fails. */
@@ -64,7 +65,20 @@ function isWorkspaceMember(auth: SessionAuthContext): boolean {
     && auth.principalId.startsWith(`slack:${EVI_SLACK_TEAM_ID}:`)
 }
 
+/** Stamped by `schedules/tasks.ts` on the runs of a schedule someone created from Slack. */
+export const SCHEDULED_TASK_ATTRIBUTE = 'evi_scheduled_task'
+
+/**
+ * A run of a schedule someone created from Slack: it carries its creator's
+ * identity, but nobody is present to see what it reads or does, so it reads
+ * and reports and never counts as the maintainer.
+ */
+export function isScheduledTask(auth: SessionAuthContext | null): boolean {
+  return auth?.attributes[SCHEDULED_TASK_ATTRIBUTE] === 'true'
+}
+
 export function isMaintainer(auth: SessionAuthContext | null): boolean {
+  if (isScheduledTask(auth)) return false
   if (isTrustedLocalDev()) return true
   if (auth === null) return false
   return MAINTAINER_PRINCIPALS.has(auth.principalId) || isWorkspaceMember(auth)
