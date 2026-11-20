@@ -142,6 +142,84 @@
   - evlog@3.0.0-beta.0
   - @evlog/telemetry@1.0.0-beta.0
 
+## 0.12.0
+
+### Minor Changes
+
+- [#1075](https://github.com/evloghq/evlog/pull/1075) [`8ee1a17`](https://github.com/evloghq/evlog/commit/8ee1a1741c9c4d758c91d368cebc7b497fe6a4e0) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map` now records what each entry point's wide event carries. Every route in `evlog.map.json` and in `--json` gains an `event` key with the dotted paths `log.set()` writes (`user.id`, `cart.items`) and the literal `action` of each `log.audit()` call. Comparing it between two scans shows which fields a change removes from your production logs. Routes that set nothing have no `event` key, and the existing keys are unchanged.
+
+### Patch Changes
+
+- [#1083](https://github.com/evloghq/evlog/pull/1083) [`9621ea4`](https://github.com/evloghq/evlog/commit/9621ea4483829640819c3621007cab5d41906c17) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog agents` and `evlog init` no longer delete or duplicate text in an `AGENTS.md` whose evlog markers are not one clean pair. A file that lost `<!-- evlog:end -->` got a second block on one run and lost the section below it on the next. Both commands now stop with `cli.AGENTS_MARKERS_UNPAIRED`, exit 1 and leave the file as it is. A marker quoted in a sentence or a code fence is read as text.
+
+  `evlog init` also changes in four places:
+
+  - A Nitro config that imports something else from `evlog/nitro` or `evlog/nitro/v3` gets `import evlog` along with `modules: [evlog()]`. It got the module entry with no import.
+  - The seeded `errors.ts` and `audit.ts` parse when a service or a route starts with a digit (`_3dShopErrors`, `_2FA_PASSWORD_CREATED`) or a route holds a wildcard.
+  - A failed `npx skills add` exits 1, and the `AGENTS.md` block no longer points at the skill that was not installed. `evlog agents` already did both.
+  - A file that cannot be written stops the run with `cli.WRITE_FAILED`, which names the file and the ones written before it, under `--json` too. `evlog agents` does the same. Both printed a stack trace and left stdout empty.
+
+- [#1128](https://github.com/evloghq/evlog/pull/1128) [`e1e33d0`](https://github.com/evloghq/evlog/commit/e1e33d033b852bb212f7658ae1733d2a4df42509) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Two fixes to `evlog init` and `evlog agents`.
+
+  - On Windows, `evlog init --apps apps/web` sets up the app. Workspace app paths were built with backslashes there, so the forward-slash form was rejected as unknown, and the JSON `app` values and the per-app headings carried backslashes. They use forward slashes on every platform, and `--apps apps\web` still selects the app.
+  - When `npx skills add` fails, the reported error is the last line it wrote before npm's update notice. Before, a failed first run could report `npm notice` as the error.
+
+- [#1101](https://github.com/evloghq/evlog/pull/1101) [`84873d5`](https://github.com/evloghq/evlog/commit/84873d5c1b38d550ff7ef6213f93736b21338adc) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The CLI says what is wrong with the environment it is started in, and its output behaves in a pipe.
+
+  - On Node older than 22, every command stops with `@evlog/cli needs Node.js 22.0.0 or later, and this is Node.js 20.20.2` and exit code 1. Before, `evlog map` failed there with a syntax error about `globSync`, while `doctor`, `logs` and `--version` still ran on a Node the package does not support. `evlog doctor` no longer has a failing `node` check or a `cli.NODE_TOO_OLD` finding, since it never starts there.
+  - Next to an evlog older than the peer range, or with none installed, every command stops with the version it needs, the version and path it found, and exit code 1. Before, Node reported a missing export as a syntax error.
+  - A `package.json` that does not parse in the working directory no longer stops the launcher with `ERR_INVALID_PACKAGE_CONFIG`.
+  - `--help` prints to stdout, so `evlog --help | grep map` works. Usage shown with a usage error stays on stderr. Flags are listed the way they are typed (`--min-score`, `-f, --follow`), and positional arguments have their own section.
+  - Colour follows the stream the report is written to: `evlog doctor 2> report.txt` writes plain text from a terminal. `FORCE_COLOR=0` and `TERM=dumb` turn colour off, and the header rule uses 24-bit colour only where the terminal supports it.
+  - A reader that closes the pipe early, as in `evlog logs --json | head`, ends the run quietly instead of with an unhandled `EPIPE` error.
+
+- [#1059](https://github.com/evloghq/evlog/pull/1059) [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Every command now stops on a flag it does not declare, and on a value flag passed with no value, with exit code 2. `evlog map --min-scor 90` used to run with no gate and exit 0, and `evlog init --dryrun` wrote files. A flag written before the command name is checked too: `evlog --dry-run init` used to run `init` for real. A script that carries a mistyped flag today starts failing: fix the spelling.
+
+  The other usage errors exit 2 as well, as the README documents: an unknown command, an invalid `--min-score`, `--framework`, `--format` or `--limit`, and `evlog map <entry>` for an entry point that does not exist. An empty `--min-score`, which is what an unset shell variable expands to, is one of them. A bare `--baseline` no longer takes the flag after it as its value: `evlog map --baseline --min-score 80` and `evlog map --baseline --cwd apps/web` read both flags. A `map` error is printed as JSON under `--format json`, as it already was under `--json`.
+
+- [#1085](https://github.com/evloghq/evlog/pull/1085) [`03b63a8`](https://github.com/evloghq/evlog/commit/03b63a85d8568c2c01b761ced3c92a111812083e) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog logs` reads a log of any size without its memory growing with it. Every view held each matching event until the end of the run: an 800 MB log took 1.2 GB with `--limit 1`. A view now keeps only the `--limit` events it shows, and `stats` keeps one duration per event for the percentiles. The output of every view is unchanged.
+
+- [#1083](https://github.com/evloghq/evlog/pull/1083) [`9621ea4`](https://github.com/evloghq/evlog/commit/9621ea4483829640819c3621007cab5d41906c17) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog logs` applies every `--where` when the flag is repeated. Only the last clause applied, so `--where path=/a --where n=5` returned events on any path. An empty `--where`, which is what an unset shell variable expands to, is now a usage error with exit 2.
+
+  An event whose `duration`, `level` or `service` is not text no longer crashes every view, `--json` included.
+
+  A `--where` value is a number only when it spells one exactly. `zip=123` no longer matches `"00123"`, a 19-digit id no longer matches its neighbours, and `amount>5000` no longer matches a field that holds text such as `"n/a"`. Write the value as the field holds it: `zip=00123`.
+
+- [#1113](https://github.com/evloghq/evlog/pull/1113) [`6011cd1`](https://github.com/evloghq/evlog/commit/6011cd181f42c70775f4e02faa648f74a77b75b7) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map` scores each entry point on its own handler instead of on the whole file.
+
+  - In a file that declares several entry points (Express, Hono and Fastify routes, the methods of a Next.js `route.ts`, server actions, TanStack Start methods), one instrumented handler used to pass every other one in the file, and each route listed the same `event.fields`. Each entry point is now read from its handler and the functions, classes and constants of the same file it names. An import such as `stripe` marks only the handlers that use it as sensitive.
+  - `request.log.info()` in a Fastify app that never registers evlog's plugin no longer passes `wide-event`: that is Fastify's own logger. `req.log` and `request.log` count when the app registers evlog's middleware, or when the call is `set`, `audit` or `fork`. `request.evlog` is recognised.
+  - `c.get('log').set()` called without binding the logger first is credited in Hono.
+  - `evlog map --all` names each row of a shared file by its route (`index.ts · GET /health`). `evlog map <file>` lists the other entry points of the file, and `evlog map "POST /orders"` inspects one by method and path.
+
+  Scores drop in files where an instrumented route was covering for the others, so the rule-set version moves to 3. `--baseline` against a map written by an earlier CLI exits 2 with the version mismatch: run `evlog map` once and commit the new `evlog.map.json`.
+
+- [#1059](https://github.com/evloghq/evlog/pull/1059) [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map` no longer scores a tree it only partly read.
+
+  - A file with a syntax error, or one the scan cannot read, used to lose its routes, which raised the score. The report now warns `<file> failed to parse` and counts the file as one failing entry point. With `--min-score`, `map.minScore` or `--baseline`, the run stops with `cli.MAP_PARSE_FAILED`, exits 1, and leaves `evlog.map.json` as it was. List the file under `map.ignore` when it is not app code.
+  - Directories named `build`, `dist` and `coverage` are skipped at the project root only, so `server/api/build/index.get.ts` is scanned.
+  - Two entry points with the same method and path, such as `get('/')` in two routers, get distinct ids. `--baseline` reported regressions on an unchanged tree when they shared one. The id of every other entry point is unchanged, so a committed map stays comparable, and an entry point is still compared with itself when a second one with its method and path appears or goes. If it also moved to another file in that change, it is compared with the entry point that has its method and path and lost the most checks, then the lowest-scoring one.
+  - `.js`, `.mjs` and `.cjs` files are parsed with JSX, so a Next.js `page.js` is checked instead of reported as `n/a`.
+
+  The first and the last of these can change a verdict on code you did not touch, so the rule-set version moves to 2. `--baseline` against a map written by an earlier CLI exits 2 with the version mismatch: run `evlog map` once and commit the new `evlog.map.json`.
+
+- [#1059](https://github.com/evloghq/evlog/pull/1059) [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035) Thanks [@HugoRCD](https://github.com/HugoRCD)! - New `telemetry.fail(code?)` for a command that handles its own failure: it prints the error, sets an exit code and returns, so the run used to be recorded as `outcome: "success"`. Call it where the error is handled and the event carries `outcome: "error"` with `code` as its `errorCode`.
+
+  The evlog CLI calls it for every error it reports, so `evlog logs` with no log directory, `evlog config` on an invalid file and a mistyped flag are sent as errors with their `cli.*` code. A failed `--min-score` or `--baseline` gate stays a successful run with `mapGateFailed: true`.
+
+- [#1059](https://github.com/evloghq/evlog/pull/1059) [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Telemetry now does what its docs say.
+
+  - The run that opts out is no longer queued: `telemetry disable`, or `disableTelemetry()` called inside a run, used to purge the outbox and then write its own event to it. `disableTelemetry()` turns off every handle created for the tool, and a `flush()` already sending stops at the batch in flight.
+  - `EVLOG_TELEMETRY_DEBUG=1` prints each run's event as the run ends and makes no request. The event is not queued either. It used to print at the next flush, and that flush sent the events.
+  - An endpoint that never answers no longer keeps the process alive for ten seconds. The drain closes its connection at the 400 ms timeout. It no longer follows redirects, so `endpoint` has to be the final URL.
+  - `DO_NOT_TRACK=true`, `yes` and `on` opt out like `1`, and `EVLOG_TELEMETRY=false`, `no` and `off` like `0`.
+  - `withTelemetry()` records only the flags a command declares. An undeclared flag used to be sent by name, and a positional as `<set>`.
+  - New `bin` option: the command people type, when it is not `name`. The first-run notice prints `<bin> telemetry disable`, so the evlog CLI's notice now says `evlog telemetry disable`, not `evlog-cli telemetry disable`.
+  - `evlog telemetry status` lists the allowlisted `init*`, `map*` and `logs*` values. The fields `evlog logs` records are documented.
+
+- Updated dependencies [[`777e3bb`](https://github.com/evloghq/evlog/commit/777e3bbfb9f9433ee539393d6bf0f37300ef8ff7), [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035), [`4466f57`](https://github.com/evloghq/evlog/commit/4466f5732a8ae75e005b0e4a7d5793b32ed22035)]:
+  - @evlog/telemetry@0.4.0
+
 ## 0.11.2
 
 ### Patch Changes
