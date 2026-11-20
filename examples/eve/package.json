@@ -14,7 +14,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit -p tsconfig.agent.json",
-    "dev:tui": "eve dev"
+    "dev:local": "eve dev --name \"clearbill \u00b7 LOCAL eve dev \u00b7 reads .evlog/logs\"",
+    "dev:remote": "node scripts/remote.mjs"
   },
   "dependencies": {
     "@evlog/eve": "workspace:*",

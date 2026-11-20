@@ -64,6 +64,23 @@ pnpm run example:eve
 
 Open **http://localhost:3000** and click a starter prompt, or paste your own.
 
+### Local or deployed: two named commands
+
+Both open eve's terminal UI. The title bar says which agent answers and which logs its `logs` tool reads, for the whole session:
+
+| Command | Talks to | The logs tool reads |
+| --- | --- | --- |
+| `pnpm dev:local` | the agent running on this machine (`eve dev`) | `.evlog/logs` |
+| `pnpm dev:remote` | the deployed agent at `EVE_REMOTE_URL` | the Vercel project's runtime logs, through `vercel/evlog` |
+
+`dev:remote` reads `EVE_REMOTE_URL`, and `VERCEL_AUTOMATION_BYPASS_SECRET` when the deployment has protection on, from `.env.local`. Neither goes in a prompt.
+
+To have the local agent read the deployed agent's logs instead, set `logs: { source: 'vercel' }` in `agent/extensions/evlog.ts` and run `vercel env pull` first: it writes the project's `VERCEL_OIDC_TOKEN`, which pins reads to that project. Check the whole path without changing anything:
+
+```bash
+npx evlog setup vercel --check
+```
+
 Requires `POSTHOG_API_KEY` in the repo root `.env` for the drain (events still log to stdout without it).
 
 ## Files
@@ -75,5 +92,7 @@ Requires `POSTHOG_API_KEY` in the repo root `.env` for the drain (events still l
 | `agent/tools/lookup_*.ts` | CRM lookups → `useLogger()` |
 | `agent/tools/issue_refund.ts` | Refund + approval gate + audit fields |
 | `agent/extensions/evlog.ts` | Wide event per turn, tail-keep on failed tools and large refunds |
+| `agent/instrumentation/evlog.ts` | Puts each turn's `traceId` and `spanId` on its event (`npx evlog setup eve` writes it) |
+| `scripts/remote.mjs` | `pnpm dev:remote`: opens the deployed agent, labelled |
 
 Docs: https://evlog.dev/use-cases/eve
