@@ -140,6 +140,18 @@ Returns an evlog plugin.
 
 `plugin.stats()` returns `{ calls, skipped, errors, refused, cached, inputTokens }`.
 
+### `knownError(errors)`
+
+A ready-made choice signal, `known-error`, for errors that reach the event without a catalog `code`: a raw Stripe exception, a library's `jwt expired`. It offers one option per entry of your `defineErrorCatalog` catalogs and `defineError` factories, described by the entry's string `message` and its `why`, plus `new` for a failure none of them describes. Errors that already carry a catalog `code` are skipped, and errors sharing a name and message share one verdict.
+
+```ts
+import { createSignals, knownError } from '@evlog/signals'
+import { authErrors, billingErrors } from './errors'
+
+createSignals({ signals: [knownError([billingErrors, authErrors])] })
+// event.signals['known-error'] → { value: 'billing.PAYMENT_DECLINED', confidence: 1 }
+```
+
 ### Verdict types
 
 ```ts
@@ -187,7 +199,7 @@ The demo catalog in `scripts/catalog.ts` runs all of these.
 | `audit-review` | keep | This action deserves a reviewer | Risk is in the combination, not one field |
 | `job-flaky` | enrich | Succeeded only because it retried | The retry hides the cause |
 
-Others that fit the same shape: `first-seen` (is this error new for this route), `user-impact` (none, degraded, blocked), `owner` (which team should look), `known-error` (which catalog entry is this, from your own `why` and `fix`), `frustration` on support conversations, `did-succeed` on session events.
+Others that fit the same shape: `first-seen` (is this error new for this route), `user-impact` (none, degraded, blocked), `owner` (which team should look), `frustration` on support conversations, `did-succeed` on session events.
 
 Not a fit: secret or PII detection (sending secrets to an API to ask if they are secrets), paging decisions (never page on a probability), anything adversarial as a single verdict, anything numeric.
 
