@@ -5,7 +5,7 @@ import { requestConnectToken, VercelReadError, vercelScope } from '../../../../e
 import type { VercelScope } from '../../../../evlog/src/logs-vercel'
 import { cliErrors } from '../errors'
 
-export { DEFAULT_VERCEL_CONNECTOR, readVercelLogs, VercelReadError } from '../../../../evlog/src/logs-vercel'
+export { DEFAULT_VERCEL_CONNECTOR, readVercelLogs, requestConnectToken, VercelReadError } from '../../../../evlog/src/logs-vercel'
 export type { VercelLogsSummary, VercelScope } from '../../../../evlog/src/logs-vercel'
 
 /** A project `vercel link` linked: where its `.vercel` directory is, and its ids. */
@@ -38,12 +38,8 @@ export interface VercelAccess {
 
 const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error)).split('\n').filter(Boolean).at(-1) ?? 'unknown error'
 
-/**
- * The linked project's OIDC token, refreshed with the developer's `vercel
- * login`, exchanged for a token from `connector`. The scope comes from the OIDC
- * token, so the read is pinned to the project that asked.
- */
-export async function resolveVercelAccess(project: VercelProject, connector: string): Promise<VercelAccess> {
+/** The linked project's OIDC token, refreshed with the developer's `vercel login`, and the scope it pins reads to. */
+export async function projectOidc(project: VercelProject): Promise<{ oidc: string, scope: VercelScope }> {
   const { getVercelOidcToken } = await import('@vercel/oidc')
   let oidc: string
   try {
@@ -55,6 +51,16 @@ export async function resolveVercelAccess(project: VercelProject, connector: str
   if (!scope || scope.projectId !== project.projectId) {
     throw cliErrors.LOGS_VERCEL_NO_TOKEN({ reason: `the OIDC token was not issued to the linked project ${project.projectId}` })
   }
+  return { oidc, scope }
+}
+
+/**
+ * The linked project's OIDC token, refreshed with the developer's `vercel
+ * login`, exchanged for a token from `connector`. The scope comes from the OIDC
+ * token, so the read is pinned to the project that asked.
+ */
+export async function resolveVercelAccess(project: VercelProject, connector: string): Promise<VercelAccess> {
+  const { oidc, scope } = await projectOidc(project)
   try {
     return { token: await requestConnectToken(oidc, connector), scope }
   } catch (error) {

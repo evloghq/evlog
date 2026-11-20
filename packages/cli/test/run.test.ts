@@ -96,7 +96,7 @@ describe('run', () => {
     await run(['logs', '--help'])
 
     expect(stdout()).toContain('USAGE  evlog logs [what] [options]')
-    expect(stdout()).toMatch(/ARGUMENTS\n\n {2}│ what {2,}`errors`, `slow`, `stats`, or a request id/)
+    expect(stdout()).toMatch(/ARGUMENTS\n\n {2}│ what {2,}`errors`, `slow`, `stats`, `sessions`, or a request id/)
     expect(stdout()).toMatch(/│ -f, --follow /)
     expect(stdout()).not.toContain('--what')
   })

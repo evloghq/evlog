@@ -13,7 +13,7 @@ import { flagValues } from '../lib/flags'
 import { buildQuery, createSelection, timeOf } from '../lib/logs/query'
 import type { LogsArgs, LogsQuery, Selected } from '../lib/logs/query'
 import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'
-import type { LogsResult, Sourced } from '../lib/logs/render'
+import type { LogsOrigin, LogsResult, Sourced } from '../lib/logs/render'
 import { findConfiguredFsDrain, findLogsSink, prettyPath, resolveProject } from '../lib/project'
 import type { ProjectInfo } from '../lib/project'
 import { DEFAULT_VERCEL_CONNECTOR, findVercelProject, readVercelLogs, resolveVercelAccess, VercelReadError } from '../lib/logs/vercel'
@@ -81,8 +81,10 @@ export interface RunLogsOptions {
   fetchFn?: typeof fetch
   /** How often a followed `--url` is re-read. The endpoint is a snapshot, so there is nothing to wait on. */
   pollIntervalMs?: number
-  /** `files` (the default) or `vercel`, the linked project's runtime logs. */
+  /** `files` (the default, or `logs.source` in evlog.config) or `vercel`, the linked project's runtime logs. */
   source?: string
+  /** `files`, `vercel` or an environment, comma-separated: refuse the read unless it matches. */
+  expect?: string
   /** How the Vercel source gets its token and scope; tests stand in for Vercel Connect. */
   vercelAccess?: (project: VercelProject, connector: string) => Promise<VercelAccess>
 }
@@ -97,17 +99,20 @@ const VERCEL_MAX_LINES = 10_000
  * Pro's retention) to `--until`. A session id narrows the read on Vercel's
  * side before evlog parses anything.
  */
-async function readVercel(ctx: CliContext, options: RunLogsOptions, read: { query: LogsQuery, search?: string, connector: string, inRange: (event: WideEvent) => boolean }): Promise<LogsResult> {
-  const { query, search, connector, inRange } = read
+async function readVercel(ctx: CliContext, options: RunLogsOptions, read: { query: LogsQuery, search?: string, connector: string, inRange: (event: WideEvent) => boolean, expect: Expectation }): Promise<LogsResult> {
+  const { query, search, connector, inRange, expect } = read
   const project = await resolveProject(ctx.cwd)
   const linked = await findVercelProject(project.packageDir, project.root)
   if (!linked) throw cliErrors.LOGS_VERCEL_NOT_LINKED({ cwd: ctx.cwd })
   const { token, scope } = await (options.vercelAccess ?? resolveVercelAccess)(linked, connector)
+  const origin: LogsOrigin = { kind: 'vercel', teamId: scope.teamId, projectId: scope.projectId, environments: [scope.environment] }
+  checkExpectation(expect, origin)
   const now = options.now ?? new Date()
+  const since = query.since ?? new Date(now.getTime() - DAY_MS)
   const reader = readVercelLogs({
     token,
     scope,
-    since: query.since ?? new Date(now.getTime() - DAY_MS),
+    since,
     until: query.until ?? now,
     search,
     maxLines: VERCEL_MAX_LINES,
@@ -130,7 +135,45 @@ async function readVercel(ctx: CliContext, options: RunLogsOptions, read: { quer
   const notes: string[] = []
   if (summary.truncated > 0) notes.push(`${summary.truncated} log line${summary.truncated === 1 ? ' was' : 's were'} cut by Vercel's size limit and skipped`)
   if (summary.more) notes.push(`read the newest ${summary.lines} log lines; narrow --since or pass --session to reach older ones`)
-  return { sources: [`vercel ${scope.projectId} (${scope.environment})`], query, ...selection.done(), ...(notes.length > 0 && { notes }) }
+  return {
+    sources: [`vercel ${scope.projectId} (${scope.environment})`],
+    origin,
+    window: { since: since.toISOString(), until: (query.until ?? now).toISOString() },
+    coverage: notes.length > 0 ? { complete: false, reasons: notes } : { complete: true },
+    query,
+    ...selection.done(),
+    ...(notes.length > 0 && { notes }),
+  }
+}
+
+interface Expectation {
+  source?: 'files' | 'vercel'
+  environment?: string
+}
+
+function parseExpectation(value: string | undefined): Expectation {
+  const expectation: Expectation = {}
+  for (const token of (value ?? '').split(',').map(part => part.trim()).filter(Boolean)) {
+    if (token === 'files' || token === 'vercel') expectation.source = token
+    else expectation.environment = token
+  }
+  return expectation
+}
+
+/**
+ * Refuses a read from another store or environment than the one asked for.
+ * Files and URLs hold whatever environments wrote to them, so the check runs
+ * on the ones the events in the window carry.
+ */
+function checkExpectation(expect: Expectation, origin: LogsOrigin): void {
+  const kind = origin.kind === 'url' ? 'files' : origin.kind
+  const sourceOff = expect.source !== undefined && expect.source !== kind
+  const environmentOff = expect.environment !== undefined && !origin.environments.includes(expect.environment)
+  if (!sourceOff && !environmentOff) return
+  throw cliErrors.LOGS_SOURCE_MISMATCH({
+    expected: [expect.source, expect.environment].filter(Boolean).join(', '),
+    actual: `${origin.kind === 'vercel' ? `Vercel ${origin.projectId}` : origin.kind === 'url' ? 'a URL' : 'local files'} (${origin.environments.join(', ') || 'no events in the window'})`,
+  })
 }
 
 function tag(event: WideEvent, name: string | undefined): Sourced {
@@ -160,22 +203,34 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
   const query = buildQuery(args, options.now, config?.logs.limit)
   const dir = options.dir ?? config?.logs.dir
   const fetchFn = options.fetchFn ?? fetch
-  const inRange = (event: WideEvent): boolean => {
+  const expect = parseExpectation(options.expect)
+  const now = options.now ?? new Date()
+  /* The environments the events in the window carry, read before the
+     filters drop any, so `--expect` judges the store and not the matches. */
+  const environments = new Set<string>()
+  const inWindow = (event: WideEvent): boolean => {
     const at = timeOf(event)
     if (query.since && at < query.since.getTime()) return false
     if (query.until && at > query.until.getTime()) return false
-    if (query.level && !query.level.includes(event.level)) return false
-    return query.filter(event)
+    if (typeof event.environment === 'string') environments.add(event.environment)
+    return true
   }
+  const keeps = (event: WideEvent): boolean => (!query.level || query.level.includes(event.level))
+    && (expect.environment === undefined || event.environment === expect.environment)
+    && query.filter(event)
+  const inRange = (event: WideEvent): boolean => inWindow(event) && keeps(event)
 
-  if (options.source !== undefined && options.source !== 'files' && options.source !== 'vercel') {
-    throw cliErrors.LOGS_INVALID_SOURCE({ value: options.source })
+  /* A flag says what this run reads; evlog.config says what runs read by default. */
+  const source = options.source ?? (options.dir === undefined && options.url === undefined && !options.follow ? config?.logs.source : undefined)
+  if (source !== undefined && source !== 'files' && source !== 'vercel') {
+    throw cliErrors.LOGS_INVALID_SOURCE({ value: source })
   }
-  if (options.source === 'vercel') {
+  if (source === 'vercel') {
     const conflict = options.follow ? 'follow' : options.dir !== undefined ? 'dir' : options.url !== undefined ? 'url' : undefined
     if (conflict) throw cliErrors.LOGS_SOURCE_CONFLICT({ flag: conflict })
-    return readVercel(ctx, options, { query, search: args.session, connector: config?.logs.vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR, inRange })
+    return readVercel(ctx, options, { query, search: args.session, connector: config?.logs.vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR, inRange, expect })
   }
+  if (expect.source === 'vercel') checkExpectation(expect, { kind: 'files', environments: [] })
 
   /* The endpoint answers with every event at once, so those are in memory
      either way; the files are read one event at a time. */
@@ -193,14 +248,23 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
     if (!options.follow && !found.some(source => existsSync(source.dir))) throw cliErrors.LOGS_NO_SINK({ cwd: ctx.cwd })
     const selection = createSelection<Sourced>(query, found.length > 1)
     for (const source of found) {
-      for await (const event of readFsLogs({ dir: source.dir, since: query.since, until: query.until, level: query.level, filter: query.filter })) {
+      for await (const event of readFsLogs({ dir: source.dir, since: query.since, until: query.until, filter: event => inWindow(event) && keeps(event) })) {
         selection.add(tag(event, found.length > 1 ? source.name : undefined))
       }
     }
     selected = selection.done()
     sources = found.map(source => prettyPath(ctx.cwd, source.dir))
   }
-  const result: LogsResult = { sources, query, ...selected }
+  const origin: LogsOrigin = { kind: options.url ? 'url' : 'files', environments: [...environments].sort() }
+  checkExpectation(expect, origin)
+  const result: LogsResult = {
+    sources,
+    origin,
+    window: { ...(query.since && { since: query.since.toISOString() }), until: (query.until ?? now).toISOString() },
+    coverage: { complete: true },
+    query,
+    ...selected,
+  }
 
   if (options.follow) {
     /* `tail -f` shows the end of the file before it waits, and the caller only
@@ -324,7 +388,7 @@ export function logsTelemetryFieldNames(): string[] {
 export default defineEvlogCommand('logs', {
   meta: { name: 'logs' },
   args: {
-    what: { type: 'positional', required: false, description: '`errors`, `slow`, `stats`, or a request id to show in full' },
+    what: { type: 'positional', required: false, description: '`errors`, `slow`, `stats`, `sessions`, or a request id to show in full' },
     session: { type: 'string', description: 'Only one AI conversation: its gen_ai.conversation.id, such as an eve session id' },
     follow: { type: 'boolean', alias: 'f', description: 'Keep reading as the app writes, like tail -f' },
     since: { type: 'string', description: 'Only events after this: a duration back (15m, 2h, 3d) or a date' },
@@ -335,7 +399,8 @@ export default defineEvlogCommand('logs', {
     where: { type: 'string', description: 'Only events where a field matches: user.id=42, payment.amount>5000, error.message~declined, audit, !error (repeatable)' },
     over: { type: 'string', description: 'For `slow`: the duration a request has to exceed (default 500ms)' },
     limit: { type: 'string', description: 'Most events to show (default 50)' },
-    source: { type: 'string', description: 'Where to read: files (default), or vercel for the linked project\'s runtime logs (set up once with evlog setup vercel)' },
+    source: { type: 'string', description: 'Where to read: files (default, or logs.source in evlog.config), or vercel for the linked project\'s runtime logs (set up once with evlog setup vercel)' },
+    expect: { type: 'string', description: 'Refuse to answer from another store or environment: files, vercel, production, preview or development, comma-separated' },
     dir: { type: 'string', description: 'Log directory (default: the project\'s .evlog/logs, or every app\'s in a workspace)' },
     url: { type: 'string', description: 'Read the memory drain\'s dev endpoint instead of files (a JSON array of events)' },
   },
@@ -351,6 +416,7 @@ export default defineEvlogCommand('logs', {
         dir: args.dir,
         url: args.url,
         source: args.source,
+        expect: args.expect,
         follow: args.follow,
         signal: controller.signal,
         onEvent: (event) => {
@@ -384,11 +450,15 @@ export default defineEvlogCommand('logs', {
       jsonMode: args.json,
       json: {
         sources: result.sources,
+        origin: result.origin,
+        window: result.window,
         view: result.query.view,
-        count: result.events.length,
+        ...(result.query.view === 'slow' && { over: result.query.over }),
+        count: result.sessions ? result.sessions.length : result.events.length,
         matched: result.matched,
+        coverage: result.coverage,
         ...(result.notes && { notes: result.notes }),
-        ...(result.stats ? { stats: result.stats } : { events: result.events }),
+        ...(result.sessions ? { sessions: result.sessions, sessionsMatched: result.sessionsMatched } : result.stats ? { stats: result.stats } : { events: result.events }),
       },
       human: args.json ? undefined : formatLogsReport(cli, result),
     })

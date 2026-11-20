@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import logs, { runLogs } from '../src/commands/logs'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
-import { buildQuery, createSelection, matchesId, matchesWhere, parseDuration, parseTime, parseWhere } from '../src/lib/logs/query'
+import { buildQuery, createSelection, matchesId, outcomeOf, matchesWhere, parseDuration, parseTime, parseWhere } from '../src/lib/logs/query'
 import { formatEvent, formatLine, formatLogsReport } from '../src/lib/logs/render'
 import { createStyle } from '../src/core/output'
 
@@ -181,6 +181,80 @@ describe('parsing', () => {
     expect(matchesId(e, 'cccccccc')).toBe(true)
     expect(matchesId(e, 'ccc')).toBe(false)
     expect(matchesId(e, 'trace-1')).toBe(true)
+  })
+})
+
+describe('outcomes and sessions', () => {
+  it('tells a recovered turn from a clean one, whatever its status says', () => {
+    expect(outcomeOf(event({ eve: { outcome: 'completed' } }))).toBe('completed')
+    expect(outcomeOf(event({ level: 'warn', eve: { outcome: 'completed', failedCalls: 1 } }))).toBe('recovered')
+    expect(outcomeOf(event({ gen_ai: { tools: [{ name: 'a', success: true }, { name: 'b', success: false }] } }))).toBe('recovered')
+    expect(outcomeOf(event({ status: 500, eve: { outcome: 'failed' } }))).toBe('failed')
+    expect(outcomeOf(event({ status: 499, eve: { outcome: 'cancelled' } }))).toBe('cancelled')
+    expect(outcomeOf(event({ status: 503 }))).toBe('failed')
+    expect(outcomeOf(event({}))).toBe('completed')
+  })
+
+  const turn = (session: string, at: string, durationMs: number, overrides: Record<string, unknown> = {}) => event({
+    timestamp: at,
+    durationMs,
+    requestId: `${session}:${at}`,
+    gen_ai: { conversation: { id: session }, calls: 2, usage: { input_tokens: 100, output_tokens: 10, cache_read: { input_tokens: 80 } }, ...overrides.gen_ai as object },
+    eve: { outcome: 'completed', ...overrides.eve as object },
+    ...Object.fromEntries(Object.entries(overrides).filter(([key]) => key !== 'gen_ai' && key !== 'eve')),
+  })
+
+  function summarize(events: WideEvent[], limit = 10) {
+    const query = buildQuery({ what: 'sessions', limit: String(limit) })
+    const selection = createSelection(query)
+    for (const e of events) if (query.filter(e)) selection.add(e)
+    return selection.done()
+  }
+
+  it('sums each session over its turns, newest session first', () => {
+    const result = summarize([
+      turn('s1', '2026-10-01T10:00:02.000Z', 2000, { traceId: 't1', gen_ai: { usage: { input_tokens: 100, output_tokens: 10, cost: 0.001 }, request: { model: 'm1' } } }),
+      turn('s2', '2026-10-01T11:00:00.000Z', 500),
+      turn('s1', '2026-10-01T10:05:00.000Z', 4000, { level: 'warn', traceId: 't2', eve: { failedCalls: 1 }, error: { code: 'DECLINED', message: 'no' }, gen_ai: { tools: [{ name: 'refund', success: false }] } }),
+      event({ requestId: 'no-session' }),
+    ])
+    expect(result.matched).toBe(3)
+    expect(result.sessionsMatched).toBe(2)
+    expect(result.sessions!.map(s => s.session)).toEqual(['s2', 's1'])
+    const s1 = result.sessions![1]!
+    expect(s1).toMatchObject({
+      firstAt: '2026-10-01T10:00:00.000Z',
+      lastAt: '2026-10-01T10:05:00.000Z',
+      elapsedMs: 300_000,
+      processingMs: 6000,
+      turns: 2,
+      outcomes: { completed: 1, recovered: 1, failed: 0, cancelled: 0 },
+      failedToolCalls: 1,
+      modelCalls: 4,
+      toolCalls: 1,
+      slowest: { requestId: 's1:2026-10-01T10:05:00.000Z', durationMs: 4000 },
+      latestFailure: { outcome: 'recovered', code: 'DECLINED', message: 'no', failedTools: ['refund'] },
+      lastRequestId: 's1:2026-10-01T10:05:00.000Z',
+      traceIds: ['t2', 't1'],
+      models: ['m1'],
+    })
+    /* One turn reported a cost and the other did not: the sum says so instead of passing for the session's total. */
+    expect(s1.cost).toEqual({ usd: 0.001, turnsReporting: 1 })
+    expect(s1.tokens).toEqual({ input: 200, output: 20, cacheRead: 80 })
+  })
+
+  it('leaves out what no turn reported instead of writing zero', () => {
+    const [only] = summarize([event({ gen_ai: { conversation: { id: 'bare' } } })]).sessions!
+    expect(only).not.toHaveProperty('cost')
+    expect(only).not.toHaveProperty('tokens')
+    expect(only).not.toHaveProperty('modelCalls')
+    expect(only!.processingMs).toBe(12)
+  })
+
+  it('returns at most limit sessions and counts the rest', () => {
+    const result = summarize(['a', 'b', 'c'].map((id, i) => turn(id, `2026-10-01T10:0${i}:00.000Z`, 10)), 2)
+    expect(result.sessions!.map(s => s.session)).toEqual(['c', 'b'])
+    expect(result.sessionsMatched).toBe(3)
   })
 })
 

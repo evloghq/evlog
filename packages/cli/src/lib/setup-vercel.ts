@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { CliContext } from '../core/context'
 import { cliErrors } from './errors'
 import { loadCliConfig } from './config'
-import { DEFAULT_VERCEL_CONNECTOR, findVercelProject, readVercelLogs, resolveVercelAccess, VercelReadError } from './logs/vercel'
-import type { VercelAccess, VercelProject } from './logs/vercel'
+import { DEFAULT_VERCEL_CONNECTOR, findVercelProject, projectOidc, readVercelLogs, requestConnectToken, resolveVercelAccess, VercelReadError } from './logs/vercel'
+import type { VercelAccess, VercelProject, VercelScope } from './logs/vercel'
 import { resolveProject } from './project'
 
 export interface VercelRun {
@@ -176,4 +179,121 @@ export async function runSetupVercel(ctx: CliContext, options: SetupVercelOption
     throw error
   }
   return { projectId: linked.projectId, connector, created, attached, reused: !created && connector !== DEFAULT_VERCEL_CONNECTOR && configured === undefined, events }
+}
+
+/** One stage of `evlog setup vercel --check`. */
+export interface PreflightStage {
+  id: 'linked' | 'oidc' | 'connector' | 'attached' | 'token' | 'read' | 'traces'
+  status: 'ok' | 'warn' | 'fail' | 'skipped'
+  message: string
+  /** What to run or change, when the stage did not pass. */
+  fix?: string
+}
+
+export interface PreflightOptions {
+  vercel?: VercelCli
+  oidc?: (project: VercelProject) => Promise<{ oidc: string, scope: VercelScope }>
+  fetchFn?: typeof fetch
+  now?: Date
+  connector?: string
+}
+
+const PREFLIGHT_ORDER: PreflightStage['id'][] = ['linked', 'oidc', 'connector', 'attached', 'token', 'read']
+
+/**
+ * Checks each step `evlog logs --source vercel` and a deployed agent depend
+ * on, one at a time, and changes nothing: it lists connectors, asks Connect
+ * for a token, and reads the last hour once. A token from Connect does not
+ * prove the key behind it may read runtime logs, so the read is its own stage.
+ * The stages after the first failure are listed as skipped.
+ */
+export async function runSetupVercelCheck(ctx: CliContext, options: PreflightOptions = {}): Promise<PreflightStage[]> {
+  const vercel = options.vercel ?? createVercelCli()
+  const stages: PreflightStage[] = []
+  const done = (): PreflightStage[] => {
+    for (const id of PREFLIGHT_ORDER.slice(stages.length)) stages.push({ id, status: 'skipped', message: 'not checked: an earlier stage failed' })
+    return stages
+  }
+  const project = await resolveProject(ctx.cwd)
+  const linked = await findVercelProject(project.packageDir, project.root)
+  if (!linked) {
+    stages.push({ id: 'linked', status: 'fail', message: 'no .vercel/project.json', fix: 'vercel link (interactive: asks which project, and can create one)' })
+    return done()
+  }
+  stages.push({ id: 'linked', status: 'ok', message: `${linked.projectId} on ${linked.teamId}` })
+
+  let oidc: string
+  let scope: VercelScope
+  try {
+    ({ oidc, scope } = await (options.oidc ?? projectOidc)(linked))
+  } catch (error) {
+    stages.push({ id: 'oidc', status: 'fail', message: error instanceof Error ? error.message : String(error), fix: 'vercel login, then run this again' })
+    return done()
+  }
+  stages.push({ id: 'oidc', status: 'ok', message: `token for ${scope.projectId}, reads ${scope.environment}` })
+
+  const connector = options.connector ?? loadCliConfig(project)?.logs.vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR
+  let onTeam: ListedConnector | undefined
+  let onProject: boolean
+  try {
+    onTeam = (await listConnectors(vercel, linked.dir, true)).find(listed => listed.uid === connector)
+    onProject = (await listConnectors(vercel, linked.dir, false)).some(listed => listed.uid === connector)
+  } catch (error) {
+    stages.push({ id: 'connector', status: 'fail', message: error instanceof Error ? error.message : String(error), fix: 'vercel login with an account on the team' })
+    return done()
+  }
+  if (!onTeam) {
+    stages.push({ id: 'connector', status: 'fail', message: `the team has no ${connector} connector`, fix: 'npx evlog setup vercel (creates it; asks for a Vercel access token scoped to the team)' })
+    return done()
+  }
+  stages.push({ id: 'connector', status: onTeam.type === 'api-key' ? 'ok' : 'warn', message: `${connector} (${onTeam.type ?? 'unknown type'})`, ...(onTeam.type !== 'api-key' && { fix: 'Reads need an API-key connector holding a Vercel access token' }) })
+  if (!onProject) {
+    stages.push({ id: 'attached', status: 'fail', message: `${connector} is not attached to ${linked.projectId}`, fix: `npx evlog setup vercel (runs vercel connect attach ${connector} --yes)` })
+    return done()
+  }
+  stages.push({ id: 'attached', status: 'ok', message: `attached to ${linked.projectId}` })
+
+  let token: string
+  try {
+    token = await requestConnectToken(oidc, connector, options.fetchFn)
+  } catch (error) {
+    const status = error instanceof VercelReadError ? error.status : undefined
+    stages.push({ id: 'token', status: 'fail', message: `Vercel Connect issued no token${status ? ` (${status})` : ''}`, fix: 'Check the connector is attached for this environment, then run this again' })
+    return done()
+  }
+  stages.push({ id: 'token', status: 'ok', message: 'Vercel Connect issued a token for the OIDC token' })
+
+  const now = options.now ?? new Date()
+  let events = 0
+  let lines = 0
+  try {
+    const reader = readVercelLogs({ token, scope, since: new Date(now.getTime() - HOUR_MS), until: now, maxLines: 100, fetchFn: options.fetchFn })
+    let step = await reader.next()
+    for (; !step.done; step = await reader.next()) events += 1
+    ;({ lines } = step.value)
+  } catch (error) {
+    if (!(error instanceof VercelReadError)) throw error
+    stages.push(error.status === 403
+      ? { id: 'read', status: 'fail', message: `the key stored in ${connector} may not read runtime logs (403)`, fix: `Replace the key in ${connector} with a Vercel access token scoped to the team (Account Settings → Tokens). An OIDC token or a provider key cannot read runtime logs` }
+      : { id: 'read', status: 'fail', message: `Vercel refused the read (${error.status})`, fix: 'Check the plan keeps runtime logs (Hobby 1 hour, Pro 1 day)' })
+    return done()
+  }
+  stages.push(events > 0
+    ? { id: 'read', status: 'ok', message: `read ${events} event${events === 1 ? '' : 's'} from the last hour` }
+    : { id: 'read', status: 'ok', message: `allowed; ${lines === 0 ? 'no runtime log lines' : `${lines} log lines, none an evlog event,`} in the last hour`, ...(lines > 0 && { fix: 'evlog prints one JSON line per event to stdout; check the deployment runs evlog' }) })
+
+  const traces = await tracesStage(project.packageDir)
+  if (traces) stages.push(traces)
+  return stages
+}
+
+/** For an eve agent: whether `agent/instrumentation` exports `evlogTraces()`, which puts trace ids on turn events. */
+async function tracesStage(packageDir: string): Promise<PreflightStage | undefined> {
+  if (!existsSync(join(packageDir, 'agent'))) return undefined
+  const dir = join(packageDir, 'agent', 'instrumentation')
+  const files = existsSync(dir) ? (await readdir(dir)).filter(file => /\.[cm]?[jt]s$/.test(file)) : []
+  for (const file of files) {
+    if ((await readFile(join(dir, file), 'utf8')).includes('evlogTraces')) return { id: 'traces', status: 'ok', message: `agent/instrumentation/${file} exports evlogTraces()` }
+  }
+  return { id: 'traces', status: 'warn', message: 'turn events carry no traceId', fix: 'npx evlog setup eve (writes agent/instrumentation/evlog.ts; reads span ids only and exports nothing)' }
 }

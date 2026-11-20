@@ -5,8 +5,16 @@ import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
 import { cliErrors, isUsageError } from '../lib/errors'
 import { DEFAULT_VERCEL_CONNECTOR } from '../lib/logs/vercel'
-import { runSetupVercel } from '../lib/setup-vercel'
-import type { ListedConnector } from '../lib/setup-vercel'
+import { runSetupEve } from '../lib/setup-eve'
+import { runSetupVercel, runSetupVercelCheck } from '../lib/setup-vercel'
+import type { ListedConnector, PreflightStage } from '../lib/setup-vercel'
+
+const MARK: Record<PreflightStage['status'], { mark: string, color: 'green' | 'yellow' | 'red' | 'dim' }> = {
+  ok: { mark: '✓', color: 'green' },
+  warn: { mark: '!', color: 'yellow' },
+  fail: { mark: '✗', color: 'red' },
+  skipped: { mark: '·', color: 'dim' },
+}
 
 async function chooseConnector(reusable: ListedConnector[], attached: ReadonlySet<string>): Promise<string | undefined> {
   const ordered = [...reusable].sort((a, b) => Number(attached.has(b.uid)) - Number(attached.has(a.uid)))
@@ -27,13 +35,43 @@ async function chooseConnector(reusable: ListedConnector[], attached: ReadonlySe
 export default defineEvlogCommand('setup', {
   meta: { name: 'setup' },
   args: {
-    target: { type: 'positional', required: true, description: 'What to set up: vercel' },
+    target: { type: 'positional', required: true, description: 'What to set up: vercel, or eve for an eve agent\'s trace instrumentation' },
+    check: { type: 'boolean', description: 'Report each stage without changing anything: link, OIDC, connector, attachment, token, log read, traces' },
     connector: { type: 'string', description: 'The Vercel Connect connector to read through, such as vercel/mcp (default: logs.vercel.connector in evlog.config, else vercel/evlog)' },
   },
   async run({ args, cli, ui }) {
     const style = createStyle(cli)
     try {
+      if (args.target === 'eve') {
+        const eve = await runSetupEve(cli, { check: args.check === true })
+        const said = {
+          written: `${style.paint('green', '✓')} wrote ${eve.file}`,
+          present: `${style.paint('green', '✓')} ${eve.file} already exports evlogTraces()`,
+          missing: `${style.paint('yellow', '!')} ${eve.file} is missing; evlog setup eve writes it`,
+          conflict: `${style.paint('yellow', '!')} ${eve.file} exists without evlogTraces(); left as it is. Add: export default evlogTraces() from '@evlog/eve/instrumentation'`,
+        }[eve.state]
+        ui.done({ jsonMode: args.json, json: { ...eve }, human: said })
+        if (eve.state === 'conflict' || eve.state === 'missing') ui.exit(EXIT_FAIL)
+        return
+      }
       if (args.target !== 'vercel') throw cliErrors.SETUP_INVALID_TARGET({ value: String(args.target) })
+      if (args.check) {
+        const stages = await runSetupVercelCheck(cli, { connector: args.connector })
+        ui.done({
+          jsonMode: args.json,
+          json: { stages, ready: stages.every(stage => stage.status === 'ok' || stage.status === 'warn') },
+          human: [
+            ...stages.flatMap(stage => [
+              `${style.paint(MARK[stage.status].color, MARK[stage.status].mark)} ${stage.id.padEnd(9)} ${stage.message}`,
+              ...(stage.fix ? [style.paint('dim', `  → ${stage.fix}`)] : []),
+            ]),
+            '',
+            style.paint('dim', 'Read-only: nothing was created, attached or written'),
+          ].join('\n'),
+        })
+        if (stages.some(stage => stage.status === 'fail')) ui.exit(EXIT_FAIL)
+        return
+      }
       const result = await runSetupVercel(cli, {
         connector: args.connector,
         choose: cli.tty && !args.json ? chooseConnector : undefined,

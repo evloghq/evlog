@@ -52,6 +52,12 @@ export interface EvlogLogsConfig {
   dir?: string
   /** Most events shown, like `--limit`. */
   limit?: number
+  /**
+   * Where `evlog logs` reads when `--source` is not passed: the local files,
+   * or the linked Vercel project's runtime logs.
+   * @default 'files'
+   */
+  source?: 'files' | 'vercel'
   /** Reading runtime logs from Vercel with `evlog logs --source vercel`. */
   vercel?: {
     /**

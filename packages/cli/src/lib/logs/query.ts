@@ -3,8 +3,8 @@ import { buildQuery as buildEngineQuery, parseDuration, parseStatus as parseEngi
 import type { LogsQuery, LogsView, Where } from '../../../../evlog/src/logs-query'
 import { cliErrors } from '../errors'
 
-export { createSelection, field, isError, matchesId, matchesWhere, parseDuration, timeOf } from '../../../../evlog/src/logs-query'
-export type { LogsQuery, LogsStats, LogsView, RouteStats, Selected, Where } from '../../../../evlog/src/logs-query'
+export { createSelection, field, isError, matchesId, matchesWhere, outcomeOf, parseDuration, timeOf } from '../../../../evlog/src/logs-query'
+export type { LogsQuery, LogsStats, LogsView, Outcome, RouteStats, SessionSummary, Selected, Where } from '../../../../evlog/src/logs-query'
 
 /**
  * String fields of the `evlog logs` telemetry, with the exact set of values each may take.
@@ -103,7 +103,7 @@ export function buildQuery(args: LogsArgs, now = new Date(), defaultLimit?: numb
   const where = parseWheres(args.where)
 
   const what = args.what?.trim()
-  const view: LogsView = what === 'errors' ? 'errors' : what === 'slow' ? 'slow' : what === 'stats' ? 'stats' : what ? 'trace' : 'recent'
+  const view: LogsView = what === 'errors' || what === 'slow' || what === 'stats' || what === 'sessions' ? what : what ? 'trace' : 'recent'
   return buildEngineQuery({
     view,
     id: view === 'trace' ? what : undefined,
