@@ -14,7 +14,7 @@ Experimental. The AI SDK API it wraps is `experimental_evaluate`, and this packa
 pnpm add @evlog/signals ai
 ```
 
-`ai` 7.0.105 or later. The default model is `typesafe-ai/jev` through Vercel AI Gateway, which reads `AI_GATEWAY_API_KEY` or OIDC on Vercel. For a direct TypeSafe key, pass a model from `@ai-sdk/typesafe-ai`.
+`ai` 7.0.130 or later. The default model is `typesafe-ai/jev` through Vercel AI Gateway, which reads `AI_GATEWAY_API_KEY` or OIDC on Vercel. For a direct TypeSafe key, pass a model from `@ai-sdk/typesafe-ai`.
 
 ## Quick start
 
@@ -42,7 +42,7 @@ export const silentFailure = defineSignal({
   name: 'silent-failure',
   when: e => e.status === 200 && e.path === '/api/checkout',
   ask: 'Returned 200, but the customer did not get what they came for',
-  keep: v => v.value && v.confidence > 0.8,
+  keep: 0.8,
 })
 ```
 
@@ -105,10 +105,16 @@ Columns are written before the console line, so they show in the dev terminal, i
 | `choice` | `Record<option, description>` | At least two. Makes a choice signal. |
 | `score` | `[level, level, ...]` | Ordered, lowest first, at least two. Makes a score signal. |
 | `criteria` | `{ true?, false? }` | Boolean signals only: what makes each answer true. |
-| `keep` | `(verdict) => boolean` | Promote the event past sampling when `true`. Never drops. |
+| `keep` | `(verdict) => boolean`, or a number on yes/no signals | Promote the event past sampling when `true`. Never drops. `keep: 0.8` keeps a yes with confidence above 0.8. |
 | `cacheKey` | `(event) => string \| undefined` | Reuse the verdict for events sharing a key. |
 
 `keep` is typed on the verdict the shape produces: `v.value === 'app'` autocompletes to the options of a choice signal.
+
+`signal.read(event)` returns that signal's column from a judged event, typed the same way, or `undefined`. Use it where code acts on a verdict, such as a retry policy:
+
+```ts
+if (retryable.read(event)?.value) await queue.retry(job)
+```
 
 The event a signal sees is the wide event in `enrich`, or the request context plus `status`, `path`, `method` and `durationMs` in `keep`. Fields evlog sets are typed; the rest is `unknown`.
 
@@ -121,12 +127,13 @@ Returns an evlog plugin.
 | `signals` | | The signals to run. Names must be unique. |
 | `model` | `'typesafe-ai/jev'` | AI SDK evaluation model. A gateway id (`'liquid/d1'`), or a provider instance such as `typeSafeAi.evaluationModel('jev-latest')` or `openai.evaluationModel('gpt-6-luna')`. |
 | `budget.perMinute` | `600` | Model calls per minute, shared by all signals. |
-| `budget.cooldownMs` | `30000` | Pause after a failed call. |
+| `budget.cooldownMs` | `30000` | Pause after three failed calls in a row. |
+| `cacheTtlMs` | `300000` | How long a `cacheKey` verdict is reused. |
 | `timeoutMs` | `2000` | Per call. |
 | `state` | whole event minus signal columns | What the model reads. Pick fields to bound tokens and egress. |
 | `maxStateChars` | `100000` | Larger events are skipped. |
 | `providerOptions` | | Forwarded to the call, e.g. `{ gateway: { zeroDataRetention: true } }`. |
-| `evaluate` | AI SDK `experimental_evaluate` | Replace the model call. Tests, record and replay. |
+| `evaluate` | AI SDK `experimental_decide` | Replace the model call. Tests, record and replay. |
 | `stampModel` | `false` | Also write the answering model's id on `event.signalsModel`. For comparing models. |
 
 `plugin.stats()` returns `{ calls, skipped, errors, refused, cached, inputTokens }`.
@@ -144,7 +151,7 @@ interface ScoreVerdict<Level> { value: Level; score: number; confidence?: number
 - Runs after the response. `keep` and `enrich` are evlog plugin hooks that run once the request is finished.
 - Promote only. A keep signal can force an event past sampling. It cannot drop one, and baseline sampling stays deterministic. Promoted events carry `kept`, so rate-weighted counts stay valid.
 - Fails open. A timeout, a failed call, an exhausted budget or an oversized state leaves the event as it was, and counts in `stats()`.
-- One call per event. Signals are batched, so the state is billed once and takes one slot of the rate limit.
+- One call per event. Signals are batched, so the state is billed once and takes one slot of the rate limit. When a keep signal is due, every other due signal is asked in the same call.
 - Typed output only. No prose on events, and no column you did not ask for: the model id is written only with `stampModel`.
 - Your key, your process. Nothing is proxied.
 - No call for what a predicate can answer. `when` runs first, always.

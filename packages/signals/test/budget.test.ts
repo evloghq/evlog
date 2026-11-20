@@ -3,19 +3,28 @@ import { createBudget } from '../src/budget'
 import { createLru } from '../src/cache'
 
 describe('createBudget', () => {
-  it('allows perMinute calls, then refuses until the window rolls over', () => {
+  it('allows perMinute calls at once, then refills one call per minute / perMinute', () => {
     let now = 0
     const budget = createBudget({ perMinute: 2, cooldownMs: 1000 }, () => now)
     expect(budget.take()).toBe(true)
     expect(budget.take()).toBe(true)
     expect(budget.take()).toBe(false)
-    now = 60_000
+    now = 29_999
+    expect(budget.take()).toBe(false)
+    now = 30_000
     expect(budget.take()).toBe(true)
+    expect(budget.take()).toBe(false)
   })
 
-  it('opens after a failure and closes after the cooldown', () => {
+  it('opens after three consecutive failures and closes after the cooldown', () => {
     let now = 0
     const budget = createBudget({ perMinute: 10, cooldownMs: 1000 }, () => now)
+    budget.fail()
+    budget.fail()
+    budget.succeed()
+    budget.fail()
+    budget.fail()
+    expect(budget.take()).toBe(true)
     budget.fail()
     expect(budget.take()).toBe(false)
     now = 999
