@@ -118,6 +118,13 @@ describe('evaluate', () => {
     expect(result.findings.map(finding => finding.id)).toContain('T-15')
   })
 
+  it('spares a rule that names the public replacement beside the retired path', () => {
+    const source = 'No `evlog/shared` import (`evlog/toolkit` is the public name).'
+    const result = evaluate(page('apps/evi/agent/skills/self-review/SKILL.md', source), quiet)
+
+    expect(result.findings.map(finding => finding.id)).not.toContain('T-15')
+  })
+
   it('still spares the sentence that retires it', () => {
     const source = 'Never use `evlog/shared`; the public entry point is `evlog/toolkit`.'
 
