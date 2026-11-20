@@ -43,6 +43,15 @@ describe('writePolicy', () => {
     expect(labels.writePolicy(auth({ principalId: 'github:12345' }))).toBe('not-applicable')
     expect(labels.writePolicy(auth({ principalId: 'github:99999' }))).toBe('user-approval')
   })
+
+  it('denies a scheduled task even though it carries a workspace member', async () => {
+    const { trust, labels } = await load({ EVI_SLACK_TEAM_ID: 'T0HOME' })
+    const member = { authenticator: 'slack-webhook', principalId: 'slack:T0HOME:U0ADA' }
+    expect(labels.writePolicy(auth(member))).toBe('not-applicable')
+    const scheduled = auth({ ...member, attributes: { [trust.SCHEDULED_TASK_ATTRIBUTE]: 'true' } })
+    expect(trust.isMaintainer(scheduled)).toBe(false)
+    expect(labels.writePolicy(scheduled)).toEqual({ type: 'denied', reason: expect.stringContaining('scheduled task') })
+  })
 })
 
 describe('createLabelPolicy', () => {
