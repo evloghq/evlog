@@ -3,8 +3,8 @@ import { defineSignal } from './define'
 
 function describeError(e: SignalInput): string | undefined {
   const error = e.error as { name?: unknown, message?: unknown } | undefined
-  if (error && typeof error === 'object') return `${String(error.name ?? 'Error')}: ${String(error.message ?? '')}`
-  if (typeof e.message === 'string') return `${typeof e.tag === 'string' ? e.tag : 'log'}: ${e.message}`
+  if (error && typeof error === 'object') return JSON.stringify(['error', String(error.name ?? 'Error'), String(error.message ?? '')])
+  if (typeof e.message === 'string') return JSON.stringify(['log', typeof e.tag === 'string' ? e.tag : null, e.message])
   return undefined
 }
 
@@ -15,8 +15,9 @@ function describeError(e: SignalInput): string | undefined {
  * verdict, so a flood of the same `Failed to fetch` costs one call.
  *
  * Client events arrive unauthenticated: register it on its own
- * `createSignals` instance so a flood cannot spend the budget of server
- * signals.
+ * `createSignals` instance so its calls draw on their own budget. Server
+ * signals still see ingested events, which can carry any `status`; give them
+ * `e.source !== 'client'` in `when` to keep a flood off their budget too.
  *
  * @example
  * ```ts

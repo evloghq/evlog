@@ -41,9 +41,12 @@ describe('clientFault', () => {
     for (let i = 0; i < 20; i++) await plugin.enrich(clientEvent({ requestId: `r${i}`, userId: `u${i}`, error: { name: 'TypeError', message: 'Failed to fetch', stack: `at line ${i}` } }))
     await plugin.enrich(clientEvent({ level: 'fatal', tag: 'checkout', message: 'stripe.js did not load' }))
     await plugin.enrich(clientEvent({ tag: 'checkout', message: 'stripe.js did not load' }))
+    await plugin.enrich(clientEvent({ tag: 'checkout: step', message: 'failed' }))
+    await plugin.enrich(clientEvent({ tag: 'checkout', message: 'step: failed' }))
+    await plugin.enrich(clientEvent({ error: { name: 'checkout', message: 'stripe.js did not load' } }))
 
-    expect(evaluate).toHaveBeenCalledTimes(2)
-    expect(plugin.stats()).toMatchObject({ calls: 2, cached: 20 })
+    expect(evaluate).toHaveBeenCalledTimes(5)
+    expect(plugin.stats()).toMatchObject({ calls: 5, cached: 20 })
   })
 })
 
