@@ -989,6 +989,12 @@ importers:
         specifier: ^0.158.0
         version: 0.158.0
     devDependencies:
+      '@evlog/signals':
+        specifier: workspace:*
+        version: link:../signals
+      ai:
+        specifier: ^7.0.173
+        version: 7.0.173(zod@4.6.7)
       evlog:
         specifier: workspace:*
         version: link:../evlog
