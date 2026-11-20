@@ -73,7 +73,6 @@ All integrations share the same core utilities. **Never reimplement logic that e
 | `BaseEvlogOptions` | `../shared/middleware` | Base user-facing options type with `drain`, `enrich`, `keep`, `include`, `exclude`, `routes`, `plugins` |
 | `createLoggerStorage` | `../shared/storage` (`evlog/toolkit/storage`) | Factory returning `{ storage, useLogger }` for `AsyncLocalStorage`-backed `useLogger()`. Prefer `evlog/toolkit/storage` on Workers / edge |
 | `shouldDeferEmitForResponse` | `../shared/streamResponse` | Defer the wide event until a streaming body closes (see Hono/Elysia) |
-| `flushPendingDrains` | `../shared/shutdown` | Flush every drain pipeline that holds events. Call it from the framework's awaited close hook (see Fastify, NestJS, Nitro) |
 
 `defineFrameworkIntegration` automatically:
 
@@ -165,7 +164,7 @@ For integrations that bind with `enterWith()`, use `createSharedEnterWithStorage
 5. **Framework SDK is an optional peer dependency**: never bundle it.
 6. **Never duplicate pipeline logic**: `runEnrichAndDrain` is internal to `createMiddlewareLogger`/`finish`.
 7. **Export type helpers** for typed context access (e.g., `EvlogVariables` for Hono).
-8. **Flush on close**: when the framework has a close hook it awaits (Fastify `onClose`, NestJS `onApplicationShutdown`, Nitro `close`), return `flushPendingDrains()` from it. Signals and `beforeExit` are handled process-wide, so never add a `SIGTERM` or `SIGINT` listener in an integration.
+8. **Flush on close**: when the framework has a close hook it awaits (Fastify `onClose`, NestJS `onApplicationShutdown`, Nitro `close`), return `flushPendingDrains()` from it. It comes from `../shared/shutdown` and is internal: `evlog/toolkit` does not export it, so only integrations in this repo can call it. Signals and `beforeExit` are handled process-wide, so never add a `SIGTERM` or `SIGINT` listener in an integration.
 
 ### When to fall back to custom mode
 

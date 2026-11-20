@@ -155,6 +155,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     let activeFlush: Promise<void> | null = null
     let settleWaiters: Array<() => void> = []
     let activeFlushCalls = 0
+    let flushTail: Promise<void> | null = null
     let pausedUntil = 0
     let pauseError: Error | undefined
     let delivered = 0
@@ -328,32 +329,40 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       }
     }
 
-    async function flush(): Promise<void> {
+    async function flushBuffer(): Promise<void> {
+      if (activeFlush) {
+        await activeFlush
+      }
+      // Snapshot the buffer length to avoid infinite loop if push() is called during flush
+      const snapshot = buffer.length
+      if (snapshot === 0) return
+      const toFlush = buffer.splice(0, snapshot)
+      while (toFlush.length > 0) {
+        const batch = toFlush.splice(0, batchSize)
+        // flush() delivers now or gives up: a pause left by the provider drops the batch instead of holding shutdown.
+        if (pauseRemainingMs() > 0 || await sendWithRetry(batch) === 'paused') {
+          drop(batch, 'rate-limited', pauseError)
+        }
+      }
+    }
+
+    function flush(): Promise<void> {
       clearTimer()
       // Counted so settled() stays pending while a spliced batch is in flight.
       activeFlushCalls++
-      try {
-        if (activeFlush) {
-          await activeFlush
-        }
-        // Snapshot the buffer length to avoid infinite loop if push() is called during flush
-        const snapshot = buffer.length
-        if (snapshot > 0) {
-          const toFlush = buffer.splice(0, snapshot)
-          while (toFlush.length > 0) {
-            const batch = toFlush.splice(0, batchSize)
-            // flush() delivers now or gives up: a pause left by the provider drops the batch instead of holding shutdown.
-            if (pauseRemainingMs() > 0 || await sendWithRetry(batch) === 'paused') {
-              drop(batch, 'rate-limited', pauseError)
-            }
-          }
-        }
-      } finally {
+      // A flush waits for one still running: that one already spliced its events out of the buffer.
+      const run = (flushTail ? flushTail.then(flushBuffer) : flushBuffer()).finally(() => {
         // flush() usually precedes exit: report drops still waiting for the next log window.
         logUnlogged()
         activeFlushCalls--
         notifySettled()
-      }
+      })
+      const tail = run.then(() => undefined, () => undefined)
+      flushTail = tail
+      void tail.then(() => {
+        if (flushTail === tail) flushTail = null
+      })
+      return run
     }
 
     function settled(): Promise<void> {
