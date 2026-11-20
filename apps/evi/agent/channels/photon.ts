@@ -6,8 +6,8 @@ import { MAINTAINER_PHONE } from '../lib/trust'
 
 export default photonIMessageChannel({
   credentials: connectPhotonCredentials('photon/evi'),
-  // The Photon project's user allowlist only registers Hugo, so every inbound
-  // message is his. Revisit when more users are added there.
+  // The Photon project's user allowlist only registers the maintainer, so every
+  // inbound message is theirs. Revisit when more users are added there.
   onMessage(_ctx, message) {
     if (message.author.isBot || MAINTAINER_PHONE === undefined) return null
     return {

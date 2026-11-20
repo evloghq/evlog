@@ -306,6 +306,28 @@ describe('createDrainPipeline', () => {
       expect(hook.pending).toBe(0)
     })
 
+    it('resolves a second flush() only after the batch the first one is sending is delivered', async () => {
+      let release!: () => void
+      const drain = vi.fn().mockImplementation(() => new Promise<void>((resolve) => {
+        release = resolve
+      }))
+      const hook = createDrainPipeline({ batch: { size: 100, intervalMs: 60000 } })(drain)
+      hook(createTestContext(1))
+
+      const first = hook.flush()
+      let secondDone = false
+      const second = hook.flush().then(() => {
+        secondDone = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(drain).toHaveBeenCalledTimes(1)
+      expect(secondDone).toBe(false)
+      release()
+      await Promise.all([first, second])
+      expect(secondDone).toBe(true)
+    })
+
     it('flush drains events that arrived during active flush', async () => {
       const drain = vi.fn().mockResolvedValue(undefined)
       const hook = createDrainPipeline({ batch: { size: 2, intervalMs: 60000 } })(drain)

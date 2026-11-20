@@ -164,6 +164,7 @@ For integrations that bind with `enterWith()`, use `createSharedEnterWithStorage
 5. **Framework SDK is an optional peer dependency**: never bundle it.
 6. **Never duplicate pipeline logic**: `runEnrichAndDrain` is internal to `createMiddlewareLogger`/`finish`.
 7. **Export type helpers** for typed context access (e.g., `EvlogVariables` for Hono).
+8. **Flush on close**: when the framework has a close hook it awaits (Fastify `onClose`, NestJS `onApplicationShutdown`, Nitro `close`), return `flushPendingDrains()` from it. It comes from `../shared/shutdown` and is internal: `evlog/toolkit` does not export it, so only integrations in this repo can call it. Signals and `beforeExit` are handled process-wide, so never add a `SIGTERM` or `SIGINT` listener in an integration.
 
 ### When to fall back to custom mode
 
@@ -222,6 +223,7 @@ On top of the matrix, cover the framework-specific surface:
 6. Drain/enrich error resilience. Errors there never break the request
 7. `useLogger()`: same logger as the native accessor, works across async boundaries, throws outside context. Skip it for an integration without ALS, and test the accessor it ships instead: on Workers that is the handler's fourth argument, from `defineWorkerFetch` / `withEvlog`
 8. Streaming (if applicable). Event deferred until the body closes
+9. Close hook (if applicable). A `createDrainPipeline` drain holding an event is flushed when the app closes
 
 Use fake timers for anything time-based; `defined()` instead of `!`.
 

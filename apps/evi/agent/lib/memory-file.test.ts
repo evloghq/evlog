@@ -33,7 +33,7 @@ function documentOfBytes(total: number): Document {
 
 describe('normalizeMemoryText', () => {
   it('trims and collapses whitespace', () => {
-    expect(normalizeMemoryText('  Hugo   prefers\n  French  ')).toBe('Hugo prefers French')
+    expect(normalizeMemoryText('  Maintainer   prefers\n  French  ')).toBe('Maintainer prefers French')
   })
 
   it('rejects empty text', () => {
@@ -50,7 +50,7 @@ describe('formatMemoryDocument / parseMemoryDocument', () => {
     const document = {
       lastAllocatedIndex: 2,
       entries: [
-        { index: 1, text: 'Hugo prefers direct answers.' },
+        { index: 1, text: 'The maintainer prefers direct answers.' },
         { index: 2, text: 'The evlog repo is evloghq/evlog.' },
       ],
     }
@@ -121,13 +121,13 @@ describe('mergeMemoryDocuments', () => {
   it('skips entries already present, whatever their incoming index', () => {
     const existing = {
       lastAllocatedIndex: 1,
-      entries: [{ index: 1, text: 'Hugo prefers French.' }],
+      entries: [{ index: 1, text: 'The maintainer prefers French.' }],
     }
     const merged = mergeMemoryDocuments(existing, [
-      { index: 99, text: 'Hugo prefers French.' },
+      { index: 99, text: 'The maintainer prefers French.' },
       { index: 99, text: 'Another fact.' },
     ])
-    expect(merged.entries.map(entry => entry.text)).toEqual(['Hugo prefers French.', 'Another fact.'])
+    expect(merged.entries.map(entry => entry.text)).toEqual(['The maintainer prefers French.', 'Another fact.'])
     expect(merged.lastAllocatedIndex).toBe(2)
   })
 })

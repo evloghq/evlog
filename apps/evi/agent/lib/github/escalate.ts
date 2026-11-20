@@ -2,7 +2,7 @@ import { EvlogError } from 'evlog'
 import { eviErrors } from '../errors'
 import { jobLogger } from '../job'
 import { type Repository, repositorySlug } from '../repo'
-import { MAINTAINER_GITHUB_LOGIN } from '../trust'
+import { ESCALATION_GITHUB_LOGIN } from '../trust'
 import { githubCredentialsFor, mintInstallationToken } from './credentials'
 
 const GITHUB_API = 'https://api.github.com'
@@ -26,8 +26,8 @@ export function isAutonomousTriageState(state: ChannelStateSlice): boolean {
 
 /**
  * Silent escalation for a failed autonomous triage: label the issue and assign
- * the maintainer so it lands in his notifications, without posting a bot error
- * comment in front of the community.
+ * the escalation login so it lands in their notifications, without posting a
+ * bot error comment in front of the community.
  */
 export async function escalateFailedTriage(repository: Repository, issueNumber: number): Promise<void> {
   const slug = repositorySlug(repository)
@@ -37,7 +37,7 @@ export async function escalateFailedTriage(repository: Repository, issueNumber: 
     labels: [ESCALATION_LABEL],
   })
   await githubRequest(token, 'POST', `/repos/${slug}/issues/${issueNumber}/assignees`, {
-    assignees: [MAINTAINER_GITHUB_LOGIN],
+    assignees: [ESCALATION_GITHUB_LOGIN],
   })
 }
 
