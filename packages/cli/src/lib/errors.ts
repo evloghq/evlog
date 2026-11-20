@@ -334,6 +334,33 @@ export const cliErrors = defineErrorCatalog('cli', {
     link: 'https://evlog.dev/cli/logs',
     tags: ['logs'],
   },
+  LOGS_ASK_UNAVAILABLE: {
+    status: 501,
+    message: ({ reason }: { reason: string }) =>
+      `--ask needs @evlog/signals and ai: ${reason}`,
+    why: 'A question is answered by a decision model through @evlog/signals, which the CLI loads from where the CLI itself is installed, only when --ask is passed. A CLI fetched by npx or bunx cannot see packages installed in the project',
+    fix: 'Install the CLI beside them in the project and run it from there: pnpm add -D @evlog/cli @evlog/signals \'ai@^7.0.130\', then pnpm evlog logs --ask',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs'],
+  },
+  LOGS_ASK_FAILED: {
+    status: 502,
+    message: ({ reason }: { reason: string }) =>
+      `The model could not answer --ask: ${reason}`,
+    why: 'Every selected event is judged, so a failed call would leave holes in the ranking; the run stops at the first one instead',
+    fix: 'Check AI_GATEWAY_API_KEY and that the gateway allows typesafe-ai, or narrow the events with --limit and retry',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs'],
+  },
+  LOGS_ASK_UNSUPPORTED: {
+    status: 400,
+    message: ({ with: other }: { with: string }) =>
+      `--ask cannot be combined with ${other}`,
+    why: 'A question ranks a finite set of events, one model call each; a follow never ends and stats keeps no events to rank',
+    fix: 'Drop --follow or the stats view, and narrow the events with --since, --where or --limit instead',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs'],
+  },
   LOGS_INVALID_LIMIT: {
     status: 400,
     message: ({ value }: { value: string }) =>
@@ -431,6 +458,7 @@ const USAGE_ERRORS = new Set<string>([
   cliErrors.LOGS_INVALID_DURATION,
   cliErrors.LOGS_INVALID_WHERE,
   cliErrors.LOGS_INVALID_LIMIT,
+  cliErrors.LOGS_ASK_UNSUPPORTED,
 ].map(entry => entry.code))
 
 /**

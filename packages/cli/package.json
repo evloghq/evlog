@@ -62,9 +62,21 @@
     "oxc-parser": "^0.158.0"
   },
   "peerDependencies": {
+    "@evlog/signals": ">=0.2.0",
+    "ai": ">=7.0.130 <8.0.0",
     "evlog": ">=2.35.1"
   },
+  "peerDependenciesMeta": {
+    "@evlog/signals": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@evlog/signals": "workspace:*",
+    "ai": "^7.0.173",
     "evlog": "workspace:*",
     "tsdown": "^0.23.7",
     "tsx": "^4.23.15",

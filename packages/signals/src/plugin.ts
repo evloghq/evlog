@@ -2,6 +2,7 @@ import { Experimental_DecisionRefusalError } from 'ai'
 import type { EnrichContext, EvlogPlugin, TailSamplingContext } from 'evlog'
 import type { Signal, SignalColumn, SignalInput, Verdict } from './define'
 import type { EvaluateFn, EvaluationModel, EvaluationQuestion, ProviderOptions, SignalState } from './evaluate'
+import type { Lane } from './budget'
 import { createBudget } from './budget'
 import { createLru } from './cache'
 import { aiSdkEvaluate, toQuestion, toVerdict } from './evaluate'
@@ -25,6 +26,14 @@ export interface SignalsOptions {
     perMinute?: number
     /** Pause after a failed call, in milliseconds. @default 30000 */
     cooldownMs?: number
+    /**
+     * Share of `perMinute` held for keep signals, which decide sampling. An
+     * error storm judged in `enrich` cannot spend it; keep signals fall back
+     * on the rest when it runs out. @default 0.25
+     */
+    keepShare?: number
+    /** Model calls in flight at once. Past it, events pass through unjudged rather than queue. @default 16 */
+    maxConcurrent?: number
   }
   /**
    * How long a verdict cached by `cacheKey` is reused, in milliseconds. Past
@@ -81,6 +90,8 @@ interface Judged {
   modelId?: string
   /** The model declined the call. A refusal of any question answers none of them. */
   refused?: boolean
+  /** Events of the lane this call stands for, itself and the ones the budget skipped before it. */
+  represents?: number
 }
 
 function dueSignals(signals: Signal[], input: SignalInput): Signal[] {
@@ -123,7 +134,10 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   const budget = createBudget({
     perMinute: options.budget?.perMinute ?? 600,
     cooldownMs: options.budget?.cooldownMs ?? 30_000,
+    keepShare: options.budget?.keepShare ?? 0.25,
   })
+  const maxConcurrent = options.budget?.maxConcurrent ?? 16
+  let calling = 0
 
   const seen = new Set<string>()
   for (const signal of options.signals) {
@@ -137,7 +151,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   const pending = createLru<Judged>(1_000)
   const stats: SignalsStats = { calls: 0, skipped: 0, errors: 0, refused: 0, cached: 0, inputTokens: 0 }
 
-  async function judge(signals: Signal[], input: SignalInput): Promise<Judged> {
+  async function judge(signals: Signal[], input: SignalInput, lane: Lane): Promise<Judged> {
     const verdicts = new Map<string, Verdict>()
     const shared: Array<[signal: Signal, call: Promise<Judged | undefined>]> = []
     const toAsk: Array<[signal: Signal, cacheId: string | undefined]> = []
@@ -158,12 +172,13 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
     }
 
     const [fresh, joined] = await Promise.all([
-      toAsk.length > 0 ? ask(toAsk, input) : undefined,
+      toAsk.length > 0 ? ask(toAsk, input, lane) : undefined,
       Promise.all(shared.map(([, call]) => call)),
     ])
     let modelId = fresh?.modelId
     const refused = fresh?.refused
-    for (const [name, verdict] of fresh?.verdicts ?? []) verdicts.set(name, verdict)
+    const rate = fresh?.represents !== undefined && fresh.represents > 1 ? 1 / fresh.represents : undefined
+    for (const [name, verdict] of fresh?.verdicts ?? []) verdicts.set(name, rate === undefined ? verdict : { ...verdict, rate } as SignalColumn)
     shared.forEach(([signal], i) => {
       const verdict = joined[i]?.verdicts.get(signal.name)
       if (!verdict) return
@@ -176,14 +191,26 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
 
   // Registered before the call is awaited, so concurrent events with the same cache key join it instead of calling again.
   // Only calls that reach the model are registered: a skip belongs to this event's state, not to its key.
-  function ask(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, input: SignalInput): Promise<Judged> {
-    const raw = buildState(input)
-    const json = typeof raw === 'string' ? raw : JSON.stringify(raw)
-    if (json.length > maxStateChars || !budget.take()) {
+  // The budget and the concurrency cap are checked before the state is built: under a spike most events are skipped, and a skip must not cost a serialization.
+  function ask(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, input: SignalInput, lane: Lane): Promise<Judged> {
+    const skip = (refund?: number): Promise<Judged> => {
+      if (refund !== undefined) budget.refund(lane, refund)
       stats.skipped++
       return Promise.resolve({ verdicts: new Map() })
     }
+    const represents = budget.take(lane)
+    if (represents === false) return skip()
+    if (calling >= maxConcurrent) return skip(represents)
+    const raw = buildState(input)
+    const json = typeof raw === 'string' ? raw : JSON.stringify(raw)
+    // An oversized state is a property of this event, not of the load, so only the events before it carry over.
+    if (json.length > maxStateChars) return skip(represents - 1)
+    calling++
     const call = callModel(toAsk, typeof raw === 'string' ? raw : JSON.parse(json))
+      .then(judged => ({ ...judged, represents }))
+      .finally(() => {
+        calling--
+      })
     // The caller gets the rejection; events that joined get no verdict, and the entry is cleared either way so the next event can retry.
     const settled = call.catch(() => undefined)
     for (const [, id] of toAsk) {
@@ -244,10 +271,10 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
 
       // The state is billed once per call and output is free, so the other due signals ride along instead of costing a second call in enrich.
       const asked = dueSignals(options.signals, input)
-      let judged = await judge(asked, input)
+      let judged = await judge(asked, input, 'keep')
       // A refused question voids the whole call, so a question that rode along must not cost the keep signals their promotion.
       if (judged.refused && asked.length > due.length && due.some(s => !judged.verdicts.has(s.name))) {
-        const retry = await judge(due, input)
+        const retry = await judge(due, input, 'keep')
         judged = { ...retry, verdicts: new Map([...judged.verdicts, ...retry.verdicts]) }
       }
       const kept = new Set<string>()
@@ -270,7 +297,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       if (requestId !== undefined) pending.delete(requestId)
 
       const remaining = due.filter(s => !prior?.verdicts.has(s.name))
-      const fresh = remaining.length > 0 ? await judge(remaining, event) : undefined
+      const fresh = remaining.length > 0 ? await judge(remaining, event, 'enrich') : undefined
 
       const columns: Record<string, SignalColumn> = {}
       for (const signal of due) {

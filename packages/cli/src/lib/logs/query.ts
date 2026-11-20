@@ -204,6 +204,10 @@ export interface LogsArgs {
   over?: string
   limit?: string
   where?: string | string[]
+  /** A yes/no question a decision model answers about each selected event. */
+  ask?: string
+  /** The decision model that answers `ask`, as an AI Gateway id. Unset, `@evlog/signals` picks its default. */
+  model?: string
 }
 
 const DEFAULT_OVER = 500

@@ -83,7 +83,7 @@ Every event that passes a signal's `when` gets judged. All due signals for one e
 }
 ```
 
-Every column has `value`, the answer. `confidence` is its probability: always on a yes/no, on choice and score when the model returns a distribution. Score signals add `score`, the weighted position between levels. `kept: true` marks the signal that promoted the event past sampling.
+Every column has `value`, the answer. `confidence` is its probability: always on a yes/no, on choice and score when the model returns a distribution. Score signals add `score`, the weighted position between levels. `kept: true` marks the signal that promoted the event past sampling. `rate` appears when the budget skipped events before this one: the verdict stands for `1 / rate` events, so `sum(1 / rate)` estimates a count during a spike.
 
 | Signal shape | `value` | Extra |
 | --- | --- | --- |
@@ -106,7 +106,7 @@ Columns are written before the console line, so they show in the dev terminal, i
 | `score` | `[level, level, ...]` | Ordered, lowest first, at least two. Makes a score signal. |
 | `criteria` | `{ true?, false? }` | Boolean signals only: what makes each answer true. |
 | `keep` | `(verdict) => boolean`, or a number on yes/no signals | Promote the event past sampling when `true`. Never drops. `keep: 0.8` keeps a yes with confidence above 0.8. |
-| `cacheKey` | `(event) => string \| undefined` | Reuse the verdict for events sharing a key. |
+| `cacheKey` | `(event) => string \| undefined` | Reuse the verdict for events sharing a key. `errorFingerprint` keys on the error with its ids and numbers stripped. |
 
 `keep` is typed on the verdict the shape produces: `v.value === 'app'` autocompletes to the options of a choice signal.
 
@@ -127,7 +127,9 @@ Returns an evlog plugin.
 | `signals` | | The signals to run. Names must be unique. |
 | `name` | `'signals'` | Plugin name. A second instance needs its own: evlog keeps one plugin per name. |
 | `model` | `'typesafe-ai/jev'` | AI SDK evaluation model. A gateway id (`'liquid/d1'`), or a provider instance such as `typeSafeAi.evaluationModel('jev-latest')` or `openai.evaluationModel('gpt-6-luna')`. |
-| `budget.perMinute` | `600` | Model calls per minute, shared by all signals. |
+| `budget.perMinute` | `600` | Model calls per minute, shared by all signals, per process. At most 10 seconds of it is spent at once. |
+| `budget.keepShare` | `0.25` | Share of `perMinute` that only keep signals spend, so an error storm judged in `enrich` cannot starve them. |
+| `budget.maxConcurrent` | `16` | Model calls in flight at once. Past it, events pass through unjudged instead of queueing. |
 | `budget.cooldownMs` | `30000` | Pause after three failed calls in a row. |
 | `cacheTtlMs` | `300000` | How long a `cacheKey` verdict is reused. |
 | `timeoutMs` | `2000` | Per call. |
@@ -138,6 +140,18 @@ Returns an evlog plugin.
 | `stampModel` | `false` | Also write the answering model's id on `event.signalsModel`. For comparing models. |
 
 `plugin.stats()` returns `{ calls, skipped, errors, refused, cached, inputTokens }`.
+
+### `knownError(errors)`
+
+A ready-made choice signal, `known-error`, for errors that reach the event without a catalog `code`: a raw Stripe exception, a library's `jwt expired`. It offers one option per entry of your `defineErrorCatalog` catalogs and `defineError` factories, described by the entry's string `message` and its `why`, plus `new` for a failure none of them describes. Errors that already carry a catalog `code` are skipped, and errors sharing a name and message share one verdict.
+
+```ts
+import { createSignals, knownError } from '@evlog/signals'
+import { authErrors, billingErrors } from './errors'
+
+createSignals({ signals: [knownError([billingErrors, authErrors])] })
+// event.signals['known-error'] → { value: 'billing.PAYMENT_DECLINED', confidence: 1 }
+```
 
 ### Verdict types
 
@@ -196,7 +210,7 @@ The demo catalog in `scripts/catalog.ts` runs all of these.
 | `audit-review` | keep | This action deserves a reviewer | Risk is in the combination, not one field |
 | `job-flaky` | enrich | Succeeded only because it retried | The retry hides the cause |
 
-Others that fit the same shape: `first-seen` (is this error new for this route), `user-impact` (none, degraded, blocked), `owner` (which team should look), `known-error` (which catalog entry is this, from your own `why` and `fix`), `frustration` on support conversations, `did-succeed` on session events.
+Others that fit the same shape: `first-seen` (is this error new for this route), `user-impact` (none, degraded, blocked), `owner` (which team should look), `frustration` on support conversations, `did-succeed` on session events.
 
 Not a fit: secret or PII detection (sending secrets to an API to ask if they are secrets), paging decisions (never page on a probability), anything adversarial as a single verdict, anything numeric.
 
