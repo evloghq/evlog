@@ -152,7 +152,8 @@ export async function askEvents<T extends WideEvent>(events: T[], question: stri
     state: askState,
     model: options.model,
     timeoutMs: 15_000,
-    budget: { perMinute: Math.max(1, events.length) },
+    // The CLI bounds the calls itself (--limit, one per fingerprint); the plugin's budget refills over seconds and would skip events mid-run.
+    budget: { perMinute: 1_000_000_000 },
     evaluate: async (request) => {
       try {
         return await call(request)
