@@ -7,7 +7,7 @@ const dir = process.env.EVLOG_FIXTURE_LOGS ?? '.evlog/logs'
 const connectStatus = Number(process.env.EVLOG_FIXTURE_CONNECT_STATUS)
 if (connectStatus) {
   const original = globalThis.fetch
-  globalThis.fetch = (input, init) => String(input).includes('vercel.com')
+  globalThis.fetch = (input, init) => new URL(String(input)).hostname.endsWith('.vercel.com')
     ? Promise.resolve(new Response('{"error":{"code":"forbidden"}}', { status: connectStatus }))
     : original(input, init)
 }
