@@ -160,8 +160,15 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   }
 
   // Registered before the call is awaited, so concurrent events with the same cache key join it instead of calling again.
+  // Only calls that reach the model are registered: a skip belongs to this event's state, not to its key.
   function ask(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, input: SignalInput): Promise<Judged> {
-    const call = callModel(toAsk, input)
+    const raw = buildState(input)
+    const json = typeof raw === 'string' ? raw : JSON.stringify(raw)
+    if (json.length > maxStateChars || !budget.take()) {
+      stats.skipped++
+      return Promise.resolve({ verdicts: new Map() })
+    }
+    const call = callModel(toAsk, typeof raw === 'string' ? raw : JSON.parse(json))
     // The caller gets the rejection; events that joined get no verdict, and the entry is cleared either way so the next event can retry.
     const settled = call.catch(() => undefined)
     for (const [, id] of toAsk) {
@@ -172,15 +179,8 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
     return call
   }
 
-  async function callModel(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, input: SignalInput): Promise<Judged> {
+  async function callModel(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, state: SignalState): Promise<Judged> {
     const verdicts = new Map<string, Verdict>()
-    const raw = buildState(input)
-    const json = typeof raw === 'string' ? raw : JSON.stringify(raw)
-    if (json.length > maxStateChars || !budget.take()) {
-      stats.skipped++
-      return { verdicts }
-    }
-    const state: SignalState = typeof raw === 'string' ? raw : JSON.parse(json)
 
     const questions: Record<string, EvaluationQuestion> = {}
     for (const [signal] of toAsk) questions[signal.name] = toQuestion(signal)

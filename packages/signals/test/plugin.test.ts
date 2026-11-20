@@ -183,6 +183,20 @@ describe('createSignals shared calls', () => {
     expect(both.map(ctx => ctx.event.signalsModel)).toEqual(['jev-1.13.0', 'jev-1.13.0'])
   })
 
+  it('does not share a state-size skip with a same-key event whose state fits', async () => {
+    const { evaluate, calls } = fakeEvaluate(yes)
+    const plugin = createSignals({ signals: [keyed], evaluate, maxStateChars: 200 })
+
+    const oversized = enrichCtx({ status: 502, path: '/api/pay', requestId: 'a', body: 'x'.repeat(500) })
+    const fits = enrichCtx({ status: 502, path: '/api/pay', requestId: 'b' })
+    await Promise.all([plugin.enrich!(oversized), plugin.enrich!(fits)])
+
+    expect(oversized.event.signals).toBeUndefined()
+    expect(fits.event.signals).toEqual({ fault: { value: 'upstream', confidence: 0.9 } })
+    expect(calls).toHaveLength(1)
+    expect(plugin.stats()).toMatchObject({ skipped: 1, calls: 1 })
+  })
+
   it('lets the next event retry a key whose call failed before reaching the model', async () => {
     const { evaluate, calls } = fakeEvaluate(yes)
     let throwing = true
@@ -197,7 +211,7 @@ describe('createSignals shared calls', () => {
 
     const joined = enrichCtx({ status: 502, path: '/api/pay', requestId: 'b' })
     const results = await Promise.allSettled([plugin.enrich!(enrichCtx({ status: 502, path: '/api/pay', requestId: 'a' })), plugin.enrich!(joined)])
-    expect(results.map(r => r.status)).toEqual(['rejected', 'fulfilled'])
+    expect(results.map(r => r.status)).toEqual(['rejected', 'rejected'])
     expect(joined.event.signals).toBeUndefined()
 
     throwing = false
