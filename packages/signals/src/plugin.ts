@@ -58,7 +58,8 @@ export interface SignalsOptions {
   /** Replace the model call. Used by tests and replay tooling. */
   evaluate?: EvaluateFn
   /**
-   * Write the id of the model that answered on `event.signalsModel`. Off by
+   * Write the id of the model that answered on `event.signalsModel`, keyed by
+   * the plugin `name`, so two instances comparing models keep both ids. Off by
    * default: one more column on every judged event, useful only while
    * comparing models. @default false
    */
@@ -109,7 +110,7 @@ function defaultState(event: SignalInput): SignalState {
  * of the rate limit, whatever the number of questions.
  *
  * Keep signals run before sampling and can only promote. Verdicts land on
- * `event.signals`, and with `stampModel` the model id on `event.signalsModel`. Any failure, budget
+ * `event.signals`, and with `stampModel` the model id on `event.signalsModel[name]`. Any failure, budget
  * exhaustion or timeout leaves the event as it was.
  *
  * @example
@@ -256,8 +257,10 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
     }
   }
 
+  const pluginName = options.name ?? 'signals'
+
   return {
-    name: options.name ?? 'signals',
+    name: pluginName,
     stats: () => ({ ...stats }),
 
     async keep(ctx: TailSamplingContext) {
@@ -309,7 +312,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       event.signals = { ...(event.signals as Record<string, SignalColumn> | undefined), ...columns }
       if (!options.stampModel) return
       const modelId = fresh?.modelId ?? prior?.modelId
-      if (modelId) event.signalsModel = modelId
+      if (modelId) event.signalsModel = { ...(event.signalsModel as Record<string, string> | undefined), [pluginName]: modelId }
     },
   }
 }

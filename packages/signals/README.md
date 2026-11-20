@@ -137,7 +137,7 @@ Returns an evlog plugin.
 | `maxStateChars` | `100000` | Larger events are skipped. |
 | `providerOptions` | | Forwarded to the call, e.g. `{ gateway: { zeroDataRetention: true } }`. |
 | `evaluate` | AI SDK `experimental_decide` | Replace the model call. Tests, record and replay. |
-| `stampModel` | `false` | Also write the answering model's id on `event.signalsModel`. For comparing models. |
+| `stampModel` | `false` | Also write the answering model's id on `event.signalsModel`, keyed by plugin `name`. For comparing models. |
 
 `plugin.stats()` returns `{ calls, skipped, errors, refused, cached, inputTokens }`.
 
