@@ -191,6 +191,8 @@ import { clientFault, createSignals } from '@evlog/signals'
 createSignals({ name: 'client-signals', signals: [clientFault], budget: { perMinute: 60 } })
 ```
 
+Server signals still see every ingested event, and a crafted client event can carry `status: 500`. Add `e.source !== 'client'` to the `when` of each server signal so client events never spend its budget.
+
 ## Use cases
 
 The demo catalog in `scripts/catalog.ts` runs all of these.
