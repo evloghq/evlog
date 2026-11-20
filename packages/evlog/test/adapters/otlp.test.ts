@@ -2,7 +2,7 @@ import { gunzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WideEvent } from '../../src/types'
 import { sendBatchToOTLP, sendToOTLP, toOTLPLogRecord, createOTLPDrain } from '../../src/adapters/otlp'
-import { EVLOG_VERSION } from '../../src/shared/http'
+import { DrainDeliveryError, EVLOG_VERSION } from '../../src/shared/http'
 
 const TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
 const SPAN_ID = '00f067aa0ba902b7'
@@ -757,6 +757,44 @@ describe('otlp adapter', () => {
       })
 
       expect(fetchSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('partialSuccess', () => {
+    const events = [createTestEvent({ requestId: '1' }), createTestEvent({ requestId: '2' }), createTestEvent({ requestId: '3' })]
+
+    it('rejects with the rejected count from a JSON response and does not retry', async () => {
+      fetchSpy.mockResolvedValue(new Response(
+        JSON.stringify({ partialSuccess: { rejectedLogRecords: '2', errorMessage: 'body too long' } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ))
+
+      const sending = sendBatchToOTLP(events, { endpoint: 'http://localhost:4318', retries: 2 })
+
+      await expect(sending).rejects.toBeInstanceOf(DrainDeliveryError)
+      await expect(sending).rejects.toMatchObject({ retryable: false, rejected: 2, message: expect.stringContaining('body too long') })
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects with the rejected count from a protobuf response', async () => {
+      // ExportLogsServiceResponse { partial_success: { rejected_log_records: 300, error_message: "bad", <unknown field 3>: 1 } }
+      const body = new Uint8Array([0x0A, 0x0A, 0x08, 0xAC, 0x02, 0x12, 0x03, 0x62, 0x61, 0x64, 0x18, 0x01])
+      fetchSpy.mockResolvedValue(new Response(body, { status: 200, headers: { 'Content-Type': 'application/x-protobuf' } }))
+
+      await expect(sendBatchToOTLP(events, { endpoint: 'http://localhost:4318', protocol: 'http/protobuf' }))
+        .rejects.toMatchObject({ retryable: false, rejected: 300, message: expect.stringContaining('bad') })
+    })
+
+    it('warns on an errorMessage without rejected records and resolves', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      fetchSpy.mockResolvedValue(new Response(
+        JSON.stringify({ partialSuccess: { rejectedLogRecords: 0, errorMessage: 'attribute truncated' } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ))
+
+      await sendBatchToOTLP(events, { endpoint: 'http://localhost:4318' })
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('attribute truncated'))
     })
   })
 

@@ -40,7 +40,10 @@ export interface DrainPipelineOptions<T = unknown> {
   /**
    * Called with every event the pipeline drops, the delivery error when there
    * is one, and the reason. Without it, drops are logged with `console.error`
-   * at most once a minute, with the count per reason.
+   * at most once a minute, with the count per reason. When the provider
+   * accepted part of a batch, such as an OTLP `partialSuccess`, `events` is the
+   * whole batch because the provider does not say which events it rejected;
+   * `error.rejected` and `stats()` have the count.
    */
   onDropped?: (events: T[], error: Error | undefined, reason: DrainDropReason) => void
 }
@@ -81,6 +84,7 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647
 interface DeliveryFailure {
   retryable?: boolean
   retryAfterMs?: number
+  rejected?: number
 }
 
 /**
@@ -222,14 +226,14 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       unloggedError = undefined
     }
 
-    function drop(events: T[], reason: DrainDropReason, error?: Error): void {
+    function drop(events: T[], reason: DrainDropReason, error?: Error, count = events.length): void {
       if (events.length === 0) return
-      dropped[reason] += events.length
+      dropped[reason] += count
       if (onDropped) {
         onDropped(events, error, reason)
         return
       }
-      unlogged[reason] = (unlogged[reason] ?? 0) + events.length
+      unlogged[reason] = (unlogged[reason] ?? 0) + count
       unloggedError = error ?? unloggedError
       if (Date.now() - lastDropLogAt >= DROP_LOG_INTERVAL_MS) logUnlogged()
     }
@@ -250,7 +254,9 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
           const lastError = error instanceof Error ? error : new Error(String(error))
           const failure = error as DeliveryFailure | null | undefined
           if (failure?.retryable === false) {
-            drop(batch, 'rejected', lastError)
+            const rejected = typeof failure.rejected === 'number' ? Math.min(failure.rejected, batch.length) : batch.length
+            delivered += batch.length - rejected
+            drop(batch, 'rejected', lastError, rejected)
             return 'done'
           }
           const retryAfterMs = typeof failure?.retryAfterMs === 'number' ? failure.retryAfterMs : undefined
