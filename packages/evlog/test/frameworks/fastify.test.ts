@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'v
 import Fastify, { type FastifyRequest } from 'fastify'
 import type { ForkableLogger } from '../../src/audit'
 import { initLogger } from '../../src/logger'
-import type { RequestLogger } from '../../src/types'
+import { createDrainPipeline } from '../../src/pipeline'
+import type { DrainContext, RequestLogger } from '../../src/types'
 import { evlog, useLogger } from '../../src/fastify/index'
 import {
   assertDrainCalledWith,
@@ -208,6 +209,20 @@ describe('evlog/fastify', () => {
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ context: {} })
     expect(drain).not.toHaveBeenCalled()
+  })
+
+  it('flushes a buffering drain pipeline when the app closes', async () => {
+    const send = vi.fn()
+    const app = Fastify({ logger: false })
+    await app.register(evlog, { drain: createDrainPipeline<DrainContext>({ batch: { size: 100, intervalMs: 600_000 } })(send) })
+    app.get('/api/users', () => ({ users: [] }))
+
+    await app.inject({ method: 'GET', url: '/api/users' })
+    expect(send).not.toHaveBeenCalled()
+    await app.close()
+
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(defined(send.mock.calls[0], 'send call')[0]).toHaveLength(1)
   })
 
   describe('drain / enrich / keep', () => {
