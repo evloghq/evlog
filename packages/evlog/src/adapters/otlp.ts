@@ -8,7 +8,7 @@ import type { OtlpAttributeValue } from '../shared/event'
 import { formatEventSummary, isPlainObject, toOtlpAttributeValue } from '../shared/event'
 import { DrainDeliveryError, EVLOG_VERSION } from '../shared/http'
 import { OTEL_SEVERITY_NUMBER, OTEL_SEVERITY_TEXT } from '../shared/severity'
-import type { OTLPPartialSuccess } from './otlp-protobuf'
+import type { OTLPPartialSuccess } from './otlp-response'
 
 /**
  * Shape of the emitted log record.
@@ -404,7 +404,7 @@ async function decodePartialSuccess(response: Response): Promise<OTLPPartialSucc
   if (contentType.includes('protobuf')) {
     const bytes = new Uint8Array(await response.arrayBuffer())
     if (bytes.length === 0) return undefined
-    const { decodeOTLPPartialSuccess } = await import('./otlp-protobuf')
+    const { decodeOTLPPartialSuccess } = await import('./otlp-response')
     return decodeOTLPPartialSuccess(bytes)
   }
   if (!contentType.includes('json')) return undefined
