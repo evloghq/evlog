@@ -73,5 +73,5 @@ export default defineMcpClientConnection({
   url: VERCEL_MCP_URL,
   description: VERCEL_MCP_INSTRUCTIONS,
   tools: { allow: ALLOWED_TOOLS },
-  auth: adminOnlyAppConnection('vercel/mcp'),
+  auth: adminOnlyAppConnection('vercel/evlog'),
 })
