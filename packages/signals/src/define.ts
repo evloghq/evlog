@@ -40,8 +40,13 @@ export interface ScoreVerdict<TLevel extends string = string> {
 
 export type Verdict = BooleanVerdict | ChoiceVerdict | ScoreVerdict
 
-/** A verdict as written on the event. `kept` marks the signal that promoted it past sampling. */
-export type SignalColumn<TVerdict extends Verdict = Verdict> = TVerdict & { kept?: true }
+/**
+ * A verdict as written on the event. `kept` marks a keep signal that promoted
+ * it. `rate` is set when the budget skipped events before this one during a
+ * spike: this verdict stands for `1 / rate` events, itself and the skipped
+ * ones, so summing `1 / rate` estimates the count the spike would have had.
+ */
+export type SignalColumn<TVerdict extends Verdict = Verdict> = TVerdict & { kept?: true, rate?: number }
 
 interface SignalBase<TVerdict extends Verdict> {
   /** Column name under `event.signals`. */

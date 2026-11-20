@@ -142,6 +142,7 @@ describe('createSignals enrich', () => {
     const { evaluate, calls } = fakeEvaluate(yes)
     const plugin = createSignals({
       signals: [cached, severity],
+      budget: { maxConcurrent: 50 },
       evaluate: async (request) => {
         await new Promise(resolve => setTimeout(resolve, 10))
         return evaluate(request)
@@ -319,8 +320,10 @@ describe('createSignals keep', () => {
 describe('createSignals fails open', () => {
   it('skips events past the per-minute budget and resumes in the next window', async () => {
     vi.useFakeTimers()
+    // Two events a minute against one call a minute samples at 0.5: draw low so the call is made.
+    vi.spyOn(Math, 'random').mockReturnValue(0)
     const { evaluate, calls } = fakeEvaluate(yes)
-    const plugin = createSignals({ signals: [fault], evaluate, budget: { perMinute: 1 } })
+    const plugin = createSignals({ signals: [fault], evaluate, budget: { perMinute: 1, keepShare: 0 } })
 
     await plugin.enrich!(enrichCtx({ status: 500, path: '/a' }))
     const skipped = enrichCtx({ status: 500, path: '/b' })
@@ -459,5 +462,54 @@ describe('createSignals fails open', () => {
 
   it('rejects duplicate signal names at construction', () => {
     expect(() => createSignals({ signals: [fault, fault], evaluate: fakeEvaluate(yes).evaluate })).toThrow(/duplicate signal name/)
+  })
+})
+
+describe('under a spike', () => {
+  it('still judges a keep signal after an error storm spent the enrich budget', async () => {
+    const plugin = createSignals({ signals: [fault, silentFailure], budget: { perMinute: 12 }, evaluate: fakeEvaluate(yes).evaluate })
+    for (let i = 0; i < 20; i++) await plugin.enrich!(enrichCtx({ status: 503, path: `/api/pay/${i}` }))
+    const tail = keepCtx({ status: 200, path: '/api/checkout', method: 'POST' })
+    await plugin.keep!(tail)
+    expect(tail.shouldKeep).toBe(true)
+  })
+
+  it('skips calls past maxConcurrent instead of queueing them', async () => {
+    const release: Array<() => void> = []
+    const { evaluate } = fakeEvaluate(yes)
+    const plugin = createSignals({
+      signals: [fault],
+      budget: { maxConcurrent: 2 },
+      evaluate: request => new Promise(resolve => release.push(() => resolve(evaluate(request)))),
+    })
+    const events = Array.from({ length: 5 }, (_, i) => enrichCtx({ status: 500, path: `/api/${i}` }))
+    const running = events.map(ctx => plugin.enrich!(ctx))
+    expect(release).toHaveLength(2)
+    release.forEach(r => r())
+    await Promise.all(running)
+    expect(plugin.stats()).toMatchObject({ calls: 2, skipped: 3 })
+    expect(events.filter(ctx => ctx.event.signals)).toHaveLength(2)
+  })
+
+  it('does not build the state of an event the budget skips', async () => {
+    const state = vi.fn((event: Record<string, unknown>) => ({ path: event.path }))
+    const plugin = createSignals({ signals: [fault], budget: { perMinute: 6, keepShare: 0 }, state, evaluate: fakeEvaluate(yes).evaluate })
+    for (let i = 0; i < 3; i++) await plugin.enrich!(enrichCtx({ status: 500, path: `/api/${i}` }))
+    expect(state).toHaveBeenCalledTimes(1)
+    expect(plugin.stats()).toMatchObject({ calls: 1, skipped: 2 })
+  })
+
+  it('writes the share of skipped events a verdict stands for during a spike, and none outside one', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    const plugin = createSignals({ signals: [fault], budget: { perMinute: 6, keepShare: 0 }, evaluate: fakeEvaluate(yes).evaluate })
+    const calm = enrichCtx({ status: 500, path: '/api/0' })
+    await plugin.enrich!(calm)
+    for (let i = 1; i < 5; i++) await plugin.enrich!(enrichCtx({ status: 500, path: `/api/${i}` }))
+    vi.advanceTimersByTime(10_000)
+    const spiked = enrichCtx({ status: 500, path: '/api/5' })
+    await plugin.enrich!(spiked)
+    expect(fault.read(calm.event)).not.toHaveProperty('rate')
+    expect(fault.read(spiked.event)?.rate).toBe(0.2)
   })
 })
