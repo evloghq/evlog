@@ -205,13 +205,16 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
   const fetchFn = options.fetchFn ?? fetch
   const expect = parseExpectation(options.expect)
   const now = options.now ?? new Date()
+  /* A one-shot read stops at the `until` it reports, so an event stamped ahead
+     of the clock is not shown under a window that excludes it; following has no end. */
+  const until = query.until ?? (options.follow ? undefined : now)
   /* The environments the events in the window carry, read before the
      filters drop any, so `--expect` judges the store and not the matches. */
   const environments = new Set<string>()
   const inWindow = (event: WideEvent): boolean => {
     const at = timeOf(event)
     if (query.since && at < query.since.getTime()) return false
-    if (query.until && at > query.until.getTime()) return false
+    if (until && at > until.getTime()) return false
     if (typeof event.environment === 'string') environments.add(event.environment)
     return true
   }
@@ -248,7 +251,7 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
     if (!options.follow && !found.some(source => existsSync(source.dir))) throw cliErrors.LOGS_NO_SINK({ cwd: ctx.cwd })
     const selection = createSelection<Sourced>(query, found.length > 1)
     for (const source of found) {
-      for await (const event of readFsLogs({ dir: source.dir, since: query.since, until: query.until, filter: event => inWindow(event) && keeps(event) })) {
+      for await (const event of readFsLogs({ dir: source.dir, since: query.since, until, filter: event => inWindow(event) && keeps(event) })) {
         selection.add(tag(event, found.length > 1 ? source.name : undefined))
       }
     }

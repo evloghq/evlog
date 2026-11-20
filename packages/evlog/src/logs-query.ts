@@ -421,7 +421,8 @@ export interface SessionSummary {
   failedToolCalls: number
   modelCalls?: number
   toolCalls?: number
-  tokens?: { input: number, output: number, cacheRead?: number, cacheWrite?: number }
+  /** Token counts summed over the turns that reported each one; `turnsReporting` counts the turns that reported any. */
+  tokens?: { input?: number, output?: number, cacheRead?: number, cacheWrite?: number, turnsReporting: number }
   /** Provider-reported cost, summed over the turns that reported one, and how many did. */
   cost?: { usd: number, turnsReporting: number }
   models?: string[]
@@ -435,7 +436,7 @@ export interface SessionSummary {
 const MAX_TRACE_IDS = 5
 
 function createSessions(limit: number): { add: (placed: Placed) => void, result: () => { sessions: SessionSummary[], total: number } } {
-  const all = new Map<string, SessionSummary & { startMs: number, endMs: number }>()
+  const all = new Map<string, SessionSummary & { startMs: number, endMs: number, failureMs: number, traces: Map<string, number> }>()
   return {
     add({ event }) {
       const id = read(event, SESSION_FIELD) as string
@@ -444,7 +445,7 @@ function createSessions(limit: number): { add: (placed: Placed) => void, result:
       const start = end - (duration ?? 0)
       let entry = all.get(id)
       if (!entry) {
-        entry = { session: id, firstAt: '', lastAt: '', startMs: start, endMs: end, elapsedMs: 0, turns: 0, outcomes: { completed: 0, recovered: 0, failed: 0, cancelled: 0 }, failedToolCalls: 0 }
+        entry = { session: id, firstAt: '', lastAt: '', startMs: start, endMs: end, failureMs: -Infinity, traces: new Map(), elapsedMs: 0, turns: 0, outcomes: { completed: 0, recovered: 0, failed: 0, cancelled: 0 }, failedToolCalls: 0 }
         all.set(id, entry)
       }
       entry.startMs = Math.min(entry.startMs, start)
@@ -466,13 +467,18 @@ function createSessions(limit: number): { add: (placed: Placed) => void, result:
       if (Array.isArray(tools)) entry.toolCalls = (entry.toolCalls ?? 0) + tools.length
       const usage = genAi?.usage as Record<string, unknown> | undefined
       if (usage && typeof usage === 'object') {
-        const tokens = entry.tokens ??= { input: 0, output: 0 }
-        tokens.input += typeof usage.input_tokens === 'number' ? usage.input_tokens : 0
-        tokens.output += typeof usage.output_tokens === 'number' ? usage.output_tokens : 0
-        const cacheRead = (usage.cache_read as { input_tokens?: unknown } | undefined)?.input_tokens
-        if (typeof cacheRead === 'number') tokens.cacheRead = (tokens.cacheRead ?? 0) + cacheRead
-        const cacheWrite = (usage.cache_write as { input_tokens?: unknown } | undefined)?.input_tokens
-        if (typeof cacheWrite === 'number') tokens.cacheWrite = (tokens.cacheWrite ?? 0) + cacheWrite
+        const counts = {
+          input: usage.input_tokens,
+          output: usage.output_tokens,
+          cacheRead: (usage.cache_read as { input_tokens?: unknown } | undefined)?.input_tokens,
+          cacheWrite: (usage.cache_write as { input_tokens?: unknown } | undefined)?.input_tokens,
+        }
+        const reported = Object.entries(counts).filter((pair): pair is [keyof typeof counts, number] => typeof pair[1] === 'number')
+        if (reported.length > 0) {
+          const tokens = entry.tokens ??= { turnsReporting: 0 }
+          tokens.turnsReporting += 1
+          for (const [key, count] of reported) tokens[key] = (tokens[key] ?? 0) + count
+        }
         if (typeof usage.cost === 'number') {
           const cost = entry.cost ??= { usd: 0, turnsReporting: 0 }
           cost.usd = Math.round((cost.usd + usage.cost) * 1_000_000) / 1_000_000
@@ -484,7 +490,8 @@ function createSessions(limit: number): { add: (placed: Placed) => void, result:
       for (const model of models) {
         if (typeof model === 'string' && !entry.models?.includes(model)) (entry.models ??= []).push(model)
       }
-      if (outcome !== 'completed' && (latest || !entry.latestFailure)) {
+      if (outcome !== 'completed' && end >= entry.failureMs) {
+        entry.failureMs = end
         const error = record(event, 'error')
         const failedTools = Array.isArray(tools) ? tools.flatMap(tool => (tool as { success?: unknown, name?: unknown }).success === false && typeof (tool as { name?: unknown }).name === 'string' ? [(tool as { name: string }).name] : []) : []
         entry.latestFailure = {
@@ -496,16 +503,16 @@ function createSessions(limit: number): { add: (placed: Placed) => void, result:
         }
       }
       const traceId = text(event, 'traceId')
-      if (traceId && !entry.traceIds?.includes(traceId)) {
-        entry.traceIds = latest ? [traceId, ...entry.traceIds ?? []] : [...entry.traceIds ?? [], traceId]
-        entry.traceIds.length = Math.min(entry.traceIds.length, MAX_TRACE_IDS)
-      }
+      if (traceId) entry.traces.set(traceId, Math.max(entry.traces.get(traceId) ?? -Infinity, end))
     },
     result() {
       const sessions = [...all.values()]
         .sort((a, b) => b.endMs - a.endMs)
         .slice(0, limit)
-        .map(({ startMs, endMs, ...summary }) => ({ ...summary, firstAt: new Date(startMs).toISOString(), lastAt: new Date(endMs).toISOString(), elapsedMs: endMs - startMs }))
+        .map(({ startMs, endMs, failureMs: _failureMs, traces, ...summary }) => ({
+          ...summary,
+          ...(traces.size > 0 && { traceIds: [...traces].sort((a, b) => b[1] - a[1]).slice(0, MAX_TRACE_IDS).map(([traceId]) => traceId) }),
+          firstAt: new Date(startMs).toISOString(), lastAt: new Date(endMs).toISOString(), elapsedMs: endMs - startMs }))
       return { sessions, total: all.size }
     },
   }

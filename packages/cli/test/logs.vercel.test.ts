@@ -355,6 +355,50 @@ describe('evlog setup vercel --check', () => {
       .toEqual(['linked:ok', 'oidc:fail', 'connector:skipped', 'attached:skipped', 'token:skipped', 'read:skipped'])
   })
 
+  /* `vercel connect list --json` answers one page of 50 with `pagination.next`; `--next <cursor>` reads the one after. */
+  function paged(team: Array<{ uid: string, type: string }>, onProject: string[], size = 2): { vercel: VercelCli, calls: string[] } {
+    const calls: string[] = []
+    const vercel: VercelCli = (args) => {
+      calls.push(args.join(' '))
+      const listed = args.includes('--all-projects') ? team : team.filter(connector => onProject.includes(connector.uid))
+      const at = args.indexOf('--next')
+      const start = at === -1 ? 0 : Number(args[at + 1])
+      const next = start + size < listed.length ? String(start + size) : null
+      return Promise.resolve({ code: 0, stdout: JSON.stringify({ connectors: listed.slice(start, start + size), cursor: next, pagination: { next } }), stderr: '' })
+    }
+    return { vercel, calls }
+  }
+  const team = [{ uid: 'slack/bot', type: 'slack' }, { uid: 'vercel/other', type: 'api-key' }, { uid: 'github/app', type: 'github' }, { uid: 'vercel/evlog', type: 'api-key' }]
+
+  it('finds the connector and its attachment past the first page of the list', async () => {
+    const cwd = await linkedProject()
+    const { vercel, calls } = paged(team, ['slack/bot', 'github/app', 'vercel/evlog'])
+    const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
+    expect(summary(stages)).toEqual(['linked:ok', 'oidc:ok', 'connector:ok', 'attached:ok', 'token:ok', 'read:ok'])
+    expect(calls).toContain('connect list --json --all-projects --next 2')
+    expect(calls).toContain('connect list --json --next 2')
+  })
+
+  it('says the team has no such connector only after the last page', async () => {
+    const cwd = await linkedProject()
+    const { vercel, calls } = paged(team.filter(connector => connector.uid !== 'vercel/evlog'), [])
+    const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
+    expect(stages.find(stage => stage.id === 'connector')).toMatchObject({ status: 'fail', message: 'the team has no vercel/evlog connector' })
+    expect(calls.filter(call => call.includes('--all-projects'))).toEqual(['connect list --json --all-projects', 'connect list --json --all-projects --next 2'])
+  })
+
+  it('fails the connector stage when a later page cannot be read, or the cursor repeats', async () => {
+    const cwd = await linkedProject()
+    const broken: VercelCli = args => Promise.resolve(args.includes('--next')
+      ? { code: 1, stdout: '', stderr: 'Error: rate limited\n' }
+      : { code: 0, stdout: JSON.stringify({ connectors: [{ uid: 'slack/bot', type: 'slack' }], pagination: { next: 'c1' } }), stderr: '' })
+    expect((await runSetupVercelCheck(ctxAt(cwd), { vercel: broken, oidc })).find(stage => stage.id === 'connector'))
+      .toMatchObject({ status: 'fail', message: 'vercel connect list --json --all-projects --next c1 failed: Error: rate limited' })
+    const looping: VercelCli = () => Promise.resolve({ code: 0, stdout: JSON.stringify({ connectors: [], pagination: { next: 'same' } }), stderr: '' })
+    expect((await runSetupVercelCheck(ctxAt(cwd), { vercel: looping, oidc })).find(stage => stage.id === 'connector'))
+      .toMatchObject({ status: 'fail', message: expect.stringContaining('returned the cursor same twice') })
+  })
+
   it('flags an eve agent without trace instrumentation, and evlog setup eve writes it once', async () => {
     const cwd = await linkedProject()
     await mkdir(join(cwd, 'agent'))

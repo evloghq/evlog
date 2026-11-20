@@ -240,7 +240,7 @@ describe('outcomes and sessions', () => {
     })
     /* One turn reported a cost and the other did not: the sum says so instead of passing for the session's total. */
     expect(s1.cost).toEqual({ usd: 0.001, turnsReporting: 1 })
-    expect(s1.tokens).toEqual({ input: 200, output: 20, cacheRead: 80 })
+    expect(s1.tokens).toEqual({ input: 200, output: 20, cacheRead: 80, turnsReporting: 2 })
   })
 
   it('leaves out what no turn reported instead of writing zero', () => {
@@ -249,6 +249,49 @@ describe('outcomes and sessions', () => {
     expect(only).not.toHaveProperty('tokens')
     expect(only).not.toHaveProperty('modelCalls')
     expect(only!.processingMs).toBe(12)
+  })
+
+  const at = (minute: number, failed = false, traceId = `trace${minute}`) => event({
+    timestamp: `2026-11-20T10:${String(minute).padStart(2, '0')}:00.000Z`,
+    durationMs: 0,
+    level: failed ? 'error' : 'info',
+    requestId: `request${minute}`,
+    traceId,
+    eve: { outcome: failed ? 'failed' : 'completed' },
+    gen_ai: { conversation: { id: 'A' } },
+  })
+  const orders = <T>(items: T[]) => [items, [...items].reverse(), [items[2]!, ...items.filter((_, i) => i !== 2)]]
+
+  it('reports the newest failure whatever order the events arrive in', () => {
+    for (const events of orders([at(1, true), at(2, true), at(3)])) {
+      expect(summarize(events).sessions![0]!.latestFailure).toEqual({ requestId: 'request2', outcome: 'failed' })
+    }
+  })
+
+  it('keeps the five newest trace ids, ordered by each trace\'s latest turn', () => {
+    for (const events of orders([1, 2, 3, 4, 5, 6].map(minute => at(minute)))) {
+      expect(summarize(events).sessions![0]!.traceIds).toEqual(['trace6', 'trace5', 'trace4', 'trace3', 'trace2'])
+    }
+    for (const events of orders([at(1, false, 'A'), at(2, false, 'B'), at(3, false, 'A')])) {
+      expect(summarize(events).sessions![0]!.traceIds).toEqual(['A', 'B'])
+    }
+    const redelivered = { ...at(6), idempotencyKey: 'turn6' }
+    const [merged] = summarize([redelivered, at(1), at(2), at(3), redelivered, at(4), at(5)]).sessions!
+    expect(merged!.traceIds).toEqual(['trace6', 'trace5', 'trace4', 'trace3', 'trace2'])
+    expect(merged!.turns).toBe(6)
+    expect(Object.keys(merged!).filter(key => key.endsWith('Ms') && key !== 'elapsedMs' && key !== 'processingMs')).toEqual([])
+  })
+
+  it('sums only the token counts a turn reported, and counts the turns that did', () => {
+    const usage = (minute: number, value: Record<string, unknown> | undefined) => turn('u', `2026-10-01T10:0${minute}:00.000Z`, 10, { gen_ai: { usage: value } })
+    const tokensOf = (...events: WideEvent[]) => summarize(events).sessions![0]!.tokens
+    expect(tokensOf(usage(1, { cost: 0.001 }))).toBeUndefined()
+    expect(tokensOf(usage(1, undefined))).toBeUndefined()
+    expect(tokensOf(usage(1, { input_tokens: 30 }))).toEqual({ input: 30, turnsReporting: 1 })
+    expect(tokensOf(usage(1, { output_tokens: 7 }))).toEqual({ output: 7, turnsReporting: 1 })
+    expect(tokensOf(usage(1, { cache_read: { input_tokens: 5 } }))).toEqual({ cacheRead: 5, turnsReporting: 1 })
+    expect(tokensOf(usage(1, { input_tokens: 30, output_tokens: 3 }), usage(2, { cost: 0.002 }), usage(3, { input_tokens: 10 })))
+      .toEqual({ input: 40, output: 3, turnsReporting: 2 })
   })
 
   it('returns at most limit sessions and counts the rest', () => {
@@ -311,6 +354,15 @@ describe('runLogs', () => {
     const result = await runLogs(fakeContext(cwd), { what: 'aaaaaaaa' }, { now: NOW })
     /* The forked report event links back through `_parentRequestId`. */
     expect(result.events.map(e => e.path)).toEqual(['/api/reports', '/api/items'])
+  })
+
+  it('reads up to the window it reports when an event is stamped ahead of now', async () => {
+    const cwd = await makeSink()
+    await appendFile(join(cwd, '.evlog', 'logs', '2026-10-01.jsonl'), `${JSON.stringify({ timestamp: '2026-10-01T12:01:00.000Z', level: 'info', service: 'shop', path: '/ahead' })}\n`)
+    const result = await runLogs(fakeContext(cwd), {}, { now: NOW })
+    expect(result.window.until).toBe('2026-10-01T12:00:00.000Z')
+    expect(result.events.map(e => e.path)).not.toContain('/ahead')
+    expect((await runLogs(fakeContext(cwd), { until: '2026-10-01T12:05:00.000Z' }, { now: NOW })).events.map(e => e.path)).toContain('/ahead')
   })
 
   it('filters on time, level, path and status class together', async () => {

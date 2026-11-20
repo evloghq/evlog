@@ -19,10 +19,16 @@ function deploymentOidcToken(): string | undefined {
   return context?.get?.().headers?.['x-vercel-oidc-token'] ?? process.env.VERCEL_OIDC_TOKEN
 }
 
+/** Which store the tool reads, known before the source is resolved. */
+function sourceKind(): 'files' | 'vercel' {
+  const chosen = extension.config.logs?.source ?? 'auto'
+  return chosen === 'files' || (chosen === 'auto' && process.env.VERCEL !== '1') ? 'files' : 'vercel'
+}
+
 export function source(): LogsSource {
-  const { dir, vercel, source: chosen = 'auto' } = extension.config.logs ?? {}
+  const { dir, vercel } = extension.config.logs ?? {}
   const onVercel = process.env.VERCEL === '1'
-  if (chosen === 'files' || (chosen === 'auto' && !onVercel)) {
+  if (sourceKind() === 'files') {
     return { kind: 'fs', dir: dir ?? '.evlog/logs', environment: extension.config.env?.environment ?? process.env.NODE_ENV ?? 'development' }
   }
   const oidcToken = deploymentOidcToken()
@@ -70,7 +76,7 @@ export default defineDynamic((ctx) => {
       fields: z.array(z.string()).max(10).optional().describe('Dotted fields to add to each row, such as user.id or eve.caller.principalId'),
       detail: z.enum(['brief', 'diagnostic']).optional().describe('diagnostic adds models, model calls, cost, cache reads and trace ids to each row'),
       limit: z.number().int().min(1).max(50).optional().describe(`Most rows or sessions returned (default ${DEFAULT_LIMIT})`),
-      full: z.boolean().optional().describe('For trace: return events past the default size budget'),
+      full: z.boolean().optional().describe('Raise the size budget from 24000 to 200000 characters, so a large event, field or summary comes back whole'),
       expect: z.object({
         source: z.enum(['files', 'vercel']).optional(),
         environment: z.string().min(1).optional(),
@@ -78,15 +84,14 @@ export default defineDynamic((ctx) => {
     }),
     async execute(input, toolCtx) {
       const started = Date.now()
-      const from = source()
       const caller = { session: toolCtx.session.id, turn: toolCtx.session.turn.id }
       let outcome: Awaited<ReturnType<typeof readLogs>> | undefined
       try {
-        outcome = await readLogs(input, { source: from, session: access === 'session' ? caller.session : undefined, caller })
+        outcome = await readLogs(input, { source: source(), session: access === 'session' ? caller.session : undefined, caller })
         return outcome
       } finally {
         if (extension.config.logs?.diagnostics) {
-          useLogger().set({ evlog: { logs: { [toolCtx.callId]: diagnosticsOf(input, from, outcome, Date.now() - started) } } })
+          useLogger().set({ evlog: { logs: { [toolCtx.callId]: diagnosticsOf(input, outcome, Date.now() - started) } } })
         }
       }
     },
@@ -94,10 +99,10 @@ export default defineDynamic((ctx) => {
 })
 
 /** What a logs call is recorded as: its shape and counts, never what it returned. */
-function diagnosticsOf(input: LogsToolInput, from: LogsSource, result: LogsToolResult | undefined, durationMs: number): Record<string, unknown> {
+function diagnosticsOf(input: LogsToolInput, result: LogsToolResult | undefined, durationMs: number): Record<string, unknown> {
   const { fields, ...asked } = input
   return {
-    source: from.kind === 'fs' ? 'files' : 'vercel',
+    source: sourceKind(),
     view: input.view ?? (input.id ? 'trace' : 'recent'),
     input: { ...asked, ...(fields && { fields: fields.length }) },
     durationMs,

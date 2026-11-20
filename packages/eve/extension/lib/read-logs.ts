@@ -27,7 +27,7 @@ export interface LogsToolInput {
   /** `diagnostic` adds models, model calls, cost, cache reads and trace ids to each row. */
   detail?: 'brief' | 'diagnostic'
   limit?: number
-  /** For `trace`: raise the size budget so a large event comes back whole. */
+  /** Raise the size budget of the result, so a large event, field or summary comes back whole. */
   full?: boolean
   /** Refuse the read unless it is this source and environment, so a question about production is never answered from local files. */
   expect?: { source?: 'files' | 'vercel', environment?: string }
@@ -50,8 +50,9 @@ export interface LogsOrigin {
 }
 
 /**
- * Whether the result covers everything the query asked for. `false` when the
+ * Whether the read covers everything the query asked for. `false` when the
  * source was cut short, so an empty or short result proves nothing beyond what it read.
+ * It says nothing about the size budget: `omitted` and `omittedFields` say what that left out.
  */
 export interface LogsCoverage {
   complete: boolean
@@ -91,6 +92,8 @@ export interface LogsRow {
   spanId?: string
   /** The fields the input asked for, by dotted name. */
   fields?: Record<string, unknown>
+  /** What the size budget left out of this row, by name; the row is otherwise as read. */
+  omittedFields?: string[]
 }
 
 /** Where a turn's OTel spans are: the trace, the turn's `invoke_agent` span, and how to open it when that is known. */
@@ -123,13 +126,13 @@ export interface LogsToolResult {
   rows?: LogsRow[]
   /** The `trace` view: full wide events of one request, not its span tree. */
   events?: WideEvent[]
-  /** The `trace` view: events left out to stay within the size budget. */
+  /** Events, rows or sessions left out whole to stay within the size budget. */
   omitted?: number
-  /** The `trace` view: where the events' OTel spans are. */
+  /** The `trace` view: where every matched event's OTel spans are, the omitted ones included. */
   traces?: TraceReference[]
   stats?: LogsStats
   /** The `sessions` view, latest first; `current` marks the caller's. */
-  sessions?: Array<SessionSummary & { current?: true }>
+  sessions?: Array<SessionSummary & { current?: true, omittedFields?: string[] }>
   sessionsMatched?: number
   notes?: string[]
 }
@@ -138,9 +141,12 @@ const DAY_MS = 86_400_000
 const VERCEL_MAX_LINES = 10_000
 const DEFAULT_OVER = 500
 export const DEFAULT_LIMIT = 10
-/** Characters of JSON the `trace` view returns by default, and with `full`. */
-const TRACE_BUDGET = 24_000
-const TRACE_BUDGET_FULL = 200_000
+/** Characters of JSON a result runs to by default, and with `full`. */
+const BUDGET = 24_000
+const BUDGET_FULL = 200_000
+/** Room kept for the notes, which are written after the items are fitted. */
+const NOTES_ROOM = 1_000
+const ROW_IDENTITY = new Set(['requestId', 'timestamp', 'level', 'result', 'session'])
 
 function invalid(message: string, why: string, fix: string): never {
   throw createError({ message, status: 400, why, fix })
@@ -235,19 +241,42 @@ function mismatch(expected: NonNullable<LogsToolInput['expect']>, origin: LogsOr
 }
 
 /**
- * Leaves out whole events past the budget, so the model never receives a
- * cut event it could take for the original.
+ * Fits items in `room` characters of JSON, the last ones first. Each item is
+ * kept whole, else in the first smaller form that fits, else left out, so the
+ * model never receives a value cut short it could take for the original.
  */
-function withinBudget(events: WideEvent[], budget: number): { events: WideEvent[], omitted: number } {
-  const kept: WideEvent[] = []
+function fit<T>(items: T[], room: number, smaller: (item: T) => T[] = () => []): { items: T[], omitted: number, reduced: number } {
+  const kept: T[] = []
   let used = 0
-  for (const event of events) {
-    const size = JSON.stringify(event).length
-    if (used + size > budget) break
-    kept.push(event)
-    used += size
+  let reduced = 0
+  for (let index = items.length - 1; index >= 0; index--) {
+    const sizes = [items[index]!, ...smaller(items[index]!)].map(form => ({ form, size: JSON.stringify(form).length + 1 }))
+    const left = room - used
+    const at = sizes.findIndex(({ size }) => size <= left)
+    if (at === -1) continue
+    kept.unshift(sizes[at]!.form)
+    used += sizes[at]!.size
+    if (at > 0) reduced += 1
   }
-  return { events: kept, omitted: events.length - kept.length }
+  return { items: kept, omitted: items.length - kept.length, reduced }
+}
+
+function smallerRows(row: LogsRow): LogsRow[] {
+  const forms: LogsRow[] = []
+  if (row.fields) {
+    const { fields, ...rest } = row
+    forms.push({ ...rest, omittedFields: Object.keys(fields) })
+  }
+  const dropped = Object.keys(row).filter(key => !ROW_IDENTITY.has(key) && row[key as keyof LogsRow] !== undefined)
+  const identity = Object.fromEntries(Object.entries(row).filter(([key, value]) => ROW_IDENTITY.has(key) && value !== undefined)) as LogsRow
+  forms.push({ ...identity, omittedFields: dropped.flatMap(key => key === 'fields' ? Object.keys(row.fields!) : [key]) })
+  return forms
+}
+
+function smallerSessions<T extends SessionSummary>(summary: T): T[] {
+  if (summary.latestFailure?.message === undefined) return []
+  const { message: _message, ...latestFailure } = summary.latestFailure
+  return [{ ...summary, latestFailure, omittedFields: ['latestFailure.message'] }]
 }
 
 function traceReferences(events: WideEvent[], local: boolean): TraceReference[] {
@@ -303,17 +332,9 @@ export async function readLogs(input: LogsToolInput, options: { source: LogsSour
   const result = (from: string, origin: LogsOrigin, window: LogsToolResult['window'], gaps: string[] = [], notes: string[] = []): LogsToolResult => {
     const selected = selection.done()
     const { matched, stats, sessions, sessionsMatched } = selected
-    let { events } = selected
-    let omitted = 0
-    if (view === 'trace') ({ events, omitted } = withinBudget(events, input.full ? TRACE_BUDGET_FULL : TRACE_BUDGET))
-    const returned = sessions ? sessions.length : stats ? matched : events.length
-    const shownNotes = [
-      ...notes,
-      ...(view === 'trace' ? ['trace returns full wide events, not the OTel span tree: open a span tree with traces[].traceId'] : []),
-      ...(omitted > 0 ? [`${omitted} event(s) left out to stay within the size budget; pass full: true, or narrow with fields in a list view`] : []),
-      ...(view === 'trace' && events.length > 0 && !events.some(event => at(event, 'traceId')) ? ['No traceId on these events: the agent does not export evlogTraces() from agent/instrumentation, or the turn was not traced'] : []),
-    ]
-    return {
+    const budget = input.full ? BUDGET_FULL : BUDGET
+    const traces = view === 'trace' ? traceReferences(selected.events, origin.kind === 'files') : undefined
+    const envelope: LogsToolResult = {
       source: from,
       origin,
       scope,
@@ -322,12 +343,40 @@ export async function readLogs(input: LogsToolInput, options: { source: LogsSour
       window,
       filters,
       matched,
-      returned,
+      returned: 0,
       coverage: gaps.length > 0 ? { complete: false, reasons: gaps } : { complete: true },
       ...(stats && { stats }),
-      ...(sessions && { sessions: sessions.map(summary => summary.session === options.caller?.session ? { ...summary, current: true as const } : summary), sessionsMatched }),
-      ...(view === 'trace' && { events, ...(omitted > 0 && { omitted }), traces: traceReferences(events, origin.kind === 'files') }),
-      ...(!stats && !sessions && view !== 'trace' && { rows: events.map(event => toRow(event, input.fields ?? [], input.detail === 'diagnostic')) }),
+      ...(sessions && { sessionsMatched }),
+      ...(traces && { traces }),
+    }
+    const room = budget - JSON.stringify(envelope).length - NOTES_ROOM
+    const marked = sessions?.map(summary => summary.session === options.caller?.session ? { ...summary, current: true as const } : summary)
+    const fitted = marked
+      ? fit(marked, room, smallerSessions)
+      : view === 'trace'
+        ? fit(selected.events, room)
+        : stats ? { items: [], omitted: 0, reduced: 0 } : fit(selected.events.map(event => toRow(event, input.fields ?? [], input.detail === 'diagnostic')), room, smallerRows)
+    const { omitted, reduced } = fitted
+    const raise = input.full ? '' : `: pass full: true to raise it to ${BUDGET_FULL}`
+    const exhausted = input.full ? ', the largest there is' : ''
+    const unit = view === 'trace' ? 'event(s)' : sessions ? 'session(s)' : 'row(s)'
+    const narrow = view === 'trace'
+      ? 'read single fields with view recent, where requestId=<id> and fields, or open the span tree from traces[]'
+      : sessions ? 'pass session to read one' : 'ask for fewer fields or a lower limit'
+    const shownNotes = [
+      ...notes,
+      ...(view === 'trace' ? ['trace returns full wide events, not the OTel span tree: open a span tree with traces[].traceId'] : []),
+      ...(omitted > 0 ? [`${omitted} ${unit} left out to stay within the ${budget}-character budget${input.full ? `${exhausted}: ${narrow}` : raise}`] : []),
+      ...(reduced > 0 ? [`${reduced} ${unit} left ${sessions ? 'failure messages' : 'fields'} out to stay within the ${budget}-character budget${input.full ? `${exhausted}: ${narrow}` : `${raise}${sessions ? '' : ', or ask for fewer fields'}`}`] : []),
+      ...(view === 'trace' && selected.events.length > 0 && !selected.events.some(event => at(event, 'traceId')) ? ['No traceId on these events: the agent does not export evlogTraces() from agent/instrumentation, or the turn was not traced'] : []),
+    ]
+    return {
+      ...envelope,
+      returned: stats ? matched : fitted.items.length,
+      ...(marked && { sessions: fitted.items as NonNullable<LogsToolResult['sessions']> }),
+      ...(view === 'trace' && { events: fitted.items as WideEvent[] }),
+      ...(omitted > 0 && { omitted }),
+      ...(!stats && !sessions && view !== 'trace' && { rows: fitted.items as LogsRow[] }),
       ...(shownNotes.length > 0 && { notes: shownNotes }),
     }
   }
@@ -335,8 +384,9 @@ export async function readLogs(input: LogsToolInput, options: { source: LogsSour
   if (source.kind === 'fs') {
     const origin: LogsOrigin = { kind: 'files', dir: source.dir, environment: source.environment ?? 'development' }
     if (input.expect) mismatch(input.expect, origin, source.dir)
-    for await (const event of readFsLogs({ dir: source.dir, since: query.since, until: query.until, level: query.level, filter: query.filter })) selection.add(event)
-    return result(source.dir, origin, { ...(query.since && { since: query.since.toISOString() }), until: (query.until ?? now).toISOString() })
+    const until = query.until ?? now
+    for await (const event of readFsLogs({ dir: source.dir, since: query.since, until, level: query.level, filter: query.filter })) selection.add(event)
+    return result(source.dir, origin, { ...(query.since && { since: query.since.toISOString() }), until: until.toISOString() })
   }
 
   const vercel = vercelScope(source.oidcToken)
