@@ -3,12 +3,13 @@ import type { DynamicContext } from 'eve/tools'
 import { isScheduleAuth } from 'eve/schedules'
 import { createError } from 'evlog'
 import { z } from 'zod'
+import { useLogger } from '../lib/logger'
 import { VIEWS } from '../lib/vendor/logs-query'
 import { DEFAULT_VERCEL_CONNECTOR } from '../lib/vendor/logs-vercel'
 import extension from '../extension'
 import type { EvlogEveLogsAccess } from '../extension'
 import { DEFAULT_LIMIT, readLogs } from '../lib/read-logs'
-import type { LogsSource } from '../lib/read-logs'
+import type { LogsSource, LogsToolInput, LogsToolResult } from '../lib/read-logs'
 
 const LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const
 
@@ -18,11 +19,18 @@ function deploymentOidcToken(): string | undefined {
   return context?.get?.().headers?.['x-vercel-oidc-token'] ?? process.env.VERCEL_OIDC_TOKEN
 }
 
-function source(): LogsSource {
-  const { dir, vercel } = extension.config.logs ?? {}
-  if (process.env.VERCEL !== '1') return { kind: 'fs', dir: dir ?? '.evlog/logs' }
+export function source(): LogsSource {
+  const { dir, vercel, source: chosen = 'auto' } = extension.config.logs ?? {}
+  const onVercel = process.env.VERCEL === '1'
+  if (chosen === 'files' || (chosen === 'auto' && !onVercel)) {
+    return { kind: 'fs', dir: dir ?? '.evlog/logs', environment: extension.config.env?.environment ?? process.env.NODE_ENV ?? 'development' }
+  }
   const oidcToken = deploymentOidcToken()
-  if (!oidcToken) throw createError({ message: 'No OIDC token in this deployment', status: 503, why: 'The logs tool reads runtime logs through Vercel Connect, which accepts the deployment\'s OIDC token', fix: 'Turn on OIDC federation for the project in its Vercel settings' })
+  if (!oidcToken) {
+    throw createError(onVercel
+      ? { message: 'No OIDC token in this deployment', status: 503, why: 'The logs tool reads runtime logs through Vercel Connect, which accepts the deployment\'s OIDC token', fix: 'Turn on OIDC federation for the project in its Vercel settings' }
+      : { message: 'No VERCEL_OIDC_TOKEN in this process', status: 503, why: 'logs.source is vercel, and a local run reads the linked project\'s runtime logs with the token vercel env pull writes to .env.local', fix: 'Run eve link, or vercel env pull, then restart eve dev. The token lasts 12 hours' })
+  }
   return { kind: 'vercel', oidcToken, connector: vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR }
 }
 
@@ -41,8 +49,11 @@ export default defineDynamic((ctx) => {
     description: [
       'Read this agent\'s own wide events: one per turn, with its outcome, duration, usage, tool calls and their errors (code, why, fix).',
       'Use it to find out what failed or was slow, and why, before proposing a fix. Quote the requestId of the events you cite.',
-      'recent (default), errors and slow (worst first) return one short row per turn; stats counts per route; trace returns one request\'s events in full, by id.',
-      'Narrow with the filters before raising limit, and open a row with trace only when its row does not answer.',
+      'recent (default), errors and slow (worst first) return one short row per turn; sessions sums each session (turns, outcomes, failed tool calls, tokens, cost, slowest turn, latest failure); stats counts per route; trace returns one request\'s full wide events by id, not its OTel span tree.',
+      'Rows carry result: completed, recovered (finished after a tool call failed), failed or cancelled. A 200 status does not mean no tool failed. detail: diagnostic adds models, model calls, cost, cache reads and trace ids.',
+      'Every result names its origin (files or vercel, and the environment), the window read, the filters and over threshold, and coverage. Say which source and window an answer covers. Never conclude that nothing failed or was slow when coverage.complete is false, and name the threshold when you say nothing was slow.',
+      'When the question is about one environment, such as production, pass expect: the read is refused instead of answered from another source.',
+      'caller is the session and turn you are in. Narrow with the filters before raising limit, and open a row with trace only when its row does not answer.',
       access === 'session' ? 'It reads this session only.' : 'It reads every session.',
     ].join(' '),
     inputSchema: z.object({
@@ -57,10 +68,41 @@ export default defineDynamic((ctx) => {
       status: z.string().optional().describe('Only this status (500) or class (5xx)'),
       over: z.string().optional().describe('For slow: the duration a turn has to exceed (default 500ms)'),
       fields: z.array(z.string()).max(10).optional().describe('Dotted fields to add to each row, such as user.id or eve.caller.principalId'),
-      limit: z.number().int().min(1).max(50).optional().describe(`Most rows returned (default ${DEFAULT_LIMIT})`),
+      detail: z.enum(['brief', 'diagnostic']).optional().describe('diagnostic adds models, model calls, cost, cache reads and trace ids to each row'),
+      limit: z.number().int().min(1).max(50).optional().describe(`Most rows or sessions returned (default ${DEFAULT_LIMIT})`),
+      full: z.boolean().optional().describe('For trace: return events past the default size budget'),
+      expect: z.object({
+        source: z.enum(['files', 'vercel']).optional(),
+        environment: z.string().min(1).optional(),
+      }).optional().describe('Refuse the read unless it is this source and environment, such as { environment: "production" }'),
     }),
-    execute(input, toolCtx) {
-      return readLogs(input, { source: source(), session: access === 'session' ? toolCtx.session.id : undefined })
+    async execute(input, toolCtx) {
+      const started = Date.now()
+      const from = source()
+      const caller = { session: toolCtx.session.id, turn: toolCtx.session.turn.id }
+      let outcome: Awaited<ReturnType<typeof readLogs>> | undefined
+      try {
+        outcome = await readLogs(input, { source: from, session: access === 'session' ? caller.session : undefined, caller })
+        return outcome
+      } finally {
+        if (extension.config.logs?.diagnostics) {
+          useLogger().set({ evlog: { logs: { [toolCtx.callId]: diagnosticsOf(input, from, outcome, Date.now() - started) } } })
+        }
+      }
     },
   })
 })
+
+/** What a logs call is recorded as: its shape and counts, never what it returned. */
+function diagnosticsOf(input: LogsToolInput, from: LogsSource, result: LogsToolResult | undefined, durationMs: number): Record<string, unknown> {
+  const { fields, ...asked } = input
+  return {
+    source: from.kind === 'fs' ? 'files' : 'vercel',
+    view: input.view ?? (input.id ? 'trace' : 'recent'),
+    input: { ...asked, ...(fields && { fields: fields.length }) },
+    durationMs,
+    ...(result
+      ? { matched: result.matched, returned: result.returned, complete: result.coverage.complete }
+      : { failed: true }),
+  }
+}
