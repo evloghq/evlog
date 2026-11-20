@@ -175,6 +175,7 @@ const ID_FIELDS = ['requestId', 'traceId', 'spanId', '_parentRequestId'] as cons
 /**
  * Whether the event belongs to the request: an exact id, or a prefix of at
  * least eight characters, so the first block of a UUID is enough to type.
+ * A one-shot run keeps only the exact matches when there are any, see `createSelection`.
  */
 export function matchesId(event: WideEvent, id: string): boolean {
   return ID_FIELDS.some((key) => {
@@ -182,6 +183,10 @@ export function matchesId(event: WideEvent, id: string): boolean {
     if (!value) return false
     return value === id || (id.length >= 8 && value.startsWith(id))
   })
+}
+
+function carriesId(event: WideEvent, id: string): boolean {
+  return ID_FIELDS.some(key => text(event, key) === id)
 }
 
 /** The OTel GenAI attribute that names a conversation; `session` filters on it. */
@@ -384,25 +389,38 @@ export interface Selected<T extends WideEvent = WideEvent> {
  * shows, so a log of any size is read in the memory `limit` events need. `stats`
  * also keeps one duration per event.
  *
+ * With an id, the events carrying it whole are kept apart and win when there
+ * are any: `turn_1` is a prefix of `turn_10`, and a complete id must not
+ * select the requests it happens to prefix.
+ *
  * Events are in the order offered. With `byTime`, for several sources read one
  * after the other, they are ordered by timestamp, and by the order offered
  * within the same instant.
  */
 export function createSelection<T extends WideEvent>(query: LogsQuery, byTime = false): { add: (event: T) => void, done: () => Selected<T> } {
-  const stats = query.view === 'stats' ? createStats() : undefined
-  const shown = keepFirst<Placed<T>>(query.limit, query.view === 'slow' ? slowestFirst : latestFirst)
+  const collect = () => ({
+    stats: query.view === 'stats' ? createStats() : undefined,
+    shown: keepFirst<Placed<T>>(query.limit, query.view === 'slow' ? slowestFirst : latestFirst),
+    matched: 0,
+  })
+  const all = collect()
+  const exact = query.id === undefined ? undefined : collect()
   const isNew = createDedupe()
-  let matched = 0
+  let seq = 0
   return {
     add(event) {
       if (!isNew(event)) return
-      const placed = { event, at: byTime ? timeOf(event) : 0, seq: matched++ }
-      if (stats) stats.add(placed)
-      else shown.add(placed)
+      const placed = { event, at: byTime ? timeOf(event) : 0, seq: seq++ }
+      for (const into of exact && carriesId(event, query.id!) ? [all, exact] : [all]) {
+        into.matched += 1
+        if (into.stats) into.stats.add(placed)
+        else into.shown.add(placed)
+      }
     },
     done() {
-      const events = shown.values().map(placed => placed.event)
-      return { matched, events: query.view === 'slow' ? events : events.reverse(), stats: stats?.result() }
+      const from = exact && exact.matched > 0 ? exact : all
+      const events = from.shown.values().map(placed => placed.event)
+      return { matched: from.matched, events: query.view === 'slow' ? events : events.reverse(), stats: from.stats?.result() }
     },
   }
 }

@@ -26,6 +26,14 @@ function rebuild(recorded: RecordedError): Error {
   }
 }
 
+/** A failure eve kept only the name and message of; the stack would be this hook's, so it has none. */
+function kept(failure: { name?: string, message: string }): Error {
+  const error = new Error(failure.message)
+  if (failure.name) error.name = failure.name
+  error.stack = undefined
+  return error
+}
+
 function settings() {
   const { record, tools, init, ...config } = extension.config
   // Records are read back by the agent and pasted into issues, so they are
@@ -106,12 +114,15 @@ export async function emitTurn(turnId: string, slot: Pick<TurnSlot, 'calls' | 'c
     } else logger[call.op](call.message, call.context)
   }
   // eve keeps only a failed call's message, so the evlog error built in the
-  // tool is found by that message to restore its code, why, fix and link.
-  for (const message of new Set(turn.failedMessages)) {
-    const created = slot.created.findLast(error => error.message === message)
-    if (!created || reported.has(message)) continue
+  // tool is found by that message to restore its code, why, fix and link. A
+  // call that threw anything else is written from what eve kept, so a
+  // recovered failure still carries an error block.
+  for (const failure of turn.failures) {
+    if (reported.has(failure.message)) continue
+    reported.add(failure.message)
+    const created = slot.created.findLast(error => error.message === failure.message)
     errors += 1
-    logger.error(rebuild(created))
+    logger.error(created ? rebuild(created) : kept(failure))
   }
   // A turn that recovered from a failed call still answered: it is a warning,
   // so `evlog logs errors` lists it without counting it as a failed turn.
