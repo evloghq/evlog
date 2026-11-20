@@ -35,7 +35,7 @@ function kept(failure: { name?: string, message: string }): Error {
 }
 
 function settings() {
-  const { record, tools, init, ...config } = extension.config
+  const { record, tools, init, logs: _logs, ...config } = extension.config
   // Records are read back by the agent and pasted into issues, so they are
   // redacted in every environment unless the mount says otherwise.
   return {

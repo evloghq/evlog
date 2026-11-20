@@ -3,3 +3,4 @@
 .next
 .output
 *.tsbuildinfo
+.env*.local

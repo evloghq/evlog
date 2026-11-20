@@ -11,6 +11,7 @@ import {
 } from '../core/output'
 import type { Check, CheckSummary } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
+import { VERSION } from '../lib/constants'
 import { loadCliConfig } from '../lib/config'
 import type { CatalogFindingSource, CliDebug } from '../lib/debug'
 import { createNoopCliDebug } from '../lib/debug'
@@ -107,6 +108,23 @@ function checkEvlog(
     status: 'warn',
     message: 'not found in this project',
     hint: 'pnpm add evlog — https://evlog.dev/getting-started/installation',
+  }
+}
+
+/**
+ * The CLI that answers, and whether the project pins one. The `evlog` bin
+ * hands off to the project's own install, so a pin stops an older global
+ * copy from answering with flags it does not know.
+ */
+export function checkCli(project: ProjectInfo, running: string): Check {
+  const pkg = project.packageJson
+  const pinned = pkg?.devDependencies?.['@evlog/cli'] ?? pkg?.dependencies?.['@evlog/cli']
+  if (pinned) return { id: 'cli', status: 'ok', message: `v${running} · pinned ${pinned}` }
+  return {
+    id: 'cli',
+    status: 'ok',
+    message: `v${running} · not pinned in package.json`,
+    hint: 'pnpm add -D @evlog/cli, and the evlog bin runs that version in this project, whatever is installed globally',
   }
 }
 
@@ -260,6 +278,7 @@ export async function runDoctor(
     return [
       ...environment,
       checkEvlog(project, resolved),
+      checkCli(project, VERSION),
       ...(config.check ? [config.check] : []),
       ...(logsCheck ? [logsCheck] : []),
     ]
@@ -272,7 +291,7 @@ export async function runDoctor(
     },
     {
       title: 'EVLOG',
-      checks: checks.filter(c => c.id === 'evlog' || c.id === 'config' || c.id === 'logs'),
+      checks: checks.filter(c => c.id === 'evlog' || c.id === 'cli' || c.id === 'config' || c.id === 'logs'),
     },
   ]
 

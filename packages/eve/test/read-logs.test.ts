@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, it } from 'vitest'
 import { readLogs } from '../extension/lib/read-logs'
 
 const NOW = new Date('2026-10-01T12:00:00.000Z')
@@ -56,6 +59,7 @@ describe('readLogs on Vercel', () => {
         status: 500,
         durationMs: 4200,
         session: 'wrun_A',
+        result: 'failed',
         error: { code: 'REFUND_DECLINED', message: 'Refund declined', why: 'Issuer rejected it', fix: 'Ask for another card' },
         toolCalls: 30,
         failedTools: ['tool_7'],
@@ -104,5 +108,104 @@ describe('readLogs on Vercel', () => {
     await expect(readLogs({ view: 'trace' }, { source, now: NOW })).rejects.toThrow('The trace view needs an id')
     await expect(readLogs({ status: '5x' }, { source, now: NOW })).rejects.toThrow('status "5x" is not a status')
     await expect(readLogs({ until: 'soon' }, { source, now: NOW })).rejects.toThrow('until "soon" is not a duration')
+  })
+})
+
+describe('readLogs results say what they cover', () => {
+  it('names the origin, the window and the filters, and is complete when nothing was cut', async () => {
+    const { fetchFn } = fakeVercel([turn('wrun_A', { durationMs: 900 })])
+    const result = await readLogs({ view: 'slow' }, { source: { kind: 'vercel', oidcToken: OIDC, connector: 'vercel/evlog', fetchFn }, caller: { session: 'wrun_A', turn: 'turn_3' }, now: NOW })
+    expect(result).toMatchObject({
+      origin: { kind: 'vercel', teamId: 'team_1', projectId: 'prj_1', environment: 'production' },
+      caller: { session: 'wrun_A', turn: 'turn_3' },
+      window: { since: '2026-09-30T12:00:00.000Z', until: '2026-10-01T12:00:00.000Z' },
+      filters: { over: '500ms', limit: 10 },
+      matched: 1,
+      returned: 1,
+      coverage: { complete: true },
+    })
+  })
+
+  it('is not complete when Vercel cut lines or more were left', async () => {
+    const fetchFn = ((url: string) => Promise.resolve(url.includes('/connect/')
+      ? new Response(JSON.stringify({ token: 't' }))
+      : new Response(JSON.stringify({ events: [{ message: turn('wrun_A') }, { truncated: true }], pagination: { hasMore: false, nextCursor: null } })))) as typeof fetch
+    const result = await readLogs({ view: 'errors' }, { source: { kind: 'vercel', oidcToken: OIDC, connector: 'vercel/evlog', fetchFn }, now: NOW })
+    expect(result.matched).toBe(0)
+    expect(result.coverage).toEqual({ complete: false, reasons: ['1 log line(s) were cut by Vercel\'s size limit and skipped'] })
+  })
+
+  it('refuses a read from another source or environment than the one expected', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'evlog-eve-expect-'))
+    dirs.push(dir)
+    const files = { kind: 'fs' as const, dir, environment: 'development' }
+    await expect(readLogs({ view: 'errors', expect: { environment: 'production' } }, { source: files, now: NOW }))
+      .rejects.toMatchObject({ status: 409, message: `This tool reads ${dir} (files, development), not production` })
+    await expect(readLogs({ expect: { source: 'vercel' } }, { source: files, now: NOW })).rejects.toMatchObject({ status: 409 })
+    const { fetchFn, calls } = fakeVercel([])
+    await expect(readLogs({ expect: { environment: 'preview' } }, { source: { kind: 'vercel', oidcToken: OIDC, connector: 'vercel/evlog', fetchFn }, now: NOW })).rejects.toMatchObject({ status: 409 })
+    /* Refused before Connect is asked for a token. */
+    expect(calls).toHaveLength(0)
+    expect((await readLogs({ expect: { source: 'files', environment: 'development' } }, { source: files, now: NOW })).origin).toEqual({ kind: 'files', dir, environment: 'development' })
+  })
+})
+
+const dirs: string[] = []
+afterAll(() => {
+  for (const dir of dirs) rmSync(dir, { recursive: true, force: true })
+})
+
+function sink(lines: string[]): string {
+  const dir = mkdtempSync(join(tmpdir(), 'evlog-eve-logs-'))
+  dirs.push(dir)
+  writeFileSync(join(dir, '2026-10-01.jsonl'), `${lines.join('\n')}\n`)
+  return dir
+}
+
+describe('readLogs sessions', () => {
+  const lines = [
+    turn('wrun_A', { requestId: 'wrun_A:turn_0', timestamp: '2026-10-01T10:00:01.000Z', durationMs: 1000, eve: { outcome: 'completed' }, gen_ai: { conversation: { id: 'wrun_A' }, calls: 1, usage: { input_tokens: 50, output_tokens: 5, cost: 0.0002 } } }),
+    turn('wrun_A', { requestId: 'wrun_A:turn_1', timestamp: '2026-10-01T10:10:00.000Z', level: 'warn', durationMs: 3000, eve: { outcome: 'completed', failedCalls: 1 }, gen_ai: { conversation: { id: 'wrun_A' }, calls: 2, tools: [{ name: 'refund', success: false }] } }),
+    turn('wrun_B', { requestId: 'wrun_B:turn_0', timestamp: '2026-10-01T11:00:00.000Z', durationMs: 200, eve: { outcome: 'failed' }, status: 500, level: 'error' }),
+  ]
+
+  it('sums each session and marks the caller\'s', async () => {
+    const result = await readLogs({ view: 'sessions' }, { source: { kind: 'fs', dir: sink(lines) }, caller: { session: 'wrun_A', turn: 'turn_2' }, now: NOW })
+    expect(result.sessionsMatched).toBe(2)
+    expect(result.returned).toBe(2)
+    expect(result.sessions!.map(s => [s.session, s.current])).toEqual([['wrun_B', undefined], ['wrun_A', true]])
+    expect(result.sessions![1]).toMatchObject({ turns: 2, outcomes: { completed: 1, recovered: 1 }, failedToolCalls: 1, modelCalls: 3, processingMs: 4000, elapsedMs: 600_000, cost: { usd: 0.0002, turnsReporting: 1 } })
+  })
+
+  it('never shows another session to a session-scoped caller', async () => {
+    const result = await readLogs({ view: 'sessions', session: 'wrun_B' }, { source: { kind: 'fs', dir: sink(lines) }, session: 'wrun_A', caller: { session: 'wrun_A' }, now: NOW })
+    expect(result.scope).toBe('session')
+    expect(result.sessions!.map(s => s.session)).toEqual(['wrun_A'])
+  })
+
+  it('adds the diagnostic fields to rows on request only', async () => {
+    const dir = sink([turn('wrun_C', { traceId: 'tr_1', spanId: 'sp_1', gen_ai: { conversation: { id: 'wrun_C' }, calls: 4, request: { model: 'm1' }, usage: { cost: 0.01, cache_read: { input_tokens: 900 } } } })])
+    const [brief] = (await readLogs({}, { source: { kind: 'fs', dir }, now: NOW })).rows!
+    expect(brief).not.toHaveProperty('traceId')
+    const [row] = (await readLogs({ detail: 'diagnostic' }, { source: { kind: 'fs', dir }, now: NOW })).rows!
+    expect(row).toMatchObject({ modelCalls: 4, models: ['m1'], cost: 0.01, cacheReadTokens: 900, traceId: 'tr_1', spanId: 'sp_1' })
+  })
+})
+
+describe('readLogs trace', () => {
+  it('returns full events within a size budget, says it is not the span tree, and points at the trace', async () => {
+    const big = (i: number) => turn('wrun_D', { requestId: 'wrun_D:turn_1', timestamp: `2026-10-01T10:0${i}:00.000Z`, traceId: `tr_${i}`, spanId: `sp_${i}`, pad: 'x'.repeat(10_000) })
+    const dir = sink([0, 1, 2, 3].map(big))
+    const result = await readLogs({ view: 'trace', id: 'wrun_D:turn_1' }, { source: { kind: 'fs', dir }, now: NOW })
+    expect(result.matched).toBe(4)
+    expect(result.returned).toBe(2)
+    expect(result.omitted).toBe(2)
+    expect(JSON.stringify(result.events).length).toBeLessThan(24_000)
+    expect(result.traces).toEqual([
+      { requestId: 'wrun_D:turn_1', traceId: 'tr_0', spanId: 'sp_0', open: 'eve traces show tr_0' },
+      { requestId: 'wrun_D:turn_1', traceId: 'tr_1', spanId: 'sp_1', open: 'eve traces show tr_1' },
+    ])
+    expect(result.notes).toContain('trace returns full wide events, not the OTel span tree: open a span tree with traces[].traceId')
+    expect((await readLogs({ view: 'trace', id: 'wrun_D:turn_1', full: true }, { source: { kind: 'fs', dir }, now: NOW })).events).toHaveLength(4)
   })
 })

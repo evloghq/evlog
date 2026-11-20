@@ -71,10 +71,14 @@ pnpm evlog map
 | `evlog logs slow [--over 1s]` | Over the bar (default 500ms), worst first |
 | `evlog logs <requestId>` | One request in full: error with `why`/`fix`/`link`, audit record, business fields |
 | `evlog logs stats` | Per route: count, errors, p50, p95; then by status class and level |
+| `evlog logs sessions` | One summary per AI session: turns by outcome, failed tool calls, tokens, cost, slowest turn |
+| `evlog logs errors --expect production` | Refuse to answer from another store or environment instead of returning nothing |
 | `evlog logs --where 'payment.amount>5000' --where audit.outcome=failure` | Any field on the event: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~regex`, present, `!absent` |
 | `evlog logs --url http://localhost:8787/_evlog/logs` | Read the memory drain's dev endpoint instead of files |
 | `evlog logs -f` | Follow new events as the app writes them |
 | `evlog logs --source vercel` | Read the linked Vercel project's runtime logs, after `npx evlog setup vercel` once |
+| `evlog setup vercel --check` | Check each stage of the Vercel read without changing anything: link, OIDC, connector, token, log read, traces |
+| `evlog setup eve` | Write the eve instrumentation file that puts trace ids on each turn's event |
 | `evlog logs --since 15m --path /api/x --status 5xx --level error` | Filters, composable with every view |
 | `evlog logs --json` | The events as JSON on stdout (one line per event with `-f`) |
 | `evlog doctor` | Monorepo-aware diagnosis: Node, project/workspace, stack, evlog install, `.evlog/logs` |

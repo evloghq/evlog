@@ -164,6 +164,16 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
     }
   })
 
+  it('records a logs call\'s shape and counts with diagnostics on, and none of what it returned', () => {
+    const read = events.find(e => e.gen_ai.tools.some(tool => tool.name === 'evlog__logs'))!
+    const [callId] = read.gen_ai.tools.map(tool => tool.call_id)
+    const recorded = (read as { evlog?: { logs?: Record<string, Record<string, unknown>> } }).evlog?.logs?.[callId!]
+    expect(recorded).toMatchObject({ source: 'files', view: 'errors', input: { view: 'errors', where: [expect.any(String)] }, matched: 1, returned: 1, complete: true })
+    expect(JSON.stringify(recorded)).not.toContain('ops@clearbill.dev')
+    expect(recorded).not.toHaveProperty('rows')
+    expect(JSON.stringify(read)).not.toContain('The card issuer rejected the reversal')
+  })
+
   it('marks a completed turn with a failed call as a warning', () => {
     const event = byOrder('bad')
     expect(event.eve.outcome).toBe('completed')

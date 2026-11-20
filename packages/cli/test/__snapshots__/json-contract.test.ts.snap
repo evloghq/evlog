@@ -59,6 +59,12 @@ exports[`--json contract > keeps the doctor envelope 1`] = `
         "status": "ok",
       },
       {
+        "hint": "pnpm add -D @evlog/cli, and the evlog bin runs that version in this project, whatever is installed globally",
+        "id": "cli",
+        "message": "v<cli-version> · not pinned in package.json",
+        "status": "ok",
+      },
+      {
         "id": "config",
         "message": "evlog.config.ts",
         "status": "ok",
@@ -83,7 +89,7 @@ exports[`--json contract > keeps the doctor envelope 1`] = `
     "schemaVersion": 2,
     "summary": {
       "fail": 0,
-      "ok": 6,
+      "ok": 7,
       "warn": 0,
     },
   },
@@ -95,6 +101,9 @@ exports[`--json contract > keeps the logs envelope 1`] = `
   "exitCode": 0,
   "output": {
     "count": 2,
+    "coverage": {
+      "complete": true,
+    },
     "environment": "test",
     "events": [
       {
@@ -124,11 +133,19 @@ exports[`--json contract > keeps the logs envelope 1`] = `
       },
     ],
     "matched": 2,
+    "origin": {
+      "environments": [],
+      "kind": "files",
+    },
     "schemaVersion": 2,
     "sources": [
       ".evlog/logs",
     ],
     "view": "recent",
+    "window": {
+      "since": "2026-09-30T00:00:00.000Z",
+      "until": "2026-10-02T00:00:00.000Z",
+    },
   },
 }
 `;

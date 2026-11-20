@@ -8,7 +8,8 @@ import { createContext } from '../src/core/context'
 import { vercelScope } from '../../evlog/src/logs-vercel'
 import { readVercelLogs } from '../src/lib/logs/vercel'
 import type { VercelAccess } from '../src/lib/logs/vercel'
-import { runSetupVercel } from '../src/lib/setup-vercel'
+import { runSetupVercel, runSetupVercelCheck } from '../src/lib/setup-vercel'
+import { runSetupEve } from '../src/lib/setup-eve'
 import type { VercelCli } from '../src/lib/setup-vercel'
 
 const NOW = new Date('2026-10-01T12:00:00.000Z')
@@ -121,6 +122,42 @@ describe('evlog logs --source vercel', () => {
     expect(result.sources).toEqual(['vercel prj_1 (production)'])
     expect(result.events.map(e => e.timestamp)).toEqual(['2026-10-01T11:00:00.000Z'])
     expect(result.notes).toEqual(['1 log line was cut by Vercel\'s size limit and skipped'])
+  })
+
+  it('says what it read: the project, its environment, the window, and that a cut line leaves it incomplete', async () => {
+    const cwd = await linkedProject()
+    const { fetchFn } = fakeVercel([{ events: [{ message: line('2026-10-01T11:00:00.000Z') }, { truncated: true }] }])
+    const ctx = ctxAt(cwd)
+    const result = await runLogs(ctx, { what: 'errors' }, { source: 'vercel', vercelAccess: access, fetchFn, now: NOW })
+    expect(result.origin).toEqual({ kind: 'vercel', teamId: 'team_1', projectId: 'prj_1', environments: ['production'] })
+    expect(result.window).toEqual({ since: '2026-09-30T12:00:00.000Z', until: '2026-10-01T12:00:00.000Z' })
+    expect(result.coverage).toEqual({ complete: false, reasons: ['1 log line was cut by Vercel\'s size limit and skipped'] })
+    const report = formatLogsReport(ctx, result)
+    expect(report.split('\n').slice(0, 2)).toEqual(['Vercel prj_1 (production) · 2026-09-30 12:00 → 2026-10-01 12:00 UTC', 'incomplete: 1 log line was cut by Vercel\'s size limit and skipped'])
+  })
+
+  it('reads Vercel when evlog.config says so, and a flag still wins', async () => {
+    const cwd = await linkedProject()
+    await writeFile(join(cwd, 'evlog.config.ts'), `export default { logs: { source: 'vercel' } }\n`)
+    const { fetchFn } = fakeVercel([{ events: [] }])
+    expect((await runLogs(ctxAt(cwd), {}, { vercelAccess: access, fetchFn, now: NOW })).origin.kind).toBe('vercel')
+    await expect(runLogs(ctxAt(cwd), {}, { source: 'files', vercelAccess: access, fetchFn, now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_NO_SINK' })
+  })
+
+  it('refuses to answer for production from local files, or for preview from production', async () => {
+    const cwd = await linkedProject()
+    await mkdir(join(cwd, '.evlog', 'logs'), { recursive: true })
+    await writeFile(join(cwd, '.evlog', 'logs', '2026-10-01.jsonl'), `${line('2026-10-01T11:00:00.000Z', { environment: 'development', status: 500, level: 'error' })}\n`)
+    const ctx = ctxAt(cwd)
+    await expect(runLogs(ctx, { what: 'errors' }, { expect: 'production', now: NOW }))
+      .rejects.toMatchObject({ code: 'cli.LOGS_SOURCE_MISMATCH', message: 'Expected production, but this reads local files (development)' })
+    await expect(runLogs(ctx, {}, { expect: 'vercel', now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_SOURCE_MISMATCH' })
+    const { fetchFn, bodies } = fakeVercel([{ events: [] }])
+    await expect(runLogs(ctx, {}, { source: 'vercel', expect: 'preview', vercelAccess: access, fetchFn, now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_SOURCE_MISMATCH' })
+    expect(bodies).toHaveLength(0)
+    const local = await runLogs(ctx, { what: 'errors' }, { expect: 'files,development', now: NOW })
+    expect(local.origin).toEqual({ kind: 'files', environments: ['development'] })
+    expect(local.matched).toBe(1)
   })
 
   it('points an empty read at the window, not at the fs drain', async () => {
@@ -262,6 +299,79 @@ describe('evlog setup vercel', () => {
     const vercel: VercelCli = () => Promise.resolve({ code: 1, stdout: '', stderr: 'Error: Not authorized\n' })
 
     await expect(runSetupVercel(ctxAt(cwd), { vercel, access })).rejects.toThrow('vercel connect list --json --all-projects failed: Error: Not authorized')
+  })
+})
+
+describe('evlog setup vercel --check', () => {
+  const oidc = () => Promise.resolve({ oidc: jwt({ owner_id: 'team_1', project_id: 'prj_1' }), scope: SCOPE })
+  function cli(team: Array<{ uid: string, type: string }>, onProject: string[]): { vercel: VercelCli, calls: string[] } {
+    const calls: string[] = []
+    const vercel: VercelCli = (args) => {
+      calls.push(args.join(' '))
+      const listed = args.includes('--all-projects') ? team : team.filter(connector => onProject.includes(connector.uid))
+      return Promise.resolve({ code: 0, stdout: JSON.stringify(listed), stderr: '' })
+    }
+    return { vercel, calls }
+  }
+  /** Connect answers `connect`, the observability API `read`. */
+  function vercelApi(connect: number, read: number, events: Array<{ message?: string }> = []): typeof fetch {
+    return ((url: string) => Promise.resolve(url.includes('/connect/token/')
+      ? (connect === 200 ? new Response(JSON.stringify({ token: 't' })) : new Response('no', { status: connect }))
+      : (read === 200 ? new Response(JSON.stringify({ events, pagination: { hasMore: false, nextCursor: null } })) : new Response('forbidden', { status: read })))) as typeof fetch
+  }
+  const summary = (stages: Array<{ id: string, status: string }>) => stages.map(stage => `${stage.id}:${stage.status}`)
+
+  it('passes every stage and changes nothing', async () => {
+    const cwd = await linkedProject()
+    const { vercel, calls } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
+    const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200, [{ message: line('2026-10-01T11:30:00.000Z') }]), now: NOW })
+    expect(summary(stages)).toEqual(['linked:ok', 'oidc:ok', 'connector:ok', 'attached:ok', 'token:ok', 'read:ok'])
+    expect(stages.at(-1)!.message).toBe('read 1 event from the last hour')
+    expect(calls.every(call => call.startsWith('connect list'))).toBe(true)
+  })
+
+  it('fails on the read, not the token, when Connect issues one but the stored key may not read logs', async () => {
+    const cwd = await linkedProject()
+    const { vercel } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
+    const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 403), now: NOW })
+    expect(summary(stages)).toEqual(['linked:ok', 'oidc:ok', 'connector:ok', 'attached:ok', 'token:ok', 'read:fail'])
+    expect(stages.at(-1)!.fix).toContain('Vercel access token scoped to the team')
+  })
+
+  it('tells an empty window from a refused one', async () => {
+    const cwd = await linkedProject()
+    const { vercel } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
+    const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
+    expect(stages.at(-1)).toEqual({ id: 'read', status: 'ok', message: 'allowed; no runtime log lines in the last hour' })
+  })
+
+  it('stops at the first failing stage and skips the rest', async () => {
+    const cwd = await linkedProject()
+    const { vercel } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], [])
+    expect(summary(await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })))
+      .toEqual(['linked:ok', 'oidc:ok', 'connector:ok', 'attached:fail', 'token:skipped', 'read:skipped'])
+    const noLogin = () => Promise.reject(new Error('No OIDC token for the linked Vercel project: not logged in'))
+    expect(summary(await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc: noLogin })))
+      .toEqual(['linked:ok', 'oidc:fail', 'connector:skipped', 'attached:skipped', 'token:skipped', 'read:skipped'])
+  })
+
+  it('flags an eve agent without trace instrumentation, and evlog setup eve writes it once', async () => {
+    const cwd = await linkedProject()
+    await mkdir(join(cwd, 'agent'))
+    const { vercel } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
+    const check = () => runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
+    expect((await check()).at(-1)).toMatchObject({ id: 'traces', status: 'warn' })
+    expect(await runSetupEve(ctxAt(cwd), { check: true })).toEqual({ file: join('agent', 'instrumentation', 'evlog.ts'), state: 'missing' })
+    expect(await runSetupEve(ctxAt(cwd))).toEqual({ file: join('agent', 'instrumentation', 'evlog.ts'), state: 'written' })
+    expect(await runSetupEve(ctxAt(cwd))).toMatchObject({ state: 'present' })
+    expect((await check()).at(-1)).toMatchObject({ id: 'traces', status: 'ok' })
+  })
+
+  it('leaves an instrumentation file it did not write alone', async () => {
+    const cwd = await linkedProject()
+    await mkdir(join(cwd, 'agent', 'instrumentation'), { recursive: true })
+    await writeFile(join(cwd, 'agent', 'instrumentation', 'evlog.ts'), 'export default {}\n')
+    expect(await runSetupEve(ctxAt(cwd))).toMatchObject({ state: 'conflict' })
   })
 })
 

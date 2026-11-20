@@ -6,6 +6,7 @@ import doctor, { formatDoctorReport, runDoctor } from '../src/commands/doctor'
 import { createContext } from '../src/core/context'
 import type { CliContext } from '../src/core/context'
 import { SCHEMA_VERSION } from '../src/core/output'
+import { VERSION } from '../src/lib/constants'
 import { resolveCliEnvironment } from '../src/lib/environment'
 
 const tempDirs: string[] = []
@@ -255,9 +256,10 @@ export default defineNitroPlugin((nitroApp) => {
         { id: 'node', message: process.version, status: 'ok' },
         { id: 'project', message: 'app', status: 'ok' },
         { id: 'evlog', message: 'v2.22.0 (^2.0.0)', status: 'ok' },
+        { id: 'cli', message: `v${VERSION} · not pinned in package.json`, status: 'ok' },
         { id: 'logs', message: '1 file · .evlog/logs', status: 'ok' },
       ],
-      summary: { fail: 0, ok: 4, warn: 0 },
+      summary: { fail: 0, ok: 5, warn: 0 },
     })
   })
 })

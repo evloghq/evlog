@@ -30,6 +30,8 @@ export interface LogsSettings {
   /** Absolute. */
   dir?: string
   limit?: number
+  /** Where `evlog logs` reads without `--source`. */
+  source?: 'files' | 'vercel'
   vercel?: {
     /** The Vercel Connect connector `--source vercel` reads through. */
     connector?: string
@@ -67,7 +69,7 @@ const MODULE_CONFIG_FILES = ['nuxt.config', 'nitro.config'].flatMap(base => ['ts
 const MAP_KEYS = ['rules', 'ignore', 'minScore', 'baseline']
 /** The map sorts entry points into instrumented, partial and dark by these, so neither can be turned off. */
 const CORE_RULES: ReadonlySet<string> = new Set<CheckId>(['wide-event', 'context'])
-const LOGS_KEYS = ['dir', 'limit', 'vercel']
+const LOGS_KEYS = ['dir', 'limit', 'source', 'vercel']
 const LOGS_VERCEL_KEYS = ['connector']
 
 /** Lists `mergeEvlogConfig` appends the child's items to instead of replacing. */
@@ -178,6 +180,10 @@ function readLogs(value: unknown, packageDir: string, at: At): LogsSettings {
   if (dir !== undefined && (typeof dir !== 'string' || dir.length === 0)) {
     throw cliErrors.CONFIG_INVALID({ key: 'logs.dir', at: at('logs.dir'), problem: 'must be a path' })
   }
+  const source = staticValue(logs.source, 'logs.source', at)
+  if (source !== undefined && source !== 'files' && source !== 'vercel') {
+    throw cliErrors.CONFIG_INVALID({ key: 'logs.source', at: at('logs.source'), problem: 'must be files or vercel' })
+  }
   const vercel = section(logs.vercel, ['logs', 'vercel'], LOGS_VERCEL_KEYS, at)
   const connector = staticValue(vercel.connector, 'logs.vercel.connector', at)
   if (connector !== undefined && (typeof connector !== 'string' || !/^[^/\s]+\/[^/\s]+$/.test(connector))) {
@@ -186,6 +192,7 @@ function readLogs(value: unknown, packageDir: string, at: At): LogsSettings {
   return {
     dir: dir === undefined ? undefined : resolve(packageDir, dir),
     limit: wholeNumber(logs.limit, 'logs.limit', at, { min: 1 }),
+    ...(source !== undefined && { source }),
     ...(connector !== undefined && { vercel: { connector } }),
   }
 }

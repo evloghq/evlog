@@ -367,6 +367,15 @@ export const cliErrors = defineErrorCatalog('cli', {
     link: 'https://evlog.dev/cli/logs',
     tags: ['logs', 'vercel'],
   },
+  LOGS_SOURCE_MISMATCH: {
+    status: 409,
+    message: ({ expected, actual }: { expected: string, actual: string }) =>
+      `Expected ${expected}, but this reads ${actual}`,
+    why: 'An empty result from the wrong source would read as an answer about the one you asked for',
+    fix: 'Pass --source vercel for the linked project\'s runtime logs, or drop --expect',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs'],
+  },
   LOGS_VERCEL_NO_TOKEN: {
     status: 401,
     message: ({ reason }: { reason: string }) =>
@@ -398,8 +407,8 @@ export const cliErrors = defineErrorCatalog('cli', {
     status: 400,
     message: ({ value }: { value: string }) =>
       `Unknown setup target "${value}"`,
-    why: 'evlog setup only knows the platforms it can read logs from',
-    fix: 'Run evlog setup vercel',
+    why: 'evlog setup only knows the platforms it can read logs from, and eve',
+    fix: 'Run evlog setup vercel, or evlog setup eve',
     tags: ['setup'],
   },
   SETUP_VERCEL_FAILED: {

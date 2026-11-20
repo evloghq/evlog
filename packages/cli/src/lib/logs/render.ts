@@ -3,7 +3,7 @@ import type { CliContext } from '../../core/context'
 import { createStyle } from '../../core/output'
 import type { Style, StyleCode } from '../../core/output'
 import { field, isError } from './query'
-import type { LogsQuery, LogsStats, Selected } from './query'
+import type { LogsQuery, LogsStats, Selected, SessionSummary } from './query'
 
 /** Fields every request event carries, shown in the fixed columns rather than the summary. */
 const STANDARD = new Set([
@@ -177,12 +177,54 @@ export function formatEvent(style: Style, event: WideEvent): string {
   return lines.join('\n').trimEnd()
 }
 
+/** What a run read, as data. */
+export interface LogsOrigin {
+  kind: 'files' | 'url' | 'vercel'
+  /** `vercel`: the project the OIDC token is pinned to. */
+  teamId?: string
+  projectId?: string
+  /** `vercel`: the one the token reads. `files` and `url`: the ones the events in the window carry. */
+  environments: string[]
+}
+
 export interface LogsResult extends Selected<Sourced> {
   /** Where the events came from: a directory per line, the URL, or the Vercel project. */
   sources: string[]
+  origin: LogsOrigin
+  /** The time range read; no `since` on files means every file. */
+  window: { since?: string, until: string }
+  /** Whether the read covered everything the query asked for, and why not. */
+  coverage: { complete: boolean, reasons?: string[] }
   query: LogsQuery
   /** What the read could not cover, such as log lines Vercel cut. */
   notes?: string[]
+}
+
+function banner(result: LogsResult): string {
+  const { origin, window } = result
+  const envs = origin.environments.length > 0 ? origin.environments.join(', ') : 'no environment seen'
+  const from = origin.kind === 'vercel' ? `Vercel ${origin.projectId} (${envs})` : `${origin.kind === 'url' ? 'URL' : 'local files'} · ${envs}`
+  return `${from} · ${window.since ? `${window.since.slice(0, 16).replace('T', ' ')} → ` : 'all files → '}${window.until.slice(0, 16).replace('T', ' ')} UTC`
+}
+
+function formatSessions(style: Style, sessions: SessionSummary[]): string[] {
+  const lines: string[] = []
+  const secs = (ms: number | undefined): string => (ms === undefined ? '–' : `${(ms / 1000).toFixed(1)}s`)
+  for (const s of sessions) {
+    const { completed, recovered, failed, cancelled } = s.outcomes
+    const outcomes = [`${completed} ok`, recovered > 0 && style.paint('yellow', `${recovered} recovered`), failed > 0 && style.paint('red', `${failed} failed`), cancelled > 0 && `${cancelled} cancelled`].filter(Boolean).join(' · ')
+    lines.push(`${style.paint('bold', printable(s.session))}  ${s.turns} turn${s.turns === 1 ? '' : 's'} · ${outcomes}`)
+    const usage = [
+      `${secs(s.processingMs)} working over ${secs(s.elapsedMs)} elapsed`,
+      s.modelCalls !== undefined && `${s.modelCalls} model call${s.modelCalls === 1 ? '' : 's'}`,
+      s.toolCalls !== undefined && `${s.toolCalls} tool call${s.toolCalls === 1 ? '' : 's'}${s.failedToolCalls > 0 ? ` (${s.failedToolCalls} failed)` : ''}`,
+      s.tokens && `${s.tokens.input + s.tokens.output} tokens${s.tokens.cacheRead ? ` (${s.tokens.cacheRead} cache read)` : ''}`,
+      s.cost && `$${s.cost.usd}${s.cost.turnsReporting < s.turns ? ` from ${s.cost.turnsReporting} of ${s.turns} turns` : ''}`,
+    ].filter(Boolean).join(' · ')
+    lines.push(style.paint('dim', `  ${s.firstAt.slice(0, 19).replace('T', ' ')} → ${s.lastAt.slice(11, 19)} · ${usage}`))
+    if (s.latestFailure) lines.push(style.paint('dim', `  latest failure ${s.latestFailure.requestId ?? ''} ${[s.latestFailure.code, s.latestFailure.failedTools?.join(',')].filter(Boolean).join(' ')}`.trimEnd()))
+  }
+  return lines
 }
 
 function describe(query: LogsQuery): string {
@@ -220,6 +262,14 @@ export function formatLogsReport(ctx: CliContext, result: LogsResult): string {
   const lines: string[] = []
   const filters = describe(query)
   const where = result.sources.length === 1 ? result.sources[0] : `${result.sources.length} apps`
+  lines.push(style.paint('cyan', banner(result)))
+  if (!result.coverage.complete) lines.push(style.paint('yellow', `incomplete: ${result.coverage.reasons?.join('; ')}`))
+  if (result.sessions) {
+    const count = result.sessionsMatched ?? 0
+    lines.push(style.paint('dim', `${result.sessions.length === count ? count : `${result.sessions.length} of ${count}`} session${count === 1 ? '' : 's'} · ${matched} events · ${where}${filters ? ` · ${filters}` : ''}`), '')
+    if (count === 0) return [...lines, 'no event carries gen_ai.conversation.id'].join('\n')
+    return [...lines, ...formatSessions(style, result.sessions), '', style.paint('dim', 'evlog logs --session <id> — one session\'s turns')].join('\n')
+  }
   if (result.stats) {
     lines.push(style.paint('dim', `${matched} event${matched === 1 ? '' : 's'} · ${where}${filters ? ` · ${filters}` : ''}`), '')
     if (matched === 0) return [...lines, 'no event matches'].join('\n')

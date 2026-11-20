@@ -24,6 +24,15 @@ export interface EvlogEveConfig extends Omit<EvlogConfig, 'extends' | 'map' | 'l
    * project's runtime logs through `vercel.connector`; elsewhere the files in `dir`.
    */
   logs?: {
+    /**
+     * Which store the tool reads. `auto` reads Vercel's runtime logs when the
+     * agent runs on Vercel and the files in `dir` elsewhere. `vercel` reads the
+     * linked project's runtime logs from a local run too, with the
+     * `VERCEL_OIDC_TOKEN` that `eve link` or `vercel env pull` writes to
+     * `.env.local`; the token pins the read to that project, whatever the model asks.
+     * @default 'auto'
+     */
+    source?: 'auto' | 'files' | 'vercel'
     /** @default '.evlog/logs' */
     dir?: string
     vercel?: {
@@ -38,6 +47,14 @@ export interface EvlogEveConfig extends Omit<EvlogConfig, 'extends' | 'map' | 'l
      * @example access: ctx => isAdmin(ctx.session.auth.current) ? 'agent' : 'session'
      */
     access?: (ctx: DynamicContext) => EvlogEveLogsAccess
+    /**
+     * Records each `logs` call on the turn's event under `evlog.logs.<callId>`: source,
+     * view, filters, counts, coverage and duration, redacted like any field.
+     * Never the rows or events it returned, which would copy earlier events
+     * into new ones. Off by default: a filter can hold the value it searches for.
+     * @default false
+     */
+    diagnostics?: boolean
   }
   /** @default 'standard' */
   record?: EvlogEveRecord

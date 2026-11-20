@@ -5,8 +5,8 @@ import type { LogLevel, WideEvent } from 'evlog'
  * read logs back. Internal: not a package export; consumers bundle it from source.
  */
 
-/** What the run shows: the latest events, the failures, the slowest, or one request. */
-export const VIEWS = ['recent', 'errors', 'slow', 'trace', 'stats'] as const
+/** What the run shows: the latest events, the failures, the slowest, one request, the counts, or one summary per AI session. */
+export const VIEWS = ['recent', 'errors', 'slow', 'trace', 'stats', 'sessions'] as const
 export type LogsView = typeof VIEWS[number]
 
 const DURATION_UNITS: Record<string, number> = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }
@@ -170,6 +170,39 @@ export function isError(event: WideEvent): boolean {
   return typeof error === 'object' && error !== null
 }
 
+function record(event: WideEvent, key: string): Record<string, unknown> | undefined {
+  const value = field(event, key)
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+}
+
+/**
+ * How a request or an agent turn ended. `recovered` completed after a tool
+ * call failed on the way: a 200 that is not a clean success.
+ */
+export type Outcome = 'completed' | 'recovered' | 'failed' | 'cancelled'
+
+/** Tool calls of the event that failed: `eve.failedCalls`, else the failed entries of `gen_ai.tools`. */
+export function failedCallsOf(event: WideEvent): number {
+  const counted = record(event, 'eve')?.failedCalls
+  if (typeof counted === 'number') return counted
+  const tools = record(event, 'gen_ai')?.tools
+  return Array.isArray(tools) ? tools.filter(tool => (tool as { success?: unknown })?.success === false).length : 0
+}
+
+/**
+ * The outcome of an event. An eve turn says it in `eve.outcome`; any other
+ * event is `failed` when it is an error, `cancelled` on a 499, else `completed`.
+ */
+export function outcomeOf(event: WideEvent): Outcome {
+  const said = record(event, 'eve')?.outcome
+  if (said === 'failed' || said === 'cancelled') return said
+  if (said === undefined) {
+    if (number(event, 'status') === 499) return 'cancelled'
+    if (isError(event)) return 'failed'
+  }
+  return failedCallsOf(event) > 0 || (said !== undefined && isError(event)) ? 'recovered' : 'completed'
+}
+
 const ID_FIELDS = ['requestId', 'traceId', 'spanId', '_parentRequestId'] as const
 
 /**
@@ -216,6 +249,7 @@ export function buildQuery(input: QueryInput): LogsQuery {
     : [...input.where ?? [], { path: SESSION_FIELD, op: '=', value: input.session } satisfies Where]
 
   const filter = (event: WideEvent): boolean => {
+    if (view === 'sessions' && typeof read(event, SESSION_FIELD) !== 'string') return false
     if (path !== undefined && text(event, 'path') !== path) return false
     if (status !== undefined) {
       const value = number(event, 'status')
@@ -371,17 +405,127 @@ function createStats(): { add: (placed: Placed) => void, result: () => LogsStats
   }
 }
 
+/** One AI session, summed over its events by the `sessions` view. Absent fields were absent on every event. */
+export interface SessionSummary {
+  session: string
+  /** The first turn's start (its event's timestamp minus its duration) and the last event's timestamp. */
+  firstAt: string
+  lastAt: string
+  /** Wall clock from `firstAt` to `lastAt`, user think time included. */
+  elapsedMs: number
+  /** The turns' own durations summed: time spent working, not waiting. Absent when no turn has a duration. */
+  processingMs?: number
+  turns: number
+  outcomes: Record<Outcome, number>
+  /** Tool calls that failed across the session, including the ones a turn recovered from. */
+  failedToolCalls: number
+  modelCalls?: number
+  toolCalls?: number
+  tokens?: { input: number, output: number, cacheRead?: number, cacheWrite?: number }
+  /** Provider-reported cost, summed over the turns that reported one, and how many did. */
+  cost?: { usd: number, turnsReporting: number }
+  models?: string[]
+  slowest?: { requestId?: string, durationMs: number }
+  latestFailure?: { requestId?: string, outcome: Outcome, code?: string, message?: string, failedTools?: string[] }
+  lastRequestId?: string
+  /** Up to five trace ids of the session's turns, newest first. */
+  traceIds?: string[]
+}
+
+const MAX_TRACE_IDS = 5
+
+function createSessions(limit: number): { add: (placed: Placed) => void, result: () => { sessions: SessionSummary[], total: number } } {
+  const all = new Map<string, SessionSummary & { startMs: number, endMs: number }>()
+  return {
+    add({ event }) {
+      const id = read(event, SESSION_FIELD) as string
+      const end = timeOf(event)
+      const duration = number(event, 'durationMs')
+      const start = end - (duration ?? 0)
+      let entry = all.get(id)
+      if (!entry) {
+        entry = { session: id, firstAt: '', lastAt: '', startMs: start, endMs: end, elapsedMs: 0, turns: 0, outcomes: { completed: 0, recovered: 0, failed: 0, cancelled: 0 }, failedToolCalls: 0 }
+        all.set(id, entry)
+      }
+      entry.startMs = Math.min(entry.startMs, start)
+      const latest = end >= entry.endMs
+      entry.endMs = Math.max(entry.endMs, end)
+      entry.turns += 1
+      const outcome = outcomeOf(event)
+      entry.outcomes[outcome] += 1
+      entry.failedToolCalls += failedCallsOf(event)
+      const requestId = text(event, 'requestId')
+      if (latest && requestId) entry.lastRequestId = requestId
+      if (duration !== undefined) {
+        entry.processingMs = (entry.processingMs ?? 0) + duration
+        if (!entry.slowest || duration > entry.slowest.durationMs) entry.slowest = { ...(requestId && { requestId }), durationMs: duration }
+      }
+      const genAi = record(event, 'gen_ai')
+      if (typeof genAi?.calls === 'number') entry.modelCalls = (entry.modelCalls ?? 0) + genAi.calls
+      const tools = genAi?.tools
+      if (Array.isArray(tools)) entry.toolCalls = (entry.toolCalls ?? 0) + tools.length
+      const usage = genAi?.usage as Record<string, unknown> | undefined
+      if (usage && typeof usage === 'object') {
+        const tokens = entry.tokens ??= { input: 0, output: 0 }
+        tokens.input += typeof usage.input_tokens === 'number' ? usage.input_tokens : 0
+        tokens.output += typeof usage.output_tokens === 'number' ? usage.output_tokens : 0
+        const cacheRead = (usage.cache_read as { input_tokens?: unknown } | undefined)?.input_tokens
+        if (typeof cacheRead === 'number') tokens.cacheRead = (tokens.cacheRead ?? 0) + cacheRead
+        const cacheWrite = (usage.cache_write as { input_tokens?: unknown } | undefined)?.input_tokens
+        if (typeof cacheWrite === 'number') tokens.cacheWrite = (tokens.cacheWrite ?? 0) + cacheWrite
+        if (typeof usage.cost === 'number') {
+          const cost = entry.cost ??= { usd: 0, turnsReporting: 0 }
+          cost.usd = Math.round((cost.usd + usage.cost) * 1_000_000) / 1_000_000
+          cost.turnsReporting += 1
+        }
+      }
+      const request = genAi?.request as { model?: unknown, models?: unknown } | undefined
+      const models = Array.isArray(request?.models) ? request.models : request?.model === undefined ? [] : [request.model]
+      for (const model of models) {
+        if (typeof model === 'string' && !entry.models?.includes(model)) (entry.models ??= []).push(model)
+      }
+      if (outcome !== 'completed' && (latest || !entry.latestFailure)) {
+        const error = record(event, 'error')
+        const failedTools = Array.isArray(tools) ? tools.flatMap(tool => (tool as { success?: unknown, name?: unknown }).success === false && typeof (tool as { name?: unknown }).name === 'string' ? [(tool as { name: string }).name] : []) : []
+        entry.latestFailure = {
+          ...(requestId && { requestId }),
+          outcome,
+          ...(typeof error?.code === 'string' && { code: error.code }),
+          ...(typeof error?.message === 'string' && { message: error.message }),
+          ...(failedTools.length > 0 && { failedTools }),
+        }
+      }
+      const traceId = text(event, 'traceId')
+      if (traceId && !entry.traceIds?.includes(traceId)) {
+        entry.traceIds = latest ? [traceId, ...entry.traceIds ?? []] : [...entry.traceIds ?? [], traceId]
+        entry.traceIds.length = Math.min(entry.traceIds.length, MAX_TRACE_IDS)
+      }
+    },
+    result() {
+      const sessions = [...all.values()]
+        .sort((a, b) => b.endMs - a.endMs)
+        .slice(0, limit)
+        .map(({ startMs, endMs, ...summary }) => ({ ...summary, firstAt: new Date(startMs).toISOString(), lastAt: new Date(endMs).toISOString(), elapsedMs: endMs - startMs }))
+      return { sessions, total: all.size }
+    },
+  }
+}
+
 /** What a one-shot run reports of the events it read. */
 export interface Selected<T extends WideEvent = WideEvent> {
   /** How many events were offered, a repeated delivery counted once. */
   matched: number
   /**
    * The last `limit` of them, oldest first, so the newest is at the bottom like
-   * `tail`. The `slow` view is the exception: worst first. Empty for `stats`.
+   * `tail`. The `slow` view is the exception: worst first. Empty for `stats` and `sessions`.
    */
   events: T[]
   /** The `stats` view. */
   stats?: LogsStats
+  /** The `sessions` view: the newest `limit` sessions, latest activity first. */
+  sessions?: SessionSummary[]
+  /** The `sessions` view: how many sessions the matched events belong to. */
+  sessionsMatched?: number
 }
 
 /**
@@ -399,7 +543,7 @@ export interface Selected<T extends WideEvent = WideEvent> {
  */
 export function createSelection<T extends WideEvent>(query: LogsQuery, byTime = false): { add: (event: T) => void, done: () => Selected<T> } {
   const collect = () => ({
-    stats: query.view === 'stats' ? createStats() : undefined,
+    stats: query.view === 'stats' ? createStats() : query.view === 'sessions' ? createSessions(query.limit) : undefined,
     shown: keepFirst<Placed<T>>(query.limit, query.view === 'slow' ? slowestFirst : latestFirst),
     matched: 0,
   })
@@ -420,7 +564,9 @@ export function createSelection<T extends WideEvent>(query: LogsQuery, byTime = 
     done() {
       const from = exact && exact.matched > 0 ? exact : all
       const events = from.shown.values().map(placed => placed.event)
-      return { matched: from.matched, events: query.view === 'slow' ? events : events.reverse(), stats: from.stats?.result() }
+      const aggregate = from.stats?.result()
+      if (aggregate && 'sessions' in aggregate) return { matched: from.matched, events: [], sessions: aggregate.sessions, sessionsMatched: aggregate.total }
+      return { matched: from.matched, events: query.view === 'slow' ? events : events.reverse(), stats: aggregate }
     },
   }
 }
