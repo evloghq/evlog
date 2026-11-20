@@ -2,7 +2,8 @@ import { byPrincipal, defineDynamicSchedules } from 'eve/experimental/schedules'
 import { z } from 'zod'
 import slack from '../channels/slack'
 import { channelName } from '../lib/channel'
-import { canReachSlackChannel, isFullSlackMember, scheduleAnchor, slackApi } from '../lib/slack'
+import { eviErrors } from '../lib/errors'
+import { canReachSlackChannel, isFullSlackMember, slackApi } from '../lib/slack'
 import { isMaintainer, SCHEDULED_TASK_ATTRIBUTE } from '../lib/trust'
 
 interface TaskPayload {
@@ -48,14 +49,14 @@ export default defineDynamicSchedules({
   // The destination and creator come from the Slack session, never from the
   // model, so a schedule only posts where its creator asked for it.
   preparePayload(input, { session }): TaskPayload {
-    if (session.schedule) throw new Error('Scheduled runs can\'t create or replace schedules.')
+    if (session.schedule) throw eviErrors.SCHEDULE_FROM_SCHEDULED_RUN()
     const auth = session.auth.current
     const teamId = auth?.issuer?.startsWith('slack:') ? auth.issuer.slice('slack:'.length) : undefined
     const userId = attribute(auth?.attributes, 'user_id')
     const channelId = attribute(auth?.attributes, 'channel_id')
     const threadTs = attribute(auth?.attributes, 'thread_ts')
     if (auth?.principalType !== 'user' || !teamId || !userId || !channelId) {
-      throw new Error('Schedules can only be created from a Slack message.')
+      throw eviErrors.SCHEDULE_NEEDS_SLACK_MESSAGE()
     }
     const payload: TaskPayload = { task: input.task, teamId, userId, channelId }
     if (input.reply === 'this_thread' && threadTs) payload.threadTs = threadTs
@@ -84,7 +85,8 @@ export default defineDynamicSchedules({
     await to(slack, {
       channelId: payload.channelId,
       installationTeamId: payload.teamId,
-      ...(payload.threadTs ? { threadTs: payload.threadTs } : { initialMessage: scheduleAnchor(label) }),
+      // No anchor post for a new thread: a run that ends with `no_reply` must leave nothing in the channel.
+      ...(payload.threadTs ? { threadTs: payload.threadTs } : {}),
     }).send(
       [
         `Run this scheduled task for <@${payload.userId}> now and post the result.`,
