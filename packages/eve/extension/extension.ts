@@ -42,9 +42,11 @@ export interface EvlogEveConfig extends Omit<EvlogConfig, 'extends' | 'map' | 'l
     /**
      * Decides, before each model call, what the tool reads for the caller.
      * What the tool returns enters the model's context, so the caller can
-     * have it repeated: grant `agent` only to callers who may see every turn.
+     * have it repeated: grant `agent` only to operators the app names, never
+     * to every signed-in caller. `session` is the session the turn runs in;
+     * eve does not check that the caller owns it, so the app must.
      * @default schedules (`isScheduleAuth`) read `agent`, signed-in callers `session`, anonymous ones `false`
-     * @example access: ctx => isAdmin(ctx.session.auth.current) ? 'agent' : 'session'
+     * @example access: ctx => operators.has(ctx.session.auth.current?.principalId ?? '') ? 'agent' : 'session'
      */
     access?: (ctx: DynamicContext) => EvlogEveLogsAccess
     /**

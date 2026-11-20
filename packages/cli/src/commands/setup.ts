@@ -19,7 +19,7 @@ const MARK: Record<PreflightStage['status'], { mark: string, color: 'green' | 'y
 async function chooseConnector(reusable: ListedConnector[], attached: ReadonlySet<string>): Promise<string | undefined> {
   const ordered = [...reusable].sort((a, b) => Number(attached.has(b.uid)) - Number(attached.has(a.uid)))
   const answer = await select({
-    message: 'The team already has a Vercel API-key connector. Read logs through it?',
+    message: 'The team already has a Vercel API-key connector. Read logs through it? Reusing one gives this project\'s deployments the whole authority of the key it stores',
     options: [
       ...ordered.map(connector => ({ value: connector.uid, label: `Reuse ${connector.uid}`, hint: attached.has(connector.uid) ? 'attached to this project' : undefined })),
       { value: DEFAULT_VERCEL_CONNECTOR, label: `Create ${DEFAULT_VERCEL_CONNECTOR}`, hint: 'asks for a new Vercel access token' },
@@ -38,6 +38,7 @@ export default defineEvlogCommand('setup', {
     target: { type: 'positional', required: true, description: 'What to set up: vercel, or eve for an eve agent\'s trace instrumentation' },
     check: { type: 'boolean', description: 'Report each stage without changing anything: link, OIDC, connector, attachment, token, log read, traces' },
     connector: { type: 'string', description: 'The Vercel Connect connector to read through, such as vercel/mcp (default: logs.vercel.connector in evlog.config, else vercel/evlog)' },
+    environment: { type: 'string', description: 'Environments to attach the connector for, separated by commas (default: production,development). Add preview only if every branch may use the key' },
   },
   async run({ args, cli, ui }) {
     const style = createStyle(cli)
@@ -74,12 +75,13 @@ export default defineEvlogCommand('setup', {
       }
       const result = await runSetupVercel(cli, {
         connector: args.connector,
+        environments: typeof args.environment === 'string' ? args.environment.split(',').map(name => name.trim()) : undefined,
         choose: cli.tty && !args.json ? chooseConnector : undefined,
         onStep: command => ui.human(style.paint('dim', `→ ${command}`)),
       })
       const steps = [
         `${result.connector} connector ${result.created ? 'created' : 'already on the team'}`,
-        result.attached ? `attached to ${result.projectId} for production, preview and development` : `already attached to ${result.projectId}`,
+        result.attached ? `attached to ${result.projectId} for ${result.environments!.join(', ')}` : `already attached to ${result.projectId}, left as it is; its environments are in the project's Connect tab`,
         `read ${result.events} event${result.events === 1 ? '' : 's'} from the last hour of runtime logs`,
       ]
       ui.done({

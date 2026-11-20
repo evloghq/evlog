@@ -73,7 +73,11 @@ Both open eve's terminal UI. The title bar says which agent answers and which lo
 | `pnpm dev:local` | the agent running on this machine (`eve dev`) | `.evlog/logs` |
 | `pnpm dev:remote` | the deployed agent at `EVE_REMOTE_URL` | the Vercel project's runtime logs, through `vercel/evlog` |
 
-`dev:remote` reads `EVE_REMOTE_URL`, and `VERCEL_AUTOMATION_BYPASS_SECRET` when the deployment has protection on, from `.env.local`. Neither goes in a prompt.
+`dev:remote` reads `EVE_REMOTE_URL`, and `VERCEL_AUTOMATION_BYPASS_SECRET` when the deployment has protection on, from `.env.local`. Neither goes in a prompt. The URL has to be `https` with no credentials in it, and `--url` or `--header` on the command line are refused, so the target stays the one in `.env.local`. The secret never reaches the command line: eve reads it from the environment and sends it only once the target is the deployment it checked.
+
+The example's channel signs nobody in from a production browser: `placeholderAuth()` refuses them until you replace it with your own auth. When you do, the `logs` tool gives each signed-in caller the turns of the session it posts to, and eve does not check that the session is theirs; see [who reads what](https://evlog.dev/use-cases/eve) before letting several users share the deployment.
+
+The events panel on http://localhost:3000 reads `.evlog/logs` through `/api/demo/logs`, which answers only under `next dev`. A build answers 404.
 
 To have the local agent read the deployed agent's logs instead, set `logs: { source: 'vercel' }` in `agent/extensions/evlog.ts` and run `vercel env pull` first: it writes the project's `VERCEL_OIDC_TOKEN`, which pins reads to that project. Check the whole path without changing anything:
 

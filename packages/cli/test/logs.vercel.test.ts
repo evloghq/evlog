@@ -1,16 +1,19 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runLogs } from '../src/commands/logs'
 import { formatLogsReport } from '../src/lib/logs/render'
 import { createContext } from '../src/core/context'
 import { vercelScope } from '../../evlog/src/logs-vercel'
-import { readVercelLogs } from '../src/lib/logs/vercel'
+import { projectOidc, readVercelLogs } from '../src/lib/logs/vercel'
 import type { VercelAccess } from '../src/lib/logs/vercel'
 import { runSetupVercel, runSetupVercelCheck } from '../src/lib/setup-vercel'
 import { runSetupEve } from '../src/lib/setup-eve'
 import type { VercelCli } from '../src/lib/setup-vercel'
+
+const oidcSdk = vi.hoisted(() => ({ getVercelOidcToken: vi.fn<(options: { team: string, project: string }) => Promise<string>>() }))
+vi.mock('@vercel/oidc', () => oidcSdk)
 
 const NOW = new Date('2026-10-01T12:00:00.000Z')
 const SCOPE = { teamId: 'team_1', projectId: 'prj_1', environment: 'production' as const }
@@ -227,8 +230,8 @@ describe('evlog setup vercel', () => {
 
     const result = await runSetupVercel(ctxAt(cwd), { vercel, access: (_, connector) => (used.push(connector), access()), fetchFn, now: NOW })
 
-    expect(result).toEqual({ projectId: 'prj_1', connector: 'vercel/evlog', created: true, attached: true, reused: false, events: 1 })
-    expect(changes(calls)).toEqual(['connect create vercel --name evlog', 'connect attach vercel/evlog --yes'])
+    expect(result).toEqual({ projectId: 'prj_1', connector: 'vercel/evlog', created: true, attached: true, environments: ['production', 'development'], reused: false, events: 1 })
+    expect(changes(calls)).toEqual(['connect create vercel --name evlog', 'connect attach vercel/evlog --yes --environment production,development'])
     expect(used).toEqual(['vercel/evlog'])
     expect(bodies[0]!.timeRange.start).toBe('2026-10-01T11:00:00.000Z')
   })
@@ -277,7 +280,7 @@ describe('evlog setup vercel', () => {
     const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW })
 
     expect(result).toMatchObject({ connector: 'vercel/evlog', created: true, reused: false })
-    expect(changes(calls)).toEqual(['connect create vercel --name evlog', 'connect attach vercel/evlog --yes'])
+    expect(changes(calls)).toEqual(['connect create vercel --name evlog', 'connect attach vercel/evlog --yes --environment production,development'])
   })
 
   it('attaches a configured connector without asking, and refuses one the team does not have', async () => {
@@ -290,8 +293,53 @@ describe('evlog setup vercel', () => {
     const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW, choose })
 
     expect(result).toMatchObject({ connector: 'vercel/ops', created: false, attached: true, reused: false })
-    expect(changes(calls)).toEqual(['connect attach vercel/ops --yes'])
+    expect(changes(calls)).toEqual(['connect attach vercel/ops --yes --environment production,development'])
     await expect(runSetupVercel(ctxAt(cwd), { vercel, access, connector: 'vercel/gone' })).rejects.toThrow('the team has no vercel/gone connector')
+  })
+
+  it('grants preview only when asked, and says what the attachment grants before running it', async () => {
+    const cwd = await linkedProject()
+    const { vercel, calls } = fakeCli({ team: [{ uid: 'vercel/evlog', type: 'api-key' }], onProject: [] })
+    const { fetchFn } = fakeVercel([{ events: [] }])
+    const said: string[] = []
+
+    const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW, environments: ['production', 'preview'], onStep: step => said.push(step) })
+
+    expect(result).toMatchObject({ attached: true, environments: ['production', 'preview'] })
+    expect(changes(calls)).toEqual(['connect attach vercel/evlog --yes --environment production,preview'])
+    expect(said.at(-2)).toBe('vercel/evlog gives code deployed to production, preview of prj_1 the authority of the key it stores, whatever that key may read or change on the team')
+    expect(said.at(-1)).toBe('vercel connect attach vercel/evlog --yes --environment production,preview')
+  })
+
+  it('leaves an existing attachment as it is and does not claim which environments it covers', async () => {
+    const cwd = await linkedProject()
+    const { vercel, calls } = fakeCli({ team: [{ uid: 'vercel/evlog', type: 'api-key' }], onProject: ['vercel/evlog'] })
+    const { fetchFn } = fakeVercel([{ events: [] }])
+
+    const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW, environments: ['preview'] })
+
+    expect(result).toMatchObject({ attached: false })
+    expect(result).not.toHaveProperty('environments')
+    expect(changes(calls)).toEqual([])
+  })
+
+  it('refuses an environment name the Vercel CLI could misread, before changing anything', async () => {
+    const cwd = await linkedProject()
+    const { vercel, calls } = fakeCli({ team: [], onProject: [] })
+    await expect(runSetupVercel(ctxAt(cwd), { vercel, access, environments: ['production', '--project=other'] })).rejects.toMatchObject({ code: 'cli.SETUP_INVALID_ENVIRONMENT' })
+    await expect(runSetupVercel(ctxAt(cwd), { vercel, access, environments: [] })).rejects.toMatchObject({ code: 'cli.SETUP_INVALID_ENVIRONMENT' })
+    expect(calls).toEqual([])
+  })
+
+  it('stops when the attachment fails, without reading', async () => {
+    const cwd = await linkedProject()
+    const vercel: VercelCli = args => Promise.resolve(args[1] === 'list'
+      ? { code: 0, stdout: JSON.stringify(args.includes('--all-projects') ? [{ uid: 'vercel/evlog', type: 'api-key' }] : []), stderr: '' }
+      : { code: 1, stdout: '', stderr: '' })
+    let read = false
+    await expect(runSetupVercel(ctxAt(cwd), { vercel, access: () => (read = true, access()) }))
+      .rejects.toThrow('vercel connect attach vercel/evlog --yes --environment production,development failed: exited 1')
+    expect(read).toBe(false)
   })
 
   it('names the step that failed', async () => {
@@ -436,5 +484,34 @@ describe('logs.vercel.connector', () => {
     await writeFile(join(cwd, 'evlog.config.ts'), `export default { logs: { vercel: { connector: 'mcp' } } }\n`)
 
     await expect(runLogs(ctxAt(cwd), {}, { source: 'vercel', vercelAccess: access })).rejects.toThrow('logs.vercel.connector in evlog.config.ts:1 must be a connector UID such as vercel/evlog')
+  })
+})
+
+describe('the linked project\'s OIDC token', () => {
+  const linked = (projectId: string, teamId = 'team_1') => ({ dir: '/nowhere', projectId, teamId })
+  const issued = (claims: Record<string, unknown>) => oidcSdk.getVercelOidcToken.mockResolvedValue(jwt({ environment: 'development', ...claims }))
+
+  it('is requested for the linked ids and kept when it names the same team and project', async () => {
+    issued({ owner_id: 'team_1', project_id: 'prj_1' })
+    await expect(projectOidc(linked('prj_1'))).resolves.toMatchObject({ scope: { teamId: 'team_1', projectId: 'prj_1' } })
+    expect(oidcSdk.getVercelOidcToken).toHaveBeenLastCalledWith({ team: 'team_1', project: 'prj_1' })
+  })
+
+  it('is never requested for ids that could reshape the refresh request', async () => {
+    oidcSdk.getVercelOidcToken.mockClear()
+    for (const [projectId, teamId] of [['prj_1/../../v1/teams', 'team_1'], ['prj_1?teamId=other', 'team_1'], ['prj_1', 'team_1#x'], ['', 'team_1']]) {
+      await expect(projectOidc(linked(projectId!, teamId))).rejects.toMatchObject({ code: 'cli.LOGS_VERCEL_NO_TOKEN' })
+    }
+    expect(oidcSdk.getVercelOidcToken).not.toHaveBeenCalled()
+  })
+
+  it('is refused when it names another team or project, without repeating the token', async () => {
+    issued({ owner_id: 'team_other', project_id: 'prj_1' })
+    const wrongTeam = await projectOidc(linked('prj_1')).catch((error: Error) => error)
+    expect(wrongTeam).toMatchObject({ code: 'cli.LOGS_VERCEL_NO_TOKEN', message: expect.stringContaining('team_1') })
+    issued({ owner_id: 'team_1', project_id: 'prj_stale' })
+    const stale = await projectOidc(linked('prj_1')).catch((error: Error) => error)
+    expect(stale).toMatchObject({ code: 'cli.LOGS_VERCEL_NO_TOKEN' })
+    for (const error of [wrongTeam, stale]) expect(JSON.stringify({ ...error, message: (error as Error).message })).not.toContain('e30.')
   })
 })
