@@ -570,6 +570,32 @@ describe('createRequestLogger', () => {
       expect(drain).toHaveBeenCalledTimes(1)
     })
 
+    it('keeps an explicit error level set after discard()', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({ pretty: false, drain })
+
+      const logger = createRequestLogger({})
+      logger.discard()
+      logger.setLevel('error')
+      const event = logger.emit()
+
+      expect(event).toHaveProperty('level', 'error')
+      expect(drain).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps a recorded error even when error sampling is zero', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({ pretty: false, drain, sampling: { rates: { error: 0 } } })
+
+      const logger = createRequestLogger({})
+      logger.discard()
+      logger.error(new Error('mailer unavailable'))
+      const event = logger.emit()
+
+      expect(event).toMatchObject({ level: 'error', error: { message: 'mailer unavailable' } })
+      expect(drain).toHaveBeenCalledTimes(1)
+    })
+
     it('wins over a keep rule and head sampling', () => {
       const { drain } = createPipelineSpies()
       initLogger({

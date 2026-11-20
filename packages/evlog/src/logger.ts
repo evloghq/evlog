@@ -1131,7 +1131,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const durationMs = overrides?._durationMs ?? elapsedMs(startTime)
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
-      if (discarded && !hasError && !hasFatal) {
+      if (discarded && !hasError && !hasFatal && manualLevel !== 'error' && manualLevel !== 'fatal') {
         emitted = true
         pendingWideEvent = null
         return null
@@ -1147,7 +1147,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       }
 
       let forceKeep = false
-      if (overrides?._forceKeep) {
+      if (discarded || overrides?._forceKeep) {
         forceKeep = true
       } else if (auditForceKeep) {
         forceKeep = true
