@@ -733,12 +733,74 @@ describe('evlog logs --ask', () => {
     expect(formatLogsReport(fakeContext(cwd), result).split('\n').at(-1)).toMatch(/· 1 not answered$/)
   })
 
-  it('stops instead of leaving out an event too large to send', async () => {
+  it('cuts a large field down instead of sending it whole', async () => {
     const cwd = await makeSink()
     const { evaluate, calls } = await scripted()
-    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${JSON.stringify(event({ timestamp: '2026-10-01T11:50:00.000Z', requestId: 'big', path: '/api/upload', body: 'x'.repeat(100_001) }))}\n`, { flag: 'a' })
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${JSON.stringify(event({ timestamp: '2026-10-01T11:50:00.000Z', requestId: 'big', path: '/api/upload', body: 'x'.repeat(100_001), items: Array.from({ length: 25 }, (_, i) => i) }))}\n`, { flag: 'a' })
+    const result = await runLogs(fakeContext(cwd), { ask: 'q', limit: '1' }, { now: NOW, evaluate })
+    expect(result.asked).toMatchObject({ answered: [{ event: { requestId: 'big' } }] })
+    const state = calls[0]!.state as { body: string, items: unknown[] }
+    expect(state.body).toBe(`${'x'.repeat(256)}… 99745 more characters`)
+    expect(state.items).toEqual([...Array.from({ length: 10 }, (_, i) => i), '… 15 more items'])
+  })
+
+  it('stops instead of leaving out an event still too large once cut down', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    const wide = Object.fromEntries(Array.from({ length: 450 }, (_, i) => [`field${i}`, 'x'.repeat(256)]))
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${JSON.stringify(event({ timestamp: '2026-10-01T11:50:00.000Z', requestId: 'big', path: '/api/upload', ...wide }))}\n`, { flag: 'a' })
     await expect(runLogs(fakeContext(cwd), { ask: 'q', limit: '2' }, { now: NOW, evaluate })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_FAILED', message: expect.stringContaining('big is over 100000 characters') })
     expect(calls).toHaveLength(1)
+  })
+
+  /* Same route and outcome, different timestamps, ids and a few ms apart: one call. A different order id, or 490ms against 412ms, is another event to the question. */
+  async function checkoutSink(): Promise<string> {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-ask-'))
+    tempDirs.push(cwd)
+    await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'shop' }))
+    await mkdir(join(cwd, '.evlog/logs'), { recursive: true })
+    const checkout = (i: number, durationMs: number, order?: string) => event({
+      timestamp: `2026-10-01T11:0${i}:00.000Z`,
+      requestId: `req-${i}`,
+      traceId: `trace-${i}`,
+      method: 'POST',
+      path: '/api/checkout',
+      durationMs,
+      duration: `${durationMs}ms`,
+      ...(order && { order: { id: order } }),
+    })
+    const lines = [checkout(1, 412), checkout(2, 419), checkout(3, 415), checkout(4, 490), checkout(5, 412, 'ord_9')]
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${lines.map(e => JSON.stringify(e)).join('\n')}\n`)
+    return cwd
+  }
+
+  it('asks once for events that differ only in timestamps, ids and a few ms, and shares the verdict', async () => {
+    const cwd = await checkoutSink()
+    const { answers, scriptedEvaluate } = await import('@evlog/signals/testing')
+    const { evaluate, calls } = scriptedEvaluate((_name, _question, state) => answers.boolean(JSON.stringify(state).includes('ord_9') ? 0.05 : 0.9))
+    const result = await runLogs(fakeContext(cwd), { ask: 'Paid but no order?' }, { now: NOW, evaluate })
+
+    expect(calls).toHaveLength(3)
+    expect(result.asked).toMatchObject({ shared: 2, stats: { calls: 3 } })
+    expect(result.asked!.answered.map(a => [a.event.requestId, a.probability])).toEqual([
+      ['req-1', 0.9],
+      ['req-2', 0.9],
+      ['req-3', 0.9],
+      ['req-4', 0.9],
+      ['req-5', 0.05],
+    ])
+    expect(formatLogsReport(fakeContext(cwd), result).split('\n').at(-1)).toMatch(/· 2 shared a verdict$/)
+  })
+
+  it('counts the calls and tokens with --dry-run and sends nothing', async () => {
+    const cwd = await checkoutSink()
+    const { evaluate, calls } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'Paid but no order?' }, { now: NOW, evaluate, dryRun: true })
+
+    expect(calls).toHaveLength(0)
+    expect(result.asked).toBeUndefined()
+    expect(result.estimated).toEqual({ question: 'Paid but no order?', estimate: { events: 5, calls: 3, inputTokens: expect.any(Number) } })
+    expect(formatLogsReport(fakeContext(cwd), result).split('\n').at(-1)).toMatch(/^would judge 5 events in 3 model calls, about \d+ input tokens\. Nothing was sent$/)
   })
 
   it('ranks the events of one request instead of printing them in full', async () => {

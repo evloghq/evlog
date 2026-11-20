@@ -11,7 +11,7 @@ import { defineEvlogCommand } from '../lib/command'
 import { loadCliConfig } from '../lib/config'
 import { cliErrors } from '../lib/errors'
 import { flagValues } from '../lib/flags'
-import { askEvents } from '../lib/logs/ask'
+import { askEvents, estimateAsk } from '../lib/logs/ask'
 import { buildQuery, createSelection, timeOf } from '../lib/logs/query'
 import type { LogsArgs, LogsQuery, Selected } from '../lib/logs/query'
 import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'
@@ -83,6 +83,8 @@ export interface RunLogsOptions {
   pollIntervalMs?: number
   /** Replace the model call `--ask` makes. */
   evaluate?: EvaluateFn
+  /** With `--ask`: count the calls and tokens instead of making them. */
+  dryRun?: boolean
 }
 
 function tag(event: WideEvent, name: string | undefined): Sourced {
@@ -149,7 +151,8 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
   const result: LogsResult = { sources, query, ...selected }
   /* Asked after selection, so the model sees at most `--limit` events: the
      filters narrow for free, the question ranks what is left. */
-  if (question) result.asked = { question, ...await askEvents(result.events, question, { evaluate: options.evaluate, model: args.model?.trim() || undefined }) }
+  if (question && options.dryRun) result.estimated = { question, estimate: estimateAsk(result.events) }
+  else if (question) result.asked = { question, ...await askEvents(result.events, question, { evaluate: options.evaluate, model: args.model?.trim() || undefined }) }
 
   if (options.follow) {
     /* `tail -f` shows the end of the file before it waits, and the caller only
@@ -245,7 +248,7 @@ async function followUrl(url: string, shown: WideEvent[], inRange: (event: WideE
  * event, field name, filter value, path or URL.
  */
 function logsTelemetryFields(
-  result: Pick<LogsResult, 'matched' | 'sources' | 'asked'> & { query: Pick<LogsResult['query'], 'view' | 'where'> },
+  result: Pick<LogsResult, 'matched' | 'sources' | 'asked' | 'estimated'> & { query: Pick<LogsResult['query'], 'view' | 'where'> },
   run: { follow: boolean, url: boolean },
 ): Record<string, boolean | number | string> {
   return {
@@ -255,7 +258,7 @@ function logsTelemetryFields(
     logsWhere: result.query.where.length,
     logsSources: result.sources.length,
     logsUrl: run.url,
-    logsAsk: result.asked !== undefined,
+    logsAsk: result.asked !== undefined || result.estimated !== undefined,
   }
 }
 
@@ -288,6 +291,7 @@ export default defineEvlogCommand('logs', {
     url: { type: 'string', description: 'Read the memory drain\'s dev endpoint instead of files (a JSON array of events)' },
     ask: { type: 'string', description: 'Rank the selected events by a yes/no question a decision model answers (needs @evlog/signals and ai)' },
     model: { type: 'string', description: 'The decision model --ask uses, as an AI Gateway id (default: the @evlog/signals default)' },
+    dryRun: { type: 'boolean', description: 'With --ask: print how many model calls and input tokens it would take, and send nothing' },
   },
   async run({ args, rawArgs, cli, ui }) {
     const style = createStyle(cli)
@@ -301,6 +305,7 @@ export default defineEvlogCommand('logs', {
         dir: args.dir,
         url: args.url,
         follow: args.follow,
+        dryRun: args.dryRun,
         signal: controller.signal,
         onEvent: (event) => {
           if (args.json) ui.stdout(JSON.stringify(event))
@@ -339,9 +344,11 @@ export default defineEvlogCommand('logs', {
         matched: result.matched,
         ...(result.stats
           ? { stats: result.stats }
-          : result.asked
-            ? { question: result.asked.question, answers: result.asked.answered, signals: result.asked.stats }
-            : { events: result.events }),
+          : result.estimated
+            ? result.estimated
+            : result.asked
+              ? { question: result.asked.question, answers: result.asked.answered, shared: result.asked.shared, signals: result.asked.stats }
+              : { events: result.events }),
       },
       human: args.json ? undefined : formatLogsReport(cli, result),
     })
