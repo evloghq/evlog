@@ -14,8 +14,10 @@ export interface WithLoggerOptions extends Pick<BaseEvlogOptions, 'drain' | 'enr
   /** Fields the wide event starts with. */
   fields?: Record<string, unknown>
   /**
-   * When to emit the unit's wide event. `'onError'` skips successful and
-   * interrupted runs, and keeps failures even when sampling would drop them.
+   * When to emit the unit's wide event. `'onError'` discards successful and
+   * interrupted runs as `log.discard()` does, so a recorded error
+   * or an audit record still emits, and keeps failures even when sampling would
+   * drop them.
    * @default 'always'
    */
   emit?: 'always' | 'onError'
@@ -37,7 +39,7 @@ function startUnit(action: string, span: Tracer.AnySpan, options: WithLoggerOpti
       if (exit._tag === 'Failure') recordCause(logger, exit.cause)
       const failed = exit._tag === 'Failure'
         && (Cause.hasFails(exit.cause) || Cause.hasDies(exit.cause))
-      if (options.emit === 'onError' && !failed) return
+      if (options.emit === 'onError' && !failed) logger.discard()
       const context = logger.getContext()
       const status = typeof context.status === 'number' ? context.status : undefined
       const duration = elapsedMs(start)

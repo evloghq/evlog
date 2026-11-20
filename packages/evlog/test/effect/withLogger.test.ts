@@ -146,6 +146,34 @@ describe('evlog/effect withLogger', () => {
     expect(drain).not.toHaveBeenCalled()
   })
 
+  it('keeps an error recorded by a successful onError unit', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromise(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.error(new Error('partial send'))
+    }).pipe(withLogger('digest', { drain, emit: 'onError' })))
+    await waitForDrainCalls(drain)
+
+    expect(drainedEvent(drain)).toMatchObject({ action: 'digest', level: 'error', error: { message: 'partial send' } })
+  })
+
+  it('keeps an audit record from a successful onError unit', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromise(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.audit({
+        action: 'invoice.refund',
+        actor: { type: 'user', id: 'u_1' },
+        target: { type: 'invoice', id: 'inv_1' },
+      })
+    }).pipe(withLogger('refund', { drain, emit: 'onError' })))
+    await waitForDrainCalls(drain)
+
+    expect(drainedEvent(drain)).toMatchObject({ action: 'refund', audit: { action: 'invoice.refund' } })
+  })
+
   it('keeps a failing onError unit even when head sampling would drop it', async () => {
     const { drain } = createPipelineSpies()
     initLogger({ env: { service: 'effect-test' }, pretty: false, sampling: { rates: { error: 0 } } })
