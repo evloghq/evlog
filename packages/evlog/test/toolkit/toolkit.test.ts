@@ -531,7 +531,7 @@ describe('defineHttpDrain', () => {
   })
 
   it('raw honors explicitly configured retries', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('boom', { status: 500 }))))
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('boom', { status: 503 }))))
     const drain = defineHttpDrain<{ apiKey: string; retries?: number }>({
       name: 'unit-test',
       resolve: () => ({ apiKey: 'k', retries: 1 }),
