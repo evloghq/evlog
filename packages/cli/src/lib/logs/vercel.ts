@@ -38,8 +38,14 @@ export interface VercelAccess {
 
 const reasonOf = (error: unknown): string => (error instanceof Error ? error.message : String(error)).split('\n').filter(Boolean).at(-1) ?? 'unknown error'
 
+/* Vercel ids are letters, digits, `_` and `-`; the SDK puts them in an authenticated URL as they are. */
+const VERCEL_ID = /^[\w-]+$/
+
 /** The linked project's OIDC token, refreshed with the developer's `vercel login`, and the scope it pins reads to. */
 export async function projectOidc(project: VercelProject): Promise<{ oidc: string, scope: VercelScope }> {
+  if (!VERCEL_ID.test(project.projectId) || !VERCEL_ID.test(project.teamId)) {
+    throw cliErrors.LOGS_VERCEL_NO_TOKEN({ reason: '.vercel/project.json names a project or team id that is not a Vercel id; run vercel link again' })
+  }
   const { getVercelOidcToken } = await import('@vercel/oidc')
   let oidc: string
   try {
@@ -48,8 +54,8 @@ export async function projectOidc(project: VercelProject): Promise<{ oidc: strin
     throw cliErrors.LOGS_VERCEL_NO_TOKEN({ reason: reasonOf(error) })
   }
   const scope = vercelScope(oidc)
-  if (!scope || scope.projectId !== project.projectId) {
-    throw cliErrors.LOGS_VERCEL_NO_TOKEN({ reason: `the OIDC token was not issued to the linked project ${project.projectId}` })
+  if (!scope || scope.projectId !== project.projectId || scope.teamId !== project.teamId) {
+    throw cliErrors.LOGS_VERCEL_NO_TOKEN({ reason: `the OIDC token was not issued to the linked project ${project.projectId} on ${project.teamId}` })
   }
   return { oidc, scope }
 }

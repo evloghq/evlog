@@ -5,6 +5,8 @@ export const dynamic = 'force-dynamic'
 const MAX_EVENTS = 48
 
 export async function GET() {
+  // Every stored event, to whoever asks: only `next dev` serves it.
+  if (process.env.NODE_ENV !== 'development') return new Response(null, { status: 404 })
   const events = []
 
   try {

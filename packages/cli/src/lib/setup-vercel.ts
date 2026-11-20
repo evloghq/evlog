@@ -110,6 +110,11 @@ export interface SetupVercelResult {
   connector: string
   created: boolean
   attached: boolean
+  /**
+   * The environments this run attached the connector for. Absent when it was
+   * already attached: `vercel connect list` does not say for which environments.
+   */
+  environments?: string[]
   /** Whether the connector is one the team already had, which `logs.vercel.connector` has to name. */
   reused: boolean
   /** Events the check read back from the last hour of runtime logs. */
@@ -129,21 +134,33 @@ export interface SetupVercelOptions {
    * Without it, setup creates the default one.
    */
   choose?: (reusable: ListedConnector[], attached: ReadonlySet<string>) => Promise<string | undefined>
-  /** Called before each step that changes something on Vercel. */
+  /**
+   * The environments to attach the connector for. Each one's deployments can
+   * exchange their OIDC token for the key the connector stores.
+   * @default ['production', 'development']
+   */
+  environments?: string[]
+  /** Called before each step that changes something on Vercel, and with what an attachment grants. */
   onStep?: (command: string) => void
 }
 
 const HOUR_MS = 3_600_000
+/* Production for deployed agents, development for the token `evlog logs` and this check read with. Preview runs any branch's code, so it is asked for by name. */
+export const DEFAULT_ATTACH_ENVIRONMENTS = ['production', 'development']
+const ENVIRONMENT = /^[a-z0-9][\w-]*$/i
 
 /**
  * Lets the linked project read its own runtime logs: links it if needed,
  * settles on a connector (the configured one, the default one, or one the
  * team already has), creates the default one if that is the choice, attaches
- * it to the project for every environment, then reads the last hour through it
+ * it to the project for the chosen environments, then reads the last hour through it
  * the way `evlog logs --source vercel` and the agent do. Each step is skipped
  * when already done, so it runs again safely.
  */
 export async function runSetupVercel(ctx: CliContext, options: SetupVercelOptions = {}): Promise<SetupVercelResult> {
+  const environments = options.environments ?? DEFAULT_ATTACH_ENVIRONMENTS
+  const invalid = environments.find(environment => !ENVIRONMENT.test(environment))
+  if (environments.length === 0 || invalid !== undefined) throw cliErrors.SETUP_INVALID_ENVIRONMENT({ value: invalid ?? '' })
   const vercel = options.vercel ?? createVercelCli()
   const project = await resolveProject(ctx.cwd)
   let linked = await findVercelProject(project.packageDir, project.root)
@@ -179,7 +196,8 @@ export async function runSetupVercel(ctx: CliContext, options: SetupVercelOption
 
   const attached = !onProject.has(connector)
   if (attached) {
-    const args = ['connect', 'attach', connector, '--yes']
+    const args = ['connect', 'attach', connector, '--yes', '--environment', environments.join(',')]
+    options.onStep?.(`${connector} gives code deployed to ${environments.join(', ')} of ${linked.projectId} the authority of the key it stores, whatever that key may read or change on the team`)
     options.onStep?.(`vercel ${args.join(' ')}`)
     await interactive(vercel, args, linked.dir)
   }
@@ -193,7 +211,7 @@ export async function runSetupVercel(ctx: CliContext, options: SetupVercelOption
     if (error instanceof VercelReadError) throw cliErrors.LOGS_VERCEL_READ_FAILED({ httpStatus: error.status, reason: error.message })
     throw error
   }
-  return { projectId: linked.projectId, connector, created, attached, reused: !created && connector !== DEFAULT_VERCEL_CONNECTOR && configured === undefined, events }
+  return { projectId: linked.projectId, connector, created, attached, ...(attached && { environments }), reused: !created && connector !== DEFAULT_VERCEL_CONNECTOR && configured === undefined, events }
 }
 
 /** One stage of `evlog setup vercel --check`. */
@@ -263,10 +281,10 @@ export async function runSetupVercelCheck(ctx: CliContext, options: PreflightOpt
   }
   stages.push({ id: 'connector', status: onTeam.type === 'api-key' ? 'ok' : 'warn', message: `${connector} (${onTeam.type ?? 'unknown type'})`, ...(onTeam.type !== 'api-key' && { fix: 'Reads need an API-key connector holding a Vercel access token' }) })
   if (!onProject) {
-    stages.push({ id: 'attached', status: 'fail', message: `${connector} is not attached to ${linked.projectId}`, fix: `npx evlog setup vercel (runs vercel connect attach ${connector} --yes)` })
+    stages.push({ id: 'attached', status: 'fail', message: `${connector} is not attached to ${linked.projectId}`, fix: `npx evlog setup vercel (runs vercel connect attach ${connector} --yes --environment ${DEFAULT_ATTACH_ENVIRONMENTS.join(',')})` })
     return done()
   }
-  stages.push({ id: 'attached', status: 'ok', message: `attached to ${linked.projectId}` })
+  stages.push({ id: 'attached', status: 'ok', message: `attached to ${linked.projectId}; the project's Connect tab lists the environments it covers` })
 
   let token: string
   try {

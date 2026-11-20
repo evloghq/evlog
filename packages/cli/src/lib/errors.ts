@@ -411,6 +411,14 @@ export const cliErrors = defineErrorCatalog('cli', {
     fix: 'Run evlog setup vercel, or evlog setup eve',
     tags: ['setup'],
   },
+  SETUP_INVALID_ENVIRONMENT: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      value ? `"${value}" is not a Vercel environment name` : 'No environment to attach the connector for',
+    why: 'The connector is attached only for the environments named, and a name is passed to the Vercel CLI as is',
+    fix: 'Pass environment names separated by commas, such as --environment production,development',
+    tags: ['setup', 'vercel'],
+  },
   SETUP_VERCEL_FAILED: {
     status: 500,
     message: ({ step, reason }: { step: string, reason: string }) =>
@@ -533,6 +541,7 @@ const USAGE_ERRORS = new Set<string>([
   cliErrors.LOGS_INVALID_SOURCE,
   cliErrors.LOGS_SOURCE_CONFLICT,
   cliErrors.SETUP_INVALID_TARGET,
+  cliErrors.SETUP_INVALID_ENVIRONMENT,
 ].map(entry => entry.code))
 
 /**
