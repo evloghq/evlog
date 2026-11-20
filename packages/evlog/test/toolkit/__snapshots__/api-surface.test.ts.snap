@@ -273,6 +273,7 @@ exports[`public API surface > matches snapshot for all subpath exports 1`] = `
     "useLogger",
   ],
   "./toolkit": [
+    "DrainDeliveryError",
     "EVLOG_USER_AGENT",
     "EVLOG_VERSION",
     "OTEL_SEVERITY_NUMBER",
@@ -313,6 +314,7 @@ exports[`public API surface > matches snapshot for all subpath exports 1`] = `
     "mergeEvlogConfig",
     "normalizeNumber",
     "onErrorCreated",
+    "parseRetryAfter",
     "pickBaseEvlogOptions",
     "resolveAdapterConfig",
     "resolveMiddlewarePluginRunner",

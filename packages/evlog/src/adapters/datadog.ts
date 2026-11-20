@@ -190,6 +190,11 @@ export function createDatadogDrain(overrides?: Partial<DatadogConfig>) {
 /** Datadog's Logs intake accepts at most 1000 entries and 5 MB uncompressed per request: larger batches are split. */
 const DATADOG_MAX_ENTRIES_PER_REQUEST = 1000
 const DATADOG_MAX_PAYLOAD_BYTES = 5_000_000
+/**
+ * Datadog documents `500` as an intake error to retry, on top of the statuses every drain retries.
+ * @see https://docs.datadoghq.com/api/latest/logs/send-logs
+ */
+const DATADOG_RETRY_STATUSES = [500]
 
 function encodeDatadogRequest(logs: string[], config: DatadogConfig): HttpDrainRequest {
   return {
@@ -213,7 +218,7 @@ export async function sendToDatadog(event: WideEvent, config: DatadogConfig): Pr
  */
 export async function sendBatchToDatadog(events: WideEvent[], config: DatadogConfig): Promise<void> {
   if (events.length === 0) return
-  const options = { label: 'Datadog', source: 'datadog', timeout: config.timeout, retries: config.retries }
+  const options = { label: 'Datadog', source: 'datadog', timeout: config.timeout, retries: config.retries, retryStatuses: DATADOG_RETRY_STATUSES }
   for (let start = 0; start < events.length; start += DATADOG_MAX_ENTRIES_PER_REQUEST) {
     const logs = events.slice(start, start + DATADOG_MAX_ENTRIES_PER_REQUEST).map(event => JSON.stringify(toDatadogLog(event)))
     for (const chunk of chunkSerialized(logs, DATADOG_MAX_ENTRIES_PER_REQUEST, DATADOG_MAX_PAYLOAD_BYTES - 2)) {
