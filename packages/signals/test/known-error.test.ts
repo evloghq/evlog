@@ -62,6 +62,13 @@ describe('knownError', () => {
     expect(plugin.stats()).toMatchObject({ calls: 3, cached: 9 })
   })
 
+  it('keeps a code named __proto__ as an option', async () => {
+    const { evaluate, calls } = scriptedEvaluate((_name, question) => question.type === 'choice' ? answers.choice(question, 'new', 0.99) : answers.first(question))
+    const plugin = createSignals({ signals: [knownError([defineError('__proto__', { message: 'Odd code' })])], evaluate })
+    await plugin.enrich(failed({ name: 'Error', message: 'boom' }))
+    expect(Object.keys((calls[0]!.questions['known-error'] as { criteria: Record<string, string> }).criteria)).toEqual(['__proto__', 'new'])
+  })
+
   it('refuses an empty catalog and a code named new', () => {
     expect(() => knownError([])).toThrow('at least one catalog entry')
     expect(() => knownError([defineError('new', { message: 'x' })])).toThrow('reserved')

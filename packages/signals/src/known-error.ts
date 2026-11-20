@@ -41,14 +41,15 @@ function describe(entry: KnownErrorEntry): string {
  * ```
  */
 export function knownError(errors: ReadonlyArray<KnownErrors>): Signal {
-  const choice: Record<string, string> = {}
+  const options = new Map<string, string>()
   for (const entry of errors.flatMap(entriesOf)) {
     if (entry.code === NEW) throw new Error(`[evlog/signals] knownError: the code "${NEW}" is reserved for errors the catalog does not describe`)
-    choice[entry.code] = describe(entry)
+    options.set(entry.code, describe(entry))
   }
-  const codes = new Set(Object.keys(choice))
+  const codes = new Set(options.keys())
   if (codes.size === 0) throw new Error('[evlog/signals] knownError needs at least one catalog entry')
-  choice[NEW] = 'None of the above: a failure none of these entries describes'
+  options.set(NEW, 'None of the above: a failure none of these entries describes')
+  const choice = Object.fromEntries(options)
 
   const errorOf = (e: SignalInput): { name?: unknown, message?: unknown, code?: unknown } | undefined =>
     typeof e.error === 'object' && e.error !== null ? e.error as { name?: unknown, message?: unknown, code?: unknown } : undefined
