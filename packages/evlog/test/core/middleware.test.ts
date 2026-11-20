@@ -179,6 +179,39 @@ describe('createMiddlewareLogger', () => {
     }))
   })
 
+  it('finish() skips keep hooks for a discarded logger', async () => {
+    const keep = vi.fn()
+    const pluginKeep = vi.fn()
+
+    const { logger, finish } = createMiddlewareLogger({
+      method: 'POST',
+      path: '/api/jobs/digest',
+      keep,
+      plugins: [{ name: 'signals', keep: pluginKeep }],
+    })
+    logger.discard()
+
+    expect(await finish({ status: 200 })).toBeNull()
+    expect(keep).not.toHaveBeenCalled()
+    expect(pluginKeep).not.toHaveBeenCalled()
+  })
+
+  it('finish() runs keep hooks when a discarded logger fails', async () => {
+    const keep = vi.fn()
+
+    const { logger, finish } = createMiddlewareLogger({
+      method: 'POST',
+      path: '/api/jobs/digest',
+      keep,
+    })
+    logger.discard()
+
+    const event = await finish({ error: new Error('mailer unavailable') })
+
+    expect(keep).toHaveBeenCalledOnce()
+    expect(event).toMatchObject({ level: 'error', status: 500 })
+  })
+
   it('returns noop when logging is disabled', () => {
     initLogger({ enabled: false })
 

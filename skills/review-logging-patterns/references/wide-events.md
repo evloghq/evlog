@@ -271,6 +271,7 @@ export default defineEventHandler(async (event) => {
 - Add enough context to debug without looking elsewhere
 - Use consistent field names across your codebase
 - Let `emit()` calculate duration automatically
+- Call `log.discard()` in a job or consumer run that found nothing to do. The event is dropped before keep hooks and sampling, while `error()`, `fatal()` and `audit()` still emit
 
 ### Don't
 

@@ -585,6 +585,27 @@ describe('createRequestLogger', () => {
       expect(drain).not.toHaveBeenCalled()
     })
 
+    it('still emits an event promoted with setLevel(\'error\')', () => {
+      const logger = createRequestLogger({})
+      logger.discard()
+      logger.setLevel('error')
+      logger.set({ error: { code: 'PAYMENT_DECLINED' } })
+
+      expect(logger.emit()).toMatchObject({ level: 'error', error: { code: 'PAYMENT_DECLINED' } })
+    })
+
+    it('still emits an audit record', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({ pretty: false, drain })
+
+      const logger = createRequestLogger({})
+      logger.audit({ action: 'user.delete', actor: { type: 'system', id: 'cron' }, target: { type: 'user', id: 'usr_1' } })
+      logger.discard()
+
+      expect(logger.emit()).toMatchObject({ audit: { action: 'user.delete' } })
+      expect(drain).toHaveBeenCalledTimes(1)
+    })
+
     it('warns and is a no-op after emit()', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const logger = createRequestLogger({})

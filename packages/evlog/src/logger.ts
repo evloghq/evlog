@@ -108,6 +108,20 @@ function mergeFields(target: Record<string, unknown>, fields: Record<string, unk
 
 const pendingDrainState = new WeakMap<WideEvent, { drainStarted: boolean }>()
 
+type DropCheck = () => boolean
+
+const discardChecks = new WeakMap<object, DropCheck>()
+
+/**
+ * True when the logger's next `emit()` will drop the event because of `discard()`.
+ * Finish paths check it to skip the keep phase, which can call a paid model.
+ *
+ * @internal Used by middleware and framework integrations.
+ */
+export function isDiscarded<T extends object>(logger: RequestLogger<T>): boolean {
+  return discardChecks.get(logger)?.() === true
+}
+
 function isAiOnlyFieldUpdate(data: Record<string, unknown>): boolean {
   const keys = Object.keys(data)
   return keys.length === 1 && keys[0] === 'ai'
@@ -983,7 +997,13 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
     auditMethod({ ...input, outcome: 'denied', reason })
   }
 
-  return {
+  // An error, including one marked with setLevel(), and an audit record outlive discard().
+  function dropsOnEmit(): boolean {
+    if (!discarded || hasError || hasFatal || manualLevel === 'error' || manualLevel === 'fatal') return false
+    return !context._auditForceKeep && !context.audit
+  }
+
+  const logger: AuditableLogger<T> = {
     audit: auditMethod,
     set(data: FieldContext<T>): void {
       if (emitted) {
@@ -1131,7 +1151,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const durationMs = overrides?._durationMs ?? elapsedMs(startTime)
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
-      if (discarded && !hasError && !hasFatal) {
+      if (dropsOnEmit()) {
         emitted = true
         pendingWideEvent = null
         return null
@@ -1191,6 +1211,8 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       return { ...context } as FieldContext<T> & Record<string, unknown>
     },
   }
+  discardChecks.set(logger, dropsOnEmit)
+  return logger
 }
 
 /**

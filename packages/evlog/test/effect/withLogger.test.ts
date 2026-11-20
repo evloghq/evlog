@@ -125,6 +125,21 @@ describe('evlog/effect withLogger', () => {
     expect(drain).not.toHaveBeenCalled()
   })
 
+  it('skips keep hooks for a discarded unit', async () => {
+    const { drain } = createPipelineSpies()
+    const keep = vi.fn()
+    const pluginKeep = vi.fn()
+
+    await Effect.runPromise(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.discard()
+    }).pipe(withLogger('empty-digest', { drain, keep, plugins: [{ name: 'signals', keep: pluginKeep }] })))
+
+    expect(keep).not.toHaveBeenCalled()
+    expect(pluginKeep).not.toHaveBeenCalled()
+    expect(drain).not.toHaveBeenCalled()
+  })
+
   it('emits nothing from a successful onError unit', async () => {
     const { drain } = createPipelineSpies()
 
@@ -144,6 +159,22 @@ describe('evlog/effect withLogger', () => {
     ))
 
     expect(drain).not.toHaveBeenCalled()
+  })
+
+  it('emits an onError unit that records an error and succeeds', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromise(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.error(new Error('3 of 10 sessions failed to delete'))
+    }).pipe(withLogger('expire-sessions', { drain, emit: 'onError' })))
+    await waitForDrainCalls(drain)
+
+    expect(drainedEvent(drain)).toMatchObject({
+      action: 'expire-sessions',
+      level: 'error',
+      error: { message: '3 of 10 sessions failed to delete' },
+    })
   })
 
   it('keeps a failing onError unit even when head sampling would drop it', async () => {

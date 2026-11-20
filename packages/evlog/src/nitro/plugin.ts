@@ -4,7 +4,7 @@
 // (nitropack dev loads plugins outside the bundle via Worker threads).
 import { defineNitroPlugin } from 'nitropack/runtime/internal/plugin'
 import type { NitroApp } from 'nitropack/types'
-import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isDiscarded, isEnabled } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
@@ -51,9 +51,11 @@ async function emitWithTailSampling(
     shouldKeep: false,
   }
 
-  await nitroApp.hooks.callHook('evlog:emit:keep', tailCtx)
-  const runner = getGlobalPluginRunner()
-  if (runner.hasKeep) await runner.runKeep(tailCtx)
+  if (!isDiscarded(requestLog)) {
+    await nitroApp.hooks.callHook('evlog:emit:keep', tailCtx)
+    const runner = getGlobalPluginRunner()
+    if (runner.hasKeep) await runner.runKeep(tailCtx)
+  }
 
   return requestLog.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
 }

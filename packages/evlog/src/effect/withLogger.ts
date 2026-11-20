@@ -1,7 +1,7 @@
 import type { Tracer } from 'effect'
-import { Cause, Effect, Option } from 'effect'
+import { Effect, Option } from 'effect'
 import { Headers, HttpTraceContext } from 'effect/http'
-import { createLogger } from '../logger'
+import { createLogger, isDiscarded } from '../logger'
 import type { BaseEvlogOptions } from '../shared/middleware'
 import { resolveMiddlewarePluginRunner, runEnrichAndDrain } from '../shared/middleware'
 import type { TailSamplingContext } from '../types'
@@ -14,8 +14,9 @@ export interface WithLoggerOptions extends Pick<BaseEvlogOptions, 'drain' | 'enr
   /** Fields the wide event starts with. */
   fields?: Record<string, unknown>
   /**
-   * When to emit the unit's wide event. `'onError'` skips successful and
-   * interrupted runs, and keeps failures even when sampling would drop them.
+   * When to emit the unit's wide event. `'onError'` emits only when the effect
+   * fails or dies, or the unit records `log.error()`/`log.fatal()`, and keeps that
+   * event even when sampling would drop it. It is `log.discard()` called at the start.
    * @default 'always'
    */
   emit?: 'always' | 'onError'
@@ -31,22 +32,22 @@ export interface WithLoggerOptions extends Pick<BaseEvlogOptions, 'drain' | 'enr
 function startUnit(action: string, span: Tracer.AnySpan, options: WithLoggerOptions): Unit {
   const start = Date.now()
   const logger = createLogger({ ...options.fields, action, ...traceFields(span) }, { _deferDrain: true })
+  if (options.emit === 'onError') logger.discard()
   return {
     logger,
     finish: exit => Effect.promise(async () => {
       if (exit._tag === 'Failure') recordCause(logger, exit.cause)
-      const failed = exit._tag === 'Failure'
-        && (Cause.hasFails(exit.cause) || Cause.hasDies(exit.cause))
-      if (options.emit === 'onError' && !failed) return
       const context = logger.getContext()
       const status = typeof context.status === 'number' ? context.status : undefined
       const duration = elapsedMs(start)
       const tail: TailSamplingContext = { status, duration, context, shouldKeep: false }
-      await options.keep?.(tail)
       const runner = resolveMiddlewarePluginRunner(options)
-      if (runner.hasKeep) await runner.runKeep(tail)
+      if (!isDiscarded(logger)) {
+        await options.keep?.(tail)
+        if (runner.hasKeep) await runner.runKeep(tail)
+      }
       const event = logger.emit({
-        _forceKeep: tail.shouldKeep || (options.emit === 'onError' && failed),
+        _forceKeep: tail.shouldKeep || options.emit === 'onError',
         _durationMs: duration,
       })
       if (event) await runEnrichAndDrain(event, options, undefined, status, runner)

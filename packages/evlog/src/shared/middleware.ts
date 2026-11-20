@@ -1,6 +1,6 @@
 import type { DrainContext, EnrichContext, RedactConfig, RequestLogger, RouteConfig, TailSamplingContext, WideEvent } from '../types'
 import type { AuditableLogger, ForkableLogger } from '../audit'
-import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, markWideEventDrainStarted, noopLogger, outputWideEvent, shouldKeep } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isDiscarded, isEnabled, markWideEventDrainStarted, noopLogger, outputWideEvent, shouldKeep } from '../logger'
 import { isGloballyRedacted, redactEvent, resolveRedactConfig } from '../redact'
 import { elapsedMs } from '../utils'
 import { extractErrorStatus } from './errors'
@@ -346,11 +346,13 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
       shouldKeep: false,
     }
 
-    if (keep) {
-      await keep(tailCtx)
-    }
-    if (pluginRunner.hasKeep) {
-      await pluginRunner.runKeep(tailCtx)
+    if (!isDiscarded(requestLogger)) {
+      if (keep) {
+        await keep(tailCtx)
+      }
+      if (pluginRunner.hasKeep) {
+        await pluginRunner.runKeep(tailCtx)
+      }
     }
 
     const forceKeep = tailCtx.shouldKeep || shouldKeep(tailCtx)

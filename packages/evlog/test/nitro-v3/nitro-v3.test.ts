@@ -333,6 +333,24 @@ describe.sequential('Nitro v3 Server with evlog', () => {
     })
   })
 
+  it.sequential('skips evlog:emit:keep for a discarded request', async () => {
+    const logs: string[] = []
+    consola.mockTypes(() => (context: unknown) => {
+      logs.push(String(context))
+    })
+    consola.wrapAll()
+
+    try {
+      await server.fetch(new Request(new URL('/discarded', server.url)))
+      await server.fetch(new Request(new URL('/works', server.url)))
+      await vi.waitFor(() => expect(logs.join('\n')).toContain('"requestPath":"/works"'))
+
+      expect(logs.join('\n')).not.toContain('"requestPath":"/discarded"')
+    } finally {
+      consola.restoreAll()
+    }
+  })
+
   it.each([
     { when: 'an earlier error hook is still running', header: 'x-test-delayed-error', path: '/throws', status: 402, message: 'Payment failed' },
     { when: 'a request hook failed before the handler', header: 'x-test-delayed-error', path: '/throws?earlier-error=1', status: 402, message: 'Payment failed' },

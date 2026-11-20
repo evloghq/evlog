@@ -3,7 +3,7 @@ import type { CaptureError } from 'nitro/types'
 import type { HTTPEvent } from 'nitro/h3'
 import * as h3 from 'nitro/h3'
 import { parseURL } from 'ufo'
-import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled, markWideEventDrainStarted, outputWideEvent } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isDiscarded, isEnabled, markWideEventDrainStarted, outputWideEvent } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/pretty-error'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
@@ -71,9 +71,11 @@ async function emitWithTailSampling(
     shouldKeep: false,
   }
 
-  await hooks.callHook('evlog:emit:keep', tailCtx)
-  const runner = getGlobalPluginRunner()
-  if (runner.hasKeep) await runner.runKeep(tailCtx)
+  if (!isDiscarded(log)) {
+    await hooks.callHook('evlog:emit:keep', tailCtx)
+    const runner = getGlobalPluginRunner()
+    if (runner.hasKeep) await runner.runKeep(tailCtx)
+  }
 
   const emittedEvent = log.emit({ _forceKeep: tailCtx.shouldKeep, _durationMs: durationMs })
   ctx._evlogEmitted = true

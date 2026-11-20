@@ -773,9 +773,9 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * finishes. Use it for jobs that are usually idle, so empty runs do not emit
    * an event while failures still do.
    *
-   * Takes precedence over `sampling.keep` and head sampling. A logger that calls
-   * `error()` or `fatal()` after `discard()` emits normally, because a failure
-   * must not be dropped silently.
+   * Takes precedence over `sampling.keep`, head sampling and the tail `keep` hooks,
+   * which do not run. A logger that calls `error()`, `fatal()` or `audit()` emits
+   * normally, because a failure or an audit record must not be dropped silently.
    *
    * No-ops with a console warning after the wide event has been emitted.
    */
