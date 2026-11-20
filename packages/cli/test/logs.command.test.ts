@@ -744,6 +744,29 @@ describe('evlog logs --ask', () => {
     expect(state.items).toEqual([...Array.from({ length: 10 }, (_, i) => i), '… 15 more items'])
   })
 
+  it('cuts a stack to 3 lines and its long lines to the string limit', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    const stack = ['x'.repeat(100_001), 'at a', 'at b', 'at c', 'at d'].join('\n')
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${JSON.stringify(event({ timestamp: '2026-10-01T11:50:00.000Z', requestId: 'stack', level: 'error', error: { message: 'boom', stack } }))}\n`, { flag: 'a' })
+    await runLogs(fakeContext(cwd), { ask: 'q', limit: '1' }, { now: NOW, evaluate })
+    const sent = (calls[0]!.state as { error: { stack: string } }).error.stack
+    expect(sent).toBe(`${'x'.repeat(256)}… 99755 more characters\n… 2 more lines`)
+  })
+
+  it('asks separately for events that differ only past what is cut', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-ask-'))
+    tempDirs.push(cwd)
+    await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'shop' }))
+    await mkdir(join(cwd, '.evlog/logs'), { recursive: true })
+    const items = (last: string) => event({ requestId: last, items: [...Array.from({ length: 11 }, (_, i) => `ord_${i}`), last] })
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${[items('ord_a'), items('ord_b')].map(e => JSON.stringify(e)).join('\n')}\n`)
+    const { evaluate, calls } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'q' }, { now: NOW, evaluate })
+    expect(calls).toHaveLength(2)
+    expect(result.asked).toMatchObject({ shared: 0 })
+  })
+
   it('stops instead of leaving out an event still too large once cut down', async () => {
     const cwd = await makeSink()
     const { evaluate, calls } = await scripted()

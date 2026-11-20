@@ -151,7 +151,7 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
   const result: LogsResult = { sources, query, ...selected }
   /* Asked after selection, so the model sees at most `--limit` events: the
      filters narrow for free, the question ranks what is left. */
-  if (question && options.dryRun) result.estimated = { question, estimate: estimateAsk(result.events) }
+  if (question && options.dryRun) result.estimated = { question, estimate: estimateAsk(result.events, question) }
   else if (question) result.asked = { question, ...await askEvents(result.events, question, { evaluate: options.evaluate, model: args.model?.trim() || undefined }) }
 
   if (options.follow) {

@@ -32,9 +32,10 @@ export interface AskEstimate {
   inputTokens: number
 }
 
-/* Fitted to the input tokens typesafe-ai/jev reported for runs of 5 and 100 calls. */
-const CALL_TOKENS = 270
+/* Fitted to the input tokens typesafe-ai/jev reported for runs of 5 and 100 calls, with a 68-character question counted apart. */
+const CALL_TOKENS = 253
 const STATE_CHARS_PER_TOKEN = 1.7
+const QUESTION_CHARS_PER_TOKEN = 4
 
 const MAX_STRING = 256
 const MAX_ITEMS = 10
@@ -53,11 +54,10 @@ export function askState(event: Record<string, unknown>): Record<string, unknown
 
 function shrink(value: unknown, key?: string): unknown {
   if (typeof value === 'string') {
-    if (key === 'stack') {
-      const lines = value.split('\n')
-      if (lines.length > STACK_LINES) return `${lines.slice(0, STACK_LINES).join('\n')}\n… ${lines.length - STACK_LINES} more lines`
-    }
-    return value.length > MAX_STRING ? `${value.slice(0, MAX_STRING)}… ${value.length - MAX_STRING} more characters` : value
+    const lines = key === 'stack' ? value.split('\n') : []
+    const text = lines.length > STACK_LINES ? lines.slice(0, STACK_LINES).join('\n') : value
+    const cut = text.length > MAX_STRING ? `${text.slice(0, MAX_STRING)}… ${text.length - MAX_STRING} more characters` : text
+    return lines.length > STACK_LINES ? `${cut}\n… ${lines.length - STACK_LINES} more lines` : cut
   }
   if (Array.isArray(value)) {
     const kept = value.slice(0, MAX_ITEMS).map(item => shrink(item))
@@ -83,8 +83,8 @@ const MEASURED = /(?:^duration|Ms$|tokens$|Tokens$)/
  * significant figures, so 412ms and 419ms match and 412ms and 490ms do not.
  * Every other value, ids a question can name included, must match exactly.
  */
-export function askFingerprint(state: Record<string, unknown>): string {
-  return JSON.stringify(state, (key, value) => {
+export function askFingerprint(event: Record<string, unknown>): string {
+  return JSON.stringify(event, (key, value) => {
     if (PER_EVENT.has(key)) return undefined
     // The printed form of durationMs, as in "412ms".
     if (key === 'duration' && typeof value === 'string') return undefined
@@ -100,7 +100,8 @@ export function askFingerprint(state: Record<string, unknown>): string {
 function groupByFingerprint<T extends WideEvent>(events: T[]): T[][] {
   const groups = new Map<string, T[]>()
   for (const event of events) {
-    const key = askFingerprint(askState(event))
+    const { signals: _signals, signalsModel: _model, ...rest } = event
+    const key = askFingerprint(rest)
     const group = groups.get(key)
     if (group) group.push(event)
     else groups.set(key, [event])
@@ -109,10 +110,11 @@ function groupByFingerprint<T extends WideEvent>(events: T[]): T[][] {
 }
 
 /** Calls and tokens the events would cost, without loading the model packages. */
-export function estimateAsk(events: WideEvent[]): AskEstimate {
+export function estimateAsk(events: WideEvent[], question: string): AskEstimate {
   const groups = groupByFingerprint(events)
   const chars = groups.reduce((sum, [event]) => sum + JSON.stringify(askState(event!)).length, 0)
-  const inputTokens = Math.round(groups.length * CALL_TOKENS + chars / STATE_CHARS_PER_TOKEN)
+  const perCall = CALL_TOKENS + Math.ceil(question.length / QUESTION_CHARS_PER_TOKEN)
+  const inputTokens = Math.round(groups.length * perCall + chars / STATE_CHARS_PER_TOKEN)
   return { events: events.length, calls: groups.length, inputTokens }
 }
 

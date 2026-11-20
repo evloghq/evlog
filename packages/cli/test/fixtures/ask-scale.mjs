@@ -1,7 +1,7 @@
 // A day of a shop with a support agent, for measuring `evlog logs --ask` at scale.
 // Seeded, so a count or a ranking that moves is the code's doing, not the data's.
 // `node ask-scale.mjs <dir> [events]` writes it as an fs drain sink.
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 function random(seed) {
@@ -76,6 +76,6 @@ if (import.meta.main) {
   if (!dir) throw new Error('usage: node ask-scale.mjs <dir> [events]')
   const logs = join(dir, '.evlog', 'logs')
   mkdirSync(logs, { recursive: true })
-  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'shop' }))
+  if (!existsSync(join(dir, 'package.json'))) writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'shop' }))
   writeFileSync(join(logs, '2026-10-01.jsonl'), `${scaleEvents(Number(count ?? 10_000)).map(({ event }) => JSON.stringify(event)).join('\n')}\n`)
 }

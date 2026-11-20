@@ -25,14 +25,14 @@ describe('evlog logs --ask over a day of events', () => {
     expect(wanted.size).toBeGreaterThan(100)
     expect(result.answered.slice(0, wanted.size).every(answer => wanted.has(answer.event.requestId))).toBe(true)
     expect(result.answered).toHaveLength(events.length)
-    expect(calls).toHaveLength(estimateAsk(events).calls)
+    expect(calls).toHaveLength(estimateAsk(events, 'q').calls)
     expect(result.shared).toBe(events.length - calls.length)
   })
 
   it('asks once for each distinct health check, however many there are', () => {
     const health = day.filter(seeded => seeded.event.path === '/api/health').map(seeded => seeded.event)
     expect(health.length).toBeGreaterThan(1000)
-    expect(estimateAsk(health).calls).toBe(5)
+    expect(estimateAsk(health, 'q').calls).toBe(5)
   })
 
   it('sends an agent turn with its tool list cut down to under a third of the tokens', () => {
