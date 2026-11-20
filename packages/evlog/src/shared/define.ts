@@ -52,6 +52,15 @@ export interface EvlogLogsConfig {
   dir?: string
   /** Most events shown, like `--limit`. */
   limit?: number
+  /** Reading runtime logs from Vercel with `evlog logs --source vercel`. */
+  vercel?: {
+    /**
+     * The Vercel Connect connector the read goes through. Set it to reuse a
+     * Vercel API-key connector the team already has, such as `vercel/mcp`.
+     * @default 'vercel/evlog'
+     */
+    connector?: string
+  }
 }
 
 /**

@@ -342,6 +342,75 @@ export const cliErrors = defineErrorCatalog('cli', {
     fix: 'Pass a whole number of 1 or more, e.g. --limit 20',
     tags: ['logs'],
   },
+  LOGS_INVALID_SOURCE: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      `Unknown --source "${value}"`,
+    why: 'A source that cannot be read would silently fall back to local files',
+    fix: 'Pass files (the default) or vercel',
+    tags: ['logs'],
+  },
+  LOGS_SOURCE_CONFLICT: {
+    status: 400,
+    message: ({ flag }: { flag: string }) =>
+      `--source vercel cannot be combined with --${flag}`,
+    why: 'The Vercel source reads the linked project\'s runtime logs over a time window, so a directory, a URL or a follow has nothing to apply to',
+    fix: 'Drop that flag, or drop --source vercel to read local files',
+    tags: ['logs'],
+  },
+  LOGS_VERCEL_NOT_LINKED: {
+    status: 404,
+    message: ({ cwd }: { cwd: string }) =>
+      `No Vercel project is linked at ${cwd}`,
+    why: 'The Vercel source reads the runtime logs of the project vercel link linked, and only that one',
+    fix: 'Run vercel link, then npx evlog setup vercel',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs', 'vercel'],
+  },
+  LOGS_VERCEL_NO_TOKEN: {
+    status: 401,
+    message: ({ reason }: { reason: string }) =>
+      `No OIDC token for the linked Vercel project: ${reason}`,
+    why: 'Vercel Connect accepts the project\'s OIDC token, which the CLI refreshes with your Vercel login',
+    fix: 'Run vercel login, check vercel link points at the project, and try again',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs', 'vercel'],
+  },
+  LOGS_VERCEL_NOT_SET_UP: {
+    status: 403,
+    message: ({ connector, reason }: { connector: string, reason: string }) =>
+      `Vercel Connect issued no token for ${connector}: ${reason}`,
+    why: 'The connector does not exist on the team, or is not attached to this project and environment',
+    fix: 'Run npx evlog setup vercel',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs', 'vercel'],
+  },
+  LOGS_VERCEL_READ_FAILED: {
+    status: 502,
+    message: ({ httpStatus, reason }: { httpStatus: number, reason: string }) =>
+      `Vercel refused the read (${httpStatus}): ${reason}`,
+    why: 'The observability API answered the runtime logs query with an error. A 403 means the access token stored in the connector cannot read runtime logs',
+    fix: 'On a 403, replace the connector\'s API key with a Vercel access token scoped to the team. Otherwise check the window is inside the plan\'s log retention (Hobby 1 hour, Pro 1 day), or narrow --since',
+    link: 'https://vercel.com/docs/logs/runtime',
+    tags: ['logs', 'vercel'],
+  },
+  SETUP_INVALID_TARGET: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      `Unknown setup target "${value}"`,
+    why: 'evlog setup only knows the platforms it can read logs from',
+    fix: 'Run evlog setup vercel',
+    tags: ['setup'],
+  },
+  SETUP_VERCEL_FAILED: {
+    status: 500,
+    message: ({ step, reason }: { step: string, reason: string }) =>
+      `${step} failed: ${reason}`,
+    why: 'A step of the setup did not complete, so the agent cannot read its logs yet',
+    fix: 'Run the step yourself, then run npx evlog setup vercel again; it skips what is already done',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['setup', 'vercel'],
+  },
   CONFIG_PARSE_FAILED: {
     status: 400,
     message: ({ file, reason }: { file: string, reason: string }) =>
@@ -452,6 +521,9 @@ const USAGE_ERRORS = new Set<string>([
   cliErrors.LOGS_INVALID_DURATION,
   cliErrors.LOGS_INVALID_WHERE,
   cliErrors.LOGS_INVALID_LIMIT,
+  cliErrors.LOGS_INVALID_SOURCE,
+  cliErrors.LOGS_SOURCE_CONFLICT,
+  cliErrors.SETUP_INVALID_TARGET,
 ].map(entry => entry.code))
 
 /**
