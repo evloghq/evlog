@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { buildFileFacts } from '../../src/lib/map/facts'
 import { parseSource } from '../../src/lib/map/parse'
+import type { SourceRange } from '../../src/lib/map/parse'
+import { handlerReach } from '../../src/lib/map/reach'
 import type {
   EvlogFeature,
   PairablePackage,
@@ -61,6 +63,8 @@ interface Case {
    * pass by inventing a signature the analyser would never produce.
    */
   repeatedErrors?: string[]
+  /** Where the entry point is written, when `code` declares several. Defaults to the whole of it. */
+  scope?: SourceRange
 }
 
 interface RuleCases {
@@ -86,7 +90,7 @@ function check(rule: MapRule, testCase: Case): CheckResult | undefined {
   const capabilities: FrameworkCapabilities = {
     requestLogger: definition.requestLogger,
     evlogAutoImports: definition.evlogAutoImports ?? [],
-    requestLoggerMember: definition.requestLoggerMember,
+    requestLoggerMembers: definition.requestLoggerMembers,
   }
   const evlogBarrels = new Map(
     Object.entries(testCase.barrels ?? {}).map(([key, names]) => [key, new Set(names)]),
@@ -94,11 +98,13 @@ function check(rule: MapRule, testCase: Case): CheckResult | undefined {
   const evlogPackages = new Map(
     Object.entries(testCase.packages ?? {}).map(([specifier, names]) => [specifier, new Set(names)]),
   )
+  const reach = testCase.scope ? handlerReach(parsed, testCase.scope) : undefined
   const facts = buildFileFacts(parsed, {
     evlogAutoImports: capabilities.evlogAutoImports,
     evlogBarrels,
     evlogPackages,
-    requestLoggerMember: capabilities.requestLoggerMember,
+    requestLoggerMembers: capabilities.requestLoggerMembers,
+    reach,
   })
   const raw = {
     framework,
@@ -126,7 +132,7 @@ function check(rule: MapRule, testCase: Case): CheckResult | undefined {
     repeatedErrors: buildRepeatedErrors(testCase.repeatedErrors ?? []),
   }
 
-  const results = runRuleSet([rule], { ctx, target, parsed, facts, project, capabilities })
+  const results = runRuleSet([rule], { ctx, target, parsed, facts, reach, project, capabilities })
   return rule.category === 'requirement'
     ? results.checks[rule.id]
     : results.suggestions[rule.id]
@@ -232,8 +238,30 @@ const CASES: Record<CheckId, RuleCases> = {
         framework: 'fastify',
         code: 'app.post(\'/x\', async (request) => { request.log.set({ a: 1 }) })',
       },
+      {
+        name: 'hono\'s c.get(\'log\'), used without being bound',
+        framework: 'hono',
+        code: 'app.post(\'/x\', (c) => { c.get(\'log\').set({ a: 1 })\nreturn c.json({}) })',
+      },
+      {
+        name: 'request.evlog, the name evlog\'s fastify plugin gives it',
+        framework: 'fastify',
+        code: 'app.post(\'/x\', async (request) => { const log = request.evlog\nlog.audit?.deny({ action: \'x\' }) })',
+      },
     ],
     invalid: [
+      {
+        name: 'fastify\'s own request logger, where no evlog plugin was found',
+        framework: 'fastify',
+        code: 'app.post(\'/x\', async (request) => { request.log.info(\'hit\') })',
+        message: /dark event/,
+      },
+      {
+        name: 'the same logger bound to a name first',
+        framework: 'fastify',
+        code: 'app.post(\'/x\', async (request) => { const log = request.log\nlog.info(\'hit\')\nlog.child({}) })',
+        message: /dark event/,
+      },
       {
         name: 'fastify\'s own instance logger is not the request logger',
         framework: 'fastify',
@@ -341,6 +369,11 @@ const CASES: Record<CheckId, RuleCases> = {
       {
         name: 'set on a context logger destructured under another name',
         code: 'export default defineEventHandler((event) => { const { log: wide } = event.context\nwide.set({ a: 1 }) })',
+      },
+      {
+        name: 'set called straight on hono\'s c.get(\'log\')',
+        framework: 'hono',
+        code: 'app.post(\'/x\', (c) => { c.get(\'log\').set({ a: 1 })\nreturn c.json({}) })',
       },
     ],
     invalid: [
@@ -703,6 +736,26 @@ describe('rule registry', () => {
     for (const rule of OPPORTUNITIES) {
       expect(rule.appliesTo.when, `${rule.id} must declare a gate`).toBeTypeOf('function')
     }
+  })
+})
+
+describe('a rule that listens to nodes', () => {
+  it('hears only the code its entry point runs', () => {
+    const code = 'function load() { shared() }\napp.get(\'/a\', () => { first() })\napp.get(\'/b\', () => { second(); load() })'
+    const heard: string[] = []
+    const rule: MapRule = {
+      ...getRule('context')!,
+      create: () => ({
+        CallExpression(node) {
+          const { callee } = node as unknown as { callee: { name?: string } }
+          if (callee.name) heard.push(callee.name)
+        },
+      }),
+    }
+
+    check(rule, { name: 'second route', framework: 'express', code, scope: [code.indexOf('get(\'/b\''), code.length] })
+
+    expect(heard.sort()).toEqual(['load', 'second', 'shared'])
   })
 })
 

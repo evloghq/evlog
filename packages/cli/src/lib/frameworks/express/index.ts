@@ -21,7 +21,7 @@ export const express = defineFramework({
   detect: { deps: ['express'], specificity: 10 },
   accessor: '`req.log`, or `useLogger()` from `evlog/express` below the handler',
   requestLogger: 'explicit',
-  requestLoggerMember: 'log',
+  requestLoggerMembers: ['log'],
   shape: {
     loggerCall: 'const log = req.log',
     handler(route, body) {

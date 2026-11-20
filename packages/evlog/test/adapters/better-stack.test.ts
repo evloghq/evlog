@@ -272,7 +272,7 @@ describe('better-stack adapter', () => {
       const drain = createBetterStackDrain({ sourceToken: 'legacy-key' })
       await drain(createDrainContext())
       expect(warnSpy).toHaveBeenCalledWith(
-        '[evlog/better-stack] \'sourceToken\' is deprecated and removed in v3, use \'apiKey\' instead.',
+        '[evlog/better-stack] \'sourceToken\' is deprecated and removed in v3, use \'apiKey\' instead. See https://www.evlog.dev/reference/migrate-v3#credential-aliases-removed',
       )
     })
 

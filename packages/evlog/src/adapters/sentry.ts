@@ -6,7 +6,7 @@ import type { HttpDrainRequest } from '../shared/drain'
 import { defineDrain, sendEncodedDrainRequest } from '../shared/drain'
 import { parseStackFrames } from '../shared/pretty-error'
 import { OTEL_SEVERITY_NUMBER } from '../shared/severity'
-import { EVLOG_VERSION } from '../shared/http'
+import { DrainDeliveryError, EVLOG_VERSION, parseRetryAfter } from '../shared/http'
 
 export interface SentryConfig {
   dsn: string
@@ -413,6 +413,86 @@ function encodeSentryRequest(logs: string[], config: SentryConfig): HttpDrainReq
 const SENTRY_MAX_LOGS_PER_ENVELOPE = 100
 const SENTRY_MAX_LOG_ITEM_BYTES = 1024 * 1024
 
+/**
+ * Rate limits Sentry announced, per DSN: epoch ms until which each data category
+ * (`log_item`, `error`, or `all`) is limited. Mirrors `updateRateLimits` in
+ * `@sentry/core` (`packages/core/src/utils/ratelimit.ts`): an envelope for a
+ * limited category is not sent, because Sentry would drop it.
+ * @see https://develop.sentry.dev/sdk/expected-features/rate-limiting/
+ */
+const rateLimits = new Map<string, Record<string, number>>()
+const warnedIssueLimitUntil = new Map<string, number>()
+const DEFAULT_RATE_LIMIT_MS = 60_000
+
+function updateRateLimits(dsn: string, headers: Headers, status: number | undefined): void {
+  const now = Date.now()
+  const limits = rateLimits.get(dsn) ?? {}
+  const extend = (category: string, delayMs: number): void => {
+    limits[category] = Math.max(limits[category] ?? 0, now + delayMs)
+  }
+  const header = headers.get('x-sentry-rate-limits')
+  const retryAfterMs = parseRetryAfter(headers.get('retry-after'), now)
+  if (header) {
+    // <retry_after>:<category>;<category>:<scope>:<reason_code>, ... An empty category list limits every category.
+    for (const limit of header.trim().split(',')) {
+      const [seconds = '', categories = ''] = limit.split(':')
+      // Sentry documents the delay as seconds and allows fractions, such as `0.5`.
+      const parsed = Number.parseFloat(seconds)
+      const delayMs = Number.isFinite(parsed) ? parsed * 1000 : DEFAULT_RATE_LIMIT_MS
+      if (categories) {
+        for (const category of categories.split(';')) extend(category, delayMs)
+      } else {
+        extend('all', delayMs)
+      }
+    }
+  } else if (retryAfterMs !== undefined) {
+    extend('all', retryAfterMs)
+  } else if (status === 429) {
+    extend('all', DEFAULT_RATE_LIMIT_MS)
+  } else {
+    return
+  }
+  rateLimits.set(dsn, limits)
+}
+
+/** Milliseconds until Sentry accepts `category` again for this DSN, 0 when it is not limited. */
+function rateLimitRemaining(dsn: string, category: 'log_item' | 'error'): number {
+  const limits = rateLimits.get(dsn)
+  if (!limits) return 0
+  return Math.max(0, (limits[category] ?? 0) - Date.now(), (limits.all ?? 0) - Date.now())
+}
+
+async function sendEnvelope(request: HttpDrainRequest, config: SentryConfig, category: 'log_item' | 'error'): Promise<void> {
+  await sendEncodedDrainRequest(request, {
+    label: 'Sentry',
+    source: 'sentry',
+    timeout: config.timeout,
+    retries: config.retries,
+    onResponse: response => updateRateLimits(config.dsn, response.headers, response.status),
+    // Read the limit before httpPost decides to retry, so it never retries into it. A rejection stays a rejection.
+    onErrorResponse: (error) => {
+      if (error.headers) updateRateLimits(config.dsn, error.headers, error.status)
+      const remaining = rateLimitRemaining(config.dsn, category)
+      if (remaining === 0 || !error.retryable) return error
+      return new DrainDeliveryError(error.message, { status: error.status, retryable: true, retryAfterMs: remaining, headers: error.headers, cause: error })
+    },
+    // A concurrent request may have announced a limit while this one waited to retry.
+    beforeRetry: () => {
+      const remaining = rateLimitRemaining(config.dsn, category)
+      if (remaining === 0) return undefined
+      return new DrainDeliveryError(`Sentry rate-limits ${category === 'error' ? 'error events' : 'logs'} for another ${Math.ceil(remaining / 1000)}s`, { retryable: true, retryAfterMs: remaining })
+    },
+  })
+}
+
+function warnIssuesRateLimited(dsn: string, skipped: number): void {
+  const until = Date.now() + rateLimitRemaining(dsn, 'error')
+  if ((warnedIssueLimitUntil.get(dsn) ?? 0) >= until) return
+  warnedIssueLimitUntil.set(dsn, until)
+  const seconds = Math.ceil((until - Date.now()) / 1000)
+  console.warn(`[evlog/sentry] Sentry rate-limits error events for ${seconds}s: skipped ${skipped} issue(s) without sending them, and skips new ones until then. Their wide events were still sent as logs.`)
+}
+
 /** An envelope holds at most one error event, so each issue gets its own request. */
 function encodeSentryErrorEventRequest(event: SentryErrorEvent, config: SentryConfig): HttpDrainRequest {
   const envelopeHeader = JSON.stringify({ event_id: event.event_id, dsn: config.dsn, sdk: SENTRY_SDK, sent_at: new Date().toISOString() })
@@ -438,8 +518,14 @@ export async function sendToSentry(event: WideEvent, config: SentryConfig): Prom
  * Send a batch of events to Sentry as structured logs via the Envelope endpoint.
  * With `issues`, `error` and `fatal` events without a 4xx status are also sent
  * as error events, one request at a time after the logs. Only a failed log
- * request rejects: issues are best-effort, and the first failed issue stops
- * the remaining ones for this batch.
+ * request rejects: issues are best-effort. An issue Sentry rejects (such as a
+ * `400`) is skipped; a transient failure stops the remaining issues of the batch.
+ *
+ * Honours `X-Sentry-Rate-Limits` and `Retry-After` per data category, like the
+ * official SDKs. While logs are limited, it rejects with a `DrainDeliveryError`
+ * carrying `retryAfterMs`, without sending, so `createDrainPipeline` holds the
+ * batch until then. While error events are limited, issues are skipped without
+ * a request and the logs still go out.
  *
  * @example
  * ```ts
@@ -450,22 +536,34 @@ export async function sendToSentry(event: WideEvent, config: SentryConfig): Prom
  */
 export async function sendBatchToSentry(events: WideEvent[], config: SentryConfig): Promise<void> {
   if (events.length === 0) return
+  const logLimitMs = rateLimitRemaining(config.dsn, 'log_item')
+  if (logLimitMs > 0) {
+    throw new DrainDeliveryError(`Sentry rate-limits logs for another ${Math.ceil(logLimitMs / 1000)}s`, { retryable: true, retryAfterMs: logLimitMs })
+  }
   const traced = events.map(withTraceId)
-  const options = { label: 'Sentry', source: 'sentry', timeout: config.timeout, retries: config.retries }
   const maxLogBytes = SENTRY_MAX_LOG_ITEM_BYTES - SENTRY_LOG_ITEM_PREFIX.length - SENTRY_LOG_ITEM_SUFFIX.length
   for (let start = 0; start < traced.length; start += SENTRY_MAX_LOGS_PER_ENVELOPE) {
     const logs = traced.slice(start, start + SENTRY_MAX_LOGS_PER_ENVELOPE).map(event => JSON.stringify(toSentryLog(event, config)))
     for (const chunk of chunkSerialized(logs, SENTRY_MAX_LOGS_PER_ENVELOPE, maxLogBytes)) {
-      await sendEncodedDrainRequest(encodeSentryRequest(chunk, config), options)
+      await sendEnvelope(encodeSentryRequest(chunk, config), config, 'log_item')
     }
   }
   if (!config.issues) return
 
   const issues = traced.filter(event => (event.level === 'error' || event.level === 'fatal') && !isClientError(event))
   for (const [index, event] of issues.entries()) {
+    if (rateLimitRemaining(config.dsn, 'error') > 0) {
+      warnIssuesRateLimited(config.dsn, issues.length - index)
+      return
+    }
     try {
-      await sendEncodedDrainRequest(encodeSentryErrorEventRequest(toSentryErrorEvent(event, config), config), options)
+      await sendEnvelope(encodeSentryErrorEventRequest(toSentryErrorEvent(event, config), config), config, 'error')
     } catch (error) {
+      if (rateLimitRemaining(config.dsn, 'error') > 0) continue
+      if (error instanceof DrainDeliveryError && !error.retryable) {
+        console.error('[evlog/sentry] Sentry rejected an issue:', error)
+        continue
+      }
       console.error(`[evlog/sentry] Failed to send issue, skipped ${issues.length - index - 1} more in this batch:`, error)
       return
     }

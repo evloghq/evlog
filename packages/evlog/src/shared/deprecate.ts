@@ -1,5 +1,19 @@
 import { claimDeprecationWarning } from './globalRegistry'
 
+const MIGRATION_GUIDE_URL = 'https://www.evlog.dev/reference/migrate-v3'
+
+/**
+ * Headings of the migration page. The 3.0 guide replaces that page at the same
+ * URL and must keep them, so the links 2.x prints keep resolving.
+ */
+type MigrationGuideSection
+  = | 'browser-entry-removed'
+    | 'credential-aliases-removed'
+    | 'posthog-events-drain-removed'
+    | 'logger-storage-moved'
+    | 'eve-moves-to-evlogeve'
+    | 'compact-output-by-default'
+
 /**
  * Show a deprecation warning for an API or option removed in the next major.
  *
@@ -10,13 +24,13 @@ import { claimDeprecationWarning } from './globalRegistry'
  *   consume the `id`.
  *
  * Call it where the deprecated thing is used (a factory, an option resolver, a
- * getter), not at import time. `message` is the full line, `[evlog/<area>]`
- * prefix included.
+ * getter), not at import time. `message` is the full sentence, `[evlog/<area>]`
+ * prefix included; the link to `section` of the migration page is appended.
  */
-export function warnDeprecated(id: string, message: string): void {
+export function warnDeprecated(id: string, message: string, section: MigrationGuideSection): void {
   if (isDeprecationWarningSilenced()) return
   if (!claimDeprecationWarning(id)) return
-  console.warn(message)
+  console.warn(`${message} See ${MIGRATION_GUIDE_URL}#${section}`)
 }
 
 function isDeprecationWarningSilenced(): boolean {
@@ -41,5 +55,6 @@ export function warnDeprecatedEnvVar(adapter: string, envNames: readonly string[
   warnDeprecated(
     `${adapter}:env:${publicName}`,
     `[evlog/${adapter}] ${publicName} is deprecated and ignored in v3. Rename it to ${replacement}.`,
+    'credential-aliases-removed',
   )
 }

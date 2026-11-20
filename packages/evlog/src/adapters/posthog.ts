@@ -60,7 +60,7 @@ export interface PostHogConfig {
    */
   sessionIdField?: string
   /**
-   * Record shape. Default: `'json'`.
+   * Record shape. Default: `'json'`, and `'compact'` in v3.
    *
    * In `'events'` mode, `'compact'` flattens nested properties into dotted
    * keys (`ai.costUsd`), which is what the PostHog UI filters and breaks down
@@ -220,6 +220,7 @@ export function createPostHogDrain(overrides?: Partial<PostHogConfig>) {
           console.error(`[evlog/posthog-events] Missing apiKey. Set ${formatPublicEnvKeys(['NUXT_POSTHOG_API_KEY', 'POSTHOG_API_KEY'])} env var or pass to createPostHogDrain({ mode: 'events' })`)
           return null
         }
+        warnUnsetRecordShape(config)
         return config as PostHogConfig
       },
       send: sendBatchToPostHogEvents,
@@ -236,10 +237,22 @@ export function createPostHogDrain(overrides?: Partial<PostHogConfig>) {
         console.error(`[evlog/posthog] Missing apiKey. Set ${formatPublicEnvKeys(['NUXT_POSTHOG_API_KEY', 'POSTHOG_API_KEY'])} env var or pass to createPostHogDrain()`)
         return null
       }
+      warnUnsetRecordShape(config)
       return config as PostHogConfig
     },
     send: sendBatchToPostHog,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToPostHog(events, { ...config, retries: config.retries ?? 0 }),
   })
+}
+
+function warnUnsetRecordShape(config: Partial<PostHogConfig>): void {
+  if (config.recordShape !== undefined) return
+  warnDeprecated(
+    'posthog:v3-defaults',
+    '[evlog/posthog] v3 changes the default of recordShape to \'compact\'. Set recordShape: \'json\' to keep this output.',
+    'compact-output-by-default',
+  )
 }
 
 /**
@@ -249,6 +262,7 @@ export function createPostHogEventsDrain(overrides?: Partial<PostHogConfig>) {
   warnDeprecated(
     'posthog:createPostHogEventsDrain',
     '[evlog/posthog] createPostHogEventsDrain() is deprecated and removed in v3. Use createPostHogDrain({ mode: \'events\' }).',
+    'posthog-events-drain-removed',
   )
   return createPostHogDrain({ ...overrides, mode: 'events' })
 }

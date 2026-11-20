@@ -28,6 +28,10 @@ describe('slugOf', () => {
     expect(slugOf('The ratchet: `--baseline`')).toBe('the-ratchet---baseline')
     expect(slugOf('HTTP drain (browser to server)')).toBe('http-drain-browser-to-server')
   })
+
+  it('keeps underscores, as the renderer does', () => {
+    expect(slugOf('AI fields under `gen_ai`')).toBe('ai-fields-under-gen_ai')
+  })
 })
 
 describe('corpusFindings', () => {

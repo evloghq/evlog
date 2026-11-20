@@ -61,6 +61,7 @@ apps/chat/.data
 examples/repro/
 examples/eve/.eve
 packages/evlog/test/nitro-v3/fixture/.wrangler
+packages/evlog/test/e2e/.otel
 apps/nuxthub-playground/.data
 .next/
 apps/telemetry/.data

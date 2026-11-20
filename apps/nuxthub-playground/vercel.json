@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh evlog-nuxthub-playground",
+  "ignoreCommand": "sh ../../scripts/vercel-ignore-build.sh apps/nuxthub-playground packages/nuxthub packages/evlog",
   "crons": [
     {
       "path": "/api/_cron/evlog-cleanup",

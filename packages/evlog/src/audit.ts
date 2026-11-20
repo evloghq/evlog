@@ -1,6 +1,6 @@
 import type { AuditActor, AuditFields, AuditPatchOp, AuditTarget, DrainContext, EnrichContext, FieldContext, RedactConfig, RequestLogger, WideEvent } from './types'
 import { createLogger } from './logger'
-import { compileRedactPathMatchers, redactValueByPaths } from './redact'
+import { compileRedactPathMatchers, escapePointerSegment, isFieldRecord, redactValueByPaths } from './redact'
 import { getHeader as getSharedHeader } from './shared/headers'
 import type { AuditInput } from './audit-action'
 
@@ -295,6 +295,28 @@ export interface WithAuditContext {
 }
 
 /**
+ * @internal Equality for the values `auditDiff` does not recurse into:
+ * `Date` by timestamp, `RegExp` by source and flags, `Set` and `Map` by content.
+ * Anything else is equal only when it is the same reference.
+ */
+function isSameNonPlainValue(a: unknown, b: unknown, seen = new Map<object, Set<object>>()): boolean {
+  if (Object.is(a, b)) return true
+  if (a instanceof Date && b instanceof Date) return Object.is(a.getTime(), b.getTime())
+  if (a instanceof RegExp && b instanceof RegExp) return String(a) === String(b)
+  if (a instanceof Set && b instanceof Set) {
+    return a.size === b.size && [...a].every(v => b.has(v))
+  }
+  if (a instanceof Map && b instanceof Map) {
+    // A pair already being compared is assumed equal, so self-referential Maps terminate.
+    const pairs = seen.get(a) ?? seen.set(a, new Set()).get(a)!
+    if (pairs.has(b)) return true
+    pairs.add(b)
+    return a.size === b.size && [...a].every(([k, v]) => b.has(k) && isSameNonPlainValue(v, b.get(k), seen))
+  }
+  return false
+}
+
+/**
  * Compute a compact, redact-aware diff between two objects for the
  * `changes` field. Output is a JSON Patch-style array (RFC 6902 subset:
  * `add`, `remove`, `replace`) — small enough to ship over the wire.
@@ -326,32 +348,36 @@ export function auditDiff(
     caseInsensitiveLeaves: new Set<string>(),
   }
   const patch: AuditPatchOp[] = []
+  // Record pairs being diffed on the current path, so self-referential objects terminate.
+  const ancestors = new Map<object, Set<object>>()
 
   function diff(a: unknown, b: unknown, path: string): void {
     if (a === b) return
 
     if (a === undefined && b !== undefined) {
-      patch.push({ op: 'add', path: path || '/', value: redactValue(b, path) })
+      patch.push({ op: 'add', path, value: redactValue(b, path) })
       return
     }
     if (a !== undefined && b === undefined) {
-      patch.push({ op: 'remove', path: path || '/' })
+      patch.push({ op: 'remove', path })
       return
     }
 
-    if (
-      a !== null && b !== null
-      && typeof a === 'object' && typeof b === 'object'
-      && !Array.isArray(a) && !Array.isArray(b)
-    ) {
-      const keys = new Set([...Object.keys(a as object), ...Object.keys(b as object)])
+    if (isFieldRecord(a) && isFieldRecord(b)) {
+      const pairs = ancestors.get(a) ?? ancestors.set(a, new Set()).get(a)!
+      if (pairs.has(b)) return
+      pairs.add(b)
+      const keys = new Set([...Object.keys(a), ...Object.keys(b)])
       for (const key of keys) {
-        diff((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], `${path}/${key}`)
+        diff(a[key], b[key], `${path}/${escapePointerSegment(key)}`)
       }
+      pairs.delete(b)
       return
     }
 
-    patch.push({ op: 'replace', path: path || '/', value: redactValue(b, path) })
+    if (isSameNonPlainValue(a, b)) return
+
+    patch.push({ op: 'replace', path, value: redactValue(b, path) })
   }
 
   function redactValue(value: unknown, path: string): unknown {

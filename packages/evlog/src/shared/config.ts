@@ -82,6 +82,7 @@ export function applyDeprecatedAlias<T extends object>(
       warnDeprecated(
         `${opts.adapter}:${opts.from}`,
         `[evlog/${opts.adapter}] '${opts.from}' is deprecated and removed in v3, use '${opts.to}' instead.`,
+        'credential-aliases-removed',
       )
       record[opts.to] = fromValue
     }

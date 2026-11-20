@@ -27,10 +27,12 @@ export default function evlog(options?: NitroModuleOptions) {
       registerEvlogConfigPlugin(nitro)
 
       // Prepend so evlog runs before any framework handler (Nuxt registers its own).
-      nitro.options.errorHandler = prependNitroErrorHandler(
-        nitro.options.errorHandler,
-        resolveModulePath('errorHandler'),
-      )
+      if (options?.errorHandler !== false) {
+        nitro.options.errorHandler = prependNitroErrorHandler(
+          nitro.options.errorHandler,
+          resolveModulePath('errorHandler'),
+        )
+      }
 
       // explicitly tell nitro to bundle evlog's files to correctly resolve nitro dependencies
       // in nitro v2 we can only disable externals globally

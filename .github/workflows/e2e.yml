@@ -1,14 +1,19 @@
 name: e2e
 
 # E2E tests against real observability platforms (Axiom, PostHog, Sentry,
-# Better Stack). They are NOT run on every PR because:
+# Better Stack, HyperDX). They are NOT run on every PR because:
 #   - secrets are not exposed to fork PRs (security)
 #   - we don't want to spam the destinations on every push
 #   - they are slower than unit tests (real network, ingestion lag)
 #
-# The sandbox job runs the Loki and ClickHouse round-trip suites against local
-# containers, and checks that the sandbox Grafana reads what they hold. It needs
-# no secrets and no cloud account.
+# The sandbox job runs the Loki, ClickHouse, OTLP and HyperDX round-trip suites
+# against local containers, and checks that the sandbox Grafana reads what they
+# hold. It needs no secrets and no cloud account.
+#
+# The fs suite needs neither, so it runs on every PR in ci.yml instead.
+#
+# The Datadog and Sazabi suites need a paid account, so this workflow passes them
+# no secret and they report themselves skipped. Run them locally with your own key.
 #
 # Triggers:
 #   - daily cron (3:00 UTC): daily health check
@@ -68,6 +73,7 @@ jobs:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           BETTER_STACK_SOURCE_TOKEN: ${{ secrets.BETTER_STACK_SOURCE_TOKEN }}
+          HYPERDX_API_KEY: ${{ secrets.HYPERDX_API_KEY }}
 
   sandbox:
     # Same gate as the e2e job above.

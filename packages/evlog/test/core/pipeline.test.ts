@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DrainContext } from '../../src/types'
 import { createDrainPipeline } from '../../src/pipeline'
-import { defineDrain } from '../../src/shared/drain'
+import { createHyperDXDrain } from '../../src/adapters/hyperdx'
+import { createPostHogDrain } from '../../src/adapters/posthog'
+import { createSazabiDrain } from '../../src/adapters/sazabi'
+import { defineDrain, defineHttpDrain } from '../../src/shared/drain'
+import { DrainDeliveryError } from '../../src/shared/http'
 import { defined } from '../helpers/defined'
 
 function getBatchArg(call: unknown[]): DrainContext[] {
@@ -447,10 +451,301 @@ describe('createDrainPipeline', () => {
       await vi.runAllTimersAsync()
 
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[evlog/pipeline] Dropped 1 event(s) after 1 attempt(s)'),
+        expect.stringContaining('[evlog/pipeline] Dropped 1 event(s): 1 retries-exhausted.'),
         expect.any(Error),
       )
       errorSpy.mockRestore()
+    })
+  })
+
+  describe('delivery failures', () => {
+    function httpDrain() {
+      return defineHttpDrain<{ url: string }>({
+        name: 'unit-http',
+        resolve: () => ({ url: 'https://ingest.example.com' }),
+        encode: (events, config) => ({ url: config.url, headers: {}, body: JSON.stringify(events) }),
+      })
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('drops a 400 after one request instead of retrying it', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('bad payload', { status: 400 }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 1 }, onDropped })(httpDrain())
+
+      hook(createTestContext(1))
+      await vi.runAllTimersAsync()
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+      expect(onDropped).toHaveBeenCalledTimes(1)
+      expect(defined(onDropped.mock.calls[0], 'onDropped call')[1]).toMatchObject({ status: 400, retryable: false })
+    })
+
+    it('still retries plain errors thrown by a custom drain', async () => {
+      const drain = vi.fn().mockRejectedValueOnce(new Error('socket hang up')).mockResolvedValueOnce(undefined)
+      const hook = createDrainPipeline({ batch: { size: 1 }, retry: { initialDelayMs: 10 } })(drain)
+
+      hook(createTestContext(1))
+      await vi.runAllTimersAsync()
+
+      expect(drain).toHaveBeenCalledTimes(2)
+    })
+
+    it('waits for Retry-After instead of the backoff delay', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response('slow down', { status: 429, headers: { 'Retry-After': '30' } }))
+        .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 1 }, retry: { initialDelayMs: 1000 }, onDropped })(httpDrain())
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(29_999)
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+      expect(onDropped).not.toHaveBeenCalled()
+    })
+
+    it('pauses and keeps the batch when Retry-After exceeds maxDelayMs', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response('quota', { status: 429, headers: { 'Retry-After': '120' } }))
+        .mockResolvedValue(new Response(null, { status: 200 }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({
+        batch: { size: 2, intervalMs: 1000 },
+        retry: { maxAttempts: 1 },
+        onDropped,
+      })(httpDrain())
+
+      hook(createTestContext(1))
+      hook(createTestContext(2))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+
+      hook(createTestContext(3))
+      hook(createTestContext(4))
+      await vi.advanceTimersByTimeAsync(119_999)
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+      expect(hook.pending).toBe(4)
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(onDropped).not.toHaveBeenCalled()
+      const sent = fetchSpy.mock.calls.slice(1).flatMap(([, init]) => JSON.parse(String(init?.body)))
+      expect(sent).toMatchObject([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }])
+    })
+
+    it('keeps the longer pause when a concurrent delivery reports a shorter Retry-After', async () => {
+      const pending: Array<(error: Error) => void> = []
+      const drain = vi.fn(() => new Promise<void>((_, reject) => pending.push(reject)))
+      const hook = createDrainPipeline({ batch: { size: 2, intervalMs: 600_000 }, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      const flushing = hook.flush()
+      hook(createTestContext(2))
+      hook(createTestContext(3))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(drain).toHaveBeenCalledTimes(2)
+
+      defined(pending[1], 'batch send')(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 120_000 }))
+      await vi.advanceTimersByTimeAsync(0)
+      defined(pending[0], 'flush send')(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 60_000 }))
+      await flushing
+
+      await vi.advanceTimersByTimeAsync(61_000)
+      hook(createTestContext(4))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(drain).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not retry into a pause another delivery started while it waited', async () => {
+      const pending: Array<(error: Error) => void> = []
+      const drain = vi.fn(() => new Promise<void>((_, reject) => pending.push(reject)))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline({ batch: { size: 2, intervalMs: 600_000 }, retry: { initialDelayMs: 10_000 }, onDropped })(drain)
+
+      hook(createTestContext(1))
+      const flushing = hook.flush()
+      hook(createTestContext(2))
+      hook(createTestContext(3))
+      await vi.advanceTimersByTimeAsync(0)
+
+      defined(pending[0], 'flush send')(new Error('socket hang up'))
+      await vi.advanceTimersByTimeAsync(0)
+      defined(pending[1], 'batch send')(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 120_000 }))
+      await vi.advanceTimersByTimeAsync(10_000)
+      await flushing
+
+      expect(drain).toHaveBeenCalledTimes(2)
+      expect(getBatchArg(defined(onDropped.mock.calls[0], 'onDropped call')).map(c => c.event.id)).toEqual([1])
+    })
+
+    it('resumes when the pause ends, not after a longer batch interval', async () => {
+      const drain = vi.fn()
+        .mockRejectedValueOnce(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 120_000 }))
+        .mockResolvedValue(undefined)
+      const hook = createDrainPipeline({ batch: { size: 1, intervalMs: 600_000 }, retry: { maxAttempts: 1 } })(drain)
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(120_000)
+
+      expect(drain).toHaveBeenCalledTimes(2)
+    })
+
+    it('waits out a Retry-After longer than setTimeout allows without spinning', async () => {
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 30 * 24 * 3600_000 }))
+      const hook = createDrainPipeline({ batch: { size: 1 } })(drain)
+
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(0)
+
+      const delays = setTimeoutSpy.mock.calls.map(([, ms]) => ms ?? 0)
+      expect(Math.max(...delays)).toBe(2_147_483_647)
+      expect(drain).toHaveBeenCalledTimes(1)
+    })
+
+    it('drops the paused batch on flush() instead of holding shutdown', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('quota', { status: 429, headers: { 'Retry-After': '120' } }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 1 }, onDropped })(httpDrain())
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(0)
+      await hook.flush()
+
+      expect(onDropped).toHaveBeenCalledTimes(1)
+      const [batch, error] = defined(onDropped.mock.calls[0], 'onDropped call')
+      expect((batch as DrainContext[]).map(c => c.event.id)).toEqual([1])
+      expect(error).toMatchObject({ status: 429, retryAfterMs: 120_000 })
+      expect(hook.pending).toBe(0)
+    })
+
+    it('resumes at the end of a pause that starts while a batch timer is pending', async () => {
+      const pending: Array<(error: Error) => void> = []
+      const drain = vi.fn()
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => pending.push(reject)))
+        .mockResolvedValue(undefined)
+      const hook = createDrainPipeline({ batch: { size: 10, intervalMs: 600_000 }, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      const flushing = hook.flush()
+      hook(createTestContext(2))
+      defined(pending[0], 'flush send')(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 120_000 }))
+      await flushing
+
+      await vi.advanceTimersByTimeAsync(120_000)
+      expect(drain).toHaveBeenCalledTimes(2)
+    })
+
+    it('reads retryable and retryAfterMs off a DrainDeliveryError from a custom drain', async () => {
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('too large', { status: 413, retryable: false }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline({ batch: { size: 1 }, onDropped })(drain)
+
+      hook(createTestContext(1))
+      await vi.runAllTimersAsync()
+
+      expect(drain).toHaveBeenCalledTimes(1)
+      expect(onDropped).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['hyperdx', () => createHyperDXDrain({ apiKey: 'k' })],
+      ['sazabi', () => createSazabiDrain({ endpoint: 'https://intake.sazabi.com/k' })],
+      ['posthog logs', () => createPostHogDrain({ apiKey: 'k' })],
+    ])('%s makes one request per pipeline attempt against a 503', async (_name, create) => {
+      // Adapter config resolves through a dynamic import, which fake timers never settle.
+      vi.useRealTimers()
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(new Response('down', { status: 503 })))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({
+        batch: { size: 10, intervalMs: 60_000 },
+        retry: { maxAttempts: 3, initialDelayMs: 1 },
+        onDropped,
+      })(create())
+
+      hook(createTestContext(1))
+      await hook.flush()
+
+      expect(fetchSpy).toHaveBeenCalledTimes(3)
+      expect(onDropped).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('drop reporting', () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('passes the reason of every drop to onDropped and counts it in stats()', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response('bad', { status: 400 }))
+        .mockResolvedValueOnce(new Response('down', { status: 503 }))
+        .mockResolvedValueOnce(new Response(null, { status: 200 }))
+        .mockResolvedValueOnce(new Response('quota', { status: 429, headers: { 'Retry-After': '600' } }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({
+        batch: { size: 1, intervalMs: 60_000 },
+        retry: { maxAttempts: 1 },
+        maxBufferSize: 1,
+        onDropped,
+      })(defineHttpDrain<{ url: string }>({
+        name: 'unit-http',
+        resolve: () => ({ url: 'https://ingest.example.com' }),
+        encode: (events, config) => ({ url: config.url, headers: {}, body: JSON.stringify(events) }),
+      }))
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(0)
+      hook(createTestContext(2))
+      await vi.advanceTimersByTimeAsync(0)
+      hook(createTestContext(3))
+      await vi.advanceTimersByTimeAsync(0)
+      hook(createTestContext(4))
+      await vi.advanceTimersByTimeAsync(0)
+      hook(createTestContext(5))
+      hook(createTestContext(6))
+      await hook.flush()
+
+      const reasons = onDropped.mock.calls.map(([events, , reason]) => [reason, (events as DrainContext[]).map(c => c.event.id)])
+      expect(reasons).toEqual([
+        ['rejected', [1]],
+        ['retries-exhausted', [2]],
+        ['buffer-full', [4]],
+        ['buffer-full', [5]],
+        ['rate-limited', [6]],
+      ])
+      expect(hook.stats()).toEqual({
+        delivered: 1,
+        dropped: { 'buffer-full': 2, 'rejected': 1, 'retries-exhausted': 1, 'rate-limited': 1 },
+      })
+    })
+
+    it('logs buffer-full drops without onDropped, at most once per minute, and the rest on flush()', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const drain = vi.fn().mockResolvedValue(undefined)
+      const hook = createDrainPipeline({ batch: { size: 100, intervalMs: 600_000 }, maxBufferSize: 2 })(drain)
+
+      for (let id = 1; id <= 5; id++) hook(createTestContext(id))
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy.mock.calls[0]?.[0]).toContain('Dropped 1 event(s): 1 buffer-full.')
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      hook(createTestContext(6))
+      expect(errorSpy).toHaveBeenCalledTimes(2)
+      expect(errorSpy.mock.calls[1]?.[0]).toContain('Dropped 3 event(s): 3 buffer-full.')
+
+      hook(createTestContext(7))
+      expect(errorSpy).toHaveBeenCalledTimes(2)
+      await hook.flush()
+      expect(errorSpy).toHaveBeenCalledTimes(3)
+      expect(errorSpy.mock.calls[2]?.[0]).toContain('Dropped 1 event(s): 1 buffer-full.')
+      expect(hook.stats().dropped['buffer-full']).toBe(5)
     })
   })
 

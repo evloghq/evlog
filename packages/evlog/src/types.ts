@@ -311,6 +311,23 @@ export interface DrainContext {
 
 export interface SamplingConfig {
   /**
+   * Severity floor for wide events (`createLogger().emit()`, framework middleware).
+   * Events below it are dropped before `keep` and `rates` are checked, so a `keep`
+   * rule or callback cannot bring them back. `error`, `fatal` and audit events are
+   * never dropped by this floor (error events still go through `rates`).
+   * Independent of the top-level `minLevel`, which governs the global `log` API.
+   *
+   * @example
+   * ```ts
+   * sampling: {
+   *   minLevel: 'warn',            // Drop trace, debug and info wide events
+   *   keep: [{ duration: 1000 }],  // Does not rescue an info event
+   * }
+   * ```
+   */
+  minLevel?: Exclude<LogLevel, 'error' | 'fatal'>
+
+  /**
    * Sampling rates per log level (head sampling).
    * Values are percentages from 0 to 100.
    * Default: 100 for all levels except trace (log everything).
@@ -390,7 +407,7 @@ export interface LoggerConfig {
   sampling?: SamplingConfig
   /**
    * Minimum severity for the global `log` API (tagged and object form).
-   * Does not apply to `createLogger().emit()` / request wide events (use `sampling` for volume).
+   * Does not apply to `createLogger().emit()` / request wide events (use `sampling.minLevel` for a floor, `sampling.rates` for volume).
    * Order: trace < debug < info < warn < error < fatal.
    * @default 'debug' (all levels)
    */
@@ -1062,6 +1079,12 @@ export interface RequestLoggerOptions {
   method?: string
   path?: string
   requestId?: string
+  /**
+   * Name of the unit of work, stored as `operation` on the wide event.
+   * Lets a task, queue worker or cron job name itself at creation time, the
+   * same field `log.fork()` sets on its child.
+   */
+  operation?: string
   /**
    * Registers async drain work with the host runtime so it can finish after the
    * HTTP response is returned. Required on **Cloudflare Workers** (and similar

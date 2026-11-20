@@ -31,6 +31,20 @@ describe('createRequestLogger', () => {
     expect(context.requestId).toBe('req-123')
   })
 
+  it('carries operation from options into the emitted event', () => {
+    const logger = createRequestLogger({ operation: 'job:sync', requestId: 'r1' })
+
+    const event = defined(logger.emit())
+    expect(event.operation).toBe('job:sync')
+    expect(event.requestId).toBe('r1')
+  })
+
+  it('omits operation when the option is not set', () => {
+    const logger = createRequestLogger({ requestId: 'r1' })
+
+    expect('operation' in logger.getContext()).toBe(false)
+  })
+
   it('accumulates context with set()', () => {
     const logger = createRequestLogger({ method: 'GET', path: '/api/user' })
 

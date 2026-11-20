@@ -3,6 +3,7 @@ import type { ConfigField } from '../shared/config'
 import { formatPublicEnvKeys, resolveAdapterConfig } from '../shared/config'
 import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
+import { warnDeprecated } from '../shared/deprecate'
 import type { OtlpAttributeValue } from '../shared/event'
 import { formatEventSummary, isPlainObject, toOtlpAttributeValue } from '../shared/event'
 import { EVLOG_VERSION } from '../shared/http'
@@ -26,7 +27,7 @@ export interface OTLPConfig {
   /** OTLP HTTP endpoint (e.g., http://localhost:4318) */
   endpoint: string
   /**
-   * Log record shape. Default: `'json'`.
+   * Log record shape. Default: `'json'`, and `'compact'` in v3.
    * @see {@link OTLPRecordShape}
    */
   recordShape?: OTLPRecordShape
@@ -387,12 +388,30 @@ export function createOTLPDrain(overrides?: Partial<OTLPConfig>) {
         console.error(`[evlog/otlp] Unsupported protocol "${config.protocol}". Use "http/json" or "http/protobuf".`)
         return null
       }
+      warnUnsetV3Defaults(config)
       config.envResourceAttributes = parseOtelKeyValueList(process.env.OTEL_RESOURCE_ATTRIBUTES)
       return withProtobufEncoder(config as ResolvedOTLPConfig)
     },
     label: 'OTLP',
     encode: (events, config) => (events.length === 0 ? null : encodeOTLPRequest(events, config)),
   })
+}
+
+const V3_DEFAULT_CHANGES = {
+  recordShape: { current: '\'json\'', v3: '\'compact\'' },
+  semanticConventions: { current: 'false', v3: 'true' },
+} as const
+
+function warnUnsetV3Defaults(config: Partial<OTLPConfig>): void {
+  const unset = (['recordShape', 'semanticConventions'] as const).filter(key => config[key] === undefined)
+  if (unset.length === 0) return
+  const changes = unset.map(key => `${key} to ${V3_DEFAULT_CHANGES[key].v3}`).join(' and ')
+  const keep = unset.map(key => `${key}: ${V3_DEFAULT_CHANGES[key].current}`).join(', ')
+  warnDeprecated(
+    `otlp:v3-defaults:${unset.join(',')}`,
+    `[evlog/otlp] v3 changes the default of ${changes}. Set ${keep} to keep this output.`,
+    'compact-output-by-default',
+  )
 }
 
 function encodeOTLPRequest(events: WideEvent[], config: ResolvedOTLPConfig): HttpDrainRequest {

@@ -1,5 +1,5 @@
 import type { Framework } from '../frameworks'
-import type { ParseFn } from './parse'
+import type { ParseFn, SourceRange } from './parse'
 import type { ProjectFacts } from './project-facts'
 
 export type { Framework }
@@ -67,9 +67,21 @@ export interface RawRouteEntry {
 }
 
 /**
- * What the entry point's wide event carries, as far as the handler's own file
- * spells it out: field paths from `log.set()`, actions from `log.audit()`.
- * Context added in a helper, a middleware, or an enricher is not here.
+ * A route as its adapter found it.
+ *
+ * `scope` is the source the entry point is written in, for a file that can
+ * declare several: the route registration, the exported method, the action.
+ * Each is then judged on the code it runs instead of on the whole file. Left
+ * out, the file is the entry point. It is never written to `evlog.map.json`.
+ */
+export interface ExtractedRoute extends RawRouteEntry {
+  scope?: SourceRange
+}
+
+/**
+ * What the entry point's wide event carries, as far as its handler spells it
+ * out: field paths from `log.set()`, actions from `log.audit()`. Context added
+ * in another file, a middleware, or an enricher is not here.
  */
 export interface EventShape {
   /** Dotted leaf paths, `user.id`, in the order the handler sets them. */

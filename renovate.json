@@ -32,10 +32,9 @@
       "enabled": false
     },
     {
-      "description": "Keep the eve peer floor where it is: a new eve release must not raise the minimum evlog accepts",
+      "description": "Keep peer floors where they are: new releases must not raise the minimum evlog accepts",
       "matchFileNames": ["packages/evlog/package.json"],
       "matchDepTypes": ["peerDependencies"],
-      "matchPackageNames": ["eve"],
       "rangeStrategy": "widen"
     }
   ],

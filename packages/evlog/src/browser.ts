@@ -18,7 +18,7 @@ export type BrowserLogDrainOptions = HttpLogDrainOptions
  * @deprecated Removed in evlog v3. Use `createHttpDrain` from `evlog/http` instead.
  */
 export function createBrowserDrain(config: BrowserDrainConfig) {
-  warnDeprecated('browser:entry', BROWSER_ENTRY_MESSAGE)
+  warnDeprecated('browser:entry', BROWSER_ENTRY_MESSAGE, 'browser-entry-removed')
   return createHttpDrain(config)
 }
 
@@ -26,6 +26,6 @@ export function createBrowserDrain(config: BrowserDrainConfig) {
  * @deprecated Removed in evlog v3. Use `createHttpLogDrain` from `evlog/http` instead.
  */
 export function createBrowserLogDrain(options: BrowserLogDrainOptions) {
-  warnDeprecated('browser:entry', BROWSER_ENTRY_MESSAGE)
+  warnDeprecated('browser:entry', BROWSER_ENTRY_MESSAGE, 'browser-entry-removed')
   return createHttpLogDrain(options)
 }

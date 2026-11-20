@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { withTelemetry } from '@evlog/telemetry'
@@ -47,6 +47,37 @@ describe('telemetry status', () => {
     expect(out).toContain('- `initFramework`: `nuxt`')
     expect(out).toContain('- `mapGrade`: `excellent`')
     expect(out).toContain('- `logsView`: ')
+  })
+})
+
+describe('telemetry state in a test run', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('is written under a scratch config home, never the contributor\'s own', async () => {
+    const scratch = process.env.XDG_CONFIG_HOME
+    expect(scratch?.startsWith(tmpdir())).toBe(true)
+
+    vi.stubEnv('EVLOG_TELEMETRY', '1')
+    vi.stubEnv('DO_NOT_TRACK', '')
+    vi.stubEnv('EVLOG_TELEMETRY_DEBUG', '0')
+    /* The discard port: a flush, if one were attempted, is refused at once. */
+    vi.stubEnv('EVLOG_TELEMETRY_ENDPOINT', 'http://127.0.0.1:9/ingest')
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const tree = withTelemetry(
+      defineCommand({ meta: { name: 'evlog' }, subCommands: { doctor } }),
+      { name: 'evlog-cli-isolation', version: '0.0.0' },
+    )
+
+    await runCommand(tree, { rawArgs: ['doctor', '--no-header', '--cwd', join(import.meta.dirname, 'map/fixtures/hono-basic')] })
+
+    const outbox = await readFile(join(scratch!, 'evlog-cli-isolation', 'telemetry', 'outbox.ndjson'), 'utf8')
+    expect(outbox).toContain('"command":"doctor"')
+  })
+
+  it('is off unless a test turns it on', () => {
+    expect(process.env.EVLOG_TELEMETRY).toBe('0')
   })
 })
 

@@ -41,24 +41,6 @@ export interface DoctorResult {
   summary: CheckSummary
 }
 
-const MIN_NODE_MAJOR = 22
-
-function checkNode(ctx: CliContext): Check {
-  const major = Number.parseInt(ctx.nodeVersion.replace(/^v/, ''), 10)
-  if (Number.isNaN(major)) {
-    return { id: 'node', status: 'warn', message: `unrecognized Node version ${ctx.nodeVersion}` }
-  }
-  if (major < MIN_NODE_MAJOR) {
-    return {
-      id: 'node',
-      status: 'fail',
-      message: `Node ${ctx.nodeVersion} is too old`,
-      hint: `evlog CLI requires Node >= ${MIN_NODE_MAJOR}`,
-    }
-  }
-  return { id: 'node', status: 'ok', message: ctx.nodeVersion }
-}
-
 function checkProject(project: ProjectInfo): Check {
   if (!project.packageJson) {
     return {
@@ -201,11 +183,6 @@ function findingsForChecks(
   for (const check of checks) {
     if (check.status === 'ok') continue
 
-    if (check.id === 'node' && check.status === 'fail') {
-      findings.push({ source: cliErrors.NODE_TOO_OLD, id: check.id, status: check.status })
-      continue
-    }
-
     if (check.id === 'project') {
       findings.push({ source: cliErrors.PROJECT_NO_PACKAGE, id: check.id, status: check.status })
       continue
@@ -273,7 +250,7 @@ export async function runDoctor(
 
   const checks = await log.step('checks', async () => {
     const environment: Check[] = [
-      checkNode(ctx),
+      { id: 'node', status: 'ok', message: ctx.nodeVersion },
       checkProject(project),
     ]
     const stackCheck = checkStack(stack, evlogReached(resolved))

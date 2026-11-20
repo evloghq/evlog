@@ -35,11 +35,13 @@ export default function evlog(options?: NitroModuleOptions) {
       }
 
 
-      const handlers = prependNitroErrorHandler(
-        nitro.options.errorHandler,
-        resolveModulePath('errorHandler'),
-      )
-      nitro.options.errorHandler = Array.isArray(handlers) ? handlers : [handlers]
+      if (options?.errorHandler !== false) {
+        const handlers = prependNitroErrorHandler(
+          nitro.options.errorHandler,
+          resolveModulePath('errorHandler'),
+        )
+        nitro.options.errorHandler = Array.isArray(handlers) ? handlers : [handlers]
+      }
 
       // runtimeConfig and the JSON bridges below serialize the config:
       // RegExps would collapse to {} and function-valued redact policy

@@ -76,6 +76,24 @@ export interface ModuleOptions {
   console?: boolean
 
   /**
+   * Install evlog's client side: the browser plugin, the `log`, `setIdentity`,
+   * `clearIdentity` and `setMinLevel` auto-imports, and `runtimeConfig.public.evlog`.
+   * Set to false for a server-only app. The Nitro plugin, the error handler and
+   * the server auto-imports stay registered.
+   * @default true
+   */
+  client?: boolean
+
+  /**
+   * Register evlog's Nitro error handler, which answers errors with JSON and
+   * includes `why`, `fix` and `link` from an `EvlogError`. Set to false when the
+   * app owns its error responses: the next Nitro error handler (yours, or the
+   * framework's) answers instead. Errors still reach the wide event.
+   * @default true
+   */
+  errorHandler?: boolean
+
+  /**
    * @default true in development, false in production
    */
   pretty?: boolean
@@ -331,9 +349,10 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
     const isNitroV3 = getNitroVersionSafe(nuxt) === 3
 
     if (options.axiom?.token !== undefined) {
-      warnDeprecated('nuxt:axiom.token', '[evlog/nuxt] evlog.axiom.token is deprecated and removed in v3, use evlog.axiom.apiKey.')
+      warnDeprecated('nuxt:axiom.token', '[evlog/nuxt] evlog.axiom.token is deprecated and removed in v3, use evlog.axiom.apiKey.', 'credential-aliases-removed')
     }
 
+    const clientEnabled = options.client ?? true
     const transportEnabled = options.transport?.enabled ?? false
     const transportEndpoint = options.transport?.endpoint ?? '/api/_evlog/ingest'
     const transportCredentials = options.transport?.credentials ?? 'same-origin'
@@ -374,14 +393,16 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
     // often cannot resolve useRuntimeConfig().evlog via dynamic import reliably).
     // @ts-expect-error nitro:config hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:config', (nitroConfig: NitroConfig) => {
-      const evlogHandler = resolver.resolve(
-        isNitroV3 ? '../nitro/v3/errorHandler' : '../nitro/errorHandler',
-      ).replace(/\\/g, '/')
-      // Nitro's DeepPartial config types array entries as possibly undefined; the helper expects string paths.
-      nitroConfig.errorHandler = prependNitroErrorHandler(
-        nitroConfig.errorHandler as string | string[] | undefined,
-        evlogHandler,
-      )
+      if (options.errorHandler !== false) {
+        const evlogHandler = resolver.resolve(
+          isNitroV3 ? '../nitro/v3/errorHandler' : '../nitro/errorHandler',
+        ).replace(/\\/g, '/')
+        // Nitro's DeepPartial config types array entries as possibly undefined; the helper expects string paths.
+        nitroConfig.errorHandler = prependNitroErrorHandler(
+          nitroConfig.errorHandler as string | string[] | undefined,
+          evlogHandler,
+        )
+      }
 
       const evlogForNitro = nuxt.options.runtimeConfig.evlog ?? options
       if (evlogForNitro !== undefined && typeof evlogForNitro === 'object') {
@@ -390,16 +411,18 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
         process.env.__EVLOG_CONFIG = JSON.stringify(evlogForNitro)
       }
     })
-    nuxt.options.runtimeConfig.public.evlog = {
-      enabled: options.enabled,
-      console: options.console,
-      pretty: options.pretty,
-      minLevel: options.minLevel,
-      transport: {
-        enabled: transportEnabled,
-        endpoint: transportEndpoint,
-        credentials: transportCredentials,
-      },
+    if (clientEnabled) {
+      nuxt.options.runtimeConfig.public.evlog = {
+        enabled: options.enabled,
+        console: options.console,
+        pretty: options.pretty,
+        minLevel: options.minLevel,
+        transport: {
+          enabled: transportEnabled,
+          endpoint: transportEndpoint,
+          credentials: transportCredentials,
+        },
+      }
     }
 
     if (transportEnabled) {
@@ -424,7 +447,9 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
     }
 
     addServerPlugin(resolver.resolve(isNitroV3 ? '../nitro/v3/plugin' : '../nitro/plugin'))
-    addServerPlugin(resolver.resolve('../runtime/server/public-config'))
+    if (clientEnabled) {
+      addServerPlugin(resolver.resolve('../runtime/server/public-config'))
+    }
     // @ts-expect-error nitro:init hook exists but is not in NuxtHooks type
     nuxt.hook('nitro:init', (nitro: Nitro) => {
       registerEvlogConfigPlugin(nitro)
@@ -437,32 +462,37 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
       nodeTsConfig.include.push(relative(nuxt.options.buildDir, configFile).replace(/\\/g, '/'))
     })
 
-    addPlugin({
-      src: resolver.resolve('../runtime/client/plugin'),
-      mode: 'client',
-    })
+    if (clientEnabled) {
+      addPlugin({
+        src: resolver.resolve('../runtime/client/plugin'),
+        mode: 'client',
+      })
+
+      addImports([
+        {
+          name: 'log',
+          from: resolver.resolve('../runtime/client/log'),
+          dtsDisabled: true,
+        },
+        {
+          name: 'setIdentity',
+          from: resolver.resolve('../runtime/client/log'),
+          dtsDisabled: true,
+        },
+        {
+          name: 'clearIdentity',
+          from: resolver.resolve('../runtime/client/log'),
+          dtsDisabled: true,
+        },
+        {
+          name: 'setMinLevel',
+          from: resolver.resolve('../runtime/client/log'),
+          dtsDisabled: true,
+        },
+      ])
+    }
 
     addImports([
-      {
-        name: 'log',
-        from: resolver.resolve('../runtime/client/log'),
-        dtsDisabled: true,
-      },
-      {
-        name: 'setIdentity',
-        from: resolver.resolve('../runtime/client/log'),
-        dtsDisabled: true,
-      },
-      {
-        name: 'clearIdentity',
-        from: resolver.resolve('../runtime/client/log'),
-        dtsDisabled: true,
-      },
-      {
-        name: 'setMinLevel',
-        from: resolver.resolve('../runtime/client/log'),
-        dtsDisabled: true,
-      },
       {
         name: 'createEvlogError',
         from: resolver.resolve('../error'),
@@ -475,14 +505,18 @@ const evlogModule: NuxtModule<ModuleOptions, ModuleOptions, false> = defineNuxtM
       },
     ])
 
-    addTypeTemplate({
-      filename: 'types/evlog-client.d.ts',
-      getContents: () => `declare global {
-  const log: typeof import('evlog/client').log
+    const clientGlobals = clientEnabled
+      ? `  const log: typeof import('evlog/client').log
   const setIdentity: typeof import('evlog/client').setIdentity
   const clearIdentity: typeof import('evlog/client').clearIdentity
   const setMinLevel: typeof import('evlog/client').setMinLevel
-  const createEvlogError: typeof import('evlog').createEvlogError
+`
+      : ''
+
+    addTypeTemplate({
+      filename: 'types/evlog-client.d.ts',
+      getContents: () => `declare global {
+${clientGlobals}  const createEvlogError: typeof import('evlog').createEvlogError
   const parseError: typeof import('evlog').parseError
 }
 export {}
@@ -542,8 +576,9 @@ export {}
       // name — since \`skipLibCheck\` is on by default in Nuxt's generated
       // tsconfigs, TypeScript silently keeps whichever declaration it sees
       // first instead of erroring, so the losing side's shape goes unused
-      // without warning.
-    }, { nitro: true })
+      // without warning. With `client: false` there is no client `log`, and the
+      // app project needs this one for server routes that `$fetch` pulls in.
+    }, clientEnabled ? { nitro: true } : { nitro: true, nuxt: true })
 
     const stripLevels = options.strip ?? ['debug']
     if (stripLevels.length > 0) {
