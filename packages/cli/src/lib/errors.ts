@@ -339,7 +339,7 @@ export const cliErrors = defineErrorCatalog('cli', {
     message: ({ reason }: { reason: string }) =>
       `--ask needs @evlog/signals and ai: ${reason}`,
     why: 'A question is answered by a decision model through @evlog/signals, which the CLI loads from where the CLI itself is installed, only when --ask is passed. A CLI fetched by npx or bunx cannot see packages installed in the project',
-    fix: 'Install the CLI beside them in the project and run it from there: pnpm add -D @evlog/cli @evlog/signals ai, then pnpm evlog logs --ask',
+    fix: 'Install the CLI beside them in the project and run it from there: pnpm add -D @evlog/cli @evlog/signals \'ai@^7.0.130\', then pnpm evlog logs --ask',
     link: 'https://evlog.dev/cli/logs',
     tags: ['logs'],
   },

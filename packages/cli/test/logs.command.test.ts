@@ -759,7 +759,7 @@ describe('evlog logs --ask', () => {
     try {
       const { runLogs: run } = await import('../src/commands/logs')
       const cwd = await makeSink()
-      await expect(run(fakeContext(cwd), { ask: 'q' }, { now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNAVAILABLE', fix: expect.stringContaining('pnpm add -D @evlog/cli @evlog/signals ai') })
+      await expect(run(fakeContext(cwd), { ask: 'q' }, { now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNAVAILABLE', fix: expect.stringContaining('pnpm add -D @evlog/cli @evlog/signals \'ai@^7.0.130\'') })
     } finally {
       vi.doUnmock('@evlog/signals')
       vi.resetModules()
