@@ -1,3 +1,4 @@
+export { clientFault } from './client-fault'
 export { defineSignal } from './define'
 export type {
   BooleanSignalInput,

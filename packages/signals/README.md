@@ -125,6 +125,7 @@ Returns an evlog plugin.
 | Option | Default | Notes |
 | --- | --- | --- |
 | `signals` | | The signals to run. Names must be unique. |
+| `name` | `'signals'` | Plugin name. A second instance needs its own: evlog keeps one plugin per name. |
 | `model` | `'typesafe-ai/jev'` | AI SDK evaluation model. A gateway id (`'liquid/d1'`), or a provider instance such as `typeSafeAi.evaluationModel('jev-latest')` or `openai.evaluationModel('gpt-6-luna')`. |
 | `budget.perMinute` | `600` | Model calls per minute, shared by all signals, per process. At most 10 seconds of it is spent at once. |
 | `budget.keepShare` | `0.25` | Share of `perMinute` that only keep signals spend, so an error storm judged in `enrich` cannot starve them. |
@@ -136,7 +137,7 @@ Returns an evlog plugin.
 | `maxStateChars` | `100000` | Larger events are skipped. |
 | `providerOptions` | | Forwarded to the call, e.g. `{ gateway: { zeroDataRetention: true } }`. |
 | `evaluate` | AI SDK `experimental_decide` | Replace the model call. Tests, record and replay. |
-| `stampModel` | `false` | Also write the answering model's id on `event.signalsModel`. For comparing models. |
+| `stampModel` | `false` | Also write the answering model's id on `event.signalsModel`, keyed by plugin `name`. For comparing models. |
 
 `plugin.stats()` returns `{ calls, skipped, errors, refused, cached, inputTokens }`.
 
@@ -179,6 +180,18 @@ The binding limit is rate: 1,200 requests per minute per TypeSafe account, about
 The default `state` is the whole event. A keep signal runs before redaction, so use `state` to pick fields if the request context holds anything you would not send to a model.
 
 A keep signal waits for the model before the sampling decision, up to `timeoutMs`. The response is already sent, so the client never waits, and `durationMs` is measured before keep hooks run, so the event carries the request's duration, not the judgment's.
+
+## Browser errors
+
+`clientFault` is a ready-made signal for errors logged in the browser and received through the ingest endpoint (`source: 'client'`). It answers `app`, `network`, `third-party` or `browser`, and shares one verdict across errors with the same name and message. The endpoint is unauthenticated, so give it its own instance and budget:
+
+```ts
+import { clientFault, createSignals } from '@evlog/signals'
+
+createSignals({ name: 'client-signals', signals: [clientFault], budget: { perMinute: 60 } })
+```
+
+Server signals still see every ingested event, and a crafted client event can carry `status: 500`. Add `e.source !== 'client'` to the `when` of each server signal so client events never spend its budget.
 
 ## Use cases
 

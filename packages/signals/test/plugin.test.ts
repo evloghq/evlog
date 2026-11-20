@@ -86,7 +86,14 @@ describe('createSignals enrich', () => {
     const { evaluate } = fakeEvaluate(yes, 'jev-1.13.0')
     const ctx = enrichCtx({ status: 503, path: '/api/pay' })
     await createSignals({ signals: [fault], evaluate, stampModel: true }).enrich!(ctx)
-    expect(ctx.event.signalsModel).toBe('jev-1.13.0')
+    expect(ctx.event.signalsModel).toEqual({ signals: 'jev-1.13.0' })
+  })
+
+  it('keeps each named plugin\'s model id when two of them judge one event', async () => {
+    const ctx = enrichCtx({ status: 503, path: '/api/pay' })
+    await createSignals({ signals: [fault], evaluate: fakeEvaluate(yes, 'jev-1.13.0').evaluate, stampModel: true }).enrich!(ctx)
+    await createSignals({ name: 'challenger', signals: [defineSignal({ name: 'retryable', when: e => (e.status ?? 0) >= 500, ask: 'Would a retry succeed?' })], evaluate: fakeEvaluate(yes, 'other-2').evaluate, stampModel: true }).enrich!(ctx)
+    expect(ctx.event.signalsModel).toEqual({ signals: 'jev-1.13.0', challenger: 'other-2' })
   })
 
   it('makes no call when no signal is due', async () => {
@@ -181,7 +188,7 @@ describe('createSignals shared calls', () => {
 
     const both = [enrichCtx({ status: 502, path: '/api/pay', requestId: 'a' }), enrichCtx({ status: 502, path: '/api/pay', requestId: 'b' })]
     await Promise.all(both.map(ctx => plugin.enrich!(ctx)))
-    expect(both.map(ctx => ctx.event.signalsModel)).toEqual(['jev-1.13.0', 'jev-1.13.0'])
+    expect(both.map(ctx => ctx.event.signalsModel)).toEqual([{ signals: 'jev-1.13.0' }, { signals: 'jev-1.13.0' }])
   })
 
   it('does not share a state-size skip with a same-key event whose state fits', async () => {
