@@ -596,6 +596,23 @@ describe('createRequestLogger', () => {
       expect(drain).toHaveBeenCalledTimes(1)
     })
 
+    it('keeps an audit record even when info sampling is zero', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({ pretty: false, drain, sampling: { rates: { info: 0 } } })
+
+      const logger = createRequestLogger({})
+      logger.discard()
+      logger.audit({
+        action: 'invoice.refund',
+        actor: { type: 'user', id: 'u_1' },
+        target: { type: 'invoice', id: 'inv_1' },
+      })
+      const event = logger.emit()
+
+      expect(event).toMatchObject({ audit: { action: 'invoice.refund', outcome: 'success' } })
+      expect(drain).toHaveBeenCalledTimes(1)
+    })
+
     it('wins over a keep rule and head sampling', () => {
       const { drain } = createPipelineSpies()
       initLogger({

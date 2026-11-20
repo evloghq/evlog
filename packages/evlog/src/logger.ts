@@ -1131,13 +1131,15 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const durationMs = overrides?._durationMs ?? elapsedMs(startTime)
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
-      if (discarded && !hasError && !hasFatal && manualLevel !== 'error' && manualLevel !== 'fatal') {
+      // Audit records are compliance evidence and stay force-kept, so read the
+      // flag before discard decides whether the event is dropped.
+      const auditForceKeep = consumeAuditForceKeep(context)
+      if (discarded && !auditForceKeep && !hasError && !hasFatal && manualLevel !== 'error' && manualLevel !== 'fatal') {
         emitted = true
         pendingWideEvent = null
         return null
       }
 
-      const auditForceKeep = consumeAuditForceKeep(context)
       // error and fatal are checked by level, not through the floor, so an untyped floor ('WARN', 'fatal') cannot drop them.
       const floor = state.sampling.minLevel
       if (!auditForceKeep && level !== 'error' && level !== 'fatal' && floor && !isLevelEnabled(level, floor)) {

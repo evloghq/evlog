@@ -776,7 +776,8 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * Takes precedence over `sampling.keep` and head sampling. A logger that calls
    * `error()` or `fatal()` after `discard()`, or sets a manual `error` / `fatal`
    * level, emits normally and bypasses head sampling, because a failure must not
-   * be dropped silently.
+   * be dropped silently. An {@link audit} record also survives `discard()`, since
+   * it is retention evidence rather than background noise.
    *
    * No-ops with a console warning after the wide event has been emitted.
    */
