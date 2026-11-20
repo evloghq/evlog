@@ -158,6 +158,56 @@ describe('createSignals enrich', () => {
   })
 })
 
+describe('createSignals shared calls', () => {
+  const keyed = defineSignal({
+    name: 'fault',
+    when: e => (e.status ?? 0) >= 400,
+    ask: 'Who is responsible for this failure?',
+    choice: { upstream: 'A dependency failed', app: 'Our bug', client: 'Bad input' },
+    cacheKey: e => String(e.path),
+  })
+
+  it('stamps the model id on events that joined a running call', async () => {
+    const { evaluate } = fakeEvaluate(yes, 'jev-1.13.0')
+    const plugin = createSignals({
+      signals: [keyed],
+      stampModel: true,
+      evaluate: async (request) => {
+        await new Promise(resolve => setTimeout(resolve, 10))
+        return evaluate(request)
+      },
+    })
+
+    const both = [enrichCtx({ status: 502, path: '/api/pay', requestId: 'a' }), enrichCtx({ status: 502, path: '/api/pay', requestId: 'b' })]
+    await Promise.all(both.map(ctx => plugin.enrich!(ctx)))
+    expect(both.map(ctx => ctx.event.signalsModel)).toEqual(['jev-1.13.0', 'jev-1.13.0'])
+  })
+
+  it('lets the next event retry a key whose call failed before reaching the model', async () => {
+    const { evaluate, calls } = fakeEvaluate(yes)
+    let throwing = true
+    const plugin = createSignals({
+      signals: [keyed],
+      evaluate,
+      state: (e) => {
+        if (throwing) throw new Error('unserializable')
+        return { status: e.status, path: e.path }
+      },
+    })
+
+    const joined = enrichCtx({ status: 502, path: '/api/pay', requestId: 'b' })
+    const results = await Promise.allSettled([plugin.enrich!(enrichCtx({ status: 502, path: '/api/pay', requestId: 'a' })), plugin.enrich!(joined)])
+    expect(results.map(r => r.status)).toEqual(['rejected', 'fulfilled'])
+    expect(joined.event.signals).toBeUndefined()
+
+    throwing = false
+    const retried = enrichCtx({ status: 502, path: '/api/pay', requestId: 'c' })
+    await plugin.enrich!(retried)
+    expect(calls).toHaveLength(1)
+    expect(retried.event.signals).toEqual({ fault: { value: 'upstream', confidence: 0.9 } })
+  })
+})
+
 describe('createSignals keep', () => {
   it('promotes past sampling and reuses the verdict in enrich without a second call', async () => {
     const { evaluate, calls } = fakeEvaluate(yes)
@@ -244,7 +294,7 @@ describe('createSignals fails open', () => {
     expect(ok.event.signals).toEqual({ fault: { value: 'upstream', confidence: 0.9 } })
   })
 
-  it('records no verdict on a refusal and leaves the breaker closed', async () => {
+  it('records no verdict on a refusal and leaves the breaker as it was', async () => {
     const { evaluate, calls } = fakeEvaluate(yes)
     let refuse = true
     const plugin = createSignals({
@@ -265,6 +315,29 @@ describe('createSignals fails open', () => {
     expect(calls).toHaveLength(1)
     expect(next.event.signals).toEqual({ fault: { value: 'upstream', confidence: 0.9 } })
     expect(plugin.stats()).toMatchObject({ refused: 1, errors: 0, skipped: 0 })
+  })
+
+  it('does not close an open breaker on a refusal', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let outcome: 'fail' | 'refuse' = 'fail'
+    let attempts = 0
+    const plugin = createSignals({
+      signals: [fault],
+      evaluate: () => {
+        attempts++
+        if (outcome === 'refuse') return Promise.reject(new Experimental_DecisionRefusalError({ questionIds: ['fault'], provider: 'test', modelId: 'test' }))
+        return Promise.reject(new Error('503'))
+      },
+    })
+
+    const first = plugin.enrich!(enrichCtx({ status: 500, path: '/a' }))
+    outcome = 'refuse'
+    const second = plugin.enrich!(enrichCtx({ status: 500, path: '/b' }))
+    await Promise.all([first, second])
+    await plugin.enrich!(enrichCtx({ status: 500, path: '/c' }))
+
+    expect(attempts).toBe(2)
+    expect(plugin.stats()).toMatchObject({ errors: 1, refused: 1, skipped: 1 })
   })
 
   it('aborts a slow call at the timeout', async () => {

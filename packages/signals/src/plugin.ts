@@ -120,13 +120,13 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   const keepSignals = options.signals.filter(s => s.keep)
 
   const cache = createLru<Verdict>(1_000)
-  const inflight = new Map<string, Promise<Verdict | undefined>>()
+  const inflight = new Map<string, Promise<Judged | undefined>>()
   const pending = createLru<Judged>(1_000)
   const stats: SignalsStats = { calls: 0, skipped: 0, errors: 0, refused: 0, cached: 0, inputTokens: 0 }
 
   async function judge(signals: Signal[], input: SignalInput): Promise<Judged> {
     const verdicts = new Map<string, Verdict>()
-    const shared: Array<[signal: Signal, verdict: Promise<Verdict | undefined>]> = []
+    const shared: Array<[signal: Signal, call: Promise<Judged | undefined>]> = []
     const toAsk: Array<[signal: Signal, cacheId: string | undefined]> = []
     for (const signal of signals) {
       const key = signal.cacheKey?.(input)
@@ -145,25 +145,29 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
 
     const [fresh, joined] = await Promise.all([
       toAsk.length > 0 ? ask(toAsk, input) : undefined,
-      Promise.all(shared.map(([, verdict]) => verdict)),
+      Promise.all(shared.map(([, call]) => call)),
     ])
+    let modelId = fresh?.modelId
     for (const [name, verdict] of fresh?.verdicts ?? []) verdicts.set(name, verdict)
     shared.forEach(([signal], i) => {
-      const verdict = joined[i]
+      const verdict = joined[i]?.verdicts.get(signal.name)
       if (!verdict) return
       verdicts.set(signal.name, verdict)
+      modelId ??= joined[i]!.modelId
       stats.cached++
     })
-    return { verdicts, modelId: fresh?.modelId }
+    return { verdicts, modelId }
   }
 
   // Registered before the call is awaited, so concurrent events with the same cache key join it instead of calling again.
   function ask(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, input: SignalInput): Promise<Judged> {
     const call = callModel(toAsk, input)
-    for (const [signal, id] of toAsk) {
+    // The caller gets the rejection; events that joined get no verdict, and the entry is cleared either way so the next event can retry.
+    const settled = call.catch(() => undefined)
+    for (const [, id] of toAsk) {
       if (id === undefined) continue
-      inflight.set(id, call.then(judged => judged.verdicts.get(signal.name)))
-      void call.then(() => inflight.delete(id))
+      inflight.set(id, settled)
+      void settled.then(() => inflight.delete(id))
     }
     return call
   }
@@ -199,7 +203,6 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
     } catch (err) {
       if (isRefusal(err)) {
         stats.refused++
-        budget.succeed()
         return { verdicts }
       }
       stats.errors++
