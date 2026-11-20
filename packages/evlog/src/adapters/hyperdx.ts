@@ -89,6 +89,8 @@ export function createHyperDXDrain(overrides?: Partial<HyperDXConfig>) {
       return config as HyperDXConfig
     },
     send: sendBatchToHyperDX,
+    // Raw callers (the pipeline) own retries: single attempt unless the config sets retries explicitly.
+    rawSend: (events, config) => sendBatchToHyperDX(events, { ...config, retries: config.retries ?? 0 }),
   })
 }
 
