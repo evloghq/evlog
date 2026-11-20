@@ -43,17 +43,36 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
   const logs = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
   let events: TurnEvent[] = []
 
-  beforeAll(async () => {
-    await run(join(import.meta.dirname, '../node_modules/.bin/eve'), ['eval'], {
+  const noOidc = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
+  const refused = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
+  const OIDC = `e30.${Buffer.from(JSON.stringify({ owner_id: 'team_1', project_id: 'prj_1', environment: 'production' })).toString('base64url')}.fixture-signature`
+  let readsWithoutOidc: TurnEvent[] = []
+  let readsRefused: TurnEvent[] = []
+  const read = (dir: string) => readdirSync(dir).filter(file => file.endsWith('.jsonl')).flatMap(file =>
+    readFileSync(join(dir, file), 'utf8').trim().split('\n').map(line => JSON.parse(line) as TurnEvent))
+  const evaluate = (dir: string, args: string[], env: Record<string, string> = {}) => {
+    const { VERCEL: _vercel, VERCEL_OIDC_TOKEN: _token, ...inherited } = process.env
+    return run(join(import.meta.dirname, '../node_modules/.bin/eve'), ['eval', ...args], {
       cwd: fixture,
       // Under Vitest's NODE_ENV=test the fixture agent never reaches its tool.
-      env: { ...process.env, NODE_ENV: 'development', EVE_TELEMETRY_DISABLED: '1', EVLOG_FIXTURE_LOGS: logs },
+      env: { ...inherited, NODE_ENV: 'development', EVE_TELEMETRY_DISABLED: '1', EVLOG_FIXTURE_LOGS: dir, ...env },
     })
-    events = readdirSync(logs).filter(file => file.endsWith('.jsonl')).flatMap(file =>
-      readFileSync(join(logs, file), 'utf8').trim().split('\n').map(line => JSON.parse(line) as TurnEvent))
+  }
+
+  beforeAll(async () => {
+    await Promise.all([
+      evaluate(logs, ['--exclude-tag', 'vercel']),
+      evaluate(noOidc, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'vercel' }).catch(() => {}),
+      evaluate(refused, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'vercel', VERCEL_OIDC_TOKEN: OIDC, EVLOG_FIXTURE_CONNECT_STATUS: '403' }).catch(() => {}),
+    ])
+    events = read(logs)
+    readsWithoutOidc = read(noOidc)
+    readsRefused = read(refused)
   }, 180_000)
 
-  afterAll(() => rmSync(logs, { recursive: true, force: true }))
+  afterAll(() => {
+    for (const dir of [logs, noOidc, refused]) rmSync(dir, { recursive: true, force: true })
+  })
 
   const byOrder = (id: string) => {
     const event = events.find(e => e.order?.id === id)
@@ -62,7 +81,7 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
   }
 
   it('emits one event per turn, keyed by session and turn', () => {
-    expect(events).toHaveLength(6)
+    expect(events).toHaveLength(7)
     for (const event of events) {
       expect(event.requestId).toBe(`${event.eve.sessionId}:${event.eve.turnId}`)
       expect(event.idempotencyKey).toBe(event.requestId)
@@ -138,7 +157,7 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
 
   // The logs-errors eval gates on the tool's output: this session's declined refund, and only it.
   it('reads the session back through the logs tool on its next turn', () => {
-    const read = events.find(e => e.gen_ai.tools.some(tool => tool.name === 'evlog__logs'))
+    const read = events.find(e => e.gen_ai.tools.some(tool => tool.name === 'evlog__logs' && tool.success))
     expect(read?.eve.turnId).toBe('turn_1')
     expect(read?.gen_ai.tools).toEqual([expect.objectContaining({ name: 'evlog__logs', success: true })])
     expect(events.filter(e => e.eve.sessionId === read?.eve.sessionId).map(e => e.error?.code)).toEqual(['REFUND_DECLINED', undefined])
@@ -165,13 +184,39 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
   })
 
   it('records a logs call\'s shape and counts with diagnostics on, and none of what it returned', () => {
-    const read = events.find(e => e.gen_ai.tools.some(tool => tool.name === 'evlog__logs'))!
+    const read = events.find(e => e.gen_ai.tools.some(tool => tool.name === 'evlog__logs' && tool.success))!
     const [callId] = read.gen_ai.tools.map(tool => tool.call_id)
     const recorded = (read as { evlog?: { logs?: Record<string, Record<string, unknown>> } }).evlog?.logs?.[callId!]
     expect(recorded).toMatchObject({ source: 'files', view: 'errors', input: { view: 'errors', where: [expect.any(String)] }, matched: 1, returned: 1, complete: true })
     expect(JSON.stringify(recorded)).not.toContain('ops@clearbill.dev')
     expect(recorded).not.toHaveProperty('rows')
     expect(JSON.stringify(read)).not.toContain('The card issuer rejected the reversal')
+  })
+
+  const recordedCall = (from: TurnEvent[]) => {
+    const turn = from.find(e => e.gen_ai.tools?.some(tool => tool.name === 'evlog__logs'))
+    expect(turn, 'no turn called the logs tool').toBeDefined()
+    const call = turn!.gen_ai.tools.find(tool => tool.name === 'evlog__logs')!
+    return { turn: turn!, call, recorded: (turn as { evlog?: { logs?: Record<string, Record<string, unknown>> } }).evlog?.logs?.[call.call_id] }
+  }
+
+  it('records a logs call the source refused before reading, and keeps the read\'s own error', () => {
+    const { call, recorded } = recordedCall(events.filter(e => JSON.stringify(e).includes('"expect"')))
+    expect(call).toMatchObject({ success: false, error: expect.stringMatching(/\(files, development\), not production$/) })
+    expect(recorded).toMatchObject({ source: 'files', view: 'errors', input: { expect: { environment: 'production' } }, failed: true })
+  })
+
+  it('records a logs call that found no OIDC token to read Vercel with', () => {
+    const { call, recorded } = recordedCall(readsWithoutOidc)
+    expect(call).toMatchObject({ success: false, error: 'No VERCEL_OIDC_TOKEN in this process' })
+    expect(recorded).toMatchObject({ source: 'vercel', view: 'errors', failed: true })
+  })
+
+  it('records a logs call Vercel Connect refused, without the token', () => {
+    const { turn, call, recorded } = recordedCall(readsRefused)
+    expect(call).toMatchObject({ success: false, error: 'Vercel Connect issued no token for vercel/evlog (403)' })
+    expect(recorded).toMatchObject({ source: 'vercel', view: 'errors', failed: true })
+    expect(JSON.stringify(turn)).not.toContain('fixture-signature')
   })
 
   it('marks a completed turn with a failed call as a warning', () => {

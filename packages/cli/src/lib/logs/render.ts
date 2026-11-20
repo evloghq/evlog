@@ -218,7 +218,7 @@ function formatSessions(style: Style, sessions: SessionSummary[]): string[] {
       `${secs(s.processingMs)} working over ${secs(s.elapsedMs)} elapsed`,
       s.modelCalls !== undefined && `${s.modelCalls} model call${s.modelCalls === 1 ? '' : 's'}`,
       s.toolCalls !== undefined && `${s.toolCalls} tool call${s.toolCalls === 1 ? '' : 's'}${s.failedToolCalls > 0 ? ` (${s.failedToolCalls} failed)` : ''}`,
-      s.tokens && `${s.tokens.input + s.tokens.output} tokens${s.tokens.cacheRead ? ` (${s.tokens.cacheRead} cache read)` : ''}`,
+      s.tokens && `${(s.tokens.input ?? 0) + (s.tokens.output ?? 0)} tokens${s.tokens.cacheRead ? ` (${s.tokens.cacheRead} cache read)` : ''}${s.tokens.turnsReporting < s.turns ? ` from ${s.tokens.turnsReporting} of ${s.turns} turns` : ''}`,
       s.cost && `$${s.cost.usd}${s.cost.turnsReporting < s.turns ? ` from ${s.cost.turnsReporting} of ${s.turns} turns` : ''}`,
     ].filter(Boolean).join(' · ')
     lines.push(style.paint('dim', `  ${s.firstAt.slice(0, 19).replace('T', ' ')} → ${s.lastAt.slice(11, 19)} · ${usage}`))

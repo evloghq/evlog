@@ -62,22 +62,37 @@ export interface ListedConnector {
   type?: string
 }
 
+/* `connect list` answers one page at a time; `pagination.next` (older releases: `cursor`) names the next one. */
 async function listConnectors(vercel: VercelCli, cwd: string, allProjects: boolean): Promise<ListedConnector[]> {
-  const args = ['connect', 'list', '--json', ...(allProjects ? ['--all-projects'] : [])]
-  const step = `vercel ${args.join(' ')}`
-  const result = await vercel(args, { cwd, capture: true })
-  if (result.code !== 0) throw cliErrors.SETUP_VERCEL_FAILED({ step, reason: lastLine(result.stderr) })
-  let listed: unknown
-  try {
-    listed = JSON.parse(result.stdout)
-  } catch {
-    throw cliErrors.SETUP_VERCEL_FAILED({ step, reason: 'its output is not JSON' })
-  }
-  const items = Array.isArray(listed) ? listed : (listed as { connectors?: unknown })?.connectors
-  if (!Array.isArray(items)) throw cliErrors.SETUP_VERCEL_FAILED({ step, reason: 'its output lists no connectors' })
-  return items.flatMap((item: { uid?: unknown, type?: unknown }) => typeof item?.uid === 'string'
-    ? [{ uid: item.uid, ...(typeof item.type === 'string' && { type: item.type }) }]
-    : [])
+  const base = ['connect', 'list', '--json', ...(allProjects ? ['--all-projects'] : [])]
+  const connectors: ListedConnector[] = []
+  const seen = new Set<string>()
+  let cursor: string | undefined
+  do {
+    const args = cursor === undefined ? base : [...base, '--next', cursor]
+    const step = `vercel ${args.join(' ')}`
+    const result = await vercel(args, { cwd, capture: true })
+    if (result.code !== 0) throw cliErrors.SETUP_VERCEL_FAILED({ step, reason: lastLine(result.stderr) })
+    let listed: unknown
+    try {
+      listed = JSON.parse(result.stdout)
+    } catch {
+      throw cliErrors.SETUP_VERCEL_FAILED({ step, reason: 'its output is not JSON' })
+    }
+    const page = listed as { connectors?: unknown, cursor?: unknown, pagination?: { next?: unknown } } | null
+    const items = Array.isArray(listed) ? listed : page?.connectors
+    if (!Array.isArray(items)) throw cliErrors.SETUP_VERCEL_FAILED({ step, reason: 'its output lists no connectors' })
+    for (const item of items as Array<{ uid?: unknown, type?: unknown }>) {
+      if (typeof item?.uid === 'string') connectors.push({ uid: item.uid, ...(typeof item.type === 'string' && { type: item.type }) })
+    }
+    const next = Array.isArray(listed) ? undefined : page?.pagination ? page.pagination.next : page?.cursor
+    cursor = typeof next === 'string' && next ? next : undefined
+    if (cursor !== undefined) {
+      if (seen.has(cursor)) throw cliErrors.SETUP_VERCEL_FAILED({ step, reason: `it returned the cursor ${cursor} twice` })
+      seen.add(cursor)
+    }
+  } while (cursor !== undefined)
+  return connectors
 }
 
 /** Vercel connectors that hold an API key, which is what issues app tokens a read can use. */

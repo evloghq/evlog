@@ -200,12 +200,96 @@ describe('readLogs trace', () => {
     expect(result.matched).toBe(4)
     expect(result.returned).toBe(2)
     expect(result.omitted).toBe(2)
-    expect(JSON.stringify(result.events).length).toBeLessThan(24_000)
-    expect(result.traces).toEqual([
-      { requestId: 'wrun_D:turn_1', traceId: 'tr_0', spanId: 'sp_0', open: 'eve traces show tr_0' },
-      { requestId: 'wrun_D:turn_1', traceId: 'tr_1', spanId: 'sp_1', open: 'eve traces show tr_1' },
-    ])
+    expect(JSON.stringify(result).length).toBeLessThanOrEqual(24_000)
+    expect(result.events!.map(event => event.traceId)).toEqual(['tr_2', 'tr_3'])
+    expect(result.traces).toEqual([0, 1, 2, 3].map(i => ({ requestId: 'wrun_D:turn_1', traceId: `tr_${i}`, spanId: `sp_${i}`, open: `eve traces show tr_${i}` })))
     expect(result.notes).toContain('trace returns full wide events, not the OTel span tree: open a span tree with traces[].traceId')
     expect((await readLogs({ view: 'trace', id: 'wrun_D:turn_1', full: true }, { source: { kind: 'fs', dir }, now: NOW })).events).toHaveLength(4)
+  })
+})
+
+describe('readLogs size budget', () => {
+  const files = (lines: string[]) => ({ source: { kind: 'fs' as const, dir: sink(lines) }, now: NOW })
+  const size = (value: unknown) => JSON.stringify(value).length
+  const huge = 'x'.repeat(210_000)
+  const ids = { requestId: 'wrun_E:turn_1', traceId: 'tr_e', spanId: 'sp_e' }
+
+  it('keeps the trace reference of an event too large for the default budget, and says full raises it', async () => {
+    const options = files([turn('wrun_E', { ...ids, payload: huge })])
+    const result = await readLogs({ view: 'trace', id: 'wrun_E:turn_1' }, options)
+    expect(result).toMatchObject({ matched: 1, returned: 0, omitted: 1, events: [], coverage: { complete: true } })
+    expect(result.traces).toEqual([{ requestId: 'wrun_E:turn_1', traceId: 'tr_e', spanId: 'sp_e', open: 'eve traces show tr_e' }])
+    expect(result.notes).toContain('1 event(s) left out to stay within the 24000-character budget: pass full: true to raise it to 200000')
+    expect(size(result)).toBeLessThanOrEqual(24_000)
+  })
+
+  it('does not suggest full when the full budget is the one exhausted', async () => {
+    const options = files([turn('wrun_E', { ...ids, payload: huge })])
+    const result = await readLogs({ view: 'trace', id: 'wrun_E:turn_1', full: true }, options)
+    expect(result).toMatchObject({ returned: 0, omitted: 1, traces: [{ traceId: 'tr_e' }], coverage: { complete: true } })
+    expect(result.notes!.join('\n')).not.toContain('pass full: true')
+    expect(result.notes).toContain('1 event(s) left out to stay within the 200000-character budget, the largest there is: read single fields with view recent, where requestId=<id> and fields, or open the span tree from traces[]')
+    expect(size(result)).toBeLessThanOrEqual(200_000)
+  })
+
+  it('keeps the small events around a large one', async () => {
+    const event = (minute: number, pad: string) => turn('wrun_E', { ...ids, traceId: `tr_${minute}`, timestamp: `2026-10-01T10:0${minute}:00.000Z`, pad })
+    const result = await readLogs({ view: 'trace', id: 'wrun_E:turn_1' }, files([event(1, 'a'), event(2, 'x'.repeat(30_000)), event(3, 'b')]))
+    expect(result.events!.map(e => e.traceId)).toEqual(['tr_1', 'tr_3'])
+    expect(result.omitted).toBe(1)
+    expect(result.traces!.map(t => t.traceId)).toEqual(['tr_1', 'tr_2', 'tr_3'])
+  })
+
+  it('drops a projected field too large for the budget from its row, and says which', async () => {
+    for (const payload of [{ nested: { blob: huge } }, huge]) {
+      const result = await readLogs({ fields: ['payload', 'user.id'] }, files([turn('wrun_E', { ...ids, payload, user: { id: 'u1' } })]))
+      expect(result.returned).toBe(1)
+      expect(result.rows![0]).toMatchObject({ requestId: 'wrun_E:turn_1', omittedFields: ['payload', 'user.id'] })
+      expect(result.rows![0]).not.toHaveProperty('fields')
+      expect(result.notes).toContain('1 row(s) left fields out to stay within the 24000-character budget: pass full: true to raise it to 200000, or ask for fewer fields')
+      expect(size(result)).toBeLessThanOrEqual(24_000)
+    }
+  })
+
+  it('bounds many rows together, newest kept whole first', async () => {
+    const lines = [1, 2, 3, 4, 5].map(minute => turn('wrun_E', { requestId: `r${minute}`, timestamp: `2026-10-01T10:0${minute}:00.000Z`, payload: 'y'.repeat(8_000) }))
+    const result = await readLogs({ fields: ['payload'] }, files(lines))
+    expect(result.rows!.map(row => [row.requestId, row.fields ? 'whole' : row.omittedFields])).toEqual([['r1', ['payload']], ['r2', ['payload']], ['r3', ['payload']], ['r4', 'whole'], ['r5', 'whole']])
+    expect(size(result)).toBeLessThanOrEqual(24_000)
+    expect((await readLogs({ fields: ['payload'], full: true }, files(lines))).rows!.every(row => row.fields)).toBe(true)
+  })
+
+  it('cuts a row with a huge error down to what identifies it', async () => {
+    const result = await readLogs({ view: 'errors' }, files([turn('wrun_E', { ...ids, level: 'error', status: 500, error: { message: huge } })]))
+    expect(result.rows).toEqual([{ requestId: 'wrun_E:turn_1', timestamp: '2026-10-01T11:00:00.000Z', level: 'error', result: 'failed', session: 'wrun_E', omittedFields: ['status', 'error'] }])
+    expect(size(result)).toBeLessThanOrEqual(24_000)
+  })
+
+  it('drops a huge failure message from a session summary', async () => {
+    const result = await readLogs({ view: 'sessions' }, files([turn('wrun_E', { ...ids, level: 'error', eve: { outcome: 'failed' }, error: { code: 'BOOM', message: huge } })]))
+    expect(result.sessions![0]).toMatchObject({ session: 'wrun_E', latestFailure: { requestId: 'wrun_E:turn_1', code: 'BOOM' }, omittedFields: ['latestFailure.message'] })
+    expect(result.sessions![0]!.latestFailure).not.toHaveProperty('message')
+    expect(size(result)).toBeLessThanOrEqual(24_000)
+  })
+
+  it('leaves a normal diagnostic projection as it is', async () => {
+    const result = await readLogs({ detail: 'diagnostic', fields: ['user.id'] }, files([turn('wrun_E', { ...ids, user: { id: 'u1' } })]))
+    expect(result.rows![0]).toMatchObject({ traceId: 'tr_e', fields: { 'user.id': 'u1' } })
+    expect(result.rows![0]).not.toHaveProperty('omittedFields')
+    expect(result).not.toHaveProperty('omitted')
+    expect(result).not.toHaveProperty('notes')
+  })
+})
+
+describe('readLogs window on files', () => {
+  it('reads up to the window it reports, even when a clock wrote events ahead of now', async () => {
+    const options = { source: { kind: 'fs' as const, dir: sink([turn('a', { requestId: 'past' }), turn('b', { requestId: 'ahead', timestamp: '2026-10-01T12:01:00.000Z' })]) }, now: NOW }
+    const read = await readLogs({}, options)
+    expect(read.window).toEqual({ until: '2026-10-01T12:00:00.000Z' })
+    expect(read.rows!.map(row => row.requestId)).toEqual(['past'])
+    const bounded = await readLogs({ until: '30m' }, options)
+    expect(bounded.window).toEqual({ until: '2026-10-01T11:30:00.000Z' })
+    expect(bounded.rows!.map(row => row.requestId)).toEqual(['past'])
+    expect((await readLogs({ until: '90m' }, options)).rows).toEqual([])
   })
 })
