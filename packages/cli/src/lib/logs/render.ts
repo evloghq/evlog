@@ -247,12 +247,12 @@ export function formatLogsReport(ctx: CliContext, result: LogsResult): string {
     return lines.join('\n')
   }
 
+  if (result.asked) return [...lines, ...formatAsked(style, result.asked, events.length)].join('\n')
+
   if (query.view === 'trace') {
     for (const event of events) lines.push(formatEvent(style, event), '')
     return lines.join('\n').trimEnd()
   }
-
-  if (result.asked) return [...lines, ...formatAsked(style, result.asked, events.length)].join('\n')
 
   for (const event of events) lines.push(formatLine(style, event))
   const failures = events.filter(isError).length

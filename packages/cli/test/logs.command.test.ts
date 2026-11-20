@@ -725,6 +725,24 @@ describe('evlog logs --ask', () => {
     expect(formatLogsReport(fakeContext(cwd), result).split('\n').at(-1)).toMatch(/· 1 not answered$/)
   })
 
+  it('stops instead of leaving out an event too large to send', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${JSON.stringify(event({ timestamp: '2026-10-01T11:50:00.000Z', requestId: 'big', path: '/api/upload', body: 'x'.repeat(100_001) }))}\n`, { flag: 'a' })
+    await expect(runLogs(fakeContext(cwd), { ask: 'q', limit: '2' }, { now: NOW, evaluate })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_FAILED', message: expect.stringContaining('big is over 100000 characters') })
+    expect(calls).toHaveLength(1)
+  })
+
+  it('ranks the events of one request instead of printing them in full', async () => {
+    const cwd = await makeSink()
+    const { evaluate } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { what: 'aaaaaaaa', ask: 'Did this touch money?' }, { now: NOW, evaluate })
+    expect(result.asked!.answered.length).toBeGreaterThan(1)
+    const lines = formatLogsReport(fakeContext(cwd), result).split('\n')
+    expect(lines).toContain('ranked by P(yes) · Did this touch money?')
+    expect(lines.at(-1)).toMatch(/^model calls \d+ · input tokens \d+$/)
+  })
+
   it('names the packages to install when @evlog/signals is missing', async () => {
     vi.resetModules()
     vi.doMock('@evlog/signals', () => {

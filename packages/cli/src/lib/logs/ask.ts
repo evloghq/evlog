@@ -37,7 +37,8 @@ function message(error: unknown): string {
  * changed: each is judged on a copy.
  *
  * Unlike the plugin, which lets events through unjudged when the model fails,
- * a failed call stops the run: a ranking with holes in it reads as an answer.
+ * a failed call, or an event too large to send, stops the run: a ranking with
+ * holes in it reads as an answer.
  * A refusal only leaves that event out.
  */
 export async function askEvents<T extends WideEvent>(events: T[], question: string, options: AskOptions = {}): Promise<AskResult<T>> {
@@ -47,6 +48,7 @@ export async function askEvents<T extends WideEvent>(events: T[], question: stri
     return { answers: result.answers, modelId: result.response.modelId, inputTokens: result.usage.inputTokens }
   })
   let failure: unknown
+  let refused = false
   // Errors never reach the plugin: its breaker would skip the remaining events, and a refusal is about one event only.
   const plugin = createSignals({
     signals: [defineSignal({ name: 'ask', ask: question })],
@@ -56,7 +58,8 @@ export async function askEvents<T extends WideEvent>(events: T[], question: stri
       try {
         return await call(request)
       } catch (error) {
-        if (!ai.Experimental_DecisionRefusalError.isInstance(error)) failure = error
+        if (ai.Experimental_DecisionRefusalError.isInstance(error)) refused = true
+        else failure = error
         return { answers: {}, modelId: '' }
       }
     },
@@ -66,10 +69,18 @@ export async function askEvents<T extends WideEvent>(events: T[], question: stri
   for (const event of events) {
     const copy = { ...event } as WideEvent
     delete copy.signals
+    refused = false
+    const skipped = plugin.stats().skipped
     await plugin.enrich({ event: copy, request: { path: typeof event.path === 'string' ? event.path : '' } })
     if (failure !== undefined) throw cliErrors.LOGS_ASK_FAILED({ reason: message(failure) })
     const verdict = (copy.signals as Record<string, { value: boolean, confidence: number }> | undefined)?.ask
-    if (!verdict) continue
+    if (!verdict) {
+      if (refused) continue
+      const reason = plugin.stats().skipped > skipped
+        ? `the event ${typeof event.requestId === 'string' ? `${event.requestId} ` : ''}is over 100000 characters of JSON, more than @evlog/signals sends`
+        : 'the model returned no answer'
+      throw cliErrors.LOGS_ASK_FAILED({ reason })
+    }
     // The column holds the confidence of the answer given; `1 - 0.97` would print as 0.030000000000000027.
     const probability = verdict.value ? verdict.confidence : 1 - verdict.confidence
     answered.push({ event, probability: Math.round(probability * 10_000) / 10_000 })

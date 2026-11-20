@@ -30,10 +30,10 @@ pnpm evlog logs slow --over 1s --json        # what was slow, worst first
 pnpm evlog logs "$REQUEST_ID" --json         # one request, every event with that id
 pnpm evlog logs stats --json                 # per route: count, errors, p50, p95; by status and level
 pnpm evlog logs --where 'payment.amount>5000' --where audit.outcome=failure --json
-pnpm evlog logs --path /api/checkout --ask 'The customer left without an order' --json   # ranked by a model; needs @evlog/signals and a key
+pnpm evlog logs --path /api/checkout --ask 'The customer left without an order' --json   # ranked by a model; needs @evlog/signals, ai >=7.0.130 and a key
 ```
 
-`--json` is an envelope (`sources`, `view`, `matched`, `events`; `stats` carries `stats` instead); filters are `--since`, `--until`, `--level`, `--path`, `--status` (`500` or `5xx`), `--where field=value|field>n|field~regex|field|!field` on any dotted field (repeatable), `--limit`, `--dir` for a non-default directory, and `--url` for an app on the memory drain that exposes `readMemoryLogs()` over HTTP. `--ask` sends each selected event to a model and costs a call per event: use it only when the question cannot be a `--where`, narrow first, and ask the user before sending events that may hold personal data. From a monorepo root it reads every app's `.evlog/logs` and labels each event. Docs: https://www.evlog.dev/cli/logs. If the CLI is unavailable or the user declines it, read the files directly as below.
+`--json` is an envelope (`sources`, `view`, `matched`, `events`; `stats` carries `stats` instead, and `--ask` carries `question` and `answers`, each a `{ probability, event }` ranked highest first); filters are `--since`, `--until`, `--level`, `--path`, `--status` (`500` or `5xx`), `--where field=value|field>n|field~regex|field|!field` on any dotted field (repeatable), `--limit`, `--dir` for a non-default directory, and `--url` for an app on the memory drain that exposes `readMemoryLogs()` over HTTP. `--ask` sends each selected event to a model and costs a call per event: use it only when the question cannot be a `--where`, narrow first, and ask the user before sending events that may hold personal data. From a monorepo root it reads every app's `.evlog/logs` and labels each event. Docs: https://www.evlog.dev/cli/logs. If the CLI is unavailable or the user declines it, read the files directly as below.
 
 Logs are written by evlog's file system drain as `.jsonl` files, organized by date.
 
