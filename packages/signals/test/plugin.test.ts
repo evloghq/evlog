@@ -367,6 +367,23 @@ describe('createSignals fails open', () => {
     expect(ok.event.signals).toEqual({ fault: { value: 'upstream', confidence: 0.9 } })
   })
 
+  it('still promotes when a question that rode along on the keep call is refused', async () => {
+    const asked: string[][] = []
+    const plugin = createSignals({
+      signals: [silentFailure, defineSignal({ name: 'topic', when: e => e.status === 200, ask: 'What was bought?', choice: { book: 'A book', other: 'Anything else' } })],
+      evaluate: (request) => {
+        asked.push(Object.keys(request.questions))
+        if ('topic' in request.questions) return Promise.reject(new Experimental_DecisionRefusalError({ questionIds: ['topic'], provider: 'test', modelId: 'test' }))
+        return Promise.resolve({ answers: { 'silent-failure': { type: 'boolean', probability: 0.95 } }, modelId: 'test' })
+      },
+    })
+    const tail = keepCtx({ status: 200, path: '/api/checkout', method: 'POST' })
+    await plugin.keep!(tail)
+    expect(asked).toEqual([['silent-failure', 'topic'], ['silent-failure']])
+    expect(tail.shouldKeep).toBe(true)
+    expect(plugin.stats()).toMatchObject({ refused: 1, calls: 1, errors: 0 })
+  })
+
   it('records no verdict on a refusal and leaves the breaker as it was', async () => {
     const { evaluate, calls } = fakeEvaluate(yes)
     let refuse = true

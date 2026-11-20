@@ -65,6 +65,9 @@ describe('defineSignal', () => {
     expectTypeOf(verdict).toEqualTypeOf<SignalColumn<ChoiceVerdict<'client' | 'app'>> | undefined>()
     expect(verdict).toEqual({ value: 'app', confidence: 0.9, kept: true })
     expect(signal.read({})).toBeUndefined()
+    const ctor = defineSignal({ name: 'constructor', ask: 'q' })
+    expect(ctor.read({ signals: { other: { value: true, confidence: 1 } } })).toBeUndefined()
+    expect(ctor.read({ signals: { constructor: { value: true, confidence: 0.7 } } })).toEqual({ value: true, confidence: 0.7 })
   })
 
   it('rejects keep without when', () => {

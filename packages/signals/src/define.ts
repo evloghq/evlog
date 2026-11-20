@@ -156,7 +156,10 @@ export const defineSignal: DefineSignal = ((signal: BooleanSignalInput | ChoiceS
     when: signal.when,
     keep: keep as ((verdict: Verdict) => boolean) | undefined,
     cacheKey: signal.cacheKey,
-    read: (event: Record<string, unknown>) => (event.signals as Record<string, SignalColumn> | undefined)?.[name],
+    read: (event: Record<string, unknown>) => {
+      const columns = event.signals as Record<string, SignalColumn> | undefined
+      return columns && Object.hasOwn(columns, name) ? columns[name] : undefined
+    },
   }
 
   if ('choice' in signal) {

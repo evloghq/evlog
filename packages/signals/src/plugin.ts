@@ -73,6 +73,8 @@ export interface SignalsPlugin extends EvlogPlugin {
 interface Judged {
   verdicts: Map<string, Verdict>
   modelId?: string
+  /** The model declined the call. A refusal of any question answers none of them. */
+  refused?: boolean
 }
 
 function dueSignals(signals: Signal[], input: SignalInput): Signal[] {
@@ -154,6 +156,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       Promise.all(shared.map(([, call]) => call)),
     ])
     let modelId = fresh?.modelId
+    const refused = fresh?.refused
     for (const [name, verdict] of fresh?.verdicts ?? []) verdicts.set(name, verdict)
     shared.forEach(([signal], i) => {
       const verdict = joined[i]?.verdicts.get(signal.name)
@@ -162,7 +165,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       modelId ??= joined[i]!.modelId
       stats.cached++
     })
-    return { verdicts, modelId }
+    return { verdicts, modelId, refused }
   }
 
   // Registered before the call is awaited, so concurrent events with the same cache key join it instead of calling again.
@@ -209,7 +212,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
     } catch (err) {
       if (Experimental_DecisionRefusalError.isInstance(err)) {
         stats.refused++
-        return { verdicts }
+        return { verdicts, refused: true }
       }
       stats.errors++
       budget.fail()
@@ -234,7 +237,13 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       if (due.length === 0) return
 
       // The state is billed once per call and output is free, so the other due signals ride along instead of costing a second call in enrich.
-      const judged = await judge(dueSignals(options.signals, input), input)
+      const asked = dueSignals(options.signals, input)
+      let judged = await judge(asked, input)
+      // A refused question voids the whole call, so a question that rode along must not cost the keep signals their promotion.
+      if (judged.refused && asked.length > due.length && due.some(s => !judged.verdicts.has(s.name))) {
+        const retry = await judge(due, input)
+        judged = { ...retry, verdicts: new Map([...judged.verdicts, ...retry.verdicts]) }
+      }
       const kept = new Set<string>()
       for (const signal of due) {
         const verdict = judged.verdicts.get(signal.name)
