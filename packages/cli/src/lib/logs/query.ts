@@ -204,6 +204,8 @@ export interface LogsArgs {
   over?: string
   limit?: string
   where?: string | string[]
+  /** A yes/no question a decision model answers about each selected event. */
+  ask?: string
 }
 
 const DEFAULT_OVER = 500

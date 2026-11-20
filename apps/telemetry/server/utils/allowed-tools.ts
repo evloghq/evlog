@@ -104,6 +104,7 @@ export const DEFAULT_ALLOWED_CUSTOM_KEYS: Record<string, string[]> = {
     'logsWhere',
     'logsSources',
     'logsUrl',
+    'logsAsk',
     // evlog map — how projects actually score, and which rules fire or get waived
     'mapFramework',
     'mapFrameworkForced',

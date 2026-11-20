@@ -4,12 +4,14 @@ import { telemetry } from '@evlog/telemetry'
 import { EvlogError } from 'evlog'
 import type { WideEvent } from 'evlog'
 import { readFsLogs, tailFsLogs } from 'evlog/fs'
+import type { EvaluateFn } from '@evlog/signals'
 import type { CliContext } from '../core/context'
 import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
 import { loadCliConfig } from '../lib/config'
 import { cliErrors } from '../lib/errors'
 import { flagValues } from '../lib/flags'
+import { askEvents } from '../lib/logs/ask'
 import { buildQuery, createSelection, timeOf } from '../lib/logs/query'
 import type { LogsArgs, LogsQuery, Selected } from '../lib/logs/query'
 import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'
@@ -79,6 +81,8 @@ export interface RunLogsOptions {
   fetchFn?: typeof fetch
   /** How often a followed `--url` is re-read. The endpoint is a snapshot, so there is nothing to wait on. */
   pollIntervalMs?: number
+  /** Replace the model call `--ask` makes. */
+  evaluate?: EvaluateFn
 }
 
 function tag(event: WideEvent, name: string | undefined): Sourced {
@@ -106,6 +110,9 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
      writes somewhere unusual is read without passing `--dir` every time. */
   const config = loadCliConfig(await resolveProject(ctx.cwd))
   const query = buildQuery(args, options.now, config?.logs.limit)
+  const question = args.ask?.trim() || undefined
+  if (question && options.follow) throw cliErrors.LOGS_ASK_UNSUPPORTED({ with: '--follow' })
+  if (question && query.view === 'stats') throw cliErrors.LOGS_ASK_UNSUPPORTED({ with: 'the stats view' })
   const dir = options.dir ?? config?.logs.dir
   const fetchFn = options.fetchFn ?? fetch
   const inRange = (event: WideEvent): boolean => {
@@ -140,6 +147,9 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
     sources = found.map(source => prettyPath(ctx.cwd, source.dir))
   }
   const result: LogsResult = { sources, query, ...selected }
+  /* Asked after selection, so the model sees at most `--limit` events: the
+     filters narrow for free, the question ranks what is left. */
+  if (question) result.asked = { question, ...await askEvents(result.events, question, { evaluate: options.evaluate }) }
 
   if (options.follow) {
     /* `tail -f` shows the end of the file before it waits, and the caller only
@@ -235,7 +245,7 @@ async function followUrl(url: string, shown: WideEvent[], inRange: (event: WideE
  * event, field name, filter value, path or URL.
  */
 function logsTelemetryFields(
-  result: Pick<LogsResult, 'matched' | 'sources'> & { query: Pick<LogsResult['query'], 'view' | 'where'> },
+  result: Pick<LogsResult, 'matched' | 'sources' | 'asked'> & { query: Pick<LogsResult['query'], 'view' | 'where'> },
   run: { follow: boolean, url: boolean },
 ): Record<string, boolean | number | string> {
   return {
@@ -245,6 +255,7 @@ function logsTelemetryFields(
     logsWhere: result.query.where.length,
     logsSources: result.sources.length,
     logsUrl: run.url,
+    logsAsk: result.asked !== undefined,
   }
 }
 
@@ -275,6 +286,7 @@ export default defineEvlogCommand('logs', {
     limit: { type: 'string', description: 'Most events to show (default 50)' },
     dir: { type: 'string', description: 'Log directory (default: the project\'s .evlog/logs, or every app\'s in a workspace)' },
     url: { type: 'string', description: 'Read the memory drain\'s dev endpoint instead of files (a JSON array of events)' },
+    ask: { type: 'string', description: 'Rank the selected events by a yes/no question a decision model answers (needs @evlog/signals and ai)' },
   },
   async run({ args, rawArgs, cli, ui }) {
     const style = createStyle(cli)
@@ -303,7 +315,7 @@ export default defineEvlogCommand('logs', {
           json: { error: { code: error.code, message: error.message, why: error.why, fix: error.fix } },
           human: error.fix ? `${error.message}\n→ ${error.fix}` : error.message,
         })
-        const failed = error.code === cliErrors.LOGS_NO_SINK.code || error.code === cliErrors.LOGS_URL_UNREACHABLE.code
+        const failed = error.code === cliErrors.LOGS_NO_SINK.code || error.code === cliErrors.LOGS_URL_UNREACHABLE.code || error.code === cliErrors.LOGS_ASK_UNAVAILABLE.code || error.code === cliErrors.LOGS_ASK_FAILED.code
         ui.exit(failed ? EXIT_FAIL : EXIT_USAGE)
         return
       }
@@ -324,7 +336,11 @@ export default defineEvlogCommand('logs', {
         view: result.query.view,
         count: result.events.length,
         matched: result.matched,
-        ...(result.stats ? { stats: result.stats } : { events: result.events }),
+        ...(result.stats
+          ? { stats: result.stats }
+          : result.asked
+            ? { question: result.asked.question, answers: result.asked.answered, signals: result.asked.stats }
+            : { events: result.events }),
       },
       human: args.json ? undefined : formatLogsReport(cli, result),
     })

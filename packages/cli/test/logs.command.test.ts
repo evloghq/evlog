@@ -644,3 +644,91 @@ describe('logs command', () => {
     expect(process.exitCode).toBe(1)
   })
 })
+
+describe('evlog logs --ask', () => {
+  /* P(yes) from the state, so the ranking cannot come from file order: the refund ranks first, the 500 second. */
+  async function scripted() {
+    const { answers, scriptedEvaluate } = await import('@evlog/signals/testing')
+    return scriptedEvaluate((_name, _question, state) => {
+      const text = JSON.stringify(state)
+      return answers.boolean(text.includes('billing.refund') ? 0.97 : text.includes('"status":500') ? 0.7 : 0.1)
+    })
+  }
+
+  it('ranks the selected events by the probability of yes, one call per event', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'Did this touch money?' }, { now: NOW, evaluate })
+
+    expect(calls).toHaveLength(6)
+    expect(calls[0]!.questions.ask).toMatchObject({ type: 'boolean', instructions: 'Did this touch money?' })
+    expect(result.asked!.answered.map(a => [a.event.path, a.probability])).toEqual([
+      ['/api/refund', 0.97],
+      ['/api/items', 0.7],
+      ['/api/health', 0.1],
+      ['/api/checkout', 0.1],
+      ['/api/reports', 0.1],
+      ['/api/items', 0.1],
+    ].map(([path, p]) => [path, expect.closeTo(p as number, 5)]))
+    expect(result.events.every(event => !('signals' in event))).toBe(true)
+  })
+
+  it('applies the filters before the model sees anything', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'Did this touch money?', what: 'errors' }, { now: NOW, evaluate })
+    expect(calls).toHaveLength(2)
+    expect(result.asked!.answered.map(a => a.event.path)).toEqual(['/api/items', '/api/checkout'])
+  })
+
+  it('refuses --follow and the stats view as usage errors', async () => {
+    const cwd = await makeSink()
+    await expect(runLogs(fakeContext(cwd), { ask: 'q' }, { now: NOW, follow: true })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNSUPPORTED' })
+    await expect(runLogs(fakeContext(cwd), { ask: 'q', what: 'stats' }, { now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNSUPPORTED' })
+  })
+
+  it('prints the probability in front of each line, highest first', async () => {
+    const cwd = await makeSink()
+    const { evaluate } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'Did this touch money?' }, { now: NOW, evaluate })
+    const lines = formatLogsReport(fakeContext(cwd), result).split('\n')
+    expect(lines).toContain('ranked by P(yes) · Did this touch money?')
+    expect(lines.find(line => line.startsWith('0.97'))).toContain('/api/refund')
+    expect(lines.at(-1)).toBe(`model calls 6 · input tokens ${result.asked!.stats.inputTokens}`)
+  })
+
+  it('stops at the first failed call instead of ranking with holes, and skips a refused event', async () => {
+    const cwd = await makeSink()
+    const ai = await import('ai')
+    const { answers } = await import('@evlog/signals/testing')
+    let n = 0
+    const evaluate = (request: { questions: Record<string, unknown> }) => {
+      n++
+      if (n === 2) return Promise.reject(new ai.Experimental_DecisionRefusalError({ questionIds: ['ask'], provider: 'test', modelId: 'test' }))
+      if (n === 4) return Promise.reject(new Error('403 restricted provider'))
+      return Promise.resolve({ answers: Object.fromEntries(Object.keys(request.questions).map(k => [k, answers.boolean(0.8)])), modelId: 'test' })
+    }
+    await expect(runLogs(fakeContext(cwd), { ask: 'q' }, { now: NOW, evaluate })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_FAILED', message: expect.stringContaining('403 restricted provider') })
+    expect(n).toBe(4)
+
+    n = 0
+    const result = await runLogs(fakeContext(cwd), { ask: 'q', limit: '3' }, { now: NOW, evaluate })
+    expect(result.asked!.answered).toHaveLength(2)
+    expect(formatLogsReport(fakeContext(cwd), result).split('\n').at(-1)).toMatch(/· 1 not answered$/)
+  })
+
+  it('names the packages to install when @evlog/signals is missing', async () => {
+    vi.resetModules()
+    vi.doMock('@evlog/signals', () => {
+      throw new Error('Cannot find package \'@evlog/signals\'')
+    })
+    try {
+      const { runLogs: run } = await import('../src/commands/logs')
+      const cwd = await makeSink()
+      await expect(run(fakeContext(cwd), { ask: 'q' }, { now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNAVAILABLE', fix: expect.stringContaining('pnpm add -D @evlog/signals ai') })
+    } finally {
+      vi.doUnmock('@evlog/signals')
+      vi.resetModules()
+    }
+  })
+})
