@@ -689,6 +689,14 @@ describe('evlog logs --ask', () => {
     expect(result.asked!.answered.map(a => a.event.path)).toEqual(['/api/items', '/api/checkout'])
   })
 
+  it('asks the model --model names, and the @evlog/signals default without it', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    await runLogs(fakeContext(cwd), { ask: 'q', limit: '1', model: 'liquid/d1' }, { now: NOW, evaluate })
+    await runLogs(fakeContext(cwd), { ask: 'q', limit: '1' }, { now: NOW, evaluate })
+    expect(calls.map(call => call.model)).toEqual(['liquid/d1', 'typesafe-ai/jev'])
+  })
+
   it('refuses --follow and the stats view as usage errors', async () => {
     const cwd = await makeSink()
     await expect(runLogs(fakeContext(cwd), { ask: 'q' }, { now: NOW, follow: true })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNSUPPORTED' })

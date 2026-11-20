@@ -17,6 +17,8 @@ export interface AskResult<T extends WideEvent = WideEvent> {
 export interface AskOptions {
   /** Replace the model call: tests, and runs without a key. */
   evaluate?: EvaluateFn
+  /** An AI Gateway id. Unset, `@evlog/signals` picks its default. */
+  model?: string
 }
 
 async function load(): Promise<[typeof import('@evlog/signals'), typeof import('ai')]> {
@@ -52,6 +54,7 @@ export async function askEvents<T extends WideEvent>(events: T[], question: stri
   // Errors never reach the plugin: its breaker would skip the remaining events, and a refusal is about one event only.
   const plugin = createSignals({
     signals: [defineSignal({ name: 'ask', ask: question })],
+    model: options.model,
     timeoutMs: 15_000,
     budget: { perMinute: Math.max(1, events.length) },
     evaluate: async (request) => {

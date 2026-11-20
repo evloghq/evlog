@@ -149,7 +149,7 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
   const result: LogsResult = { sources, query, ...selected }
   /* Asked after selection, so the model sees at most `--limit` events: the
      filters narrow for free, the question ranks what is left. */
-  if (question) result.asked = { question, ...await askEvents(result.events, question, { evaluate: options.evaluate }) }
+  if (question) result.asked = { question, ...await askEvents(result.events, question, { evaluate: options.evaluate, model: args.model?.trim() || undefined }) }
 
   if (options.follow) {
     /* `tail -f` shows the end of the file before it waits, and the caller only
@@ -287,6 +287,7 @@ export default defineEvlogCommand('logs', {
     dir: { type: 'string', description: 'Log directory (default: the project\'s .evlog/logs, or every app\'s in a workspace)' },
     url: { type: 'string', description: 'Read the memory drain\'s dev endpoint instead of files (a JSON array of events)' },
     ask: { type: 'string', description: 'Rank the selected events by a yes/no question a decision model answers (needs @evlog/signals and ai)' },
+    model: { type: 'string', description: 'The decision model --ask uses, as an AI Gateway id (default: the @evlog/signals default)' },
   },
   async run({ args, rawArgs, cli, ui }) {
     const style = createStyle(cli)
