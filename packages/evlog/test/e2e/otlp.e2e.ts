@@ -38,7 +38,7 @@ describeIfEnv('otlp e2e (round-trip)', ['OTLP_ENDPOINT', 'OTLP_EXPORT_FILE'], ()
       error: { name: 'PaymentError', message: 'card declined' },
     })
 
-    await sendBatchToOTLP([event], { endpoint })
+    await sendBatchToOTLP([event], { endpoint, recordShape: 'json', semanticConventions: false })
 
     const { resource, scope, record } = await waitForCollectedRecord(file, event.e2e_correlation_id, 'otlp-json')
     expect(resource).toMatchObject({ 'service.name': 'evlog-e2e', 'deployment.environment': 'test', 'service.version': '1.2.3' })
