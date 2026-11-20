@@ -36,11 +36,16 @@ class ProtoReader {
     return field
   }
 
+  private advance(bytes: number): void {
+    if (this.position + bytes > this.bytes.length) throw new Error('Truncated protobuf field')
+    this.position += bytes
+  }
+
   skip(wireType: number): void {
     if (wireType === WIRE_VARINT) this.varint()
-    else if (wireType === WIRE_FIXED64) this.position += 8
+    else if (wireType === WIRE_FIXED64) this.advance(8)
     else if (wireType === WIRE_LENGTH_DELIMITED) this.lengthDelimited()
-    else if (wireType === WIRE_FIXED32) this.position += 4
+    else if (wireType === WIRE_FIXED32) this.advance(4)
     else throw new Error(`Unsupported protobuf wire type ${wireType}`)
   }
 }
@@ -66,7 +71,8 @@ export function decodeOTLPPartialSuccess(bytes: Uint8Array): OTLPPartialSuccess 
       continue
     }
     const reader = new ProtoReader(response.lengthDelimited())
-    partialSuccess = { rejectedLogRecords: 0, errorMessage: '' }
+    // Protobuf merges repeated occurrences of an embedded message field.
+    partialSuccess ??= { rejectedLogRecords: 0, errorMessage: '' }
     while (!reader.done) {
       const fieldTag = reader.varint()
       if (fieldTag === (1 << 3 | WIRE_VARINT)) partialSuccess.rejectedLogRecords = reader.varint()

@@ -31,6 +31,8 @@ export default defineNitroPlugin((nitroApp) => {
 ## Full Configuration
 
 ```typescript
+import { DrainDeliveryError } from 'evlog/toolkit'
+
 const pipeline = createDrainPipeline<DrainContext>({
   batch: {
     size: 50,          // Max events per batch (default: 50)
@@ -45,7 +47,9 @@ const pipeline = createDrainPipeline<DrainContext>({
   maxBufferSize: 1000,  // Max buffered events; oldest dropped on overflow (default: 1000)
   onDropped: (events, error, reason) => {
     // reason: 'buffer-full' | 'rejected' | 'retries-exhausted' | 'rate-limited'
-    console.error(`[evlog] Dropped ${events.length} events (${reason}):`, error?.message)
+    // A partial rejection passes the whole batch; error.rejected is how many were lost.
+    const lost = (error instanceof DrainDeliveryError ? error.rejected : undefined) ?? events.length
+    console.error(`[evlog] Dropped ${lost} events (${reason}):`, error?.message)
   },
 })
 ```

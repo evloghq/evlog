@@ -785,6 +785,28 @@ describe('otlp adapter', () => {
         .rejects.toMatchObject({ retryable: false, rejected: 300, message: expect.stringContaining('bad') })
     })
 
+    it('merges a partial_success field the collector split across two occurrences', async () => {
+      // partial_success { rejected_log_records: 2 } followed by partial_success { error_message: "bad" }
+      const body = new Uint8Array([0x0A, 0x02, 0x08, 0x02, 0x0A, 0x05, 0x12, 0x03, 0x62, 0x61, 0x64])
+      fetchSpy.mockResolvedValue(new Response(body, { status: 200, headers: { 'Content-Type': 'application/x-protobuf' } }))
+
+      await expect(sendBatchToOTLP(events, { endpoint: 'http://localhost:4318', protocol: 'http/protobuf' }))
+        .rejects.toMatchObject({ rejected: 2, message: expect.stringContaining('bad') })
+    })
+
+    it.each([
+      ['fixed32', 0x1D],
+      ['fixed64', 0x19],
+    ])('warns and resolves when a %s field is cut short', async (_name, tag) => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const body = new Uint8Array([0x0A, 0x03, 0x08, 0x02, tag])
+      fetchSpy.mockResolvedValue(new Response(body, { status: 200, headers: { 'Content-Type': 'application/x-protobuf' } }))
+
+      await sendBatchToOTLP(events, { endpoint: 'http://localhost:4318', protocol: 'http/protobuf' })
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not read the collector response'), expect.any(Error))
+    })
+
     it('warns on an errorMessage without rejected records and resolves', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       fetchSpy.mockResolvedValue(new Response(
