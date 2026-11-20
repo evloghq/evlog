@@ -103,8 +103,8 @@ and pending requests included, hence the epilogue every task used to carry.
 **The Slack principal is `slack:<team>:<member>`.** `defaultSlackAuth` mints
 it from the event's `team_id` and the actor's user id, and `trust.ts` trusts
 every human principal of `EVI_SLACK_TEAM_ID` rather than one member: the
-workspace is private and only Hugo can install the connector or invite into
-it, so the workspace is the allowlist. Replies in a thread Evi owns need the
+workspace is private and only the maintainer can install the connector or
+invite into it, so the workspace is the allowlist. Replies in a thread Evi owns need the
 connector's trigger to subscribe `message.channels` with `channels:history`
 (plus `message.groups` and `groups:history` for a private channel); without
 them, only mentions and DMs reach the agent.
@@ -246,7 +246,7 @@ native MCP channel (`mcpChannel`). Clients get the durable invocation tools:
 `agent_start`, `agent_get`, `agent_update`, `agent_cancel`: start returns an
 invocation id immediately, the harness polls `agent_get`, and human-input
 requests surface as `input_required` instead of a hanging HTTP call. Each
-`agent_start` is one task-mode session owned by the `mcp:hugo` principal,
+`agent_start` is one task-mode session owned by the `mcp:maintainer` principal,
 trusted as the maintainer only while the token env is set; there is no
 cross-call conversation, so a request must carry its own context. Setup:
 generate a token (`openssl rand -hex 32`), set `EVI_MAINTAINER_TOKEN` on the project,

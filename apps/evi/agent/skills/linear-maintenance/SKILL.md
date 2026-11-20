@@ -1,6 +1,6 @@
 ---
 name: linear-maintenance
-description: "Bi-weekly housekeeping pass over the evlog team's Linear backlog: labels, projects, priorities, stale triage, work that is done but still open, and anything misfiled next to its siblings. Applies the mechanically verifiable fixes and surfaces the rest as decisions. Load this when the linear-maintenance schedule fires, or when Hugo asks for a Linear clean-up, a backlog pass, or a triage consistency check."
+description: "Bi-weekly housekeeping pass over the evlog team's Linear backlog: labels, projects, priorities, stale triage, work that is done but still open, and anything misfiled next to its siblings. Applies the mechanically verifiable fixes and surfaces the rest as decisions. Load this when the linear-maintenance schedule fires, or when a maintainer asks for a Linear clean-up, a backlog pass, or a triage consistency check."
 ---
 
 # Linear maintenance
@@ -26,8 +26,8 @@ evidence enough that a write is correct. Apply them directly via
 
 **Surface** what needs a judgement call about intent. Anything you cannot
 verify, or whose correct value is a matter of taste, stays open and is written
-down as a finding for Hugo. Never guess a decision that a sibling set or the
-issue history cannot support.
+down as a finding for the maintainers. Never guess a decision that a sibling
+set or the issue history cannot support.
 
 ## The lenses
 
@@ -76,8 +76,9 @@ report back to confirm it.
 - **Mechanical fix, unambiguous → apply it** with `linear__save_issue` and
   list it in the report under "applied".
 - **Decision → a finding** in the report under "left open", naming the
-  evidence and the exact call to make. A finding that needs a decision Hugo
-  has not asked you to take stays open; do not close it unilaterally.
+  evidence and the exact call to make. A finding that needs a decision the
+  maintainers have not asked you to take stays open; do not close it
+  unilaterally.
 
 Never invent a fix to fill the run, and never report a lens as clean when it
 ran and found nothing of note. A quiet pass is a real result: one line saying
