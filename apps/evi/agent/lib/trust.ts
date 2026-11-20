@@ -14,7 +14,7 @@ export const { MAINTAINER_PHONE, MAINTAINER_GITHUB_ID } = process.env
  */
 export const { EVI_SLACK_TEAM_ID } = process.env
 /** The GitHub login escalated issues are assigned to. Unset, escalation labels the issue and the assignment fails. */
-export const MAINTAINER_GITHUB_LOGIN = process.env.MAINTAINER_GITHUB_LOGIN?.toLowerCase()
+export const ESCALATION_GITHUB_LOGIN = process.env.ESCALATION_GITHUB_LOGIN?.toLowerCase()
 
 /** Exported for memory identity seeding, which needs the members, not the answer. */
 export const MAINTAINER_PRINCIPALS: ReadonlySet<string> = new Set(

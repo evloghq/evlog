@@ -8,7 +8,7 @@ vi.mock('./credentials', async importOriginal => ({
 }))
 
 vi.hoisted(() => {
-  vi.stubEnv('MAINTAINER_GITHUB_LOGIN', 'Octo-Maintainer')
+  vi.stubEnv('ESCALATION_GITHUB_LOGIN', 'Octo-Escalation')
 })
 
 const drain = vi.fn<(ctx: { event: WideEvent }) => void>()
@@ -59,7 +59,7 @@ describe('escalateFailedTriage', () => {
       'POST /repos/acme/widgets/issues/42/assignees',
     ])
     expect(calls[2]?.body).toEqual({ labels: [ESCALATION_LABEL] })
-    expect(calls[3]?.body).toEqual({ assignees: ['octo-maintainer'] })
+    expect(calls[3]?.body).toEqual({ assignees: ['octo-escalation'] })
   })
 
   it('skips label creation when the label exists', async () => {
