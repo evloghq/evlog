@@ -147,7 +147,7 @@ export function cooldownCommand(repoDir: string, days: number): string {
 /**
  * Paths from `git log --name-only --pretty=format:`, deduplicated. Anything
  * the log reports as touched is off the table for the cooldown, whoever
- * touched it. A page Hugo edited yesterday does not want a rewrite today.
+ * touched it. A page a maintainer edited yesterday does not want a rewrite today.
  */
 export function touchedPaths(gitLogOutput: string): string[] {
   const paths = gitLogOutput

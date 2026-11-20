@@ -1,6 +1,6 @@
 ---
 name: cost-watchdog
-description: Weekly review of evlog's model cost and performance. Load this when the cost-watchdog schedule fires, or when Hugo asks for a cost check, a model review, a per-surface model analysis, or a spend/drift report for the gateway.
+description: Weekly review of evlog's model cost and performance. Load this when the cost-watchdog schedule fires, or when a maintainer asks for a cost check, a model review, a per-surface model analysis, or a spend/drift report for the gateway.
 ---
 
 # Cost and model watchdog
@@ -86,7 +86,7 @@ One constraint the report does not show: today the agent runs a single model eve
 
 **The thread get two or three lines**: the single most attention-worthy number or finding, and the document link.
 
-**A material, decision-worthy recommendation becomes a Linear issue** on the evlog team via `linear__save_issue`. Search first (`linear__list_issues`) for a covering issue, including your own from earlier runs; update rather than duplicate. File the strongest one or two, never a report's worth. A model change is Hugo's call, and the issue is where he makes it.
+**A material, decision-worthy recommendation becomes a Linear issue** on the evlog team via `linear__save_issue`. Search first (`linear__list_issues`) for a covering issue, including your own from earlier runs; update rather than duplicate. File the strongest one or two, never a report's worth. A model change is the maintainers' call, and the issue is where they make it.
 
 If `linear__save_document` is unavailable or fails, fall back to posting the full report in the thread and say why.
 

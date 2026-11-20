@@ -1,6 +1,6 @@
 ---
 name: repo-health-sweep
-description: Twice-weekly simplification audit of the evlog repository and Evi's own communication, run in bounded cohorts. Removes, dedupes and clarifies, opens one ready PR per batch of same-kind fixes (at most three per run), and records rejected findings so later runs go deeper. Load this when the repo-health-sweep schedule fires, or when Hugo asks for repository simplification, an unslop pass, or a clarity audit.
+description: Twice-weekly simplification audit of the evlog repository and Evi's own communication, run in bounded cohorts. Removes, dedupes and clarifies, opens one ready PR per batch of same-kind fixes (at most three per run), and records rejected findings so later runs go deeper. Load this when the repo-health-sweep schedule fires, or when a maintainer asks for repository simplification, an unslop pass, or a clarity audit.
 ---
 
 # Repo health sweep
@@ -174,7 +174,7 @@ The unit of delivery is a batch from `pullRequestBatches`: every confirmed candi
 
 Immediately before pushing or opening the pull request, run `git merge-base HEAD <reviewed-revision>` and require the output to equal the full reviewed SHA. Inspect `git diff <reviewed-revision>...HEAD` and require it to contain only the batch's verified candidates, plus the ledger files under `apps/evi/agent/ledgers/` when the branch carries the run's ledger update. If either check fails, do not deliver the branch; restart it from the reviewed revision.
 
-Open a normal, ready pull request, not a draft. Title it by kind and area (`refactor(core): drop paraphrasing comments in shared/`, `docs(evi): clarify the sweep delivery rules`). The body lists each candidate with its before and after. Read CI once it settles and fix any failure. Request review from `hugorcd` only once the run's ledger commit is pushed, below, and CI on the pull request's final head has passed. If the branch cannot meet the readiness gate, do not open a half-finished pull request. Keep the result as a blocker or proposal in the report.
+Open a normal, ready pull request, not a draft. Title it by kind and area (`refactor(core): drop paraphrasing comments in shared/`, `docs(evi): clarify the sweep delivery rules`). The body lists each candidate with its before and after. Read CI once it settles and fix any failure. Request review from the code owners only once the run's ledger commit is pushed, below, and CI on the pull request's final head has passed. If the branch cannot meet the readiness gate, do not open a half-finished pull request. Keep the result as a blocker or proposal in the report.
 
 Open at most three pull requests per run. One batch per pull request; never mix kinds or directories. Batches past the cap go to the compact ledger as next cohorts.
 
@@ -196,7 +196,7 @@ The ledger update rides in a pull request the run already opened whenever there 
 2. Otherwise, the first batch pull request this run opens. Put the line `Records the repo health sweep run of YYYY-MM-DD.` in its body above the ELI5 when you open it, so the next run's search finds it.
 3. Otherwise, when the run opened no pull request, a ready pull request with only the ledger commit, branched from current `origin/main`, titled like the commit, with the same line in its body. It needs no changeset and does not count toward the three-pull-request cap.
 
-Then read CI on every pull request this run opened or pushed to, fix any failure, and request review from `hugorcd` on each once its final head passes.
+Then read CI on every pull request this run opened or pushed to, fix any failure, and request review from the code owners on each once its final head passes.
 
 Post one line per artifact in the schedule thread, with links inline.
 
