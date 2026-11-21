@@ -4,8 +4,13 @@ import type { ProjectFacts } from './project-facts'
 
 export type { Framework }
 
-/** Route shape as detected on disk, before observability checks run. */
-export type RouteKind = 'api' | 'page' | 'middleware' | 'server-action' | 'cron' | 'websocket'
+/**
+ * Route shape as detected on disk, before observability checks run.
+ *
+ * `tool`, `schedule` and `channel` are an eve agent's entry points: a tool the
+ * model calls, and the schedules and channels that start its turns.
+ */
+export type RouteKind = 'api' | 'page' | 'middleware' | 'server-action' | 'cron' | 'websocket' | 'tool' | 'schedule' | 'channel'
 
 /**
  * One rule `map` runs against an entry point.
@@ -76,6 +81,13 @@ export interface RawRouteEntry {
  */
 export interface ExtractedRoute extends RawRouteEntry {
   scope?: SourceRange
+  /**
+   * Whether an integration records the entry point on an event whatever its
+   * code does: eve's turn event lists every call once the agent mounts
+   * `@evlog/eve`. Set, it decides `wide-event` in place of the code. Never
+   * written to `evlog.map.json`.
+   */
+  recorded?: boolean
 }
 
 /**

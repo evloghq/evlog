@@ -195,6 +195,270 @@ exports[`effect > effect-basic map snapshot 1`] = `
 }
 `;
 
+exports[`eve > eve-basic map snapshot 1`] = `
+{
+  "cliVersion": "[REDACTED]",
+  "framework": "eve",
+  "generatedAt": "[REDACTED]",
+  "projectName": "eve-basic",
+  "routes": [
+    {
+      "checks": {
+        "wide-event": {
+          "status": "pass",
+        },
+      },
+      "file": "agent/schedules/daily-digest.md",
+      "framework": "eve",
+      "handler": null,
+      "id": "3d66b4730152",
+      "kind": "schedule",
+      "method": null,
+      "path": "daily-digest",
+      "score": 100,
+      "sensitivity": {
+        "level": "none",
+        "reasons": [],
+      },
+      "suggestions": {},
+    },
+    {
+      "checks": {
+        "audit": {
+          "status": "n/a",
+        },
+        "context": {
+          "status": "pass",
+        },
+        "error-handling": {
+          "status": "n/a",
+        },
+        "structured-errors": {
+          "status": "pass",
+        },
+        "wide-event": {
+          "status": "pass",
+        },
+      },
+      "event": {
+        "audit": [],
+        "fields": [
+          "deploy.service",
+        ],
+      },
+      "file": "agent/tools/deploy.ts",
+      "framework": "eve",
+      "handler": {
+        "column": 0,
+        "line": 7,
+      },
+      "id": "4aa9057af7b4",
+      "kind": "tool",
+      "method": null,
+      "path": "deploy",
+      "score": 100,
+      "sensitivity": {
+        "level": "none",
+        "reasons": [],
+      },
+      "suggestions": {},
+    },
+    {
+      "checks": {
+        "wide-event": {
+          "status": "pass",
+        },
+      },
+      "file": "agent/channels/eve.ts",
+      "framework": "eve",
+      "handler": {
+        "column": 0,
+        "line": 4,
+      },
+      "id": "11ff3bd03b1a",
+      "kind": "channel",
+      "method": null,
+      "path": "eve",
+      "score": 100,
+      "sensitivity": {
+        "level": "none",
+        "reasons": [],
+      },
+      "suggestions": {},
+    },
+    {
+      "checks": {
+        "audit": {
+          "evidence": {
+            "file": "agent/tools/issue_refund.ts",
+            "line": 4,
+            "snippet": undefined,
+          },
+          "message": "has logger + context but no log.audit() — sensitive route needs audit trail",
+          "status": "fail",
+        },
+        "context": {
+          "evidence": {
+            "file": "agent/tools/issue_refund.ts",
+            "line": 4,
+            "snippet": undefined,
+          },
+          "message": "no log.set() context accumulation",
+          "status": "fail",
+        },
+        "error-handling": {
+          "status": "n/a",
+        },
+        "structured-errors": {
+          "evidence": {
+            "file": "agent/tools/issue_refund.ts",
+            "line": 8,
+            "snippet": "if (amount > 500) throw new Error('Refund above the limit')",
+          },
+          "message": "throw new Error() — use createError({ why, fix })",
+          "status": "fail",
+        },
+        "wide-event": {
+          "status": "pass",
+        },
+      },
+      "file": "agent/tools/issue_refund.ts",
+      "framework": "eve",
+      "handler": {
+        "column": 0,
+        "line": 4,
+      },
+      "id": "62df062221b8",
+      "kind": "tool",
+      "method": null,
+      "path": "issue_refund",
+      "score": 40,
+      "sensitivity": {
+        "level": "high",
+        "reasons": [
+          "money: path says "refund"",
+        ],
+      },
+      "suggestions": {},
+    },
+    {
+      "checks": {
+        "audit": {
+          "status": "n/a",
+        },
+        "context": {
+          "status": "pass",
+        },
+        "error-handling": {
+          "status": "n/a",
+        },
+        "structured-errors": {
+          "status": "n/a",
+        },
+        "wide-event": {
+          "status": "pass",
+        },
+      },
+      "event": {
+        "audit": [],
+        "fields": [
+          "order.id",
+        ],
+      },
+      "file": "agent/tools/lookup_order.ts",
+      "framework": "eve",
+      "handler": {
+        "column": 0,
+        "line": 5,
+      },
+      "id": "a16b0241f304",
+      "kind": "tool",
+      "method": null,
+      "path": "lookup_order",
+      "score": 100,
+      "sensitivity": {
+        "level": "none",
+        "reasons": [],
+      },
+      "suggestions": {},
+    },
+    {
+      "checks": {
+        "audit": {
+          "status": "n/a",
+        },
+        "context": {
+          "status": "pass",
+        },
+        "error-handling": {
+          "status": "n/a",
+        },
+        "structured-errors": {
+          "status": "n/a",
+        },
+        "wide-event": {
+          "evidence": {
+            "file": "agent/subagents/researcher/tools/search_tickets.ts",
+            "line": 6,
+            "snippet": undefined,
+          },
+          "message": "nothing records its runs — add @evlog/eve in the agent's extensions/",
+          "status": "fail",
+        },
+      },
+      "event": {
+        "audit": [],
+        "fields": [
+          "search.query",
+        ],
+      },
+      "file": "agent/subagents/researcher/tools/search_tickets.ts",
+      "framework": "eve",
+      "handler": {
+        "column": 0,
+        "line": 6,
+      },
+      "id": "22611ce73a0a",
+      "kind": "tool",
+      "method": null,
+      "path": "researcher/search_tickets",
+      "score": 60,
+      "sensitivity": {
+        "level": "none",
+        "reasons": [],
+      },
+      "suggestions": {},
+    },
+    {
+      "checks": {
+        "wide-event": {
+          "status": "pass",
+        },
+      },
+      "file": "agent/schedules/sweep.ts",
+      "framework": "eve",
+      "handler": {
+        "column": 0,
+        "line": 3,
+      },
+      "id": "55b9dc267218",
+      "kind": "schedule",
+      "method": null,
+      "path": "sweep",
+      "score": 100,
+      "sensitivity": {
+        "level": "none",
+        "reasons": [],
+      },
+      "suggestions": {},
+    },
+  ],
+  "ruleSetVersion": 3,
+  "score": 80,
+  "version": 1,
+}
+`;
+
 exports[`full scan snapshots > hono-basic map snapshot 1`] = `
 {
   "cliVersion": "[REDACTED]",

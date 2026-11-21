@@ -1,6 +1,6 @@
 ---
 name: review-logging-patterns
-description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify, Effect, and eve agents (`init` only). Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Effect, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
+description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify, Effect, and eve agents. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Effect, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
 license: MIT
 metadata:
   author: HugoRCD
@@ -92,6 +92,7 @@ What you get:
 - Per-file inspect: `npx evlog map <file> --no-write` shows the shape the handler could take
 - Each route is scored on its own handler and the same-file helpers it calls. In an Express, Hono or Fastify routes file, inspect one route with `npx evlog map "GET /users/:id" --no-write`
 - Re-run after fixes and watch the score move
+- On an eve agent, map lists the tools, schedules and channels under `agent/` (or each `agents/<name>/agent/` of a workspace). Mounting `@evlog/eve` in that agent's `extensions/` passes `wide-event` for all of them, and `useLogger().set()` from `@evlog/eve/logger` in a tool is its context. `evlog init` writes that mount.
 
 Work FIX FIRST in order, keep changes minimal (`useLogger()`, `log.set()`, `log.audit()`, `createError({ why, fix })`), then re-run with `--no-write`. Omit `--no-write` only when the user wants `evlog.map.json` written.
 

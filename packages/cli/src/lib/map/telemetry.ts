@@ -26,7 +26,7 @@ export type { MapGate, MapView } from './telemetry-fields'
 const PREFIX = 'map'
 
 /** Entry-point kinds the map can scan, a closed set, in scan order. */
-const KINDS: readonly RouteKind[] = ['api', 'page', 'middleware', 'server-action', 'cron', 'websocket']
+const KINDS: readonly RouteKind[] = ['api', 'page', 'middleware', 'server-action', 'cron', 'websocket', 'tool', 'schedule', 'channel']
 
 /** Sensitivity labels the classifier can assign, in precedence order. */
 const SENSITIVITIES = ['money', 'auth', 'pii'] as const

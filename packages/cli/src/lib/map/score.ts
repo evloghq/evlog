@@ -97,7 +97,9 @@ export function classifyRouteObservability(route: RouteEntry): 'instrumented' | 
     return 'dark'
   }
 
-  if (wide?.status === 'pass' && context?.status === 'pass') return 'instrumented'
+  /* An eve schedule or channel has no `context` check: the turns it starts are
+     its event, and their tools carry the context. */
+  if (wide?.status === 'pass' && (context === undefined || context.status === 'pass')) return 'instrumented'
   if (wide?.status === 'pass' || context?.status === 'pass') return 'partial'
   return 'dark'
 }

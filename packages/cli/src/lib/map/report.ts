@@ -62,6 +62,9 @@ const KIND_SHORT: Record<string, string> = {
   'server-action': 'ACT',
   'cron': 'CRON',
   'websocket': 'WS',
+  'tool': 'TOOL',
+  'schedule': 'SCHED',
+  'channel': 'CHAN',
 }
 
 function methodOf(route: RouteEntry): string {
@@ -143,6 +146,9 @@ function entryKindText(route: RouteEntry): string {
     case 'cron': return 'scheduled job'
     case 'server-action': return 'server action invoked from the client'
     case 'websocket': return 'websocket handler'
+    case 'tool': return `tool ${route.path} — the model calls it`
+    case 'schedule': return `schedule ${route.path} — starts a turn on its cron`
+    case 'channel': return `channel ${route.path} — starts turns from its messages`
   }
 }
 
@@ -198,6 +204,15 @@ function ruleExpects(id: CheckId): string {
 }
 
 /**
+ * What a check asks of this entry point. Where the integration records entry
+ * points on its own (eve), `wide-event` asks for that mount, not for a logger.
+ */
+function checkExpects(route: RouteEntry, id: CheckId): string {
+  const { recordedBy } = getFramework(route.framework)
+  return id === 'wide-event' && recordedBy ? recordedBy : ruleExpects(id)
+}
+
+/**
  * Why an entry point is worth fixing first, as a sentence.
  *
  * Deliberately human: "moves money with no audit trail" tells you what is at
@@ -217,7 +232,8 @@ function priorityReason(route: RouteEntry): { sentence: string, doc: string } {
     return { sentence: 'touches auth and logs nothing', doc: ruleDocs('wide-event') }
   }
   if (failed.includes('wide-event')) {
-    return { sentence: 'when it breaks, the event will not say why', doc: ruleDocs('wide-event') }
+    const sentence = getFramework(route.framework).recordedBy ? 'runs in turns nothing records' : 'when it breaks, the event will not say why'
+    return { sentence, doc: ruleDocs('wide-event') }
   }
   if (failed.includes('structured-errors')) {
     return { sentence: 'throws plain errors with no why or fix', doc: ruleDocs('structured-errors') }
@@ -266,9 +282,20 @@ function coverageAreas(active: RouteEntry[]): CoverageArea[] {
         : `${gaps} swallow${gaps === 1 ? 's' : ''} fetch errors`,
     },
     {
+      label: 'Agent tools',
+      routes: active.filter(route => route.kind === 'tool'),
+      meaning: (routes, gaps) => gaps === 0 ? 'every tool covered' : `${gaps} of ${routes.length} have gaps`,
+    },
+    {
       label: 'Middleware & jobs',
-      routes: active.filter(route => !['api', 'page'].includes(route.kind)),
+      routes: active.filter(route => ['middleware', 'server-action', 'cron', 'websocket'].includes(route.kind)),
       meaning: (_routes, gaps) => gaps === 0 ? 'fully covered' : 'run without any logging',
+    },
+    {
+      /* An eve schedule or channel can only fail by starting turns nothing records. */
+      label: 'Agent triggers',
+      routes: active.filter(route => route.kind === 'schedule' || route.kind === 'channel'),
+      meaning: (_routes, gaps) => gaps === 0 ? 'every turn recorded' : 'start turns nothing records',
     },
     {
       label: 'Money & auth',
@@ -431,7 +458,7 @@ export function formatMapReport(
        per route saying almost the same thing. */
     const byGapSignature = new Map<string, RouteEntry[]>()
     for (const route of rest) {
-      const signature = failedChecks(route).map(ruleExpects).join(' + ')
+      const signature = failedChecks(route).map(id => checkExpects(route, id)).join(' + ')
       const group = byGapSignature.get(signature)
       if (group) group.push(route)
       else byGapSignature.set(signature, [route])
@@ -814,15 +841,17 @@ export function formatMapInspect(ctx: CliContext, result: ScanResult, route: Rou
     .filter(([, check]) => check.status !== 'n/a' || check.suppressed)
   if (entries.length > 0) {
     lines.push(paint('dim', 'CHECKS'))
-    const width = Math.max(...entries.map(([id]) => ruleExpects(id).length)) + 2
+    const width = Math.max(...entries.map(([id]) => checkExpects(route, id).length)) + 2
+    const recorded = getFramework(route.framework).recordedBy !== undefined
     for (const [id, check] of entries) {
-      const label = pad(ruleExpects(id), width)
+      const label = pad(checkExpects(route, id), width)
       if (check.suppressed) {
         lines.push(`${paint('dim', '○')} ${label}${paint('dim', check.message ?? 'disabled')}`)
       } else if (check.status === 'pass') {
-        lines.push(`${paint('green', '✓')} ${label}${paint('dim', EXPLAIN[id]?.pass ?? 'ok')}`)
+        const pass = recorded && id === 'wide-event' ? 'recorded on the event of every turn it runs in' : EXPLAIN[id]?.pass
+        lines.push(`${paint('green', '✓')} ${label}${paint('dim', pass ?? 'ok')}`)
       } else {
-        const why = EXPLAIN[id]?.fail ?? check.message ?? 'failed'
+        const why = (recorded && id === 'wide-event' ? 'nothing records its runs' : EXPLAIN[id]?.fail) ?? check.message ?? 'failed'
         lines.push(`${paint('red', '✗')} ${label}${paint('dim', why)}  ${style.doc(ruleDocs(id))}`)
       }
     }

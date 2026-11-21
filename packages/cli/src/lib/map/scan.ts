@@ -33,6 +33,8 @@ interface AnalyseInput {
   id: string
   project: ProjectFacts
   capabilities: FrameworkCapabilities
+  /** {@link ProjectFacts.evlogPackages} with the framework's own `evlogModules`. */
+  evlogPackages: ReadonlyMap<string, ReadonlySet<string>>
 }
 
 /**
@@ -43,14 +45,14 @@ interface AnalyseInput {
  */
 function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: string[] } {
   const { ctx, id, project, capabilities } = input
-  const { scope, ...raw } = input.extracted
+  const { scope, recorded, ...raw } = input.extracted
   const parsed = (ctx.parse ?? parseFile)(join(ctx.projectRoot, raw.file))
   const reach = parsed && scope ? handlerReach(parsed, scope) : undefined
   const facts = parsed
     ? buildFileFacts(parsed, {
       evlogAutoImports: capabilities.evlogAutoImports,
       evlogBarrels: project.evlogBarrels,
-      evlogPackages: project.evlogPackages,
+      evlogPackages: input.evlogPackages,
       requestLoggerMembers: capabilities.requestLoggerMembers,
       middlewareRegistered: capabilities.requestLogger === 'ambient',
       reach,
@@ -62,7 +64,7 @@ function analyseRoute(input: AnalyseInput): { route: RouteEntry, warnings: strin
     : { level: 'none' as const, reasons: [] }
   const { checks, suggestions, warnings } = runRules({
     ctx,
-    target: { ...raw, sensitivity },
+    target: { ...raw, sensitivity, ...(recorded !== undefined && { recorded }) },
     parsed,
     facts,
     reach,
@@ -118,13 +120,16 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
     requestLoggerMembers: definition.requestLoggerMembers,
   }
 
+  const evlogModules = new Map(Object.entries(definition.evlogModules ?? {}).map(([source, names]) => [source, new Set(names)]))
   const project = collectProjectFacts(ctx, {
     packageJson: readPackageJson(ctx.projectRoot),
     evlogAutoImports: capabilities.evlogAutoImports,
+    evlogModules,
   })
   /* An app that reaches evlog only through a wrapper package has none of its
      own under pnpm, and the rules would tell it to adopt evlog. */
   if (!ctx.hasEvlog && project.evlogPackages.size > 0) ctx = { ...ctx, hasEvlog: true }
+  const evlogPackages = new Map([...project.evlogPackages, ...evlogModules])
 
   const found = await adapter.extractRoutes(ctx)
   /* A file the adapter could not parse and listed nothing for declares routes
@@ -145,7 +150,7 @@ export async function scan(input: ScanContext): Promise<ScanResult> {
   const ignored = new Set(ctx.ignore?.length ? glob(ctx.ignore, ctx.projectRoot).map(file => relativeFromRoot(ctx.projectRoot, file)) : [])
   const kept = extracted.filter(raw => !ignored.has(raw.file))
   const ids = routeIds(kept)
-  const analysed = kept.map((route, index) => analyseRoute({ ctx, extracted: route, id: ids[index]!, project, capabilities }))
+  const analysed = kept.map((route, index) => analyseRoute({ ctx, extracted: route, id: ids[index]!, project, capabilities, evlogPackages }))
   const routes = analysed.map(entry => entry.route)
   const unparsed = [...broken]
     .filter(([file]) => !ignored.has(file))

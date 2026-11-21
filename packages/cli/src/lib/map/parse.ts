@@ -116,6 +116,9 @@ export function parseSource(filePath: string, source: string): ParseResult | nul
     if (!extracted) return null
     code = extracted
   }
+  /* A Markdown entry point, such as an eve schedule written as a prompt, has
+     no code: it reads as an empty module rather than as a syntax error. */
+  if (ext === 'md') code = ''
 
   const result = parseSync(filePath, code, {
     sourceType: 'module',

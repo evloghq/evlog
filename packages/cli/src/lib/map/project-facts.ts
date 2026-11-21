@@ -112,7 +112,12 @@ function confirmFeature(feature: EvlogFeature, facts: FileFacts): boolean {
  */
 export function collectProjectFacts(
   ctx: ScanContext,
-  options: { packageJson: unknown, evlogAutoImports?: readonly string[] },
+  options: {
+    packageJson: unknown
+    evlogAutoImports?: readonly string[]
+    /** The framework's `evlogModules`, so its own logger counts as adoption evidence. */
+    evlogModules?: ReadonlyMap<string, ReadonlySet<string>>
+  },
 ): ProjectFacts {
   const dependencies = readDependencies(options.packageJson)
   const features = new Set<EvlogFeature>()
@@ -140,7 +145,7 @@ export function collectProjectFacts(
 
     const parsed = parseSource(file, source)
     if (!parsed) continue
-    const facts = buildFileFacts(parsed, { evlogAutoImports: options.evlogAutoImports })
+    const facts = buildFileFacts(parsed, { evlogAutoImports: options.evlogAutoImports, evlogPackages: options.evlogModules })
 
     for (const feature of markers) {
       if (!confirmFeature(feature, facts)) continue

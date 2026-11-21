@@ -57,8 +57,7 @@ const APPS = [
   { name: 'hono', fixture: 'hono-basic' },
   { name: 'express', fixture: 'express-basic' },
   { name: 'fastify', fixture: 'fastify-basic' },
-  /* `map` lists no eve entry points yet, so its checks have nothing to score. */
-  { name: 'eve', generate: generateEveApp, skip: name => name.startsWith('map') },
+  { name: 'eve', generate: generateEveApp },
 ]
 
 /**
@@ -161,13 +160,16 @@ export default defineAgent({
 })
 `)
 
-  write(dir, 'agent/tools/issue_refund.ts', `import { defineTool } from 'eve/tools'
+  // Context but no mount yet: `map` flags it until `init` writes agent/extensions/evlog.ts.
+  write(dir, 'agent/tools/issue_refund.ts', `import { useLogger } from '@evlog/eve/logger'
+import { defineTool } from 'eve/tools'
 import { z } from 'zod'
 
 export default defineTool({
   description: 'Refund an order.',
   inputSchema: z.object({ orderId: z.string(), amount: z.number() }),
   async execute({ orderId, amount }) {
+    useLogger().set({ refund: { orderId, amount } })
     return { orderId, refunded: amount }
   },
 })

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { getFramework } from '../../src/lib/frameworks'
-import type { Framework, RawRouteEntry, ScanContext } from '../../src/lib/map/types'
+import type { ExtractedRoute, Framework, ScanContext } from '../../src/lib/map/types'
 
 const tempDirs: string[] = []
 
@@ -19,7 +19,7 @@ async function project(files: Record<string, string>): Promise<string> {
   return root
 }
 
-async function routesOf(framework: Framework, root: string): Promise<RawRouteEntry[]> {
+async function routesOf(framework: Framework, root: string): Promise<ExtractedRoute[]> {
   const adapter = await getFramework(framework).map()
   return adapter.extractRoutes(scanContext(framework, root))
 }
@@ -451,5 +451,88 @@ const app = Fastify()
 await app.register(evlog, { drain })`,
     })
     expect(await requestLoggerOf('fastify', root)).toBe('ambient')
+  })
+})
+
+describe('eve adapter', () => {
+  const tool = `import { defineTool } from 'eve/tools'
+export default defineTool({ description: 'x', execute() { return {} } })`
+
+  it('names tools, schedules and channels from their paths, and leaves colocated tests out', async () => {
+    const root = await project({
+      'agent/instructions.md': 'Help.',
+      'agent/tools/lookup.ts': tool,
+      'agent/tools/lookup.test.ts': tool,
+      'agent/tools/__tests__/fixtures.ts': tool,
+      'agent/schedules/billing/sweep.md': '---\ncron: "0 0 * * 0"\n---\n\nSweep.',
+      'agent/channels/slack.ts': `import { slackChannel } from 'eve/channels/slack'\nexport default slackChannel({})`,
+      'agent/subagents/researcher/agent.ts': `import { defineAgent } from 'eve'\nexport default defineAgent({ description: 'r' })`,
+      'agent/subagents/researcher/tools/search.ts': tool,
+      'agent/subagents/researcher/subagents/reader/agent.ts': `import { defineAgent } from 'eve'\nexport default defineAgent({ description: 'r' })`,
+      'agent/subagents/researcher/subagents/reader/tools/read.ts': tool,
+      'agent/subagents/researcher/schedules/ignored.ts': tool,
+    })
+
+    const routes = await routesOf('eve', root)
+
+    expect(routes.map(route => `${route.kind} ${route.path} (${route.file})`).sort()).toEqual([
+      'channel slack (agent/channels/slack.ts)',
+      'schedule billing/sweep (agent/schedules/billing/sweep.md)',
+      'tool lookup (agent/tools/lookup.ts)',
+      'tool researcher/reader/read (agent/subagents/researcher/subagents/reader/tools/read.ts)',
+      'tool researcher/search (agent/subagents/researcher/tools/search.ts)',
+    ])
+  })
+
+  it('records the entry points of each agent that mounts @evlog/eve, and no others', async () => {
+    const root = await project({
+      'agent/extensions/evlog.ts': `export { default } from '@evlog/eve'`,
+      'agent/extensions/crm.ts': `import crm from '@acme/crm'\nexport default crm({})`,
+      'agent/tools/lookup.ts': tool,
+      'agent/subagents/researcher/agent.ts': `import { defineAgent } from 'eve'\nexport default defineAgent({ description: 'r' })`,
+      'agent/subagents/researcher/tools/search.ts': tool,
+      'agent/subagents/auditor/agent.ts': `import { defineAgent } from 'eve'\nexport default defineAgent({ description: 'a' })`,
+      'agent/subagents/auditor/extensions/evlog/extension.ts': `import evlog from '@evlog/eve'\nexport default evlog({ record: 'minimal' })`,
+      'agent/subagents/auditor/tools/check.ts': tool,
+    })
+
+    const routes = await routesOf('eve', root)
+
+    expect(Object.fromEntries(routes.map(route => [route.path, route.recorded]))).toEqual({
+      'lookup': true,
+      'researcher/search': false,
+      'auditor/check': true,
+    })
+  })
+
+  it('reads each agent of a workspace under its member name, with its own mount', async () => {
+    const root = await project({
+      'agents/support/agent/extensions/evlog.ts': `export { default } from '@evlog/eve'`,
+      'agents/support/agent/tools/lookup.ts': tool,
+      'agents/support/agent/schedules/digest.md': '---\ncron: "0 9 * * *"\n---\n\nDigest.',
+      'agents/ops/agent/tools/lookup.ts': tool,
+      'agents/ops/agent/subagents/pager/agent.ts': `import { defineAgent } from 'eve'\nexport default defineAgent({ description: 'p' })`,
+      'agents/ops/agent/subagents/pager/tools/page.ts': tool,
+      /* Its own package: eve leaves it out of the workspace. */
+      'agents/billing/package.json': '{}',
+      'agents/billing/agent/tools/charge.ts': tool,
+    })
+
+    const routes = await routesOf('eve', root)
+
+    expect(routes.map(route => `${route.kind} ${route.path} ${route.recorded}`).sort()).toEqual([
+      'schedule support/digest true',
+      'tool ops/lookup false',
+      'tool ops/pager/page false',
+      'tool support/lookup true',
+    ])
+  })
+
+  it('records nothing when the only mount is another package', async () => {
+    const root = await project({
+      'agent/extensions/logger.ts': `import logger from '@evlog/eve-like'\nexport default logger()`,
+      'agent/tools/lookup.ts': tool,
+    })
+    expect((await routesOf('eve', root)).map(route => route.recorded)).toEqual([false])
   })
 })
