@@ -1427,6 +1427,7 @@ describe('eve agents', () => {
     const extension = await readFile(join(cwd, 'agent', 'extensions', 'evlog.ts'), 'utf8')
     expect(extension).toContain(`import config from '../../evlog.config'`)
     expect(extension).toContain('export default evlog(config)')
+    expect(result.agentServices).toEqual([])
     expect(await readFile(join(cwd, 'agent', 'instrumentation', 'evlog.ts'), 'utf8')).toBe(EVE_INSTRUMENTATION)
     expect(result.install.command).toBe(`npm install ${evlogPackageSpec(VERSION)} ${evlogPackageSpec(VERSION, '@evlog/eve')}`)
     expect(result.manual.find(step => step.title === 'Run the agent on Node 24 or later')?.snippet).toBe(`"engines": { "node": ">=24" }`)
@@ -1447,7 +1448,7 @@ describe('eve agents', () => {
     ]))
   })
 
-  it('wires the Next app the agent ships in from the same config', async () => {
+  it('wires the Next app the agent ships in from the same config, the agent under its own service', async () => {
     const cwd = await project({ ...EVE, 'package.json': JSON.stringify({ name: 'web', dependencies: { eve: '1.3.0', next: '^16.0.0' } }), 'app/page.tsx': 'export default () => null\n' })
 
     const result = await run(cwd)
@@ -1455,7 +1456,10 @@ describe('eve agents', () => {
     expect(result.host).toBe('next')
     expect(files(result)).toEqual([join('agent', 'extensions', 'evlog.ts'), join('agent', 'instrumentation', 'evlog.ts'), 'evlog.config.ts', 'instrumentation.ts', join('lib', 'evlog.ts')])
     expect(await readFile(join(cwd, 'lib', 'evlog.ts'), 'utf8')).toContain(`import config from '../evlog.config'`)
-    expect(formatInitReport(fakeContext(cwd), result)).toContain('eve + next')
+    expect(await readFile(join(cwd, 'evlog.config.ts'), 'utf8')).toContain(`service: 'web',`)
+    expect(await readFile(join(cwd, 'agent', 'extensions', 'evlog.ts'), 'utf8')).toContain(`  ...config,\n  // The agent's own service, apart from the app's.\n  service: 'web-agent',\n})`)
+    expect(result.agentServices).toEqual(['web-agent'])
+    expect(formatInitReport(fakeContext(cwd), result)).toMatch(/eve \+ next.*service web.*agent web-agent/)
   })
 
   it('adds only the agent to a Next app evlog already reaches, leaving its files alone', async () => {
@@ -1473,8 +1477,22 @@ describe('eve agents', () => {
 
     expect(files(result)).toEqual([join('agent', 'extensions', 'evlog.ts'), join('agent', 'instrumentation', 'evlog.ts')])
     expect(result.answers.service).toBe('web')
+    expect(await readFile(join(cwd, 'agent', 'extensions', 'evlog.ts'), 'utf8')).toContain(`service: 'web-agent',`)
     expect(await readFile(join(cwd, 'evlog.config.ts'), 'utf8')).toBe(config)
     expect(await readFile(join(cwd, 'lib', 'evlog.ts'), 'utf8')).toBe(libEvlog)
+  })
+
+  it('hands back the service line for a mount beside an app that has none, and leaves one with a service alone', async () => {
+    const webApp = { ...EVE, 'package.json': JSON.stringify({ name: 'web', dependencies: { eve: '1.3.0', next: '^16.0.0' } }) }
+    const shared = `import evlog from '@evlog/eve'\nimport config from '../../evlog.config'\n\nexport default evlog(config)\n`
+    const own = `import evlog from '@evlog/eve'\nimport config from '../../evlog.config'\n\nexport default evlog({ ...config, service: 'support' })\n`
+
+    const withShared = await run(await project({ ...webApp, 'agent/extensions/evlog.ts': shared }), { dryRun: true })
+    const withOwn = await run(await project({ ...webApp, 'agent/extensions/evlog.ts': own }), { dryRun: true })
+
+    expect(withShared.manual.find(step => step.file === join('agent', 'extensions', 'evlog.ts'))).toMatchObject({ title: 'Give the agent its own service, web-agent', snippet: `service: 'web-agent',` })
+    expect(files(withShared)).not.toContain(join('agent', 'extensions', 'evlog.ts'))
+    expect(withOwn.manual.filter(step => step.file === join('agent', 'extensions', 'evlog.ts'))).toEqual([])
   })
 
   it('sets up only the agent under --framework eve, and only the app under --framework next', async () => {
@@ -1488,7 +1506,7 @@ describe('eve agents', () => {
     expect(files(app)).not.toContain(join('agent', 'extensions', 'evlog.ts'))
   })
 
-  it('registers evlog/nuxt beside the agent, and says the nuxt.config evlog block does not reach it', async () => {
+  it('registers evlog/nuxt beside the agent, and says the nuxt.config evlog block configures the app only', async () => {
     const nuxtConfig = `export default defineNuxtConfig({\n  modules: ['eve/nuxt'],\n  evlog: { env: { service: 'shop' } },\n})\n`
     const cwd = await project({ ...EVE, 'package.json': JSON.stringify({ name: 'shop', dependencies: { eve: '1.3.0', nuxt: '^4.0.0' } }), 'nuxt.config.ts': nuxtConfig })
 
@@ -1496,7 +1514,7 @@ describe('eve agents', () => {
 
     expect(result.host).toBe('nuxt')
     expect(result.written.find(file => file.relative === 'nuxt.config.ts')?.contents).toContain(`modules: ['eve/nuxt', 'evlog/nuxt'],`)
-    expect(result.notes).toContain('The evlog block in nuxt.config.ts reaches the Nuxt server only. The agent reads evlog.config.ts, so settings both should share belong there')
+    expect(result.notes).toContain('The evlog block in nuxt.config.ts configures the Nuxt app only. evlog.config.ts is shared: the Nuxt app and the agent both read it')
   })
 
   it('mounts in every member of an agent workspace, not in a root agent/ or a member with its own package', async () => {
@@ -1517,7 +1535,10 @@ describe('eve agents', () => {
       join('agents', 'support', 'agent', 'instrumentation', 'evlog.ts'),
       'evlog.config.ts',
     ])
-    expect(await readFile(join(cwd, 'agents', 'support', 'agent', 'extensions', 'evlog.ts'), 'utf8')).toContain(`import config from '../../../../evlog.config'`)
+    const support = await readFile(join(cwd, 'agents', 'support', 'agent', 'extensions', 'evlog.ts'), 'utf8')
+    expect(support).toContain(`import config from '../../../../evlog.config'`)
+    expect(support).toContain(`service: 'support',`)
+    expect(result.agentServices).toEqual(['research', 'support'])
     expect(existsSync(join(cwd, 'agent'))).toBe(false)
   })
 

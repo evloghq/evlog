@@ -68,6 +68,8 @@ export interface InitResult {
   manual: ManualStep[]
   /** The app an eve agent ships inside, wired beside it. */
   host: InitFramework | null
+  /** Services eve agents report under, apart from `answers.service`. */
+  agentServices: string[]
   /** The Vercel connector step for an eve agent, when one was chosen. */
   vercel: VercelSummary | null
   /** Extras asked for that this project cannot use. */
@@ -299,6 +301,7 @@ export async function runInit(
       notes: [],
       manual: [],
       host: null,
+      agentServices: [],
       vercel: null,
       dropped: [],
       insight: null,
@@ -571,6 +574,7 @@ export async function runInit(
     already: plan.already,
     notes: plan.notes,
     host: host ?? null,
+    agentServices: plan.agentServices ?? [],
     vercel,
     manual: plan.manual,
     dropped: droppedExtras(base),
@@ -612,6 +616,7 @@ function cancelledResult(input: {
     notes: [],
     manual: [],
     host: null,
+    agentServices: [],
     vercel: null,
     dropped: [],
     insight: null,

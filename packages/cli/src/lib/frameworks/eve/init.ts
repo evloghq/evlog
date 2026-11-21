@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { basename, dirname, join, relative } from 'node:path'
 import { readConfig } from '../../config/read'
 import type { WiringInput, WiringPlan } from '../../init/wiring'
 import { configCandidates, evlogConfigImport, firstExisting } from '../../init/wiring'
@@ -7,19 +7,24 @@ import { EVE_INSTRUMENTATION, inspectEveInstrumentation } from '../../setup-eve'
 import { eveAgentDirs, findEveMount } from './mount'
 
 /** The mount init writes. Named `evlog`, so the logs tool is `evlog__logs`. */
-function mountTemplate(input: WiringInput, file: string): string {
-  const head = `import evlog from '@evlog/eve'\nimport config from '${evlogConfigImport(input, file)}'\n`
-  if (input.agentLogs) {
-    return `${head}\n/** One wide event per agent turn, with the settings in evlog.config.ts. */\nexport default evlog(config)\n`
-  }
-  return `${head}
-/** One wide event per agent turn, with the settings in evlog.config.ts. */
-export default evlog({
-  ...config,
-  // Hides the evlog__logs tool. Remove to let the agent read its own events.
-  logs: { ...config.logs, access: () => false },
-})
-`
+function mountTemplate(input: WiringInput, file: string, service: string | undefined): string {
+  const head = `import evlog from '@evlog/eve'\nimport config from '${evlogConfigImport(input, file)}'\n\n/** One wide event per agent turn, with the settings in evlog.config.ts. */\n`
+  const overrides = [
+    ...(service ? [`  // The agent's own service, apart from the app's.\n  service: '${service}',`] : []),
+    ...(input.agentLogs ? [] : ['  // Hides the evlog__logs tool. Remove to let the agent read its own events.\n  logs: { ...config.logs, access: () => false },']),
+  ]
+  if (overrides.length === 0) return `${head}export default evlog(config)\n`
+  return `${head}export default evlog({\n  ...config,\n${overrides.join('\n')}\n})\n`
+}
+
+/**
+ * The service an agent's turns report under. A lone agent is the project, so
+ * it keeps the config's; beside an app it is `<service>-agent`, and a
+ * workspace member takes its eve name, the directory under `agents/`.
+ */
+function agentService(input: WiringInput, agentDir: string): string | undefined {
+  if (agentDir !== 'agent') return basename(dirname(agentDir))
+  return input.host ? `${input.service}-agent` : undefined
 }
 
 /**
@@ -29,24 +34,35 @@ export default evlog({
  * back as the lines to add.
  */
 export default function planEve(input: WiringInput): WiringPlan {
-  const plan: WiringPlan = { actions: [], manual: [], already: [], notes: [] }
+  const plan: WiringPlan = { actions: [], manual: [], already: [], notes: [], agentServices: [] }
   const agents = eveAgentDirs(input.root)
 
   for (const agentDir of agents.length > 0 ? agents : ['agent']) {
     const file = join(agentDir, 'extensions', 'evlog.ts')
     const mount = findEveMount(input.root, agentDir)
+    const service = agentService(input, agentDir)
     if (mount) {
       plan.already.push(`${mount.file} already mounts @evlog/eve${mount.name === 'evlog' ? '' : `, so its logs tool is ${mount.name}__logs`}`)
+      if (service && !/\bservice\s*:/.test(readFileSync(join(input.root, mount.file), 'utf8'))) {
+        plan.manual.push({
+          title: `Give the agent its own service, ${service}`,
+          file: mount.file,
+          snippet: `service: '${service}',`,
+          reason: `its turns report under ${input.service} with the rest of the project, and init does not rewrite a file you wrote`,
+        })
+      }
     } else if (existsSync(join(input.root, file)) || existsSync(join(input.root, agentDir, 'extensions', 'evlog'))) {
       plan.manual.push({
         title: 'Mount @evlog/eve',
         file,
-        snippet: mountTemplate(input, file).trim(),
+        snippet: mountTemplate(input, file, service).trim(),
         reason: `an evlog mount is already there and does not import @evlog/eve, and init does not rewrite a file you wrote`,
       })
     } else {
-      plan.actions.push({ path: join(input.root, file), relative: file, kind: 'create', contents: mountTemplate(input, file) })
+      plan.actions.push({ path: join(input.root, file), relative: file, kind: 'create', contents: mountTemplate(input, file, service) })
     }
+
+    if (service) plan.agentServices!.push(service)
 
     const traces = inspectEveInstrumentation(input.root, agentDir)
     if (traces.state === 'present') {
@@ -102,7 +118,7 @@ export default function planEve(input: WiringInput): WiringPlan {
   if (input.host === 'nuxt') {
     const nuxtConfig = firstExisting(input.root, configCandidates('nuxt.config'))
     if (nuxtConfig && /\bevlog\s*:\s*\{/.test(readFileSync(nuxtConfig, 'utf8'))) {
-      plan.notes.push(`The evlog block in ${relative(input.root, nuxtConfig)} reaches the Nuxt server only. The agent reads evlog.config.ts, so settings both should share belong there`)
+      plan.notes.push(`The evlog block in ${relative(input.root, nuxtConfig)} configures the Nuxt app only. evlog.config.ts is shared: the Nuxt app and the agent both read it`)
     }
   }
 

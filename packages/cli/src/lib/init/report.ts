@@ -40,6 +40,7 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
   lines.push([
     paint('bold', result.host ? `${answers.framework} + ${result.host}` : answers.framework),
     paint('dim', `service ${answers.service}`),
+    ...(result.agentServices.length > 0 ? [paint('dim', `${result.agentServices.length > 1 ? 'agents' : 'agent'} ${result.agentServices.join(', ')}`)] : []),
     paint('dim', `dev → ${dev}`),
     paint('dim', `prod → ${prod.length > 0 ? prod.join(' + ') : 'not set'}`),
   ].join(paint('dim', ' · ')))

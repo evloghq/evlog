@@ -208,6 +208,7 @@ function toJson(result: InitResult): Record<string, unknown> {
     written: result.written.map(action => ({ file: action.relative, kind: action.kind })),
     already: result.already,
     notes: result.notes,
+    agentServices: result.agentServices,
     vercel: result.vercel,
     agentLogs: result.answers.framework === 'eve' ? result.answers.agentLogs : undefined,
     manual: result.manual.map(step => ({ title: step.title, file: step.file, reason: step.reason })),

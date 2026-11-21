@@ -34,6 +34,8 @@ export interface WiringPlan {
   already: string[]
   /** What the setup gives the reader that no file shows, such as a tool the agent gets. */
   notes: string[]
+  /** Services eve agents report under, apart from the app's. */
+  agentServices?: string[]
 }
 
 export interface WiringInput {
