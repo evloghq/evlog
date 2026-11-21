@@ -83,8 +83,13 @@ jobs:
             with:
               team: ${{ vars.TURBO_TEAM }}
 
+          # @evlog/cli depends on evlog, so this installs both packages and
+          # everything they build and test with: half the workspace, and a
+          # cache entry that unpacks in half the time.
           - name: Set up pnpm and Node
             uses: ./.github/actions/setup
+            with:
+              filters: --filter=@evlog/cli...
 
       - name: Set up Bun for import regressions
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -148,6 +153,8 @@ jobs:
 
           - name: Set up pnpm and Node
             uses: ./.github/actions/setup
+            with:
+              filters: --filter=@evlog/cli...
 
       # Same as for evlog: coverage bypasses turbo, so the CLI and the
       # workspace packages it imports are prepared explicitly.
@@ -267,14 +274,14 @@ jobs:
         with:
           team: ${{ vars.TURBO_TEAM }}
 
-      # Windows has no node_modules cache to restore (only main saves one, and
-      # main never runs this job), so it installs only the CLI and the
-      # workspace packages it builds from. Linux restores main's full cache.
+      # The same install as the test jobs. Linux restores the entry main saves
+      # for them; Windows has none (main never runs this job), so it installs,
+      # and the filter keeps that to half the workspace.
       - name: Set up pnpm and Node
         if: steps.cli.outputs.changed == 'true'
         uses: ./.github/actions/setup
         with:
-          filters: ${{ runner.os == 'Windows' && '--filter=@evlog/cli...' || '' }}
+          filters: --filter=@evlog/cli...
 
       - name: Build the CLI
         if: steps.cli.outputs.changed == 'true'

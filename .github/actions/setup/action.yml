@@ -48,7 +48,10 @@ runs:
         node-version-file: .node-version
         node-version: ${{ inputs.node-version }}
         registry-url: ${{ inputs.registry-url }}
-        cache: ${{ steps.modules.outputs.cache-hit != 'true' && 'pnpm' || '' }}
+        # A merge queue run saves under its own temporary ref, which no other
+        # run can read, so its store cache would only push main's out of the
+        # 10 GB quota.
+        cache: ${{ steps.modules.outputs.cache-hit != 'true' && github.event_name != 'merge_group' && 'pnpm' || '' }}
 
     - name: Install dependencies
       id: install
