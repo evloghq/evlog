@@ -197,12 +197,11 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     /**
      * Every event gets a push sequence. A request-end wait holds every event pushed
      * before it that has not settled, so it is the sequence it was registered at, and
-     * it resolves once `lowestUnsettled` reaches it. Events settle mostly in push order:
-     * the ones that settle ahead of a lower sequence wait in `settledAhead`.
+     * it resolves once the lowest unsettled sequence reaches it. Set order is insertion
+     * order, so the first sequence in `unsettled` is the lowest.
      */
     let nextSeq = 0
-    let lowestUnsettled = 0
-    const settledAhead = new Set<number>()
+    const unsettled = new Set<number>()
     /**
      * Request-end waits, in registration order, with the sends made for their
      * events and the runtime's deadline. `sending` ones also send those events now
@@ -319,16 +318,11 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     /** Resolves request-end waiters whose events are all delivered or dropped. */
     function release(entries: Entry<T>[]): void {
       for (const entry of entries) {
-        if (entry.settled) continue
         entry.settled = true
-        if (entry.seq !== lowestUnsettled) {
-          settledAhead.add(entry.seq)
-          continue
-        }
-        lowestUnsettled++
-        while (settledAhead.size > 0 && settledAhead.delete(lowestUnsettled)) lowestUnsettled++
+        unsettled.delete(entry.seq)
       }
       if (heldWaiters.size === 0) return
+      const lowestUnsettled = unsettled.size === 0 ? nextSeq : unsettled.values().next().value!
       for (const waiter of heldWaiters) {
         if (waiter.until > lowestUnsettled) break
         heldWaiters.delete(waiter)
@@ -469,6 +463,8 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
         compact()
         const batch = buffer.splice(0, batchSize)
         if (await sendWithRetry(batch) === 'paused') {
+          // Pushes during the send may have dropped from the front: the batch goes back ahead of live events only.
+          compact()
           buffer.unshift(...batch)
           dropOverflow()
         }
@@ -519,7 +515,8 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
         drop([oldest], 'buffer-full')
       }
       if (buffered() === 0) bufferedSince = Date.now()
-      buffer.push({ ctx, seq: nextSeq++, settled: false })
+      buffer.push({ ctx, seq: nextSeq, settled: false })
+      unsettled.add(nextSeq++)
 
       if (buffered() >= batchSize && pauseRemainingMs() === 0) {
         clearTimer()
@@ -567,7 +564,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     }
 
     function waitHeld(sending: boolean, deadline = Number.POSITIVE_INFINITY): Promise<void> {
-      if (lowestUnsettled === nextSeq) return Promise.resolve()
+      if (unsettled.size === 0) return Promise.resolve()
       const done = new Promise<void>((resolve) => {
         heldWaiters.add({ until: nextSeq, resolve, sending, sends: 0, deadline })
       })

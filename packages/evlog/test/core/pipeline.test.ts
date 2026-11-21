@@ -268,6 +268,25 @@ describe('createDrainPipeline', () => {
       const batch = getBatchArg(defined(drain.mock.calls[0], 'drain call'))
       expect(batch.map(c => c.event.id)).toEqual([2, 3, 4])
     })
+
+    it('puts a paused batch back ahead of the events left after an overflow during its send', async () => {
+      const pending: Array<(error: Error) => void> = []
+      const drain = vi.fn(() => new Promise<void>((_, reject) => pending.push(reject)))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 1, intervalMs: 600_000 }, maxBufferSize: 2, onDropped })(drain)
+
+      hook(createTestContext(0))
+      hook(createTestContext(1))
+      hook(createTestContext(2))
+      hook(createTestContext(3))
+      defined(pending[0], 'send')(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 60_000 }))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(onDropped.mock.calls.map(call => getBatchArg(call).map(ctx => ctx.event.id))).toEqual([[1], [0]])
+      expect(hook.pending).toBe(2)
+      await hook.flush()
+      expect(onDropped.mock.calls.slice(2).flatMap(call => getBatchArg(call).map(ctx => ctx.event.id))).toEqual([2, 3])
+    })
   })
 
   describe('flush()', () => {
