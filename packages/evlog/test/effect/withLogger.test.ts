@@ -71,6 +71,121 @@ describe('evlog/effect withLogger', () => {
     await expect(Effect.runPromise(set({ ignored: true }))).resolves.toBeUndefined()
   })
 
+  it('drops a discarded unit that succeeds', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromise(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.set({ recipients: 0 })
+      log.discard()
+    }).pipe(withLogger('empty-digest', { drain })))
+
+    expect(drain).not.toHaveBeenCalled()
+  })
+
+  it('emits a discarded unit when it fails', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromiseExit(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.discard()
+      yield* Effect.fail(new Error('mailer unavailable'))
+    }).pipe(withLogger('empty-digest', { drain })))
+    await waitForDrainCalls(drain)
+
+    expect(drainedEvent(drain)).toMatchObject({
+      action: 'empty-digest',
+      level: 'error',
+      error: { message: 'mailer unavailable' },
+    })
+  })
+
+  it('keeps a discarded unit that records an error without failing', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromise(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.discard()
+      log.error(new Error('partial send'))
+    }).pipe(withLogger('digest', { drain })))
+    await waitForDrainCalls(drain)
+
+    expect(drainedEvent(drain)).toMatchObject({ action: 'digest', level: 'error' })
+  })
+
+  it('drops a discarded unit that is interrupted', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromiseExit(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.discard()
+      yield* Effect.interrupt
+    }).pipe(withLogger('interrupted-digest', { drain })))
+
+    expect(drain).not.toHaveBeenCalled()
+  })
+
+  it('emits nothing from a successful onError unit', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromise(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.set({ sessions: { expired: 0 } })
+    }).pipe(withLogger('expire-sessions', { drain, emit: 'onError' })))
+
+    expect(drain).not.toHaveBeenCalled()
+  })
+
+  it('emits nothing from an interrupted onError unit', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromiseExit(Effect.interrupt.pipe(
+      withLogger('expire-sessions', { drain, emit: 'onError' }),
+    ))
+
+    expect(drain).not.toHaveBeenCalled()
+  })
+
+  it('keeps an error recorded by a successful onError unit', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromise(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.error(new Error('partial send'))
+    }).pipe(withLogger('digest', { drain, emit: 'onError' })))
+    await waitForDrainCalls(drain)
+
+    expect(drainedEvent(drain)).toMatchObject({ action: 'digest', level: 'error', error: { message: 'partial send' } })
+  })
+
+  it('keeps an audit record from a successful onError unit', async () => {
+    const { drain } = createPipelineSpies()
+
+    await Effect.runPromise(Effect.gen(function* () {
+      const log = yield* EvlogLogger
+      log.audit({
+        action: 'invoice.refund',
+        actor: { type: 'user', id: 'u_1' },
+        target: { type: 'invoice', id: 'inv_1' },
+      })
+    }).pipe(withLogger('refund', { drain, emit: 'onError' })))
+    await waitForDrainCalls(drain)
+
+    expect(drainedEvent(drain)).toMatchObject({ action: 'refund', audit: { action: 'invoice.refund' } })
+  })
+
+  it('keeps a failing onError unit even when head sampling would drop it', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ env: { service: 'effect-test' }, pretty: false, sampling: { rates: { error: 0 } } })
+
+    await Effect.runPromiseExit(Effect.fail(new Error('delete failed')).pipe(
+      withLogger('expire-sessions', { drain, emit: 'onError' }),
+    ))
+    await waitForDrainCalls(drain)
+
+    expect(drainedEvent(drain)).toMatchObject({ action: 'expire-sessions', level: 'error' })
+  })
+
   it('nests units in the same trace', async () => {
     const { drain } = createPipelineSpies()
 

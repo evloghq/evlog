@@ -4,6 +4,7 @@ import { createRequestLogger, initLogger } from '../../src/logger'
 import type { FieldContext } from '../../src/types'
 import { withFakeTimers } from '../helpers/timers'
 import { defined } from '../helpers/defined'
+import { createPipelineSpies } from '../helpers/framework'
 
 describe('createRequestLogger', () => {
   let infoSpy: ReturnType<typeof vi.spyOn>
@@ -540,6 +541,104 @@ describe('createRequestLogger', () => {
 
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
     expect(consoleWarnSpy.mock.calls[0]?.[0]).toContain('log.setLevel() called after the wide event was emitted')
+  })
+
+  describe('discard()', () => {
+    it('drops a successful event without writing or draining', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({ pretty: false, drain })
+
+      const logger = createRequestLogger({})
+      logger.set({ recipients: 0 })
+      logger.discard()
+
+      expect(logger.emit()).toBeNull()
+      expect(infoSpy).not.toHaveBeenCalled()
+      expect(drain).not.toHaveBeenCalled()
+    })
+
+    it('still emits an error recorded after discard()', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({ pretty: false, drain })
+
+      const logger = createRequestLogger({})
+      logger.discard()
+      logger.error(new Error('mailer unavailable'))
+      const event = logger.emit()
+
+      expect(event).toMatchObject({ level: 'error', error: { message: 'mailer unavailable' } })
+      expect(drain).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps an explicit error level set after discard()', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({ pretty: false, drain })
+
+      const logger = createRequestLogger({})
+      logger.discard()
+      logger.setLevel('error')
+      const event = logger.emit()
+
+      expect(event).toHaveProperty('level', 'error')
+      expect(drain).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps a recorded error even when error sampling is zero', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({ pretty: false, drain, sampling: { rates: { error: 0 } } })
+
+      const logger = createRequestLogger({})
+      logger.discard()
+      logger.error(new Error('mailer unavailable'))
+      const event = logger.emit()
+
+      expect(event).toMatchObject({ level: 'error', error: { message: 'mailer unavailable' } })
+      expect(drain).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps an audit record even when info sampling is zero', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({ pretty: false, drain, sampling: { rates: { info: 0 } } })
+
+      const logger = createRequestLogger({})
+      logger.discard()
+      logger.audit({
+        action: 'invoice.refund',
+        actor: { type: 'user', id: 'u_1' },
+        target: { type: 'invoice', id: 'inv_1' },
+      })
+      const event = logger.emit()
+
+      expect(event).toMatchObject({ audit: { action: 'invoice.refund', outcome: 'success' } })
+      expect(drain).toHaveBeenCalledTimes(1)
+    })
+
+    it('wins over a keep rule and head sampling', () => {
+      const { drain } = createPipelineSpies()
+      initLogger({
+        pretty: false,
+        drain,
+        sampling: { rates: { info: 100 }, keep: [{ duration: 0 }] },
+      })
+
+      const logger = createRequestLogger({})
+      logger.discard()
+
+      expect(logger.emit()).toBeNull()
+      expect(drain).not.toHaveBeenCalled()
+    })
+
+    it('warns and is a no-op after emit()', () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const logger = createRequestLogger({})
+
+      logger.emit()
+      consoleWarnSpy.mockClear()
+      logger.discard()
+
+      expect(consoleWarnSpy).toHaveBeenCalledTimes(1)
+      expect(consoleWarnSpy.mock.calls[0]?.[0]).toContain('log.discard() called after the wide event was emitted')
+    })
   })
 
   it('includes duration in emitted event', async () => {

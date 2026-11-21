@@ -888,6 +888,7 @@ const noopAudit = Object.assign(() => {}, { deny: () => {} }) as AuditMethod
 export const noopLogger: ForkableLogger = {
   set() {},
   setLevel() {},
+  discard() {},
   error() {},
   fatal() {},
   info() {},
@@ -949,6 +950,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
   let hasFatal = false
   let hasWarn = false
   let manualLevel: LogLevel | undefined
+  let discarded = false
   let emitted = false
   let pendingWideEvent: WideEvent | null = null
 
@@ -1009,6 +1011,14 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
         return
       }
       manualLevel = level
+    },
+
+    discard(): void {
+      if (emitted) {
+        warnPostEmit('log.discard()', 'Ignoring discard.')
+        return
+      }
+      discarded = true
     },
 
     error(error: Error | string, errorContext?: FieldContext<T>): void {
@@ -1121,7 +1131,15 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const durationMs = overrides?._durationMs ?? elapsedMs(startTime)
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
+      // Audit records are compliance evidence and stay force-kept, so read the
+      // flag before discard decides whether the event is dropped.
       const auditForceKeep = consumeAuditForceKeep(context)
+      if (discarded && !auditForceKeep && !hasError && !hasFatal && manualLevel !== 'error' && manualLevel !== 'fatal') {
+        emitted = true
+        pendingWideEvent = null
+        return null
+      }
+
       // error and fatal are checked by level, not through the floor, so an untyped floor ('WARN', 'fatal') cannot drop them.
       const floor = state.sampling.minLevel
       if (!auditForceKeep && level !== 'error' && level !== 'fatal' && floor && !isLevelEnabled(level, floor)) {
@@ -1131,7 +1149,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       }
 
       let forceKeep = false
-      if (overrides?._forceKeep) {
+      if (discarded || overrides?._forceKeep) {
         forceKeep = true
       } else if (auditForceKeep) {
         forceKeep = true

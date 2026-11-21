@@ -1,5 +1,5 @@
 import type { Tracer } from 'effect'
-import { Effect, Option } from 'effect'
+import { Cause, Effect, Option } from 'effect'
 import { Headers, HttpTraceContext } from 'effect/http'
 import { createLogger } from '../logger'
 import type { BaseEvlogOptions } from '../shared/middleware'
@@ -13,6 +13,14 @@ import { TraceState, provideUnit, traceFields } from './unit'
 export interface WithLoggerOptions extends Pick<BaseEvlogOptions, 'drain' | 'enrich' | 'keep' | 'redact' | 'plugins' | 'waitUntil'> {
   /** Fields the wide event starts with. */
   fields?: Record<string, unknown>
+  /**
+   * When to emit the unit's wide event. `'onError'` discards successful and
+   * interrupted runs as `log.discard()` does, so a recorded error
+   * or an audit record still emits, and keeps failures even when sampling would
+   * drop them.
+   * @default 'always'
+   */
+  emit?: 'always' | 'onError'
   /**
    * Continue the trace of this W3C `traceparent` (a queue message, a Durable
    * Object call) instead of the current span. Malformed values start a new trace.
@@ -29,6 +37,9 @@ function startUnit(action: string, span: Tracer.AnySpan, options: WithLoggerOpti
     logger,
     finish: exit => Effect.promise(async () => {
       if (exit._tag === 'Failure') recordCause(logger, exit.cause)
+      const failed = exit._tag === 'Failure'
+        && (Cause.hasFails(exit.cause) || Cause.hasDies(exit.cause))
+      if (options.emit === 'onError' && !failed) logger.discard()
       const context = logger.getContext()
       const status = typeof context.status === 'number' ? context.status : undefined
       const duration = elapsedMs(start)
@@ -36,7 +47,10 @@ function startUnit(action: string, span: Tracer.AnySpan, options: WithLoggerOpti
       await options.keep?.(tail)
       const runner = resolveMiddlewarePluginRunner(options)
       if (runner.hasKeep) await runner.runKeep(tail)
-      const event = logger.emit({ _forceKeep: tail.shouldKeep, _durationMs: duration })
+      const event = logger.emit({
+        _forceKeep: tail.shouldKeep || (options.emit === 'onError' && failed),
+        _durationMs: duration,
+      })
       if (event) await runEnrichAndDrain(event, options, undefined, status, runner)
     }),
   }
