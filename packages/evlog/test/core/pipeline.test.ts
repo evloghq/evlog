@@ -909,6 +909,14 @@ describe('createDrainPipeline', () => {
       }, n => 250 * n, 'request-end waits')
     })
 
+    it('keeps pushes into a full buffer linear in its size while the backend hangs', () => {
+      expectLinearTime<number>((events) => {
+        (globalThis as Record<symbol, { pending?: Set<unknown> } | undefined>)[Symbol.for('evlog.drains.v2')]?.pending?.clear()
+        const hook = createDrainPipeline<DrainContext>({ batch: { size: 1, intervalMs: 5000 }, maxBufferSize: events, onDropped: () => {} })(() => new Promise<void>(() => {}))
+        for (let id = 0; id < 2 * events; id++) hook(createTestContext(id))
+      }, n => 4_000 * n, 'buffer-full pushes')
+    })
+
     it('resolves every request at 20 events/s with a 300 ms backend, within two round trips of its end', async () => {
       vi.stubEnv('VERCEL', '1')
       onTestFinished(() => vi.unstubAllEnvs())
