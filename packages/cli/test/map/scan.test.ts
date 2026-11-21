@@ -324,6 +324,86 @@ describe('effect', () => {
   })
 })
 
+describe('eve', () => {
+  const root = join(FIXTURES, 'eve-basic')
+  let result: ScanResult
+
+  beforeAll(async () => {
+    result = await scan(await ctx(root, 'eve'))
+  })
+
+  async function detectIn(dependencies: Record<string, string>, agentDir: boolean): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'evlog-cli-eve-'))
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'app', dependencies }), 'utf8')
+    if (agentDir) await mkdir(join(dir, 'agent'))
+    try {
+      return detectFramework(await resolveProject(dir)).framework
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+
+  const route = (kind: string, path: string) => result.map.routes.find(r => r.kind === kind && r.path === path)
+
+  it('detects an eve agent by its agent/ directory, ahead of the web app it ships in', async () => {
+    expect(detectFramework(await resolveProject(root)).framework).toBe('eve')
+    expect(await detectIn({ eve: '^1.0.0', next: '^16.0.0' }, true)).toBe('eve')
+    expect(await detectIn({ eve: '^1.0.0', next: '^16.0.0' }, false)).toBe('next')
+  })
+
+  it('lists tools, background tools, schedules, channels and subagent tools, not skills or tests', () => {
+    expect(result.map.routes.map(r => `${r.kind} ${r.path}`).sort()).toEqual([
+      'channel eve',
+      'schedule daily-digest',
+      'schedule sweep',
+      'tool deploy',
+      'tool issue_refund',
+      'tool lookup_order',
+      'tool researcher/search_tickets',
+    ])
+    expect(result.unparsed).toEqual([])
+  })
+
+  it('credits a mounted @evlog/eve as the event and useLogger().set() from @evlog/eve/logger as context', () => {
+    expect(route('tool', 'lookup_order')).toMatchObject({ score: 100, checks: { 'wide-event': { status: 'pass' }, 'context': { status: 'pass' } } })
+    expect(route('tool', 'deploy')?.checks['structured-errors']?.status).toBe('pass')
+
+    const refund = route('tool', 'issue_refund')
+    expect(refund?.checks['wide-event']?.status).toBe('pass')
+    expect(refund?.checks['context']?.status).toBe('fail')
+    expect(refund?.checks['audit']?.status).toBe('fail')
+  })
+
+  it('scores schedules and channels on whether their turns are recorded, and counts them instrumented', () => {
+    for (const [kind, path] of [['schedule', 'daily-digest'], ['schedule', 'sweep'], ['channel', 'eve']] as const) {
+      expect(route(kind, path)?.checks).toEqual({ 'wide-event': { status: 'pass' } })
+    }
+    expect(result.summary).toMatchObject({ instrumented: 5, partial: 2, dark: 0 })
+  })
+
+  it('fails a subagent tool whose agent does not mount @evlog/eve itself', () => {
+    expect(route('tool', 'researcher/search_tickets')?.checks['wide-event']).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining('add @evlog/eve in the agent\'s extensions/'),
+    })
+  })
+
+  it('eve-basic map snapshot', () => {
+    expect(mapForSnapshot(result.map)).toMatchSnapshot()
+  })
+
+  it('reads each agent of a workspace on its own mount, a directory mount included', async () => {
+    const workspace = await scan(await ctx(join(FIXTURES, 'eve-workspace'), 'eve'))
+    expect(detectFramework(await resolveProject(join(FIXTURES, 'eve-workspace'))).framework).toBe('eve')
+    expect(Object.fromEntries(workspace.map.routes.map(r => [`${r.kind} ${r.path}`, r.checks['wide-event']?.status]))).toEqual({
+      'tool support/lookup_order': 'pass',
+      'channel support/eve': 'pass',
+      'tool ops/restart_service': 'fail',
+      'schedule ops/heartbeat': 'fail',
+    })
+  })
+})
+
 /* The setup from EVL-659: a Next.js app in a pnpm workspace that only ever
    imports a shared `@acme/logger` package, with evlog installed in that package
    and not in the app. */

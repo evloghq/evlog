@@ -4,11 +4,19 @@ import type { ProjectFacts } from '../project-facts'
 import type { CheckId, Framework, RawRouteEntry, RouteKind, Sensitivity } from '../types'
 
 /** Entry-point kinds that own a server-side wide event. */
-export const HANDLER_KINDS: readonly RouteKind[] = ['api', 'server-action', 'middleware', 'cron']
+export const HANDLER_KINDS: readonly RouteKind[] = ['api', 'server-action', 'middleware', 'cron', 'tool']
+
+/**
+ * Entry points that start an event and run no code of their own inside it:
+ * an eve schedule or channel starts a turn, and the turn's tools add its context.
+ */
+export const TRIGGER_KINDS: readonly RouteKind[] = ['schedule', 'channel']
 
 /** The entry point a rule is looking at, with its sensitivity already resolved. */
 export interface RuleTarget extends RawRouteEntry {
   sensitivity: Sensitivity
+  /** {@link ExtractedRoute.recorded}, when the adapter decides it. */
+  recorded?: boolean
 }
 
 /** A gap a rule found. Reporting nothing means the rule passed. */

@@ -90,6 +90,16 @@ export interface FrameworkDefinition<TId extends string = string> {
    * `req.log.set(…)` is instrumented without ever naming `useLogger`.
    */
   requestLoggerMembers?: readonly string[]
+  /**
+   * Modules of the integration that export a logger under evlog's names
+   * without re-exporting evlog, e.g. `useLogger` from `@evlog/eve/logger`.
+   */
+  evlogModules?: Readonly<Record<string, readonly string[]>>
+  /**
+   * What records an entry point on an event without its code asking, for an
+   * adapter that sets {@link ExtractedRoute.recorded}. Named when one is not recorded.
+   */
+  recordedBy?: string
   shape: FrameworkShape
   map: () => Promise<MapAdapter>
   init?: () => Promise<InitPlanner>

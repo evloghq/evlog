@@ -1,5 +1,5 @@
 import { getFramework } from '../../frameworks'
-import { HANDLER_KINDS } from './types'
+import { HANDLER_KINDS, TRIGGER_KINDS } from './types'
 import type { MapRule } from './types'
 
 /**
@@ -18,7 +18,7 @@ export const wideEventRule = {
   question: 'Does this entry point emit a wide event?',
   weight: 40,
   docs: '/learn/wide-events',
-  appliesTo: { kinds: HANDLER_KINDS },
+  appliesTo: { kinds: [...HANDLER_KINDS, ...TRIGGER_KINDS] },
 
   fixSlot: 'setup',
   suggest({ framework }) {
@@ -26,9 +26,13 @@ export const wideEventRule = {
   },
 
   create(context) {
-    const { facts, capabilities } = context
+    const { facts, capabilities, target } = context
     return {
       onEnd() {
+        if (target.recorded !== undefined) {
+          if (!target.recorded) context.report({ message: `nothing records its runs — add ${getFramework(context.framework).recordedBy}` })
+          return
+        }
         /* An evlog wrapper instruments the handler without naming a logger —
            `withEvlog` is how evlog documents its own Next.js integration. */
         if (facts.loggerInit || facts.evlogWrappers.size > 0) return

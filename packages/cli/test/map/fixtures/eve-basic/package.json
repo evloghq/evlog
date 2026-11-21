@@ -1,0 +1,11 @@
+{
+  "name": "eve-basic",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@evlog/eve": "^1.0.0-beta.1",
+    "eve": "^1.0.2",
+    "evlog": "^3.0.0-beta.0",
+    "zod": "^4.0.0"
+  }
+}
