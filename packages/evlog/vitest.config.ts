@@ -21,6 +21,7 @@ export default defineConfig({
   ],
   test: {
     hookTimeout: 30_000,
+    setupFiles: ['./test/helpers/serverless-platform.ts'],
     include: ['test/**/*.test.ts'],
     environment: 'node',
     // Flag tests slower than this for triage; lift the suite out of the
