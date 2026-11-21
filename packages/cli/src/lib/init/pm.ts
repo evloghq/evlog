@@ -27,27 +27,28 @@ export function detectPackageManager(dirs: string[]): PackageManager {
 }
 
 /**
- * The `evlog` spec init installs. A prerelease CLI installs evlog from `beta`:
- * until a major is GA, `latest` is the previous one, whose import paths differ.
+ * The spec init installs a package with. A prerelease CLI installs from `beta`:
+ * until evlog 3 is GA, `latest` is evlog 2, whose import paths differ and which
+ * `@evlog/eve` does not accept.
  */
-export function evlogPackageSpec(cliVersion: string): string {
-  return cliVersion.includes('-') ? 'evlog@beta' : 'evlog'
+export function evlogPackageSpec(cliVersion: string, name = 'evlog'): string {
+  return cliVersion.includes('-') ? `${name}@beta` : name
 }
 
-const EVLOG_PACKAGE = evlogPackageSpec(VERSION)
-
-/** The command line that adds `evlog`, as the user would type it. */
-export function installCommand(manager: PackageManager, pkg = EVLOG_PACKAGE): string {
-  return manager === 'npm' ? `npm install ${pkg}` : `${manager} add ${pkg}`
+/** The command line that adds the packages, as the user would type it. */
+export function installCommand(manager: PackageManager, packages: readonly string[] = ['evlog']): string {
+  const specs = packages.map(name => evlogPackageSpec(VERSION, name)).join(' ')
+  return manager === 'npm' ? `npm install ${specs}` : `${manager} add ${specs}`
 }
 
 /** Returns the failure rather than throwing — the wiring already on disk stands. */
 export async function runInstall(
   manager: PackageManager,
   cwd: string,
-  pkg = EVLOG_PACKAGE,
+  packages: readonly string[] = ['evlog'],
 ): Promise<{ ok: true } | { ok: false, error: string }> {
-  const args = manager === 'npm' ? ['install', pkg] : ['add', pkg]
+  const specs = packages.map(name => evlogPackageSpec(VERSION, name))
+  const args = manager === 'npm' ? ['install', ...specs] : ['add', ...specs]
   try {
     await exec(manager, args, { cwd, timeout: 5 * 60_000 })
     return { ok: true }

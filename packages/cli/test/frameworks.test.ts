@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -32,7 +32,9 @@ describe('framework registry', () => {
   it.each(FRAMEWORK_IDS)('detects %s from its first declared dependency', async (id) => {
     const dir = await mkdtemp(join(tmpdir(), 'evlog-cli-frameworks-'))
     tempDirs.push(dir)
-    const dep = getFramework(id).detect.deps[0]!
+    const { deps, requires = [] } = getFramework(id).detect
+    const dep = deps[0]!
+    await Promise.all(requires.map(path => mkdir(join(dir, path), { recursive: true })))
     await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'app', dependencies: { [dep]: '*' } }))
     expect(detectFramework(await resolveProject(dir)).framework).toBe(id)
   })

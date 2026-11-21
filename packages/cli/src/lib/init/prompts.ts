@@ -19,6 +19,7 @@ import type { CliContext } from '../../core/context'
 import { DOCS_URL, createStyle } from '../../core/output'
 import type { Framework } from '../map/types'
 import { INIT_FRAMEWORK_IDS, getFramework } from '../frameworks'
+import type { ListedConnector } from '../setup-vercel'
 import {
   availableExtras,
   DEFAULT_ENRICHERS,
@@ -46,6 +47,8 @@ export interface InitAnswers {
   install: boolean
   /** Write the `AGENTS.md` block and install the published skills. */
   agentGuide: boolean
+  /** eve only: give the agent the `evlog__logs` tool, which reads its own events. */
+  agentLogs: boolean
 }
 
 /** Thrown when the user aborts a prompt — the command exits quietly, writing nothing. */
@@ -65,6 +68,8 @@ function required<T>(value: T | typeof CANCEL_SYMBOL): T {
 export interface PromptContext {
   ctx: CliContext
   detected: Framework
+  /** The app an eve agent ships inside, set up beside it. */
+  host?: Framework
   /** Detection was a guess rather than a match — ask instead of announcing. */
   uncertain: boolean
   defaultService: string
@@ -73,6 +78,8 @@ export interface PromptContext {
   installRequested: boolean
   /** Whether `--agents` is still on — `--no-agents` is an answer, not a prompt. */
   agentGuideRequested: boolean
+  /** `--agent-logs` or `--no-agent-logs` when passed, which answers the question. */
+  agentLogs?: boolean
   /** Builds the offer list once the destinations are known. */
   offers: (prodDrains: DrainId[], framework: Framework) => OfferContext
 }
@@ -100,7 +107,9 @@ export async function askAnswers(input: PromptContext): Promise<InitAnswers> {
     : input.detected
 
   if (!input.uncertain) {
-    clackLog.step(`Detected ${getFramework(framework).label}`)
+    clackLog.step(framework === 'eve' && input.host
+      ? `Detected an eve agent in a ${getFramework(input.host).label} app; both are set up from one evlog.config.ts`
+      : `Detected ${getFramework(framework).label}`)
   }
 
   const service = required(await text({
@@ -202,6 +211,13 @@ export async function askAnswers(input: PromptContext): Promise<InitAnswers> {
     }))
     : false
 
+  const agentLogs = framework === 'eve' && input.agentLogs === undefined
+    ? required(await confirm({
+      message: 'Let the agent read its own logs? (an evlog__logs tool: signed-in callers read their session, schedules every turn)',
+      initialValue: true,
+    }))
+    : input.agentLogs ?? true
+
   // Not a question of its own: the plan lists the install and asks once.
   return {
     framework,
@@ -213,6 +229,7 @@ export async function askAnswers(input: PromptContext): Promise<InitAnswers> {
     sampling,
     install: !input.evlogInstalled && input.installRequested,
     agentGuide,
+    agentLogs,
   }
 }
 
@@ -241,6 +258,43 @@ export function showPlan(
 
   note(lines.join('\n'), 'Plan')
   return true
+}
+
+/** What the setup gives that no file shows, for a run drawing its own frame. */
+export function noteInfo(notes: readonly string[]): void {
+  for (const line of notes) clackLog.info(line)
+}
+
+/** A step a subprocess is about to take, such as a Vercel command, shown before it runs. */
+export function noteStep(ctx: CliContext, step: string): void {
+  clackLog.message(createStyle(ctx).paint('dim', `→ ${step}`))
+}
+
+/** The answer to which connector a deployed agent reads its Vercel runtime logs through. */
+export interface ConnectorChoice {
+  connector: string
+  /** The connector does not exist yet: `evlog setup vercel` creates it, asking for an access token. */
+  create: boolean
+}
+
+/**
+ * Which Vercel connector the deployed agent reads its runtime logs through:
+ * one the team has, a new one, or none. Locally the agent reads its files
+ * whatever the answer.
+ */
+export async function askVercelConnector(projectId: string, reusable: readonly ListedConnector[], attached: ReadonlySet<string>, create: string): Promise<ConnectorChoice | null> {
+  const ordered = [...reusable].sort((a, b) => Number(attached.has(b.uid)) - Number(attached.has(a.uid)))
+  const answer = required(await select<string>({
+    message: `On Vercel, the agent reads its runtime logs through a connector of ${projectId}'s team. Which one? A connector gives the project's deployments the whole authority of the key it stores`,
+    options: [
+      ...ordered.map(connector => ({ value: connector.uid, label: `Use ${connector.uid}`, hint: attached.has(connector.uid) ? 'already attached to this project' : `attaches it to ${projectId}` })),
+      { value: '\0create', label: `Create a new connector, ${create}`, hint: 'asks for a Vercel access token scoped to the team' },
+      { value: '\0skip', label: 'Skip', hint: 'the agent reads local files only; npx evlog setup vercel later' },
+    ],
+    initialValue: ordered[0]?.uid ?? '\0skip',
+  }))
+  if (answer === '\0skip') return null
+  return answer === '\0create' ? { connector: create, create: true } : { connector: answer, create: false }
 }
 
 export async function confirmPlan(

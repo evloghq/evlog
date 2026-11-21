@@ -1,3 +1,5 @@
+import { log as clackLog } from '@clack/prompts'
+import { EvlogError } from 'evlog'
 import { runDoctor } from '../../commands/doctor'
 import type { CliContext } from '../../core/context'
 import { planAgents } from '../agents/plan'
@@ -6,11 +8,16 @@ import { findInstalledSkills, runSkills, skillsCommand } from '../agents/skills'
 import type { CliDebug } from '../debug'
 import { createNoopCliDebug } from '../debug'
 import { cliErrors } from '../errors'
-import { detectFramework } from '../map/detect'
+import { detectFramework, rangeMajor } from '../map/detect'
+import type { DetectionResult } from '../map/detect'
+import { eveAgentDirs, findEveRoot } from '../frameworks/eve/mount'
+import { DEFAULT_VERCEL_CONNECTOR, findVercelProject } from '../logs/vercel'
+import { findLogConnectors, runSetupVercel } from '../setup-vercel'
 import type { Framework } from '../map/types'
 import { evlogReached, resolveEvlog, resolveProject } from '../project'
 import type { PackageJson, ProjectInfo } from '../project'
 import { getFramework, isInitFramework } from '../frameworks'
+import type { InitFramework } from '../frameworks'
 import type { DrainId, EnricherId, ExtraId, OfferContext, SamplingProfile } from './catalog'
 import { configuredService, planWiring } from './wiring'
 import type { FileAction, ManualStep } from './wiring'
@@ -28,11 +35,14 @@ import {
   InitCancelled,
   noteManual,
   noteSkills,
+  askVercelConnector,
+  noteInfo,
   noteSkillsStarting,
+  noteStep,
   openInteractive,
   runVerification,
 } from './prompts'
-import type { InitAnswers } from './prompts'
+import type { ConnectorChoice, InitAnswers } from './prompts'
 import { droppedExtras, resolveAnswers } from './resolve'
 import { writeActions } from './write'
 import { recordInitAnswers } from './telemetry'
@@ -53,7 +63,15 @@ export interface InitResult {
   /** Files written (or that would be, under `--dry-run`). */
   written: FileAction[]
   already: string[]
+  /** What the setup gives that no file shows, such as the agent's logs tool. */
+  notes: string[]
   manual: ManualStep[]
+  /** The app an eve agent ships inside, wired beside it. */
+  host: InitFramework | null
+  /** Services eve agents report under, apart from `answers.service`. */
+  agentServices: string[]
+  /** The Vercel connector step for an eve agent, when one was chosen. */
+  vercel: VercelSummary | null
   /** Extras asked for that this project cannot use. */
   dropped: ExtraId[]
   /** What the scan found — why the offers were what they were. */
@@ -72,6 +90,15 @@ export interface InitResult {
    * is reached only through one, `init` stops: nothing to install, nothing to scaffold.
    */
   wrappers: string[]
+}
+
+/** The connector a deployed eve agent reads its Vercel runtime logs through. */
+export interface VercelSummary {
+  projectId: string
+  connector: string
+  /** `pending` under `--dry-run`, `ready` once attached and read back, `failed` with why. */
+  status: 'pending' | 'ready' | 'failed'
+  error?: string
 }
 
 /** What the scan found, summarised for the report and the telemetry event. */
@@ -121,6 +148,8 @@ export interface InitOptions {
   agentGuide?: boolean
   /** Force non-interactive regardless of the terminal (set by `--json`). */
   nonInteractive?: boolean
+  /** eve only: the agent's `evlog__logs` tool. Default: true, or asked. */
+  agentLogs?: boolean
 }
 
 /** The package name without its scope: `@acme/checkout` → `checkout`. */
@@ -174,11 +203,28 @@ export async function runInit(
     p => ({ cwd: ctx.cwd, project: { kind: p.kind, root: p.root, name: p.packageName } }),
   )
 
-  const detection = await log.step(
-    'detectFramework',
-    () => detectFramework(project, options.framework),
-    r => ({ framework: r.framework }),
-  )
+  /* eve below 1.0 is not detected as eve, so an agent on it would otherwise be
+     set up as its web app, or not at all, without saying why. */
+  const eveRange = project.packageJson?.dependencies?.eve ?? project.packageJson?.devDependencies?.eve
+  const eveMajor = eveRange === undefined ? null : rangeMajor(eveRange)
+  const oldEve = eveRange !== undefined && eveMajor !== null && eveMajor < 1 && eveAgentDirs(project.packageDir).length > 0
+  let detection: DetectionResult
+  try {
+    detection = await log.step(
+      'detectFramework',
+      () => detectFramework(project, options.framework),
+      r => ({ framework: r.framework }),
+    )
+  } catch (error) {
+    if (oldEve && error instanceof EvlogError && error.code === 'cli.MAP_FRAMEWORK_NOT_DETECTED') throw cliErrors.INIT_EVE_TOO_OLD({ range: eveRange! })
+    throw error
+  }
+
+  /* An eve agent inside a web app: the app is wired beside it, from the same
+     config. An explicit --framework picks one of the two. */
+  const hostOf = (framework: Framework): InitFramework | undefined => framework === 'eve' && options.framework === undefined
+    ? detection.also.find((id): id is InitFramework => isInitFramework(id) && id !== 'eve')
+    : undefined
 
   /* `map` scans more frameworks than `init` can wire: refuse the map-only ones
      here, before any prompt, instead of crashing in the planner. */
@@ -195,14 +241,24 @@ export async function runInit(
   // The same analysis `map` runs, so an offer can carry its evidence.
   const insight = await log.step(
     'readProject',
-    () => readProject(project.packageDir, detection.framework, project.packageName ?? 'app'),
+    () => readProject(project.packageDir, hostOf(detection.framework) ?? detection.framework, project.packageName ?? 'app'),
     r => ({ repeatedErrors: r?.repeatedErrors.length ?? 0, auditGaps: r?.auditGaps.length ?? 0 }),
   )
 
   const packageManager = detectPackageManager([project.packageDir, project.root])
-  const command = installCommand(packageManager)
   const dryRun = options.dryRun === true
   const evlogInstalled = !!resolved.install
+  /* evlog plus the framework's own package (`@evlog/eve`), minus what the
+     project already has. */
+  const missingPackages = (framework: Framework): string[] => {
+    const declared = { ...project.packageJson?.dependencies, ...project.packageJson?.devDependencies }
+    return [
+      ...(evlogInstalled ? [] : ['evlog']),
+      ...(getFramework(framework).packages ?? []).filter(name => !(name in declared)),
+    ]
+  }
+  const nothingToInstall = missingPackages(detection.framework).length === 0
+  let command = installCommand(packageManager, nothingToInstall ? ['evlog'] : missingPackages(detection.framework))
   const wrappers = [...resolved.wrappers.keys()]
   const interactive = !options.nonInteractive && !options.yes && canPrompt(ctx)
 
@@ -216,9 +272,10 @@ export async function runInit(
   const base = {
     framework: detection.framework,
     defaultService: configuredService({ root: project.packageDir, workspaceRoot: project.root }) ?? defaultService(project),
-    evlogInstalled,
+    evlogInstalled: nothingToInstall,
     install: options.install !== false,
     agentGuide: options.agentGuide !== false,
+    agentLogs: options.agentLogs,
     devDrain: options.devDrain,
     prodDrains: options.prodDrains,
     extras: options.extras,
@@ -241,7 +298,11 @@ export async function runInit(
       install: { status: 'already', command },
       written: [],
       already: [],
+      notes: [],
       manual: [],
+      host: null,
+      agentServices: [],
+      vercel: null,
       dropped: [],
       insight: null,
       verified: null,
@@ -263,12 +324,14 @@ export async function runInit(
       answers = await askAnswers({
         ctx,
         detected: detection.framework,
+        host: hostOf(detection.framework),
         /* An explicit --framework is an answer, not a guess: do not ask again. */
-        uncertain: options.framework === undefined && detection.warnings.length > 0,
+        uncertain: options.framework === undefined && detection.warnings.length > 0 && !hostOf(detection.framework),
         defaultService: base.defaultService,
-        evlogInstalled,
+        evlogInstalled: nothingToInstall,
         installRequested: base.install,
         agentGuideRequested: base.agentGuide,
+        agentLogs: options.agentLogs,
         offers,
       })
     } catch (error) {
@@ -288,25 +351,55 @@ export async function runInit(
     extras: answers.extras.join(',') || 'none',
   })
 
+  const host = hostOf(answers.framework)
+  const vercelProject = answers.framework === 'eve' ? await findVercelProject(project.packageDir, project.root) : undefined
+  /* Asked, never assumed: a connector carries the authority of the key it
+     stores. Only a run with somebody to answer looks the team's connectors up. */
+  let connector: ConnectorChoice | null = null
+  const notes: string[] = []
+  if (vercelProject && interactive) {
+    try {
+      const found = await findLogConnectors(vercelProject)
+      connector = await askVercelConnector(vercelProject.projectId, found.reusable, found.attached, DEFAULT_VERCEL_CONNECTOR)
+    } catch (error) {
+      if (error instanceof InitCancelled) {
+        closeCancelled()
+        return cancelled(cancelledResult({ project, answers, packageManager, command, dryRun, wrappers }))
+      }
+      if (!(error instanceof EvlogError)) throw error
+      notes.push(`Could not list the team's Vercel connectors (${error.message}). npx evlog setup vercel sets one up later`)
+    }
+  }
   const plan = await log.step(
     'planWiring',
     () => planWiring({
       root: project.packageDir,
       workspaceRoot: project.root,
       framework: answers.framework,
+      host,
+      agentLogs: answers.agentLogs,
+      vercelProject: vercelProject?.projectId,
+      logsConnector: connector?.connector,
       service: answers.service,
       devDrain: answers.devDrain,
       prodDrains: answers.prodDrains,
       extras: answers.extras,
       enrichers: answers.enrichers,
       sampling: answers.sampling,
-      nitroMajor: detectNitroMajor(project.packageJson, answers.framework),
+      nitroMajor: detectNitroMajor(project.packageJson, host ?? answers.framework),
       evlogMajor: detectEvlogMajor(resolved.install?.version),
       repeatedErrors: insight?.repeatedErrors ?? [],
       auditGaps: insight?.auditGaps ?? [],
     }),
     r => ({ writes: r.actions.length, manual: r.manual.length }),
   )
+
+  plan.notes.push(...notes)
+  if (answers.framework !== 'eve') {
+    const eveRoot = findEveRoot(project.packageDir)
+    if (eveRoot) plan.notes.push(`eve runs this app's agent from ${eveRoot}. Set it up with evlog init --cwd ${eveRoot}`)
+    if (oldEve) plan.notes.push(`The agent here is on eve ${eveRange}: @evlog/eve needs eve 1.0 or later, so init set up ${getFramework(answers.framework).label} only`)
+  }
 
   /* Merged into the same plan rather than run afterwards, so the user reads one
      list and confirms once. The skills are a separate step: `npx skills add`
@@ -338,10 +431,14 @@ export async function runInit(
     }, r => ({ found: r.found.length }))
   }
 
+  /* The framework answered may not be the one detected. */
+  const packages = missingPackages(answers.framework)
+  if (packages.length > 0) command = installCommand(packageManager, packages)
+
   /* What the run would shell out to, `--dry-run` included: a preview that hides
      the commands is the one thing a preview exists to show. Execution stays
      gated on `dryRun` separately, further down. */
-  const wouldInstall = !evlogInstalled && answers.install
+  const wouldInstall = packages.length > 0 && answers.install
   /* Already-installed skills belong to `npx skills update`, not to us. */
   const wouldAddSkills = agentGuide !== null && agentGuide.found.length === 0
   const installing = wouldInstall && !dryRun
@@ -375,14 +472,14 @@ export async function runInit(
   }
 
   let install: InstallOutcome
-  if (evlogInstalled) {
-    install = { status: 'already', command, version: resolved.install!.version }
+  if (packages.length === 0) {
+    install = { status: 'already', command, version: resolved.install?.version }
   } else if (!answers.install || dryRun) {
     install = { status: 'skipped', command }
   } else {
     const outcome = await log.step(
       'install',
-      () => runInstall(packageManager, project.packageDir),
+      () => runInstall(packageManager, project.packageDir, packages),
       r => ({ installed: r.ok }),
     )
     install = outcome.ok ? { status: 'installed', command } : { status: 'failed', command, error: outcome.error }
@@ -393,6 +490,26 @@ export async function runInit(
       await writeActions(plan.actions)
       return plan.actions.length
     })
+  }
+
+  /* After the writes, so the config naming the connector is on disk whatever
+     Vercel answers. The same steps as `evlog setup vercel`, each skipped when done. */
+  let vercel: VercelSummary | null = null
+  if (vercelProject && connector) {
+    vercel = { projectId: vercelProject.projectId, connector: connector.connector, status: 'pending' }
+    if (!dryRun) {
+      try {
+        await runSetupVercel({ ...ctx, cwd: project.packageDir }, {
+          connector: connector.connector,
+          onStep: step => noteStep(ctx, step),
+        })
+        vercel.status = 'ready'
+      } catch (error) {
+        if (!(error instanceof EvlogError)) throw error
+        vercel.status = 'failed'
+        vercel.error = error.fix ? `${error.message}. ${error.fix}` : error.message
+      }
+    }
   }
 
   if (agentGuide) {
@@ -439,6 +556,9 @@ export async function runInit(
 
   if (interactive) {
     if (agentGuide) noteSkills(ctx, agentGuide)
+    noteInfo(plan.notes)
+    if (vercel?.status === 'ready') clackLog.success(`The deployed agent reads its Vercel runtime logs through ${vercel.connector}`)
+    if (vercel?.status === 'failed') clackLog.error(`${vercel.connector} is named in evlog.config.ts but not ready: ${vercel.error}`)
     noteManual(plan.manual)
     closeInteractive(ctx, answers.framework, getFramework(answers.framework).docs, dryRun)
   }
@@ -452,6 +572,10 @@ export async function runInit(
     install,
     written: plan.actions,
     already: plan.already,
+    notes: plan.notes,
+    host: host ?? null,
+    agentServices: plan.agentServices ?? [],
+    vercel,
     manual: plan.manual,
     dropped: droppedExtras(base),
     insight: insight
@@ -489,7 +613,11 @@ function cancelledResult(input: {
     install: { status: 'skipped', command: input.command },
     written: [],
     already: [],
+    notes: [],
     manual: [],
+    host: null,
+    agentServices: [],
+    vercel: null,
     dropped: [],
     insight: null,
     verified: null,

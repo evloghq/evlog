@@ -6,6 +6,7 @@ import { defineEvlogCommand } from '../lib/command'
 import { cliErrors, isUsageError } from '../lib/errors'
 import { DEFAULT_VERCEL_CONNECTOR } from '../lib/logs/vercel'
 import { runSetupEve } from '../lib/setup-eve'
+import type { SetupEveResult } from '../lib/setup-eve'
 import { runSetupVercel, runSetupVercelCheck } from '../lib/setup-vercel'
 import type { ListedConnector, PreflightStage } from '../lib/setup-vercel'
 
@@ -44,15 +45,15 @@ export default defineEvlogCommand('setup', {
     const style = createStyle(cli)
     try {
       if (args.target === 'eve') {
-        const eve = await runSetupEve(cli, { check: args.check === true })
-        const said = {
+        const results = await runSetupEve(cli, { check: args.check === true })
+        const said = (eve: SetupEveResult): string => ({
           written: `${style.paint('green', '✓')} wrote ${eve.file}`,
           present: `${style.paint('green', '✓')} ${eve.file} already exports evlogTraces()`,
           missing: `${style.paint('yellow', '!')} ${eve.file} is missing; evlog setup eve writes it`,
           conflict: `${style.paint('yellow', '!')} ${eve.file} exists without evlogTraces(); left as it is. Add: export default evlogTraces() from '@evlog/eve/instrumentation'`,
-        }[eve.state]
-        ui.done({ jsonMode: args.json, json: { ...eve }, human: said })
-        if (eve.state === 'conflict' || eve.state === 'missing') ui.exit(EXIT_FAIL)
+        })[eve.state]
+        ui.done({ jsonMode: args.json, json: { agents: results }, human: results.map(said).join('\n') })
+        if (results.some(eve => eve.state === 'conflict' || eve.state === 'missing')) ui.exit(EXIT_FAIL)
         return
       }
       if (args.target !== 'vercel') throw cliErrors.SETUP_INVALID_TARGET({ value: String(args.target) })

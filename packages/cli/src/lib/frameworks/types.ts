@@ -14,6 +14,13 @@ export interface FrameworkDetection {
   configs?: readonly string[]
   /** Any of these dependencies rules the framework out. */
   unlessDeps?: readonly string[]
+  /** Paths relative to the package root, at least one of which must exist, on top of a match above. */
+  requires?: readonly string[]
+  /**
+   * The lowest major the declared dependency in `deps` may be. A range with no
+   * readable version (`workspace:*`, `catalog:`, `latest`) passes.
+   */
+  minMajor?: number
   specificity: number
 }
 
@@ -55,6 +62,8 @@ export interface FrameworkDefinition<TId extends string = string> {
   /** Integration guide, as a path under `https://evlog.dev`. */
   docs: string
   detect: FrameworkDetection
+  /** Packages `evlog init` installs beside `evlog` when the project does not declare them. */
+  packages?: readonly string[]
   /** How a handler obtains its request logger, as written in the `AGENTS.md` block. */
   accessor: string
   /**

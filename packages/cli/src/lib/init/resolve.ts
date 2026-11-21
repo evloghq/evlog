@@ -96,6 +96,8 @@ export interface ResolveInput {
   install: boolean
   /** `--agents` (default true) — write the AGENTS.md block and install the skills. */
   agentGuide: boolean
+  /** `--agent-logs` (default true): the eve agent's `evlog__logs` tool. */
+  agentLogs?: boolean
   devDrain?: DrainId
   prodDrains?: DrainId[]
   extras?: ExtraId[]
@@ -127,6 +129,7 @@ export function resolveAnswers(input: ResolveInput): InitAnswers {
     sampling: extras.includes('sampling') ? input.sampling ?? 'medium' : 'all',
     install: input.evlogInstalled ? false : input.install,
     agentGuide: input.agentGuide,
+    agentLogs: input.agentLogs ?? true,
   }
 }
 

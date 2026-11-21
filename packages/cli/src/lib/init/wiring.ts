@@ -32,6 +32,10 @@ export interface WiringPlan {
   manual: ManualStep[]
   /** Wiring that is already in place — printed so the run is never silent. */
   already: string[]
+  /** What the setup gives the reader that no file shows, such as a tool the agent gets. */
+  notes: string[]
+  /** Services eve agents report under, apart from the app's. */
+  agentServices?: string[]
 }
 
 export interface WiringInput {
@@ -40,6 +44,14 @@ export interface WiringInput {
   /** Workspace root: the highest directory a parent `evlog.config` is looked for in. Defaults to `root`. */
   workspaceRoot?: string
   framework: InitFramework
+  /** The app an eve agent ships inside, wired beside it from the same config. */
+  host?: InitFramework
+  /** Whether the eve agent gets the `evlog__logs` tool, which reads its own events. */
+  agentLogs: boolean
+  /** The linked Vercel project, when there is one. */
+  vercelProject?: string
+  /** The connector the deployed agent reads its Vercel runtime logs through, when one was chosen. */
+  logsConnector?: string
   service: string
   /** Local sink: `fs` or `none`. */
   devDrain: DrainId
@@ -306,7 +318,12 @@ function evlogConfigTemplate(input: WiringInput, parent: string | null, settings
     ...(variables.length > 0 ? [`Reads ${variables.join(', ')} from the environment.`] : []),
     `${DOCS_URL}/cli/config`,
   ]
-  const body = [...(parent ? ['  extends: base,'] : []), `  service: ${quote(input.service)},`, ...options]
+  const body = [
+    ...(parent ? ['  extends: base,'] : []),
+    `  service: ${quote(input.service)},`,
+    ...options,
+    ...(input.logsConnector ? [`  logs: { vercel: { connector: ${quote(input.logsConnector)} } },`] : []),
+  ]
 
   return `${head.join('\n')}
 ${preamble}
@@ -327,14 +344,14 @@ function configSnippet(input: WiringInput, settings: readonly ConfigSetting[], s
 }
 
 /** Frameworks Nitro builds the server for. */
-function isNitroFamily(framework: InitFramework): boolean {
+function isNitroFamily(framework: InitFramework | undefined): boolean {
   return framework === 'nuxt' || framework === 'nitro' || framework === 'tanstack-start'
 }
 
 /** Drain and enricher plugins an earlier `evlog init` wrote under `server/plugins`. */
 function nitroPluginFiles(input: WiringInput): Partial<Record<'drain' | 'enrich', string>> {
   const dir = join(input.root, 'server', 'plugins')
-  if (!isNitroFamily(input.framework) || !existsSync(dir)) return {}
+  if (!isNitroFamily(input.host ?? input.framework) || !existsSync(dir)) return {}
 
   const names = readdirSync(dir)
   const drain = names.find(name => /^evlog-drain\.[cm]?[jt]s$/.test(name))
@@ -519,6 +536,7 @@ function catalogDir(input: WiringInput): string {
     return useSrc ? join('src', 'lib') : 'lib'
   }
   if (input.framework === 'tanstack-start') return join('src', 'lib')
+  if (input.framework === 'eve') return join('agent', 'lib')
   if (input.framework === 'hono' || input.framework === 'effect') {
     return existsSync(join(input.root, 'src')) ? join('src', 'lib') : 'lib'
   }
@@ -668,7 +686,15 @@ initLogger(toLoggerConfig(config))
 
 /** Build the file plan for a framework. Pure: reads the project, writes nothing. */
 export async function planWiring(input: WiringInput): Promise<WiringPlan> {
-  const plan = await getFramework(input.framework).init!()
+  const plan = (await getFramework(input.framework).init!())(input)
+  if (input.host) {
+    // One config for both: the host's planner sees the run as its own.
+    const host = (await getFramework(input.host).init!())({ ...input, framework: input.host, host: undefined })
+    plan.actions.push(...host.actions)
+    plan.manual.push(...host.manual)
+    plan.already.push(...host.already)
+    plan.notes.push(...host.notes)
+  }
   // Applied once here rather than in each planner, where one would be forgotten.
-  return withEnvGuidance(withCatalogs(withEvlogConfig(plan(input), input), input), input)
+  return withEnvGuidance(withCatalogs(withEvlogConfig(plan, input), input), input)
 }

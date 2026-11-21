@@ -8,6 +8,8 @@ import { loadCliConfig } from './config'
 import { DEFAULT_VERCEL_CONNECTOR, findVercelProject, projectOidc, readVercelLogs, requestConnectToken, resolveVercelAccess, VercelReadError } from './logs/vercel'
 import type { VercelAccess, VercelProject, VercelScope } from './logs/vercel'
 import { resolveProject } from './project'
+import { eveAgentDirs } from './frameworks/eve/mount'
+import { inspectEveInstrumentation } from './setup-eve'
 
 export interface VercelRun {
   code: number
@@ -98,6 +100,17 @@ async function listConnectors(vercel: VercelCli, cwd: string, allProjects: boole
 /** Vercel connectors that hold an API key, which is what issues app tokens a read can use. */
 export function reusableConnectors(team: ListedConnector[]): ListedConnector[] {
   return team.filter(connector => connector.uid.startsWith('vercel/') && connector.type === 'api-key')
+}
+
+/**
+ * The team's connectors a deployed agent could read its runtime logs through,
+ * and which of them the project already has. Read-only: lists, never creates
+ * or attaches.
+ */
+export async function findLogConnectors(linked: VercelProject, vercel: VercelCli = createVercelCli()): Promise<{ reusable: ListedConnector[], attached: Set<string> }> {
+  const reusable = reusableConnectors(await listConnectors(vercel, linked.dir, true))
+  const attached = new Set((await listConnectors(vercel, linked.dir, false)).map(connector => connector.uid))
+  return { reusable, attached }
 }
 
 async function interactive(vercel: VercelCli, args: string[], cwd: string): Promise<void> {
@@ -315,18 +328,17 @@ export async function runSetupVercelCheck(ctx: CliContext, options: PreflightOpt
     ? { id: 'read', status: 'ok', message: `read ${events} event${events === 1 ? '' : 's'} from the last hour` }
     : { id: 'read', status: 'ok', message: `allowed; ${lines === 0 ? 'no runtime log lines' : `${lines} log lines, none an evlog event,`} in the last hour`, ...(lines > 0 && { fix: 'evlog prints one JSON line per event to stdout; check the deployment runs evlog' }) })
 
-  const traces = await tracesStage(project.packageDir)
+  const traces = tracesStage(project.packageDir)
   if (traces) stages.push(traces)
   return stages
 }
 
-/** For an eve agent: whether `agent/instrumentation` exports `evlogTraces()`, which puts trace ids on turn events. */
-async function tracesStage(packageDir: string): Promise<PreflightStage | undefined> {
-  if (!existsSync(join(packageDir, 'agent'))) return undefined
-  const dir = join(packageDir, 'agent', 'instrumentation')
-  const files = existsSync(dir) ? (await readdir(dir)).filter(file => /\.[cm]?[jt]s$/.test(file)) : []
-  for (const file of files) {
-    if ((await readFile(join(dir, file), 'utf8')).includes('evlogTraces')) return { id: 'traces', status: 'ok', message: `agent/instrumentation/${file} exports evlogTraces()` }
-  }
-  return { id: 'traces', status: 'warn', message: 'turn events carry no traceId', fix: 'npx evlog setup eve (writes agent/instrumentation/evlog.ts; reads span ids only and exports nothing)' }
+/** For an eve agent: whether each agent's `instrumentation/` exports `evlogTraces()`, which puts trace ids on turn events. */
+function tracesStage(packageDir: string): PreflightStage | undefined {
+  const agents = eveAgentDirs(packageDir)
+  if (agents.length === 0) return undefined
+  const found = agents.map(agentDir => inspectEveInstrumentation(packageDir, agentDir))
+  const missing = found.filter(entry => entry.state !== 'present')
+  if (missing.length === 0) return { id: 'traces', status: 'ok', message: `${found.map(entry => entry.file).join(', ')} export${found.length === 1 ? 's' : ''} evlogTraces()` }
+  return { id: 'traces', status: 'warn', message: `turn events carry no traceId (${missing.map(entry => entry.file).join(', ')})`, fix: 'npx evlog setup eve (writes instrumentation/evlog.ts in each agent; reads span ids only and exports nothing)' }
 }

@@ -4,7 +4,7 @@ import type { WiringInput, WiringPlan } from '../../init/wiring'
 import { addMiddlewareModule } from '../../init/wiring'
 
 export default function planExpress(input: WiringInput): WiringPlan {
-  const plan: WiringPlan = { actions: [], manual: [], already: [] }
+  const plan: WiringPlan = { actions: [], manual: [], already: [], notes: [] }
   const useSrc = existsSync(join(input.root, 'src'))
   const relativePath = useSrc ? join('src', 'evlog.ts') : 'evlog.ts'
   addMiddlewareModule(plan, input, relativePath, {

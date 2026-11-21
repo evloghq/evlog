@@ -100,6 +100,15 @@ export const cliErrors = defineErrorCatalog('cli', {
     link: 'https://evlog.dev/integrate/frameworks/overview',
     tags: ['init'],
   },
+  INIT_EVE_TOO_OLD: {
+    status: 400,
+    message: ({ range }: { range: string }) =>
+      `This eve agent is on eve ${range}, and @evlog/eve needs eve 1.0 or later`,
+    why: '@evlog/eve is an eve 1.0 extension; earlier eve has no extensions to mount it from',
+    fix: 'Upgrade eve to 1.0 or later, then run evlog init again',
+    link: 'https://evlog.dev/use-cases/eve',
+    tags: ['init'],
+  },
   INIT_INVALID_ENRICHER: {
     status: 400,
     message: ({ value, known }: { value: string, known: string }) =>

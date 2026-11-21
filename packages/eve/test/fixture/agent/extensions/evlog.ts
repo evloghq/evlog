@@ -1,4 +1,5 @@
 import evlog from '@evlog/eve'
+import { initLogger } from 'evlog'
 import { createFsDrain } from 'evlog/fs'
 
 const dir = process.env.EVLOG_FIXTURE_LOGS ?? '.evlog/logs'
@@ -11,6 +12,9 @@ if (connectStatus) {
     ? Promise.resolve(new Response('{"error":{"code":"forbidden"}}', { status: connectStatus }))
     : original(input, init)
 }
+
+// EVLOG_FIXTURE_HOST_SERVICE stands in for a host app, such as Next, that initialised evlog before the first turn.
+if (process.env.EVLOG_FIXTURE_HOST_SERVICE) initLogger({ env: { service: process.env.EVLOG_FIXTURE_HOST_SERVICE }, silent: true })
 
 export default evlog({
   service: 'refund-agent',

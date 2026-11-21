@@ -25,7 +25,7 @@ afterEach(async () => {
 describe('detectFramework', () => {
   it('honors an explicit --framework override without reading package.json', async () => {
     const project = await resolveProject(await makeProject())
-    expect(detectFramework(project, 'next')).toEqual({ framework: 'next', warnings: [] })
+    expect(detectFramework(project, 'next')).toEqual({ framework: 'next', also: [], warnings: [] })
   })
 
   it('throws MAP_NO_PACKAGE_JSON when no package.json is found', async () => {

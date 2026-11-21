@@ -99,7 +99,7 @@ function libStep(input: { libRelative: string, instrumentationRelative: string, 
 }
 
 export default function planNext(input: WiringInput): WiringPlan {
-  const plan: WiringPlan = { actions: [], manual: [], already: [] }
+  const plan: WiringPlan = { actions: [], manual: [], already: [], notes: [] }
   /* Next resolves both `instrumentation.ts` and `src/instrumentation.ts`, but
      only the one that matches the app directory: at the root of a `src/`
      project it is never loaded. */

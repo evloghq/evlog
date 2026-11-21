@@ -6,7 +6,7 @@ import { configCandidates, firstExisting } from '../../init/wiring'
 
 /** Registers the module only: it loads `evlog.config.ts`, where the settings live. */
 export default function planNuxt(input: WiringInput): WiringPlan {
-  const plan: WiringPlan = { actions: [], manual: [], already: [] }
+  const plan: WiringPlan = { actions: [], manual: [], already: [], notes: [] }
   const configPath = firstExisting(input.root, configCandidates('nuxt.config'))
 
   if (!configPath) {

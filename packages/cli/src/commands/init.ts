@@ -61,6 +61,7 @@ export default defineEvlogCommand('init', {
     // citty negations: declared positive so `--no-install` works.
     install: { type: 'boolean', default: true, description: 'Install evlog when missing (--no-install to skip)' },
     agents: { type: 'boolean', default: true, description: 'Write the AGENTS.md block and install the skills (--no-agents to skip)' },
+    agentLogs: { type: 'boolean', description: 'eve: give the agent the evlog__logs tool to read its own events (default; --no-agent-logs to hide it)' },
   },
   async run({ args, cli, log, ui }) {
     let options: InitOptions
@@ -76,6 +77,7 @@ export default defineEvlogCommand('init', {
         dryRun: args.dryRun,
         install: args.install,
         agentGuide: args.agents,
+        agentLogs: args.agentLogs,
         yes: args.yes,
         /* JSON output and a prompt cannot share a terminal: the payload is the
            contract, and half a TUI on stderr in front of it helps nobody. */
@@ -194,6 +196,7 @@ function stepFailed(result: InitResult): boolean {
 function toJson(result: InitResult): Record<string, unknown> {
   return {
     framework: result.answers.framework,
+    host: result.host,
     service: result.answers.service,
     devDrain: result.answers.devDrain,
     prodDrains: result.answers.prodDrains,
@@ -204,6 +207,10 @@ function toJson(result: InitResult): Record<string, unknown> {
     install: result.install,
     written: result.written.map(action => ({ file: action.relative, kind: action.kind })),
     already: result.already,
+    notes: result.notes,
+    agentServices: result.agentServices,
+    vercel: result.vercel,
+    agentLogs: result.answers.framework === 'eve' ? result.answers.agentLogs : undefined,
     manual: result.manual.map(step => ({ title: step.title, file: step.file, reason: step.reason })),
     dropped: result.dropped,
     insight: result.insight,
