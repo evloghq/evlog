@@ -29,6 +29,8 @@ function createTestContext(id: number): DrainContext {
 describe('createDrainPipeline', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    // Request-end flushes wait on every pipeline in the process: forget the ones earlier tests left holding events.
+    ;(globalThis as Record<symbol, { pending?: Set<unknown> } | undefined>)[Symbol.for('evlog.drains.v2')]?.pending?.clear()
   })
 
   afterEach(() => {
