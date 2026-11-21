@@ -190,6 +190,9 @@ export default defineNuxtConfig({
     // the Vercel build rendering /_og/s/* routes, so keeping generated images avoids
     // rerendering unchanged docs pages on every deployment.
     buildCache: true,
+    // Entries are keyed by image options, component and module version, but not by fonts or
+    // shared CSS. The 3-day default re-rendered every image every 3 days; 30 days bounds staleness.
+    cacheMaxAgeSeconds: 60 * 60 * 24 * 30,
     // Simplified OgImageDocs.satori.vue (text-shadow only) keeps prerender under timeout.
     // Missing prerendered assets fall back to /og.png via server/middleware/01-og-fallback.ts.
     defaults: {
