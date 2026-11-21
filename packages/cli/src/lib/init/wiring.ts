@@ -519,6 +519,7 @@ function catalogDir(input: WiringInput): string {
     return useSrc ? join('src', 'lib') : 'lib'
   }
   if (input.framework === 'tanstack-start') return join('src', 'lib')
+  if (input.framework === 'eve') return join('agent', 'lib')
   if (input.framework === 'hono' || input.framework === 'effect') {
     return existsSync(join(input.root, 'src')) ? join('src', 'lib') : 'lib'
   }

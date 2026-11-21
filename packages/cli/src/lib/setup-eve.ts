@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import type { CliContext } from '../core/context'
 import { resolveProject } from './project'
 
@@ -22,6 +22,23 @@ export interface SetupEveResult {
 }
 
 /**
+ * Where an eve agent's `evlogTraces()` instrumentation stands, without writing.
+ * `evlog init` plans the file from this, and `evlog setup eve` writes it.
+ */
+export function inspectEveInstrumentation(packageDir: string): SetupEveResult & { state: 'present' | 'missing' | 'conflict' } {
+  const dir = join('agent', 'instrumentation')
+  const file = join(dir, 'evlog.ts')
+  if (existsSync(join(packageDir, dir))) {
+    for (const name of readdirSync(join(packageDir, dir))) {
+      if (/\.[cm]?[jt]s$/.test(name) && readFileSync(join(packageDir, dir, name), 'utf8').includes('evlogTraces')) {
+        return { file: join(dir, name), state: 'present' }
+      }
+    }
+  }
+  return { file, state: existsSync(join(packageDir, file)) ? 'conflict' : 'missing' }
+}
+
+/**
  * Writes `agent/instrumentation/evlog.ts` for an eve agent, which extensions
  * cannot declare themselves. Never overwrites: a run on a project that has
  * it, or another file exporting `evlogTraces()`, changes nothing.
@@ -29,19 +46,10 @@ export interface SetupEveResult {
  */
 export async function runSetupEve(ctx: CliContext, options: { check?: boolean } = {}): Promise<SetupEveResult> {
   const project = await resolveProject(ctx.cwd)
-  const dir = join(project.packageDir, 'agent', 'instrumentation')
-  const file = join(dir, 'evlog.ts')
-  const shown = relative(project.packageDir, file)
-  if (existsSync(dir)) {
-    for (const name of await readdir(dir)) {
-      if (/\.[cm]?[jt]s$/.test(name) && (await readFile(join(dir, name), 'utf8')).includes('evlogTraces')) {
-        return { file: relative(project.packageDir, join(dir, name)), state: 'present' }
-      }
-    }
-  }
-  if (existsSync(file)) return { file: shown, state: 'conflict' }
-  if (options.check) return { file: shown, state: 'missing' }
-  await mkdir(dir, { recursive: true })
-  await writeFile(file, EVE_INSTRUMENTATION)
-  return { file: shown, state: 'written' }
+  const found = inspectEveInstrumentation(project.packageDir)
+  if (found.state !== 'missing' || options.check) return found
+  const path = join(project.packageDir, found.file)
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, EVE_INSTRUMENTATION)
+  return { file: found.file, state: 'written' }
 }

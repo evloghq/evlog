@@ -57,6 +57,8 @@ const APPS = [
   { name: 'hono', fixture: 'hono-basic' },
   { name: 'express', fixture: 'express-basic' },
   { name: 'fastify', fixture: 'fastify-basic' },
+  /* `map` lists no eve entry points yet, so its checks have nothing to score. */
+  { name: 'eve', generate: generateEveApp, skip: name => name.startsWith('map') },
 ]
 
 /**
@@ -139,6 +141,36 @@ export default defineHandler(() => ({ reports: [] }))
   write(dir, 'routes/api/payments/refund.post.ts', `import { defineHandler } from 'nitro/h3'
 
 export default defineHandler(() => ({ refunded: true }))
+`)
+}
+
+/** An eve 1.0 agent with no evlog wiring: what `evlog init` starts from. */
+function generateEveApp(dir) {
+  write(dir, 'package.json', `${JSON.stringify({
+    name: 'eve-sandbox',
+    private: true,
+    type: 'module',
+    engines: { node: '>=24' },
+    dependencies: { eve: '^1.0.2', zod: '^4.0.0' },
+  }, null, 2)}\n`)
+
+  write(dir, 'agent/agent.ts', `import { defineAgent } from 'eve'
+
+export default defineAgent({
+  model: 'anthropic/claude-sonnet-4.5',
+})
+`)
+
+  write(dir, 'agent/tools/issue_refund.ts', `import { defineTool } from 'eve/tools'
+import { z } from 'zod'
+
+export default defineTool({
+  description: 'Refund an order.',
+  inputSchema: z.object({ orderId: z.string(), amount: z.number() }),
+  async execute({ orderId, amount }) {
+    return { orderId, refunded: amount }
+  },
+})
 `)
 }
 
@@ -495,6 +527,7 @@ function smoke(apps) {
   for (const app of apps) {
     process.stderr.write(`${bold(app.name)}\n`)
     for (const { name, fn } of checks) {
+      if (app.skip?.(name)) continue
       /* A fresh copy per check: `init` writes files, and a check that inherits
          the previous one's leftovers passes or fails for the wrong reason. */
       const dir = createApp(app)

@@ -15,6 +15,7 @@ import type { FileAction, WiringPlan } from '../src/lib/init/wiring'
 import type { DrainId } from '../src/lib/init/catalog'
 import { detectPackageManager, evlogPackageSpec, installCommand } from '../src/lib/init/pm'
 import { detectEvlogMajor, detectNitroMajor, runInit } from '../src/lib/init/run'
+import { EVE_INSTRUMENTATION } from '../src/lib/setup-eve'
 import { parseSource } from '../src/lib/map/parse'
 
 /** Only the spawn is faked; the rest of the skills module stays real. */
@@ -38,14 +39,16 @@ vi.mock('../src/lib/agents/skills', async (importOriginal) => {
 const installs = vi.hoisted(() => ({
   result: { ok: true } as { ok: true } | { ok: false, error: string },
   calls: [] as string[],
+  packages: [] as readonly string[],
 }))
 
 vi.mock('../src/lib/init/pm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/lib/init/pm')>()
   return {
     ...actual,
-    runInstall: (manager: string) => {
+    runInstall: (manager: string, _cwd: string, packages: readonly string[] = []) => {
       installs.calls.push(manager)
+      installs.packages = packages
       return Promise.resolve(installs.result)
     },
   }
@@ -1396,6 +1399,118 @@ describe('runInit — effect', () => {
 
     expect(result.answers.framework).toBe('effect')
     expect(result.written.map(action => action.relative)).toEqual(expect.arrayContaining(['evlog.config.ts', join('src', 'evlog.ts')]))
+  })
+})
+
+describe('eve agents', () => {
+  const EVE = {
+    'package.json': JSON.stringify({ name: 'support-agent', dependencies: { 'eve': '^1.0.2', 'next': '^16.0.0' } }),
+    'agent/agent.ts': 'export default {}\n',
+    'agent/tools/lookup_order.ts': 'export default {}\n',
+  }
+
+  it('mounts @evlog/eve from evlog.config.ts and adds the trace instrumentation', async () => {
+    const cwd = await project(EVE)
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
+
+    expect(result.answers.framework).toBe('eve')
+    expect(result.written.map(file => file.relative).sort()).toEqual([
+      join('agent', 'extensions', 'evlog.ts'),
+      join('agent', 'instrumentation', 'evlog.ts'),
+      'evlog.config.ts',
+    ])
+    const extension = await readFile(join(cwd, 'agent', 'extensions', 'evlog.ts'), 'utf8')
+    expect(extension).toContain(`import evlog from '@evlog/eve'`)
+    expect(extension).toContain(`import config from '../../evlog.config'`)
+    expect(extension).toContain('export default evlog(config)')
+    expect(await readFile(join(cwd, 'agent', 'instrumentation', 'evlog.ts'), 'utf8')).toBe(EVE_INSTRUMENTATION)
+    expect(result.install.command).toBe(`npm install ${evlogPackageSpec(VERSION)} ${evlogPackageSpec(VERSION, '@evlog/eve')}`)
+    expect(result.manual.find(step => step.title === 'Run the agent on Node 24 or later')?.snippet).toBe(`"engines": { "node": ">=24" }`)
+  })
+
+  it('changes nothing on a second run', async () => {
+    const cwd = await project(EVE)
+    await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
+
+    const second = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
+
+    expect(second.written).toEqual([])
+    expect(second.already).toEqual(expect.arrayContaining([
+      `${join('agent', 'extensions', 'evlog.ts')} already mounts @evlog/eve`,
+      `${join('agent', 'instrumentation', 'evlog.ts')} already exports evlogTraces()`,
+      'evlog.config.ts already exists',
+    ]))
+  })
+
+  it('leaves a mount, an instrumentation file and engines the agent already has', async () => {
+    const mount = `import evlog from '@evlog/eve'\n\nexport default evlog({ service: 'agent' })\n`
+    const cwd = await project({
+      ...EVE,
+      'package.json': JSON.stringify({ name: 'agent', engines: { node: '^24.1.0' }, dependencies: { eve: '1.0.2' } }),
+      'agent/extensions/observability.ts': mount,
+      'agent/instrumentation/evlog.ts': 'export default {}\n',
+    })
+
+    const plan = await planWiring({ root: cwd, framework: 'eve', service: 'agent', ...wiring(), nitroMajor: 3 })
+
+    expect(plan.actions.map(file => file.relative)).toEqual(['evlog.config.ts'])
+    expect(plan.already).toEqual(expect.arrayContaining([
+      `${join('agent', 'extensions', 'observability.ts')} already mounts @evlog/eve`,
+      'package.json already requires Node ^24.1.0',
+    ]))
+    expect(plan.manual.map(step => step.title)).toEqual(['Put trace ids on each turn\'s event'])
+  })
+
+  it('asks for the mount when agent/extensions/evlog.ts imports only a subpath', async () => {
+    const cwd = await project({ ...EVE, 'agent/extensions/evlog.ts': `import { useLogger } from '@evlog/eve/logger'\n` })
+
+    const plan = await planWiring({ root: cwd, framework: 'eve', service: 'agent', ...wiring(), nitroMajor: 3 })
+
+    expect(plan.actions.map(file => file.relative)).not.toContain(join('agent', 'extensions', 'evlog.ts'))
+    expect(plan.manual.find(step => step.title === 'Mount @evlog/eve')?.snippet).toContain('export default evlog(config)')
+  })
+
+  it('names Node 24 when engines.node allows an older one', async () => {
+    const cwd = await project({ ...EVE, 'package.json': JSON.stringify({ name: 'agent', engines: { node: '>=22 || >=24' }, dependencies: { eve: '1.0.2' } }) })
+
+    const plan = await planWiring({ root: cwd, framework: 'eve', service: 'agent', ...wiring(), nitroMajor: 3 })
+
+    expect(plan.manual.find(step => step.title === 'Run the agent on Node 24 or later')?.reason).toContain('engines.node allows >=22 || >=24')
+  })
+
+  it('installs only @evlog/eve when evlog is already there', async () => {
+    const cwd = await project({
+      ...EVE,
+      'package.json': JSON.stringify({ name: 'agent', dependencies: { eve: '1.0.2', evlog: '^3.0.0-beta.4' } }),
+      'node_modules/evlog/package.json': JSON.stringify({ name: 'evlog', version: '3.0.0-beta.4' }),
+      'pnpm-lock.yaml': '',
+    })
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, yes: true })
+
+    expect(result.install).toEqual({ status: 'installed', command: `pnpm add ${evlogPackageSpec(VERSION, '@evlog/eve')}` })
+    expect(installs.packages).toEqual(['@evlog/eve'])
+  })
+
+  it.each([
+    ['eve before 1.0', { 'package.json': JSON.stringify({ name: 'app', dependencies: { eve: '^0.74.0', next: '^16.0.0' } }), 'agent/agent.ts': '' }],
+    ['eve without an agent directory', { 'package.json': JSON.stringify({ name: 'app', dependencies: { eve: '^1.0.0', next: '^16.0.0' } }) }],
+  ])('keeps the other framework for %s', async (_, files) => {
+    const cwd = await project(files)
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true, dryRun: true })
+
+    expect(result.answers.framework).toBe('next')
+  })
+
+  it('detects an agent whose eve range names no version', async () => {
+    const cwd = await project({ ...EVE, 'package.json': JSON.stringify({ name: 'agent', dependencies: { eve: 'workspace:*' } }) })
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true, dryRun: true })
+
+    expect(result.answers.framework).toBe('eve')
+    expect(existsSync(join(cwd, 'agent', 'extensions'))).toBe(false)
   })
 })
 

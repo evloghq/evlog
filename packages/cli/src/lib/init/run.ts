@@ -200,9 +200,19 @@ export async function runInit(
   )
 
   const packageManager = detectPackageManager([project.packageDir, project.root])
-  const command = installCommand(packageManager)
   const dryRun = options.dryRun === true
   const evlogInstalled = !!resolved.install
+  /* evlog plus the framework's own package (`@evlog/eve`), minus what the
+     project already has. */
+  const missingPackages = (framework: Framework): string[] => {
+    const declared = { ...project.packageJson?.dependencies, ...project.packageJson?.devDependencies }
+    return [
+      ...(evlogInstalled ? [] : ['evlog']),
+      ...(getFramework(framework).packages ?? []).filter(name => !(name in declared)),
+    ]
+  }
+  const nothingToInstall = missingPackages(detection.framework).length === 0
+  let command = installCommand(packageManager, nothingToInstall ? ['evlog'] : missingPackages(detection.framework))
   const wrappers = [...resolved.wrappers.keys()]
   const interactive = !options.nonInteractive && !options.yes && canPrompt(ctx)
 
@@ -216,7 +226,7 @@ export async function runInit(
   const base = {
     framework: detection.framework,
     defaultService: configuredService({ root: project.packageDir, workspaceRoot: project.root }) ?? defaultService(project),
-    evlogInstalled,
+    evlogInstalled: nothingToInstall,
     install: options.install !== false,
     agentGuide: options.agentGuide !== false,
     devDrain: options.devDrain,
@@ -266,7 +276,7 @@ export async function runInit(
         /* An explicit --framework is an answer, not a guess: do not ask again. */
         uncertain: options.framework === undefined && detection.warnings.length > 0,
         defaultService: base.defaultService,
-        evlogInstalled,
+        evlogInstalled: nothingToInstall,
         installRequested: base.install,
         agentGuideRequested: base.agentGuide,
         offers,
@@ -338,10 +348,14 @@ export async function runInit(
     }, r => ({ found: r.found.length }))
   }
 
+  /* The framework answered may not be the one detected. */
+  const packages = missingPackages(answers.framework)
+  if (packages.length > 0) command = installCommand(packageManager, packages)
+
   /* What the run would shell out to, `--dry-run` included: a preview that hides
      the commands is the one thing a preview exists to show. Execution stays
      gated on `dryRun` separately, further down. */
-  const wouldInstall = !evlogInstalled && answers.install
+  const wouldInstall = packages.length > 0 && answers.install
   /* Already-installed skills belong to `npx skills update`, not to us. */
   const wouldAddSkills = agentGuide !== null && agentGuide.found.length === 0
   const installing = wouldInstall && !dryRun
@@ -375,14 +389,14 @@ export async function runInit(
   }
 
   let install: InstallOutcome
-  if (evlogInstalled) {
-    install = { status: 'already', command, version: resolved.install!.version }
+  if (packages.length === 0) {
+    install = { status: 'already', command, version: resolved.install?.version }
   } else if (!answers.install || dryRun) {
     install = { status: 'skipped', command }
   } else {
     const outcome = await log.step(
       'install',
-      () => runInstall(packageManager, project.packageDir),
+      () => runInstall(packageManager, project.packageDir, packages),
       r => ({ installed: r.ok }),
     )
     install = outcome.ok ? { status: 'installed', command } : { status: 'failed', command, error: outcome.error }

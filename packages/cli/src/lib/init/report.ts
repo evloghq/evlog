@@ -63,9 +63,9 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
   if (install.status === 'already') {
     lines.push(`${paint('green', '✓')} evlog ${paint('dim', `already installed${install.version ? ` (${install.version})` : ''}`)}`)
   } else if (install.status === 'installed') {
-    lines.push(`${paint('green', '✓')} ${paint('dim', `installed evlog · ${install.command}`)}`)
+    lines.push(`${paint('green', '✓')} ${paint('dim', `installed · ${install.command}`)}`)
   } else if (install.status === 'skipped') {
-    lines.push(`${paint('yellow', '·')} ${paint('dim', `evlog is not installed — run ${install.command}`)}`)
+    lines.push(`${paint('yellow', '·')} ${paint('dim', `not installed yet — run ${install.command}`)}`)
   } else {
     lines.push(`${paint('red', '✗')} ${paint('dim', `install failed — run ${install.command}`)}`)
     if (install.error) lines.push(`   ${paint('dim', install.error)}`)
