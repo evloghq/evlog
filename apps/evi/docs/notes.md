@@ -100,14 +100,31 @@ existing `threadTs` resumes that thread's session, which is what the old
 iMessage delivery did for every run: one long-lived session, stale context
 and pending requests included, hence the epilogue every task used to carry.
 
-**The Slack principal is `slack:<team>:<member>`.** `defaultSlackAuth` mints
-it from the event's `team_id` and the actor's user id, and `trust.ts` trusts
-every human principal of `EVI_SLACK_TEAM_ID` rather than one member: the
-workspace is private and only Hugo can install the connector or invite into
-it, so the workspace is the allowlist. Replies in a thread Evi owns need the
-connector's trigger to subscribe `message.channels` with `channels:history`
-(plus `message.groups` and `groups:history` for a private channel); without
-them, only mentions and DMs reach the agent.
+**The Slack principal is `slack:<team>:<member>`, and `<team>` is the
+workspace the app is installed in, not the author's.** eve mints it from the
+installation team, so a Slack Connect user from another company, a guest and
+a deactivated account all carry a principal of `EVI_SLACK_TEAM_ID`. The
+workspace is still the allowlist, but `channels/slack.ts` admits a message,
+and an approval click, only after `users.info` reports a full member of that
+workspace: same team, not restricted, not deleted, not a bot. A lookup Slack
+cannot answer drops the message. That needs the `users:read` bot scope on
+`slack/evi`; without it every Slack message is dropped. Replies in a thread
+Evi owns need the connector's trigger to subscribe `message.channels` with
+`channels:history` (plus `message.groups` and `groups:history` for a private
+channel); without them, only mentions and DMs reach the agent. Such a reply
+arrives deferred, with guidance to call `no_reply` when it is meant for
+someone else.
+
+**Code channels and Slack-created schedules need more of the connector.**
+`codeChannels: true` needs **Code Channels** turned on in the connector's
+settings (it adds `code_channels:manage`, `message.session` and
+`agent_session_stopped`) plus `groups:read` and `mpim:read`. A schedule
+someone creates from Slack (`schedules/tasks.ts`, eve's experimental
+`defineDynamicSchedules`) re-checks before every run that its creator is still
+a full member and can still read the conversation, which uses
+`channels:read`, `groups:read`, `im:read` and `mpim:read`. Its runs carry the
+creator's principal but are stamped as scheduled tasks: they are never the
+maintainer, so they read and report and every write is denied.
 
 **`main` requires signed commits, and the sandbox has no key to sign with.**
 A `git push` from the sandbox lands unsigned commits, and GitHub then blocks
@@ -246,7 +263,7 @@ native MCP channel (`mcpChannel`). Clients get the durable invocation tools:
 `agent_start`, `agent_get`, `agent_update`, `agent_cancel`: start returns an
 invocation id immediately, the harness polls `agent_get`, and human-input
 requests surface as `input_required` instead of a hanging HTTP call. Each
-`agent_start` is one task-mode session owned by the `mcp:hugo` principal,
+`agent_start` is one task-mode session owned by the `mcp:maintainer` principal,
 trusted as the maintainer only while the token env is set; there is no
 cross-call conversation, so a request must carry its own context. Setup:
 generate a token (`openssl rand -hex 32`), set `EVI_MAINTAINER_TOKEN` on the project,

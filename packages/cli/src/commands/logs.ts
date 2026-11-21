@@ -4,12 +4,14 @@ import { telemetry } from '@evlog/telemetry'
 import { EvlogError } from 'evlog'
 import type { WideEvent } from 'evlog'
 import { readFsLogs, tailFsLogs } from 'evlog/fs'
+import type { EvaluateFn } from '@evlog/signals'
 import type { CliContext } from '../core/context'
 import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
 import { loadCliConfig } from '../lib/config'
 import { cliErrors, isUsageError } from '../lib/errors'
 import { flagValues } from '../lib/flags'
+import { askEvents, estimateAsk } from '../lib/logs/ask'
 import { buildQuery, createSelection, timeOf } from '../lib/logs/query'
 import type { LogsArgs, LogsQuery, Selected } from '../lib/logs/query'
 import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'
@@ -87,6 +89,10 @@ export interface RunLogsOptions {
   expect?: string
   /** How the Vercel source gets its token and scope; tests stand in for Vercel Connect. */
   vercelAccess?: (project: VercelProject, connector: string) => Promise<VercelAccess>
+  /** Replace the model call `--ask` makes. */
+  evaluate?: EvaluateFn
+  /** With `--ask`: count the calls and tokens instead of making them. */
+  dryRun?: boolean
 }
 
 const DAY_MS = 86_400_000
@@ -201,6 +207,13 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
      writes somewhere unusual is read without passing `--dir` every time. */
   const config = loadCliConfig(await resolveProject(ctx.cwd))
   const query = buildQuery(args, options.now, config?.logs.limit)
+  const question = args.ask?.trim() || undefined
+  if (question && options.follow) throw cliErrors.LOGS_ASK_UNSUPPORTED({ with: '--follow' })
+  if (question && (query.view === 'stats' || query.view === 'sessions')) throw cliErrors.LOGS_ASK_UNSUPPORTED({ with: `the ${query.view} view` })
+  const ask = async (result: LogsResult): Promise<void> => {
+    if (question && options.dryRun) result.estimated = { question, estimate: estimateAsk(result.events, question) }
+    else if (question) result.asked = { question, ...await askEvents(result.events, question, { evaluate: options.evaluate, model: args.model?.trim() || undefined }) }
+  }
   const dir = options.dir ?? config?.logs.dir
   const fetchFn = options.fetchFn ?? fetch
   const expect = parseExpectation(options.expect)
@@ -231,7 +244,9 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
   if (source === 'vercel') {
     const conflict = options.follow ? 'follow' : options.dir !== undefined ? 'dir' : options.url !== undefined ? 'url' : undefined
     if (conflict) throw cliErrors.LOGS_SOURCE_CONFLICT({ flag: conflict })
-    return readVercel(ctx, options, { query, search: args.session, connector: config?.logs.vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR, inRange, expect })
+    const result = await readVercel(ctx, options, { query, search: args.session, connector: config?.logs.vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR, inRange, expect })
+    await ask(result)
+    return result
   }
   if (expect.source === 'vercel') checkExpectation(expect, { kind: 'files', environments: [] })
 
@@ -268,6 +283,9 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
     query,
     ...selected,
   }
+  /* Asked after selection, so the model sees at most `--limit` events: the
+     filters narrow for free, the question ranks what is left. */
+  await ask(result)
 
   if (options.follow) {
     /* `tail -f` shows the end of the file before it waits, and the caller only
@@ -363,7 +381,7 @@ async function followUrl(url: string, shown: WideEvent[], inRange: (event: WideE
  * event, field name, filter value, path or URL.
  */
 function logsTelemetryFields(
-  result: Pick<LogsResult, 'matched' | 'sources'> & { query: Pick<LogsResult['query'], 'view' | 'where'> },
+  result: Pick<LogsResult, 'matched' | 'sources' | 'asked' | 'estimated'> & { query: Pick<LogsResult['query'], 'view' | 'where'> },
   run: { follow: boolean, url: boolean },
 ): Record<string, boolean | number | string> {
   return {
@@ -373,6 +391,7 @@ function logsTelemetryFields(
     logsWhere: result.query.where.length,
     logsSources: result.sources.length,
     logsUrl: run.url,
+    logsAsk: result.asked !== undefined || result.estimated !== undefined,
   }
 }
 
@@ -406,6 +425,9 @@ export default defineEvlogCommand('logs', {
     expect: { type: 'string', description: 'Refuse to answer from another store or environment: files, vercel, production, preview or development, comma-separated' },
     dir: { type: 'string', description: 'Log directory (default: the project\'s .evlog/logs, or every app\'s in a workspace)' },
     url: { type: 'string', description: 'Read the memory drain\'s dev endpoint instead of files (a JSON array of events)' },
+    ask: { type: 'string', description: 'Rank the selected events by a yes/no question a decision model answers (needs @evlog/signals and ai)' },
+    model: { type: 'string', description: 'The decision model --ask uses, as an AI Gateway id (default: the @evlog/signals default)' },
+    dryRun: { type: 'boolean', description: 'With --ask: print how many model calls and input tokens it would take, and send nothing' },
   },
   async run({ args, rawArgs, cli, ui }) {
     const style = createStyle(cli)
@@ -421,6 +443,7 @@ export default defineEvlogCommand('logs', {
         source: args.source,
         expect: args.expect,
         follow: args.follow,
+        dryRun: args.dryRun,
         signal: controller.signal,
         onEvent: (event) => {
           if (args.json) ui.stdout(JSON.stringify(event))
@@ -461,7 +484,15 @@ export default defineEvlogCommand('logs', {
         matched: result.matched,
         coverage: result.coverage,
         ...(result.notes && { notes: result.notes }),
-        ...(result.sessions ? { sessions: result.sessions, sessionsMatched: result.sessionsMatched } : result.stats ? { stats: result.stats } : { events: result.events }),
+        ...(result.sessions
+          ? { sessions: result.sessions, sessionsMatched: result.sessionsMatched }
+          : result.stats
+            ? { stats: result.stats }
+            : result.estimated
+              ? result.estimated
+              : result.asked
+                ? { question: result.asked.question, answers: result.asked.answered, shared: result.asked.shared, signals: result.asked.stats }
+                : { events: result.events }),
       },
       human: args.json ? undefined : formatLogsReport(cli, result),
     })

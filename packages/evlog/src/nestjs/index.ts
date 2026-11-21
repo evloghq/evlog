@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http'
 import type { Request } from 'express'
-import type { DynamicModule, MiddlewareConsumer, NestModule, Provider } from '@nestjs/common'
+import type { DynamicModule, MiddlewareConsumer, NestModule, OnApplicationShutdown, Provider } from '@nestjs/common'
 import { HttpAdapterHost } from '@nestjs/core'
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify'
 import type { ForkableLogger } from '../audit'
@@ -8,6 +8,7 @@ import { noopLogger } from '../logger'
 import { defineFrameworkIntegration } from '../shared/integration'
 import type { BaseEvlogOptions } from '../shared/middleware'
 import { bindNodeResponseLifecycle } from '../shared/nodeResponse'
+import { flushPendingDrains } from '../shared/shutdown'
 import { createLoggerStorage } from '../shared/storage'
 
 const { storage, useLogger } = createLoggerStorage(
@@ -138,7 +139,7 @@ const fastifyRequestLogProvider: Provider = {
  * export class AppModule {}
  * ```
  */
-export class EvlogModule implements NestModule {
+export class EvlogModule implements NestModule, OnApplicationShutdown {
 
   private static options: EvlogNestJSOptions = {}
 
@@ -199,6 +200,10 @@ export class EvlogModule implements NestModule {
     consumer
       .apply(createEvlogMiddleware(() => EvlogModule.options))
       .forRoutes('*')
+  }
+
+  onApplicationShutdown(): Promise<void> {
+    return flushPendingDrains()
   }
 
 }

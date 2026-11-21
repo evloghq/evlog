@@ -40,6 +40,14 @@ export interface ScoreVerdict<TLevel extends string = string> {
 
 export type Verdict = BooleanVerdict | ChoiceVerdict | ScoreVerdict
 
+/**
+ * A verdict as written on the event. `kept` marks a keep signal that promoted
+ * it. `rate` is set when the budget skipped events before this one during a
+ * spike: this verdict stands for `1 / rate` events, itself and the skipped
+ * ones, so summing `1 / rate` estimates the count the spike would have had.
+ */
+export type SignalColumn<TVerdict extends Verdict = Verdict> = TVerdict & { kept?: true, rate?: number }
+
 interface SignalBase<TVerdict extends Verdict> {
   /** Column name under `event.signals`. */
   name: string
@@ -63,9 +71,15 @@ interface SignalBase<TVerdict extends Verdict> {
   cacheKey?: (event: SignalInput) => string | undefined
 }
 
-export interface BooleanSignalInput extends SignalBase<BooleanVerdict> {
+export interface BooleanSignalInput extends Omit<SignalBase<BooleanVerdict>, 'keep'> {
   /** Optional description of what makes each answer true. */
   criteria?: { true?: string, false?: string }
+  /**
+   * Promote the event past sampling. A number keeps it when the answer is
+   * yes with a confidence above that number: `keep: 0.8` is
+   * `keep: v => v.value && v.confidence > 0.8`.
+   */
+  keep?: ((verdict: BooleanVerdict) => boolean) | number
 }
 
 export interface ChoiceSignalInput<TOption extends string> extends SignalBase<ChoiceVerdict<TOption>> {
@@ -81,25 +95,30 @@ export interface ScoreSignalInput<TLevel extends string> extends SignalBase<Scor
 export type SignalKind = 'boolean' | 'choice' | 'score'
 
 /** A validated signal. Create with {@link defineSignal}. */
-export interface Signal {
+export interface Signal<TVerdict extends Verdict = Verdict> {
   kind: SignalKind
   name: string
   ask: string
   when?: (event: SignalInput) => boolean
-  keep?(verdict: Verdict): boolean
+  keep?(verdict: TVerdict): boolean
   cacheKey?: (event: SignalInput) => string | undefined
   criteria?: { true?: string, false?: string }
   choice?: Record<string, string>
   score?: readonly string[]
+  /**
+   * This signal's column on an event that went through `createSignals`, typed
+   * on its options or levels. `undefined` when the event was not judged.
+   */
+  read: (event: Record<string, unknown>) => SignalColumn<TVerdict> | undefined
 }
 
 const NAME_PATTERN = /^[a-z][a-z0-9-]*$/i
 
 /** Call signatures of {@link defineSignal}: the input shape selects the verdict type of `keep`. */
 export interface DefineSignal {
-  <TOption extends string>(signal: ChoiceSignalInput<TOption>): Signal
-  <TLevel extends string>(signal: ScoreSignalInput<TLevel>): Signal
-  (signal: BooleanSignalInput): Signal
+  <TOption extends string>(signal: ChoiceSignalInput<TOption>): Signal<ChoiceVerdict<TOption>>
+  <TLevel extends string>(signal: ScoreSignalInput<TLevel>): Signal<ScoreVerdict<TLevel>>
+  (signal: BooleanSignalInput): Signal<BooleanVerdict>
 }
 
 /**
@@ -123,7 +142,7 @@ export interface DefineSignal {
  * })
  * ```
  */
-export const defineSignal: DefineSignal = (signal: BooleanSignalInput | ChoiceSignalInput<string> | ScoreSignalInput<string>): Signal => {
+export const defineSignal: DefineSignal = ((signal: BooleanSignalInput | ChoiceSignalInput<string> | ScoreSignalInput<string>): Signal => {
   if (!NAME_PATTERN.test(signal.name)) {
     throw new Error(`[evlog/signals] invalid signal name "${signal.name}": use letters, digits and dashes, starting with a letter`)
   }
@@ -134,12 +153,18 @@ export const defineSignal: DefineSignal = (signal: BooleanSignalInput | ChoiceSi
     throw new Error(`[evlog/signals] signal "${signal.name}" has keep without when: a keep signal runs before sampling, so it needs a predicate`)
   }
 
+  const keep = typeof signal.keep === 'number' ? keepAbove(signal.name, signal.keep) : signal.keep
+  const { name } = signal
   const base = {
-    name: signal.name,
+    name,
     ask: signal.ask,
     when: signal.when,
-    keep: signal.keep,
+    keep: keep as ((verdict: Verdict) => boolean) | undefined,
     cacheKey: signal.cacheKey,
+    read: (event: Record<string, unknown>) => {
+      const columns = event.signals as Record<string, SignalColumn> | undefined
+      return columns && Object.hasOwn(columns, name) ? columns[name] : undefined
+    },
   }
 
   if ('choice' in signal) {
@@ -154,5 +179,12 @@ export const defineSignal: DefineSignal = (signal: BooleanSignalInput | ChoiceSi
     }
     return { kind: 'score', ...base, score: signal.score }
   }
-  return { kind: 'boolean', ...base, criteria: signal.criteria }
+  return { kind: 'boolean', ...base, criteria: (signal as BooleanSignalInput).criteria }
+}) as DefineSignal
+
+function keepAbove(name: string, threshold: number): (verdict: BooleanVerdict) => boolean {
+  if (!(threshold >= 0 && threshold < 1)) {
+    throw new Error(`[evlog/signals] signal "${name}" has keep: ${threshold}: a confidence threshold is at least 0 and below 1`)
+  }
+  return v => v.value && v.confidence > threshold
 }

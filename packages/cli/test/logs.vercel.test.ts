@@ -139,6 +139,23 @@ describe('evlog logs --source vercel', () => {
     expect(report.split('\n').slice(0, 2)).toEqual(['Vercel prj_1 (production) · 2026-09-30 12:00 → 2026-10-01 12:00 UTC', 'incomplete: 1 log line was cut by Vercel\'s size limit and skipped'])
   })
 
+  it('ranks the Vercel events with --ask, and refuses --ask on the sessions view', async () => {
+    const cwd = await linkedProject()
+    const { fetchFn } = fakeVercel([
+      { events: [
+        { message: line('2026-10-01T11:00:00.000Z', { path: '/api/checkout', status: 402 }) },
+        { message: line('2026-10-01T10:00:00.000Z', { path: '/api/checkout', status: 200 }) },
+      ] }
+    ])
+    const question = 'The customer tried to pay but did not end up with a confirmed order'
+
+    const result = await runLogs(ctxAt(cwd), { ask: question }, { source: 'vercel', vercelAccess: access, fetchFn, now: NOW, dryRun: true })
+
+    expect(result.estimated).toMatchObject({ question, estimate: { events: 2, calls: 2 } })
+    await expect(runLogs(ctxAt(cwd), { what: 'sessions', ask: question }, { source: 'vercel', vercelAccess: access, fetchFn, now: NOW }))
+      .rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNSUPPORTED' })
+  })
+
   it('reads Vercel when evlog.config says so, and a flag still wins', async () => {
     const cwd = await linkedProject()
     await writeFile(join(cwd, 'evlog.config.ts'), `export default { logs: { source: 'vercel' } }\n`)

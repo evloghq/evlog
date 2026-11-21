@@ -484,9 +484,6 @@ export interface LoggerConfig {
    * const drain = pipeline(createAxiomDrain({ dataset: 'logs', token: '...' }))
    *
    * initLogger({ drain })
-   *
-   * // Flush on shutdown
-   * process.on('beforeExit', () => drain.flush())
    * ```
    */
   drain?: (ctx: DrainContext) => void | Promise<void>
@@ -770,6 +767,21 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * ```
    */
   setLevel: (level: LogLevel) => void
+
+  /**
+   * Drop this unit's wide event unless it records an error before the logger
+   * finishes. Use it for jobs that are usually idle, so empty runs do not emit
+   * an event while failures still do.
+   *
+   * Takes precedence over `sampling.keep` and head sampling. A logger that calls
+   * `error()` or `fatal()` after `discard()`, or sets a manual `error` / `fatal`
+   * level, emits normally and bypasses head sampling, because a failure must not
+   * be dropped silently. An {@link audit} record also survives `discard()`, since
+   * it is retention evidence rather than background noise.
+   *
+   * No-ops with a console warning after the wide event has been emitted.
+   */
+  discard: () => void
 
   /**
    * Log an error and capture its details.

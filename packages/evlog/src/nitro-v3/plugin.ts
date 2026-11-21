@@ -13,6 +13,7 @@ import { extendDeferredDrain } from '../nitro/deferred-drain'
 import { normalizeRedactConfig } from '../redact'
 import { shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
+import { flushPendingDrains } from '../shared/shutdown'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import { setNitroRequestLoggerResolver } from '../shared/globalRegistry'
 import type { MiddlewareLoggerOptions } from '../shared/middleware'
@@ -274,6 +275,7 @@ export default definePlugin(async (nitroApp) => {
 
   const hooks = nitroApp.hooks as unknown as Hooks
   hooks.hook('close', flushEvlogFileConfigDrain)
+  hooks.hook('close', () => flushPendingDrains())
   // Only reaches a request when the app sets `experimental.asyncContext`.
   setNitroRequestLoggerResolver(currentRequestLogger)
 

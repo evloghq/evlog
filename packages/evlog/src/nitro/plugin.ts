@@ -12,6 +12,7 @@ import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
 import { shouldLog, getServiceForPath, extractErrorStatus, type NitroPluginEvlogConfig } from '../nitro'
 import { normalizeRedactConfig } from '../redact'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
+import { flushPendingDrains } from '../shared/shutdown'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import { bindStreamingResponseLifecycle, shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { setNitroRequestLoggerResolver } from '../shared/globalRegistry'
@@ -136,6 +137,7 @@ export default defineNitroPlugin(async (nitroApp) => {
     _suppressDrainWarning: true,
   })
   nitroApp.hooks.hook('close', flushEvlogFileConfigDrain)
+  nitroApp.hooks.hook('close', () => flushPendingDrains())
 
   // When `evlog.stream` is set (or auto-on in dev), boot the mini stream
   // server and hook every drained event into it. The server runs on its

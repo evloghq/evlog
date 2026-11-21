@@ -36,7 +36,7 @@ untrusted URLs, so the metadata-only PostHog policy holds. The namespaces:
 `image.{host,fetched,bytes,mediaType,reason}`. A content pass that held everything or
 a push that was refused is chartable from the turn event alone. Tool executes
 are the one place `useLogger()` is contractually bound (see the caller gap
-below); hooks and the subagents stay uninstrumented, and the two pieces of
+below); hooks and the subagents stay uninstrumented, and the pieces of
 work that run outside a turn emit their own events (below).
 
 ## Errors
@@ -67,11 +67,13 @@ for eve below.
 
 ## Out-of-turn events
 
-Two pieces of work run with no turn to attach to: the silent escalation of a
-failed autonomous triage (`lib/github/escalate.ts`) and the cron handoff into
-Slack (`lib/schedule.ts`). Both emit one wide event through `jobLogger()`
-(`agent/lib/job.ts`), which is evlog's global logger with a `job` field
-(`github.escalate`, `schedule.send`). `agent/hooks/evlog.ts` gives that global
+Three pieces of work run with no turn to attach to: the silent escalation of a
+failed autonomous triage (`lib/github/escalate.ts`), the cron handoff into
+Slack (`lib/schedule.ts`), and a Slack membership check that Slack could not
+answer (`channels/slack.ts`), which drops the message. Each emits one wide
+event through `jobLogger()` (`agent/lib/job.ts`), which is evlog's global
+logger with a `job` field (`github.escalate`, `schedule.send`,
+`slack.member-check`). `agent/hooks/evlog.ts` gives that global
 logger its own drain, the same fs and PostHog destinations as the turns but
 under the `evi_job` event name, so a chart of turns never counts a cron
 handoff. Turn events bypass the global drain (`_deferDrain`), so nothing is

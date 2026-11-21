@@ -3,6 +3,7 @@ import type { CliContext } from '../../core/context'
 import { createStyle } from '../../core/output'
 import type { Style, StyleCode } from '../../core/output'
 import { field, isError } from './query'
+import type { AskEstimate, AskResult } from './ask'
 import type { LogsQuery, LogsStats, Selected, SessionSummary } from './query'
 
 /** Fields every request event carries, shown in the fixed columns rather than the summary. */
@@ -198,6 +199,10 @@ export interface LogsResult extends Selected<Sourced> {
   query: LogsQuery
   /** What the read could not cover, such as log lines Vercel cut. */
   notes?: string[]
+  /** With `--ask`: the selected events ranked by the probability the answer is yes. */
+  asked?: { question: string } & AskResult<Sourced>
+  /** With `--ask --dry-run`: what asking would take, nothing sent. */
+  estimated?: { question: string, estimate: AskEstimate }
 }
 
 function banner(result: LogsResult): string {
@@ -255,6 +260,28 @@ function formatStats(style: Style, stats: LogsStats): string[] {
   return lines
 }
 
+function formatEstimated({ question, estimate }: NonNullable<LogsResult['estimated']>): string[] {
+  const { events, calls, inputTokens } = estimate
+  return [
+    printable(question),
+    '',
+    `would judge ${events} event${events === 1 ? '' : 's'} in ${calls} model call${calls === 1 ? '' : 's'}, about ${inputTokens} input tokens. Nothing was sent`,
+  ]
+}
+
+function formatAsked(style: Style, asked: NonNullable<LogsResult['asked']>, selected: number): string[] {
+  const { stats } = asked
+  const lines = [style.paint('dim', `ranked by P(yes) · ${printable(asked.question)}`), '']
+  for (const { event, probability } of asked.answered) {
+    const p = probability.toFixed(2)
+    lines.push(`${style.paint(probability >= 0.5 ? 'yellow' : 'dim', p)}  ${formatLine(style, event)}`)
+  }
+  const unjudged = selected - asked.answered.length
+  const shared = asked.shared > 0 ? ` · ${asked.shared} shared a verdict` : ''
+  lines.push('', style.paint('dim', `model calls ${stats.calls} · input tokens ${stats.inputTokens}${shared}${unjudged > 0 ? ` · ${unjudged} not answered` : ''}`))
+  return lines
+}
+
 /** The one-shot report: a header, one line per event (or the full event for a trace), and what to try next. */
 export function formatLogsReport(ctx: CliContext, result: LogsResult): string {
   const style = createStyle(ctx)
@@ -288,6 +315,9 @@ export function formatLogsReport(ctx: CliContext, result: LogsResult): string {
     lines.push('', style.paint('dim', hint))
     return lines.join('\n')
   }
+
+  if (result.estimated) return [...lines, ...formatEstimated(result.estimated)].join('\n')
+  if (result.asked) return [...lines, ...formatAsked(style, result.asked, events.length)].join('\n')
 
   if (query.view === 'trace') {
     for (const event of events) lines.push(formatEvent(style, event), '')

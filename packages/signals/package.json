@@ -65,7 +65,7 @@
     "vitest": "^4.1.12"
   },
   "peerDependencies": {
-    "ai": ">=7.0.105 <8.0.0",
+    "ai": ">=7.0.130 <8.0.0",
     "evlog": "^3.0.0-beta.0"
   },
   "publishConfig": {

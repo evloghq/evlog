@@ -131,14 +131,21 @@ export class DrainDeliveryError extends Error {
   readonly retryAfterMs?: number
   /** Response headers, when the provider answered. */
   readonly headers?: Headers
+  /**
+   * How many events of the request the provider rejected when it accepted the
+   * rest, such as an OTLP `partialSuccess`. `createDrainPipeline` counts only
+   * these as dropped. Unset means the whole request failed.
+   */
+  readonly rejected?: number
 
-  constructor(message: string, options: { status?: number, retryable: boolean, retryAfterMs?: number, headers?: Headers, cause?: unknown }) {
+  constructor(message: string, options: { status?: number, retryable: boolean, retryAfterMs?: number, headers?: Headers, rejected?: number, cause?: unknown }) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause })
     this.name = 'DrainDeliveryError'
     this.status = options.status
     this.retryable = options.retryable
     this.retryAfterMs = options.retryAfterMs
     this.headers = options.headers
+    this.rejected = options.rejected
   }
 }
 

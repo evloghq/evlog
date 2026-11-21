@@ -823,3 +823,225 @@ describe('logs command', () => {
     expect(process.exitCode).toBe(1)
   })
 })
+
+describe('evlog logs --ask', () => {
+  /* P(yes) from the state, so the ranking cannot come from file order: the refund ranks first, the 500 second. */
+  async function scripted() {
+    const { answers, scriptedEvaluate } = await import('@evlog/signals/testing')
+    return scriptedEvaluate((_name, _question, state) => {
+      const text = JSON.stringify(state)
+      return answers.boolean(text.includes('billing.refund') ? 0.97 : text.includes('"status":500') ? 0.7 : 0.1)
+    })
+  }
+
+  it('ranks the selected events by the probability of yes, one call per event', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'Did this touch money?' }, { now: NOW, evaluate })
+
+    expect(calls).toHaveLength(6)
+    expect(calls[0]!.questions.ask).toMatchObject({ type: 'boolean', instructions: 'Did this touch money?' })
+    expect(result.asked!.answered.map(a => [a.event.path, a.probability])).toEqual([
+      ['/api/refund', 0.97],
+      ['/api/items', 0.7],
+      ['/api/health', 0.1],
+      ['/api/checkout', 0.1],
+      ['/api/reports', 0.1],
+      ['/api/items', 0.1],
+    ].map(([path, p]) => [path, expect.closeTo(p as number, 5)]))
+    expect(result.events.every(event => !('signals' in event))).toBe(true)
+  })
+
+  it('reports P(yes) without float noise when the answer is no', async () => {
+    const cwd = await makeSink()
+    const { answers, scriptedEvaluate } = await import('@evlog/signals/testing')
+    const { evaluate } = scriptedEvaluate(() => answers.boolean(0.03))
+    const result = await runLogs(fakeContext(cwd), { ask: 'q', limit: '1' }, { now: NOW, evaluate })
+    expect(result.asked!.answered[0]!.probability).toBe(0.03)
+  })
+
+  it('applies the filters before the model sees anything', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'Did this touch money?', what: 'errors' }, { now: NOW, evaluate })
+    expect(calls).toHaveLength(2)
+    expect(result.asked!.answered.map(a => a.event.path)).toEqual(['/api/items', '/api/checkout'])
+  })
+
+  it('asks the model --model names, and the @evlog/signals default without it', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    await runLogs(fakeContext(cwd), { ask: 'q', limit: '1', model: 'liquid/d1' }, { now: NOW, evaluate })
+    await runLogs(fakeContext(cwd), { ask: 'q', limit: '1' }, { now: NOW, evaluate })
+    expect(calls.map(call => call.model)).toEqual(['liquid/d1', 'typesafe-ai/jev'])
+  })
+
+  it('refuses --follow and the stats view as usage errors', async () => {
+    const cwd = await makeSink()
+    await expect(runLogs(fakeContext(cwd), { ask: 'q' }, { now: NOW, follow: true })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNSUPPORTED' })
+    await expect(runLogs(fakeContext(cwd), { ask: 'q', what: 'stats' }, { now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNSUPPORTED' })
+  })
+
+  it('prints the probability in front of each line, highest first', async () => {
+    const cwd = await makeSink()
+    const { evaluate } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'Did this touch money?' }, { now: NOW, evaluate })
+    const lines = formatLogsReport(fakeContext(cwd), result).split('\n')
+    expect(lines).toContain('ranked by P(yes) · Did this touch money?')
+    expect(lines.find(line => line.startsWith('0.97'))).toContain('/api/refund')
+    expect(lines.at(-1)).toBe(`model calls 6 · input tokens ${result.asked!.stats.inputTokens}`)
+  })
+
+  it('stops at the first failed call instead of ranking with holes, and skips a refused event', async () => {
+    const cwd = await makeSink()
+    const ai = await import('ai')
+    const { answers } = await import('@evlog/signals/testing')
+    let n = 0
+    const evaluate = (request: { questions: Record<string, unknown> }) => {
+      n++
+      if (n === 2) return Promise.reject(new ai.Experimental_DecisionRefusalError({ questionIds: ['ask'], provider: 'test', modelId: 'test' }))
+      if (n === 4) return Promise.reject(new Error('403 restricted provider'))
+      return Promise.resolve({ answers: Object.fromEntries(Object.keys(request.questions).map(k => [k, answers.boolean(0.8)])), modelId: 'test' })
+    }
+    await expect(runLogs(fakeContext(cwd), { ask: 'q' }, { now: NOW, evaluate })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_FAILED', message: expect.stringContaining('403 restricted provider') })
+    expect(n).toBe(4)
+
+    n = 0
+    const result = await runLogs(fakeContext(cwd), { ask: 'q', limit: '3' }, { now: NOW, evaluate })
+    expect(result.asked!.answered).toHaveLength(2)
+    expect(formatLogsReport(fakeContext(cwd), result).split('\n').at(-1)).toMatch(/· 1 not answered$/)
+  })
+
+  it('cuts a large field down instead of sending it whole', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${JSON.stringify(event({ timestamp: '2026-10-01T11:50:00.000Z', requestId: 'big', path: '/api/upload', body: 'x'.repeat(100_001), items: Array.from({ length: 25 }, (_, i) => i) }))}\n`, { flag: 'a' })
+    const result = await runLogs(fakeContext(cwd), { ask: 'q', limit: '1' }, { now: NOW, evaluate })
+    expect(result.asked).toMatchObject({ answered: [{ event: { requestId: 'big' } }] })
+    const state = calls[0]!.state as { body: string, items: unknown[] }
+    expect(state.body).toBe(`${'x'.repeat(256)}… 99745 more characters`)
+    expect(state.items).toEqual([...Array.from({ length: 10 }, (_, i) => i), '… 15 more items'])
+  })
+
+  it('cuts a stack to 3 lines and its long lines to the string limit', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    const stack = ['x'.repeat(100_001), 'at a', 'at b', 'at c', 'at d'].join('\n')
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${JSON.stringify(event({ timestamp: '2026-10-01T11:50:00.000Z', requestId: 'stack', level: 'error', error: { message: 'boom', stack } }))}\n`, { flag: 'a' })
+    await runLogs(fakeContext(cwd), { ask: 'q', limit: '1' }, { now: NOW, evaluate })
+    const sent = (calls[0]!.state as { error: { stack: string } }).error.stack
+    expect(sent).toBe(`${'x'.repeat(256)}… 99755 more characters\n… 2 more lines`)
+  })
+
+  it('compares a printed duration when no durationMs stands for it', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-ask-'))
+    tempDirs.push(cwd)
+    await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'shop' }))
+    await mkdir(join(cwd, '.evlog/logs'), { recursive: true })
+    const job = (duration: string) => {
+      const { durationMs: _ms, ...rest } = event({ requestId: duration, path: '/jobs/sync', duration })
+      return rest
+    }
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${[job('100ms'), job('900ms')].map(e => JSON.stringify(e)).join('\n')}\n`)
+    const { evaluate, calls } = await scripted()
+    await runLogs(fakeContext(cwd), { ask: 'q' }, { now: NOW, evaluate })
+    expect(calls).toHaveLength(2)
+  })
+
+  it('asks separately for events that differ only past what is cut', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-ask-'))
+    tempDirs.push(cwd)
+    await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'shop' }))
+    await mkdir(join(cwd, '.evlog/logs'), { recursive: true })
+    const items = (last: string) => event({ requestId: last, items: [...Array.from({ length: 11 }, (_, i) => `ord_${i}`), last] })
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${[items('ord_a'), items('ord_b')].map(e => JSON.stringify(e)).join('\n')}\n`)
+    const { evaluate, calls } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'q' }, { now: NOW, evaluate })
+    expect(calls).toHaveLength(2)
+    expect(result.asked).toMatchObject({ shared: 0 })
+  })
+
+  it('stops instead of leaving out an event still too large once cut down', async () => {
+    const cwd = await makeSink()
+    const { evaluate, calls } = await scripted()
+    const wide = Object.fromEntries(Array.from({ length: 450 }, (_, i) => [`field${i}`, 'x'.repeat(256)]))
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${JSON.stringify(event({ timestamp: '2026-10-01T11:50:00.000Z', requestId: 'big', path: '/api/upload', ...wide }))}\n`, { flag: 'a' })
+    await expect(runLogs(fakeContext(cwd), { ask: 'q', limit: '2' }, { now: NOW, evaluate })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_FAILED', message: expect.stringContaining('big is over 100000 characters') })
+    expect(calls).toHaveLength(1)
+  })
+
+  /* Same route and outcome, different timestamps, ids and a few ms apart: one call. A different order id, or 490ms against 412ms, is another event to the question. */
+  async function checkoutSink(): Promise<string> {
+    const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-ask-'))
+    tempDirs.push(cwd)
+    await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'shop' }))
+    await mkdir(join(cwd, '.evlog/logs'), { recursive: true })
+    const checkout = (i: number, durationMs: number, order?: string) => event({
+      timestamp: `2026-10-01T11:0${i}:00.000Z`,
+      requestId: `req-${i}`,
+      traceId: `trace-${i}`,
+      method: 'POST',
+      path: '/api/checkout',
+      durationMs,
+      duration: `${durationMs}ms`,
+      ...(order && { order: { id: order } }),
+    })
+    const lines = [checkout(1, 412), checkout(2, 419), checkout(3, 415), checkout(4, 490), checkout(5, 412, 'ord_9')]
+    await writeFile(join(cwd, '.evlog/logs/2026-10-01.jsonl'), `${lines.map(e => JSON.stringify(e)).join('\n')}\n`)
+    return cwd
+  }
+
+  it('asks once for events that differ only in timestamps, ids and a few ms, and shares the verdict', async () => {
+    const cwd = await checkoutSink()
+    const { answers, scriptedEvaluate } = await import('@evlog/signals/testing')
+    const { evaluate, calls } = scriptedEvaluate((_name, _question, state) => answers.boolean(JSON.stringify(state).includes('ord_9') ? 0.05 : 0.9))
+    const result = await runLogs(fakeContext(cwd), { ask: 'Paid but no order?' }, { now: NOW, evaluate })
+
+    expect(calls).toHaveLength(3)
+    expect(result.asked).toMatchObject({ shared: 2, stats: { calls: 3 } })
+    expect(result.asked!.answered.map(a => [a.event.requestId, a.probability])).toEqual([
+      ['req-1', 0.9],
+      ['req-2', 0.9],
+      ['req-3', 0.9],
+      ['req-4', 0.9],
+      ['req-5', 0.05],
+    ])
+    expect(formatLogsReport(fakeContext(cwd), result).split('\n').at(-1)).toMatch(/· 2 shared a verdict$/)
+  })
+
+  it('counts the calls and tokens with --dry-run and sends nothing', async () => {
+    const cwd = await checkoutSink()
+    const { evaluate, calls } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { ask: 'Paid but no order?' }, { now: NOW, evaluate, dryRun: true })
+
+    expect(calls).toHaveLength(0)
+    expect(result.asked).toBeUndefined()
+    expect(result.estimated).toEqual({ question: 'Paid but no order?', estimate: { events: 5, calls: 3, inputTokens: expect.any(Number) } })
+    expect(formatLogsReport(fakeContext(cwd), result).split('\n').at(-1)).toMatch(/^would judge 5 events in 3 model calls, about \d+ input tokens\. Nothing was sent$/)
+  })
+
+  it('ranks the events of one request instead of printing them in full', async () => {
+    const cwd = await makeSink()
+    const { evaluate } = await scripted()
+    const result = await runLogs(fakeContext(cwd), { what: 'aaaaaaaa', ask: 'Did this touch money?' }, { now: NOW, evaluate })
+    expect(result.asked!.answered.length).toBeGreaterThan(1)
+    const lines = formatLogsReport(fakeContext(cwd), result).split('\n')
+    expect(lines).toContain('ranked by P(yes) · Did this touch money?')
+    expect(lines.at(-1)).toMatch(/^model calls \d+ · input tokens \d+$/)
+  })
+
+  it('names the packages to install when @evlog/signals is missing', async () => {
+    vi.resetModules()
+    vi.doMock('@evlog/signals', () => {
+      throw new Error('Cannot find package \'@evlog/signals\'')
+    })
+    try {
+      const { runLogs: run } = await import('../src/commands/logs')
+      const cwd = await makeSink()
+      await expect(run(fakeContext(cwd), { ask: 'q' }, { now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_ASK_UNAVAILABLE', fix: expect.stringContaining('pnpm add -D @evlog/cli @evlog/signals \'ai@^7.0.130\'') })
+    } finally {
+      vi.doUnmock('@evlog/signals')
+      vi.resetModules()
+    }
+  })
+})

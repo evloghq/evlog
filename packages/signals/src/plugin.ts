@@ -1,12 +1,20 @@
+import { Experimental_DecisionRefusalError } from 'ai'
 import type { EnrichContext, EvlogPlugin, TailSamplingContext } from 'evlog'
-import type { Signal, SignalInput, Verdict } from './define'
+import type { Signal, SignalColumn, SignalInput, Verdict } from './define'
 import type { EvaluateFn, EvaluationModel, EvaluationQuestion, ProviderOptions, SignalState } from './evaluate'
+import type { Lane } from './budget'
 import { createBudget } from './budget'
 import { createLru } from './cache'
 import { aiSdkEvaluate, toQuestion, toVerdict } from './evaluate'
 
 export interface SignalsOptions {
   signals: Signal[]
+  /**
+   * Plugin name. evlog keeps one plugin per name, so a second instance, such
+   * as one with its own budget for client events, needs its own.
+   * @default 'signals'
+   */
+  name?: string
   /**
    * AI SDK evaluation model: a gateway id or a provider instance.
    * @default 'typesafe-ai/jev'
@@ -18,7 +26,21 @@ export interface SignalsOptions {
     perMinute?: number
     /** Pause after a failed call, in milliseconds. @default 30000 */
     cooldownMs?: number
+    /**
+     * Share of `perMinute` held for keep signals, which decide sampling. An
+     * error storm judged in `enrich` cannot spend it; keep signals fall back
+     * on the rest when it runs out. @default 0.25
+     */
+    keepShare?: number
+    /** Model calls in flight at once. Past it, events pass through unjudged rather than queue. @default 16 */
+    maxConcurrent?: number
   }
+  /**
+   * How long a verdict cached by `cacheKey` is reused, in milliseconds. Past
+   * it, the next event with that key asks the model again, so an outage that
+   * cleared stops reading as one. @default 300000
+   */
+  cacheTtlMs?: number
   /** Per-call timeout, in milliseconds. @default 2000 */
   timeoutMs?: number
   /**
@@ -36,7 +58,8 @@ export interface SignalsOptions {
   /** Replace the model call. Used by tests and replay tooling. */
   evaluate?: EvaluateFn
   /**
-   * Write the id of the model that answered on `event.signalsModel`. Off by
+   * Write the id of the model that answered on `event.signalsModel`, keyed by
+   * the plugin `name`, so two instances comparing models keep both ids. Off by
    * default: one more column on every judged event, useful only while
    * comparing models. @default false
    */
@@ -50,6 +73,8 @@ export interface SignalsStats {
   skipped: number
   /** Model calls that failed or timed out. */
   errors: number
+  /** Model calls the model declined to answer. They record no verdict and do not open the breaker. */
+  refused: number
   /** Verdicts served from `cacheKey` without a call. */
   cached: number
   inputTokens: number
@@ -61,12 +86,13 @@ export interface SignalsPlugin extends EvlogPlugin {
   stats: () => SignalsStats
 }
 
-/** A verdict as written on the event. `kept` marks the signal that promoted it past sampling. */
-export type SignalColumn = Verdict & { kept?: true }
-
 interface Judged {
   verdicts: Map<string, Verdict>
   modelId?: string
+  /** The model declined the call. A refusal of any question answers none of them. */
+  refused?: boolean
+  /** Events of the lane this call stands for, itself and the ones the budget skipped before it. */
+  represents?: number
 }
 
 function dueSignals(signals: Signal[], input: SignalInput): Signal[] {
@@ -84,7 +110,7 @@ function defaultState(event: SignalInput): SignalState {
  * of the rate limit, whatever the number of questions.
  *
  * Keep signals run before sampling and can only promote. Verdicts land on
- * `event.signals`, and with `stampModel` the model id on `event.signalsModel`. Any failure, budget
+ * `event.signals`, and with `stampModel` the model id on `event.signalsModel[name]`. Any failure, budget
  * exhaustion or timeout leaves the event as it was.
  *
  * @example
@@ -105,10 +131,14 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   const maxStateChars = options.maxStateChars ?? 100_000
   const buildState = options.state ?? defaultState
   const evaluate = options.evaluate ?? aiSdkEvaluate
+  const cacheTtlMs = options.cacheTtlMs ?? 300_000
   const budget = createBudget({
     perMinute: options.budget?.perMinute ?? 600,
     cooldownMs: options.budget?.cooldownMs ?? 30_000,
+    keepShare: options.budget?.keepShare ?? 0.25,
   })
+  const maxConcurrent = options.budget?.maxConcurrent ?? 16
+  let calling = 0
 
   const seen = new Set<string>()
   for (const signal of options.signals) {
@@ -117,32 +147,83 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
   }
   const keepSignals = options.signals.filter(s => s.keep)
 
-  const cache = createLru<Verdict>(1_000)
+  const cache = createLru<{ verdict: Verdict, expiresAt: number }>(1_000)
+  const inflight = new Map<string, Promise<Judged | undefined>>()
   const pending = createLru<Judged>(1_000)
-  const stats: SignalsStats = { calls: 0, skipped: 0, errors: 0, cached: 0, inputTokens: 0 }
+  const stats: SignalsStats = { calls: 0, skipped: 0, errors: 0, refused: 0, cached: 0, inputTokens: 0 }
 
-  async function judge(signals: Signal[], input: SignalInput): Promise<Judged> {
+  async function judge(signals: Signal[], input: SignalInput, lane: Lane): Promise<Judged> {
     const verdicts = new Map<string, Verdict>()
-    const toAsk: Array<[signal: Signal, cacheKey: string | undefined]> = []
+    const shared: Array<[signal: Signal, call: Promise<Judged | undefined>]> = []
+    const toAsk: Array<[signal: Signal, cacheId: string | undefined]> = []
     for (const signal of signals) {
       const key = signal.cacheKey?.(input)
-      const hit = key === undefined ? undefined : cache.get(`${signal.name}\0${key}`)
+      const id = key === undefined ? undefined : `${signal.name}\0${key}`
+      const entry = id === undefined ? undefined : cache.get(id)
+      const hit = entry && entry.expiresAt > Date.now() ? entry.verdict : undefined
+      const running = id === undefined ? undefined : inflight.get(id)
       if (hit) {
         verdicts.set(signal.name, hit)
         stats.cached++
+      } else if (running) {
+        shared.push([signal, running])
       } else {
-        toAsk.push([signal, key])
+        toAsk.push([signal, id])
       }
     }
-    if (toAsk.length === 0) return { verdicts }
 
+    const [fresh, joined] = await Promise.all([
+      toAsk.length > 0 ? ask(toAsk, input, lane) : undefined,
+      Promise.all(shared.map(([, call]) => call)),
+    ])
+    let modelId = fresh?.modelId
+    const refused = fresh?.refused
+    const rate = fresh?.represents !== undefined && fresh.represents > 1 ? 1 / fresh.represents : undefined
+    for (const [name, verdict] of fresh?.verdicts ?? []) verdicts.set(name, rate === undefined ? verdict : { ...verdict, rate } as SignalColumn)
+    shared.forEach(([signal], i) => {
+      const verdict = joined[i]?.verdicts.get(signal.name)
+      if (!verdict) return
+      verdicts.set(signal.name, verdict)
+      modelId ??= joined[i]!.modelId
+      stats.cached++
+    })
+    return { verdicts, modelId, refused }
+  }
+
+  // Registered before the call is awaited, so concurrent events with the same cache key join it instead of calling again.
+  // Only calls that reach the model are registered: a skip belongs to this event's state, not to its key.
+  // The budget and the concurrency cap are checked before the state is built: under a spike most events are skipped, and a skip must not cost a serialization.
+  function ask(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, input: SignalInput, lane: Lane): Promise<Judged> {
+    const skip = (refund?: number): Promise<Judged> => {
+      if (refund !== undefined) budget.refund(lane, refund)
+      stats.skipped++
+      return Promise.resolve({ verdicts: new Map() })
+    }
+    const represents = budget.take(lane)
+    if (represents === false) return skip()
+    if (calling >= maxConcurrent) return skip(represents)
     const raw = buildState(input)
     const json = typeof raw === 'string' ? raw : JSON.stringify(raw)
-    if (json.length > maxStateChars || !budget.take()) {
-      stats.skipped++
-      return { verdicts }
+    // An oversized state is a property of this event, not of the load, so only the events before it carry over.
+    if (json.length > maxStateChars) return skip(represents - 1)
+    calling++
+    const call = callModel(toAsk, typeof raw === 'string' ? raw : JSON.parse(json))
+      .then(judged => ({ ...judged, represents }))
+      .finally(() => {
+        calling--
+      })
+    // The caller gets the rejection; events that joined get no verdict, and the entry is cleared either way so the next event can retry.
+    const settled = call.catch(() => undefined)
+    for (const [, id] of toAsk) {
+      if (id === undefined) continue
+      inflight.set(id, settled)
+      void settled.then(() => inflight.delete(id))
     }
-    const state: SignalState = typeof raw === 'string' ? raw : JSON.parse(json)
+    return call
+  }
+
+  async function callModel(toAsk: Array<[signal: Signal, cacheId: string | undefined]>, state: SignalState): Promise<Judged> {
+    const verdicts = new Map<string, Verdict>()
 
     const questions: Record<string, EvaluationQuestion> = {}
     for (const [signal] of toAsk) questions[signal.name] = toQuestion(signal)
@@ -153,16 +234,20 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       const response = await evaluate({ model, state, questions, abortSignal: controller.signal, providerOptions: options.providerOptions })
       stats.calls++
       stats.inputTokens += response.inputTokens ?? 0
-      for (const [signal, key] of toAsk) {
+      for (const [signal, id] of toAsk) {
         const answer = response.answers[signal.name]
         if (!answer) continue
         const verdict = toVerdict(signal, answer)
         verdicts.set(signal.name, verdict)
-        if (key !== undefined) cache.set(`${signal.name}\0${key}`, verdict)
+        if (id !== undefined) cache.set(id, { verdict, expiresAt: Date.now() + cacheTtlMs })
       }
       budget.succeed()
       return { verdicts, modelId: response.modelId }
     } catch (err) {
+      if (Experimental_DecisionRefusalError.isInstance(err)) {
+        stats.refused++
+        return { verdicts, refused: true }
+      }
       stats.errors++
       budget.fail()
       console.warn('[evlog/signals] model call failed, events pass through unjudged:', err)
@@ -172,18 +257,29 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
     }
   }
 
+  const pluginName = options.name ?? 'signals'
+
   return {
-    name: 'signals',
+    name: pluginName,
     stats: () => ({ ...stats }),
 
     async keep(ctx: TailSamplingContext) {
       const input: SignalInput = { ...ctx.context }
       if (ctx.status !== undefined) input.status = ctx.status
       if (ctx.duration !== undefined) input.durationMs = ctx.duration
+      input.path ??= ctx.path
+      input.method ??= ctx.method
       const due = dueSignals(keepSignals, input)
       if (due.length === 0) return
 
-      const judged = await judge(due, input)
+      // The state is billed once per call and output is free, so the other due signals ride along instead of costing a second call in enrich.
+      const asked = dueSignals(options.signals, input)
+      let judged = await judge(asked, input, 'keep')
+      // A refused question voids the whole call, so a question that rode along must not cost the keep signals their promotion.
+      if (judged.refused && asked.length > due.length && due.some(s => !judged.verdicts.has(s.name))) {
+        const retry = await judge(due, input, 'keep')
+        judged = { ...retry, verdicts: new Map([...judged.verdicts, ...retry.verdicts]) }
+      }
       const kept = new Set<string>()
       for (const signal of due) {
         const verdict = judged.verdicts.get(signal.name)
@@ -204,7 +300,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       if (requestId !== undefined) pending.delete(requestId)
 
       const remaining = due.filter(s => !prior?.verdicts.has(s.name))
-      const fresh = remaining.length > 0 ? await judge(remaining, event) : undefined
+      const fresh = remaining.length > 0 ? await judge(remaining, event, 'enrich') : undefined
 
       const columns: Record<string, SignalColumn> = {}
       for (const signal of due) {
@@ -216,7 +312,7 @@ export function createSignals(options: SignalsOptions): SignalsPlugin {
       event.signals = { ...(event.signals as Record<string, SignalColumn> | undefined), ...columns }
       if (!options.stampModel) return
       const modelId = fresh?.modelId ?? prior?.modelId
-      if (modelId) event.signalsModel = modelId
+      if (modelId) event.signalsModel = { ...(event.signalsModel as Record<string, string> | undefined), [pluginName]: modelId }
     },
   }
 }

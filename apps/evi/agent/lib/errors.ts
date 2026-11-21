@@ -83,6 +83,12 @@ export const eviErrors = defineErrorCatalog('evi', {
     message: 'Page or source revision changed since review. Capture and review it again.',
   },
 
+  SLACK_REQUEST_FAILED: {
+    status: 502,
+    message: ({ operation, slackError }: { operation: string, slackError: string }) => `Slack ${operation} failed: ${slackError}`,
+  },
+  SCHEDULE_FROM_SCHEDULED_RUN: { status: 403, message: 'Scheduled runs can\'t create or replace schedules.' },
+  SCHEDULE_NEEDS_SLACK_MESSAGE: { status: 400, message: 'Schedules can only be created from a Slack message.' },
   SLACK_CHANNEL_NOT_CONFIGURED: {
     message: 'EVI_SLACK_CHANNEL_ID is required for scheduled runs.',
     fix: 'Set EVI_SLACK_CHANNEL_ID on the deployment.',

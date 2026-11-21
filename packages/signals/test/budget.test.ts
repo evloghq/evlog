@@ -3,25 +3,64 @@ import { createBudget } from '../src/budget'
 import { createLru } from '../src/cache'
 
 describe('createBudget', () => {
-  it('allows perMinute calls, then refuses until the window rolls over', () => {
+  it('holds ten seconds of budget, then refills at perMinute', () => {
     let now = 0
-    const budget = createBudget({ perMinute: 2, cooldownMs: 1000 }, () => now)
-    expect(budget.take()).toBe(true)
-    expect(budget.take()).toBe(true)
-    expect(budget.take()).toBe(false)
-    now = 60_000
-    expect(budget.take()).toBe(true)
+    const budget = createBudget({ perMinute: 60, cooldownMs: 1000, keepShare: 0 }, () => now, () => 0)
+    for (let i = 0; i < 10; i++) expect(budget.take('enrich')).toBe(1)
+    expect(budget.take('enrich')).toBe(false)
+    now = 999
+    expect(budget.take('enrich')).toBe(false)
+    now = 2000
+    expect(budget.take('enrich')).toBe(3)
   })
 
-  it('opens after a failure and closes after the cooldown', () => {
+  it('keeps a share for keep signals that enrich cannot spend, and lets keep fall back on the rest', () => {
+    const now = 0
+    const starved = createBudget({ perMinute: 60, cooldownMs: 1000, keepShare: 0.5 }, () => now, () => 0)
+    for (let i = 0; i < 5; i++) expect(starved.take('enrich')).toBe(1)
+    expect(starved.take('enrich')).toBe(false)
+    for (let i = 0; i < 5; i++) expect(starved.take('keep')).toBe(1)
+    expect(starved.take('keep')).toBe(false)
+
+    const spare = createBudget({ perMinute: 60, cooldownMs: 1000, keepShare: 0.5 }, () => now, () => 0)
+    for (let i = 0; i < 10; i++) expect(spare.take('keep')).toBe(1)
+    expect(spare.take('keep')).toBe(false)
+  })
+
+  it('admits each event with the probability the lane can afford once arrivals outpace it, and counts the ones it skipped', () => {
     let now = 0
-    const budget = createBudget({ perMinute: 10, cooldownMs: 1000 }, () => now)
-    budget.fail()
-    expect(budget.take()).toBe(false)
-    now = 999
-    expect(budget.take()).toBe(false)
+    let draw = 0.5
+    const budget = createBudget({ perMinute: 600, cooldownMs: 1000, keepShare: 0 }, () => now, () => draw)
+    for (let i = 0; i < 1000; i++) budget.take('enrich')
     now = 1000
-    expect(budget.take()).toBe(true)
+    expect(budget.take('enrich')).toBe(false)
+    draw = 0.009
+    expect(budget.take('enrich')).toBe(902)
+  })
+
+  it('returns a refunded call to its lane and carries its events over to the next call', () => {
+    const budget = createBudget({ perMinute: 6, cooldownMs: 1000, keepShare: 0 }, () => 0, () => 0)
+    expect(budget.take('enrich')).toBe(1)
+    budget.refund('enrich', 1)
+    expect(budget.take('enrich')).toBe(2)
+    expect(budget.take('enrich')).toBe(false)
+  })
+
+  it('opens after three consecutive failures and closes after the cooldown', () => {
+    let now = 0
+    const budget = createBudget({ perMinute: 600, cooldownMs: 1000, keepShare: 0 }, () => now, () => 0)
+    budget.fail()
+    budget.fail()
+    budget.succeed()
+    budget.fail()
+    budget.fail()
+    expect(budget.take('enrich')).not.toBe(false)
+    budget.fail()
+    expect(budget.take('enrich')).toBe(false)
+    now = 999
+    expect(budget.take('enrich')).toBe(false)
+    now = 1000
+    expect(budget.take('enrich')).not.toBe(false)
   })
 })
 

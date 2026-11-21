@@ -8,6 +8,8 @@ import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createError } from '../../src/error'
 import { initLogger } from '../../src/logger'
+import { createDrainPipeline } from '../../src/pipeline'
+import type { DrainContext } from '../../src/types'
 import { EvlogModule, useLogger } from '../../src/nestjs/index'
 import {
   assertHttpEventEmitted,
@@ -96,6 +98,19 @@ describe('evlog/nestjs (real NestJS runtime)', () => {
       status: 200,
       level: 'info',
     })
+  })
+
+  it('flushes a buffering drain pipeline when the app closes', async () => {
+    const send = vi.fn()
+    app = await bootApp({ drain: createDrainPipeline<DrainContext>({ batch: { size: 100, intervalMs: 600_000 } })(send) })
+
+    await request(app.getHttpServer()).get('/api/users').expect(200)
+    expect(send).not.toHaveBeenCalled()
+    await app.close()
+    app = undefined
+
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(defined(send.mock.calls[0], 'send call')[0]).toHaveLength(1)
   })
 
   it('uses NestJS DI: useLogger() inside a controller resolves the request logger', async () => {

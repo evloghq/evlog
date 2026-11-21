@@ -5,8 +5,9 @@ import type { HttpDrainRequest } from '../shared/drain'
 import { defineHttpDrain, sendEncodedDrainRequest } from '../shared/drain'
 import type { OtlpAttributeValue } from '../shared/event'
 import { formatEventSummary, isPlainObject, toOtlpAttributeValue } from '../shared/event'
-import { EVLOG_VERSION } from '../shared/http'
+import { DrainDeliveryError, EVLOG_VERSION } from '../shared/http'
 import { OTEL_SEVERITY_NUMBER, OTEL_SEVERITY_TEXT } from '../shared/severity'
+import type { OTLPPartialSuccess } from './otlp-response'
 
 /**
  * Shape of the emitted log record.
@@ -398,7 +399,68 @@ export function createOTLPDrain(overrides?: Partial<OTLPConfig>) {
     },
     label: 'OTLP',
     encode: (events, config) => (events.length === 0 ? null : encodeOTLPRequest(events, config)),
+    onResponse: readPartialSuccess,
   })
+}
+
+async function decodePartialSuccess(response: Response): Promise<OTLPPartialSuccess | undefined> {
+  const contentType = response.headers.get('content-type') ?? ''
+  if (contentType.includes('protobuf')) {
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    if (bytes.length === 0) return undefined
+    const { decodeOTLPPartialSuccess } = await import('./otlp-response')
+    return decodeOTLPPartialSuccess(bytes)
+  }
+  if (!contentType.includes('json')) return undefined
+  const text = await response.text()
+  if (!text) return undefined
+  const body = JSON.parse(text) as { partialSuccess?: { rejectedLogRecords?: number | string, errorMessage?: string } }
+  if (!body.partialSuccess) return undefined
+  // proto3 JSON writes int64 as a string.
+  return { rejectedLogRecords: Number(body.partialSuccess.rejectedLogRecords ?? 0), errorMessage: body.partialSuccess.errorMessage ?? '' }
+}
+
+/**
+ * Turn the `partialSuccess` of a 2xx export response into a non-retryable
+ * failure carrying the rejected count; an `errorMessage` alone is a warning.
+ */
+async function readPartialSuccess(response: Response): Promise<void> {
+  let partialSuccess: OTLPPartialSuccess | undefined
+  try {
+    partialSuccess = await decodePartialSuccess(response)
+  } catch (error) {
+    // The collector accepted the request, so an unreadable body must not fail or resend it.
+    console.warn('[evlog/otlp] Could not read the collector response:', error)
+    return
+  }
+  if (!partialSuccess) return
+  const { rejectedLogRecords, errorMessage } = partialSuccess
+  if (rejectedLogRecords > 0) {
+    throw new DrainDeliveryError(`OTLP collector rejected ${rejectedLogRecords} log record(s)${errorMessage ? `: ${errorMessage}` : ''}`, {
+      status: response.status,
+      retryable: false,
+      rejected: rejectedLogRecords,
+      headers: response.headers,
+    })
+  }
+  if (errorMessage) console.warn(`[evlog/otlp] ${errorMessage}`)
+}
+
+const V3_DEFAULT_CHANGES = {
+  recordShape: { current: '\'json\'', v3: '\'compact\'' },
+  semanticConventions: { current: 'false', v3: 'true' },
+} as const
+
+function warnUnsetV3Defaults(config: Partial<OTLPConfig>): void {
+  const unset = (['recordShape', 'semanticConventions'] as const).filter(key => config[key] === undefined)
+  if (unset.length === 0) return
+  const changes = unset.map(key => `${key} to ${V3_DEFAULT_CHANGES[key].v3}`).join(' and ')
+  const keep = unset.map(key => `${key}: ${V3_DEFAULT_CHANGES[key].current}`).join(', ')
+  warnDeprecated(
+    `otlp:v3-defaults:${unset.join(',')}`,
+    `[evlog/otlp] v3 changes the default of ${changes}. Set ${keep} to keep this output.`,
+    'compact-output-by-default',
+  )
 }
 
 function encodeOTLPRequest(events: WideEvent[], config: ResolvedOTLPConfig): HttpDrainRequest {
@@ -463,5 +525,6 @@ export async function sendBatchToOTLP(events: WideEvent[], config: OTLPConfig): 
     source: 'otlp',
     timeout: config.timeout,
     retries: config.retries,
+    onResponse: readPartialSuccess,
   })
 }
