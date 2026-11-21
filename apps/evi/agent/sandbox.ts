@@ -4,7 +4,7 @@ import { defineSandbox } from 'eve/sandbox'
 import type { SandboxSession } from 'eve/sandbox'
 import { browserSandbox } from './lib/capture'
 import { cloneUrl, homeRepository } from './lib/repo'
-import { createSandboxEnvironment } from './lib/sandbox-backend'
+import { createSandboxEnvironment, sandboxEnv } from './lib/sandbox-backend'
 import { agentBrowserInstallOptions, cacheWarmupCommand, failedWarmupChecks, workspaceBootstrapCommand } from './lib/workspace-bootstrap'
 
 /**
@@ -19,11 +19,12 @@ const BEFORE_AFTER_CLI = '@vercel/before-and-after@0.0.4'
  * from the lockfile.
  */
 const PACKAGE_MANAGER_CLIS = ['corepack@0.36.0', '@antfu/ni@30.6.0', 'bun@1.4.2']
+const AMP_CLI = '@ampcode/cli'
 
 const HOME = homeRepository()
 
 async function prepareSandbox(sandbox: SandboxSession) {
-  await sandbox.run({ command: `npm install -g ${[BEFORE_AFTER_CLI, ...PACKAGE_MANAGER_CLIS].join(' ')}` })
+  await sandbox.run({ command: `npm install -g ${[BEFORE_AFTER_CLI, ...PACKAGE_MANAGER_CLIS, AMP_CLI].join(' ')}` })
   await sandbox.run({ command: 'corepack enable' })
   await sandbox.run({ command: `git clone --depth 50 ${cloneUrl(HOME)} repo` })
   // Frozen: a cold install in a fresh clone otherwise re-resolves the whole
@@ -56,7 +57,7 @@ async function prepareSandbox(sandbox: SandboxSession) {
  * eve keys the snapshot on this module's compiled revision, so any edit here
  * rebuilds it.
  */
-export const environment = createSandboxEnvironment(Boolean(process.env.VERCEL), prepareSandbox)
+export const environment = createSandboxEnvironment(Boolean(process.env.VERCEL), prepareSandbox, sandboxEnv())
 
 export default defineSandbox(async () => {
   const sandbox = await environment.open()
