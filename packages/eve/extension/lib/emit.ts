@@ -1,11 +1,10 @@
 import type { HookContext } from 'eve/hooks'
 import { createError, initLogger, toLoggerConfig, toMiddlewareOptions } from 'evlog'
-import { createMiddlewareLogger, isLoggerInitialized, isLoggerLocked } from 'evlog/toolkit'
+import { createMiddlewareLogger, isLoggerInitialized, isLoggerLocked, resolveRedactConfig } from 'evlog/toolkit'
 import extension from '../extension'
 import type { RecordedError, TurnSlot } from './state'
 import { takeTurnTrace } from './traces'
 import { turnFields } from './turn'
-import { resolveRedactConfig } from './vendor/redact'
 
 let initialized = false
 let replaying = false
