@@ -5,6 +5,7 @@ import extension from '../extension'
 import type { RecordedError, TurnSlot } from './state'
 import { takeTurnTrace } from './traces'
 import { turnFields } from './turn'
+import { resolveRedactConfig } from './vendor/redact'
 
 let initialized = false
 let replaying = false
@@ -97,6 +98,7 @@ export async function emitTurn(turnId: string, slot: Pick<TurnSlot, 'calls' | 'c
     channel: ctx.channel.kind,
     record,
     tools,
+    redact: resolveRedactConfig(config.redact),
     created: slot.created,
   })
   logger.set({ idempotencyKey: id, ...turn.fields, ...takeTurnTrace(ctx.session.id, turnId) })

@@ -222,7 +222,7 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
 
   // eve's view keeps background task calls, subagent calls and skill loads as
   // calls of their turn, so the turn event lists them like any tool call.
-  it('records background tasks, subagents and skill loads as the turn\'s calls, without their output', () => {
+  it('records background tasks, subagents and skill loads as the turn\'s calls', () => {
     const event = events.find(e => e.gen_ai.tools?.some(tool => tool.name === 'deploy'))
     expect(event, 'no event for the background tasks').toBeDefined()
     expect(event!.gen_ai.tools.map(({ name, kind, success }) => ({ name, kind, success }))).toEqual([
@@ -234,7 +234,28 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
     expect(event!.gen_ai.tools[2]).toMatchObject({ outcome: 'failed', error: 'Deploy failed' })
     expect(event!.eve).toMatchObject({ outcome: 'completed', failedCalls: 1 })
     expect(event!.level).toBe('warn')
-    expect(JSON.stringify(event)).not.toMatch(/TASK-OUTPUT-MARKER|RESEARCH-OUTPUT-MARKER|SKILL-BODY-MARKER/)
+  })
+
+  it('records tool inputs and outputs as redacted previews with their size', () => {
+    const event = events.find(e => e.gen_ai.tools?.some(tool => tool.name === 'deploy'))!
+    const [skill, deployed, broken, researcher] = event.gen_ai.tools as Array<Record<string, unknown>>
+    // 'full': the whole skill body, longer than the default preview.
+    expect(skill!.output).toEqual(expect.stringContaining('40. Confirm the payment settled'))
+    expect(skill).toMatchObject({ output_size: (skill!.output as string).length })
+    expect(skill!.output_size).toBeGreaterThan(2000)
+    expect(skill).not.toHaveProperty('output_truncated')
+    // A value within its limit keeps its shape.
+    expect(deployed).toMatchObject({ input: { service: 'api' }, input_size: 17 })
+    expect(broken).toMatchObject({ input: { service: 'broken' }, input_size: 20 })
+    expect(broken).not.toHaveProperty('output')
+    // { maxLength: 20 } cuts inside the email, which was masked before the cut.
+    expect(deployed).toMatchObject({ output: '{"contact":"o***@***…', output_truncated: true })
+    expect(JSON.stringify(event)).not.toContain('ops@clea')
+    expect(deployed!.output_size).toBe(JSON.stringify({ contact: 'o***@***.dev', url: 'https://api.example.invalid', note: 'TASK-OUTPUT-MARKER' }).length)
+    // true: the subagent's reply, cut to the default 2,000 characters.
+    expect(researcher).toMatchObject({ output_truncated: true, output_size: 4023 })
+    expect(researcher!.output).toMatch(/^RESEARCH-OUTPUT-MARKER /)
+    expect(researcher!.output).toHaveLength(2001)
   })
 
   it('marks a completed turn with a failed call as a warning', () => {

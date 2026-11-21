@@ -15,5 +15,8 @@ if (connectStatus) {
 export default evlog({
   service: 'refund-agent',
   drain: createFsDrain({ dir }),
+  // The background-tasks eval's calls: a long reply under the default cap, a cut
+  // that falls inside an email address, and a value kept whole.
+  tools: { triage: { output: 'full' }, deploy: { input: true, output: { maxLength: 20 } }, researcher: { output: true } },
   logs: { dir, diagnostics: true, source: process.env.EVLOG_FIXTURE_SOURCE === 'vercel' ? 'vercel' : 'files' },
 })

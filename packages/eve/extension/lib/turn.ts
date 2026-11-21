@@ -1,9 +1,14 @@
 import type { SessionView } from 'eve/events'
 import { calls, interactions, reply, runs, turn } from 'eve/events'
-import type { EvlogEveRecord, EvlogEveToolRule } from '../extension'
+import type { RedactConfig } from 'evlog'
+import type { EvlogEveCapture, EvlogEveRecord, EvlogEveToolRule } from '../extension'
 import type { RecordedError } from './state'
+import { redactEvent } from './vendor/redact'
 
 const REPLY_PREVIEW_LENGTH = 200
+const IO_PREVIEW_LENGTH = 2000
+
+type Capture = number | 'full' | false
 
 export interface TurnInput {
   view: SessionView
@@ -13,12 +18,21 @@ export interface TurnInput {
   channel?: string
   record: EvlogEveRecord
   tools: Record<string, EvlogEveToolRule>
+  /** Applied to tool inputs and outputs before they are measured and cut. */
+  redact?: RedactConfig
   /** The evlog errors built during the turn, matched to failed calls by message when the match is unambiguous. */
   created: RecordedError[]
 }
 
-function resolveRule(name: string, record: EvlogEveRecord, rules: Record<string, EvlogEveToolRule>): { input: boolean, output: boolean } | false {
-  const io = record === 'debug'
+function capture(value: EvlogEveCapture | undefined, preset: Capture): Capture {
+  if (value === undefined) return preset
+  if (value === true) return IO_PREVIEW_LENGTH
+  if (typeof value === 'object') return value.maxLength
+  return value
+}
+
+function resolveRule(name: string, record: EvlogEveRecord, rules: Record<string, EvlogEveToolRule>): { input: Capture, output: Capture } | false {
+  const io: Capture = record === 'debug' && IO_PREVIEW_LENGTH
   const key = name in rules
     ? name
     : Object.keys(rules)
@@ -27,7 +41,19 @@ function resolveRule(name: string, record: EvlogEveRecord, rules: Record<string,
   const rule = key === undefined ? true : rules[key]
   if (rule === false) return false
   if (rule === true) return { input: io, output: io }
-  return { input: rule.input ?? io, output: rule.output ?? io }
+  return { input: capture(rule.input, io), output: capture(rule.output, io) }
+}
+
+/**
+ * A redacted value as the event keeps it, with its size. An AI reply or a tool
+ * result can run to tens of thousands of characters, so past the limit the
+ * value becomes the start of its JSON; a value within it keeps its shape.
+ */
+function captured(field: 'input' | 'output', value: unknown, limit: Capture): Record<string, unknown> {
+  if (limit === false || value === undefined) return {}
+  const text = typeof value === 'string' ? value : JSON.stringify(value)
+  if (limit === 'full' || text.length <= limit) return { [field]: value, [`${field}_size`]: text.length }
+  return { [field]: `${text.slice(0, limit)}…`, [`${field}_size`]: text.length, [`${field}_truncated`]: true }
 }
 
 /**
@@ -73,7 +99,7 @@ export function turnFields(input: TurnInput): { fields: Record<string, unknown>,
 
   const turnCalls = calls(view, { turnId }).filter(call => call.kind !== 'control')
   const failed = turnCalls.filter(call => call.state === 'failed')
-  const tools = record === 'minimal'
+  const recorded = record === 'minimal'
     ? []
     : turnCalls.flatMap((call) => {
       const rule = resolveRule(call.name, record, input.tools)
@@ -82,23 +108,37 @@ export function turnFields(input: TurnInput): { fields: Record<string, unknown>,
       const created = call.error && thrownBy(call.error.message, failed, input.created)
       return [
         {
-          call_id: call.callId,
-          name: call.name,
-          kind: call.kind,
-          ...(duration !== undefined && { duration_ms: duration }),
-          success: call.state !== 'failed',
-          ...(call.outcome && { outcome: call.outcome }),
-          ...(call.error && { error: call.error.message }),
-          ...(created && {
-            ...(created.code && { code: created.code }),
-            ...(created.why && { why: created.why }),
-            ...(created.fix && { fix: created.fix }),
-          }),
-          ...(rule.input && call.input !== undefined && { input: call.input }),
-          ...(rule.output && call.output !== undefined && { output: call.output }),
+          rule,
+          tool: {
+            call_id: call.callId,
+            name: call.name,
+            kind: call.kind,
+            ...(duration !== undefined && { duration_ms: duration }),
+            success: call.state !== 'failed',
+            ...(call.outcome && { outcome: call.outcome }),
+            ...(call.error && { error: call.error.message }),
+            ...(created && {
+              ...(created.code && { code: created.code }),
+              ...(created.why && { why: created.why }),
+              ...(created.fix && { fix: created.fix }),
+            }),
+            ...(rule.input && call.input !== undefined && { input: call.input }),
+            ...(rule.output && call.output !== undefined && { output: call.output }),
+          } as Record<string, unknown>,
         }
       ]
     })
+  // Redacted where the event holds them, before they are measured and cut: a
+  // secret cut in half no longer matches its pattern, and a path rule no longer
+  // reaches inside a value cut to a string.
+  const redacted = input.redact && recorded.some(({ tool }) => 'input' in tool || 'output' in tool)
+    ? (redactEvent({ gen_ai: { tools: recorded.map(({ tool }) => tool) } }, input.redact).gen_ai as { tools: Record<string, unknown>[] }).tools
+    : recorded.map(({ tool }) => tool)
+  const tools = redacted.map(({ input: callInput, output, ...tool }, i) => ({
+    ...tool,
+    ...captured('input', callInput, recorded[i]!.rule.input),
+    ...captured('output', output, recorded[i]!.rule.output),
+  }))
 
   const approvals = record === 'minimal'
     ? []

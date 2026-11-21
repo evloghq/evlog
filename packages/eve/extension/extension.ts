@@ -8,12 +8,24 @@ import { z } from 'zod'
  *
  * - `minimal`: outcome, duration, usage and errors.
  * - `standard`: adds every tool, skill and subagent call, approvals and lineage.
- * - `debug`: adds tool inputs and outputs and a reply preview, all redacted.
+ * - `debug`: adds a preview of each tool input and output and a reply preview, all redacted.
  */
 export type EvlogEveRecord = 'minimal' | 'standard' | 'debug'
 
-/** Per-tool override of the preset. `false` leaves the tool out of the event. */
-export type EvlogEveToolRule = boolean | { input?: boolean, output?: boolean }
+/**
+ * How much of a tool call's input or output the event keeps, after redaction.
+ * `true` keeps a preview of up to 2,000 characters, `{ maxLength }` a preview of
+ * up to `maxLength`, and `'full'` the whole value. A value longer than its
+ * preview is cut to a string of its JSON and flagged `<field>_truncated`; every
+ * recorded value carries `<field>_size`, the length of the string or of its JSON.
+ */
+export type EvlogEveCapture = boolean | 'full' | { maxLength: number }
+
+/**
+ * Per-tool override of the preset. `false` leaves the tool out of the event;
+ * `true` keeps it under the preset.
+ */
+export type EvlogEveToolRule = boolean | { input?: EvlogEveCapture, output?: EvlogEveCapture }
 
 /** What the `logs` tool reads for a caller: every turn, the caller's own session, or nothing, which hides the tool. */
 export type EvlogEveLogsAccess = 'agent' | 'session' | false
