@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - v3
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -25,6 +26,9 @@ env:
   TURBO_CACHE: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'remote:rw' || 'local:rw' }}
   # Without this, turbo silently treats every package as affected
   TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+  # Pull requests run what their diff can reach; the merge queue runs
+  # everything, so nothing reaches v3 or main on a narrowed selection.
+  AFFECTED: ${{ github.event_name != 'merge_group' && '--affected' || '' }}
 
 jobs:
   quality:
@@ -54,10 +58,10 @@ jobs:
       # any on a cold CI checkout, so vue-tsc reports implicit-any on every
       # query callback. It never ran here before either. Tracked separately.
       - name: Lint
-        run: pnpm exec turbo run lint --affected
+        run: pnpm exec turbo run lint $AFFECTED
 
       - name: Typecheck
-        run: pnpm exec turbo run typecheck --affected --filter='!evlog-telemetry'
+        run: pnpm exec turbo run typecheck $AFFECTED --filter='!evlog-telemetry'
 
   test:
     name: Test
@@ -98,7 +102,7 @@ jobs:
       # The eve CLI refuses to start below Node 24, so the packages that build
       # with it only run on the 24 leg.
       - name: Test workspace
-        run: pnpm exec turbo run test --affected --filter='!evlog' --filter='!@evlog/cli' ${{ matrix.node-version == '22' && '--filter=!@evlog/eve --filter=!evi --filter=!evlog-eve-example' || '' }}
+        run: pnpm exec turbo run test $AFFECTED --filter='!evlog' --filter='!@evlog/cli' ${{ matrix.node-version == '22' && '--filter=!@evlog/eve --filter=!evi --filter=!evlog-eve-example' || '' }}
 
       # content-lint lives in scripts/, outside the workspace graph, so turbo
       # never sees it. Its fixture test is what keeps the content pass honest.
@@ -155,9 +159,9 @@ jobs:
       # coverage step it bypasses turbo, so it prepares the CLI and the
       # workspace packages it imports.
       - name: CLI sandbox smoke
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         run: |
-          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs | grep -q .; then
+          if [ "${{ github.event_name }}" = merge_group ] || git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs | grep -q .; then
             pnpm exec turbo run dev:prepare --filter=@evlog/cli
             node scripts/cli-sandbox.mjs --smoke
           else
@@ -169,9 +173,9 @@ jobs:
       # range that rejects 2.x fails the install with ERESOLVE. Checks the
       # lowest 2.x the CLI supports and the 2.33 line it is released against.
       - name: CLI installs next to evlog 2.x
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         run: |
-          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli | grep -q .; then
+          if [ "${{ github.event_name }}" = merge_group ] || git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli | grep -q .; then
             pnpm exec turbo run dev:prepare --filter=@evlog/cli
             pack_dir=$(mktemp -d)
             (cd packages/cli && pnpm pack --pack-destination "$pack_dir" >/dev/null)
@@ -197,7 +201,7 @@ jobs:
   # Node 22.0 or 22.1, so that leg runs `init` with --no-agents.
   cli-compat:
     name: CLI smoke (${{ matrix.name }})
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -227,7 +231,7 @@ jobs:
       - name: Check whether the CLI changed
         id: cli
         run: |
-          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs .github/workflows/ci.yml | grep -q .; then
+          if [ "${{ github.event_name }}" = merge_group ] || git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs .github/workflows/ci.yml | grep -q .; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "CLI untouched — smoke skipped"
@@ -287,7 +291,7 @@ jobs:
 
       # --continue: one broken example must not cancel the others
       - name: Build affected examples
-        run: pnpm exec turbo run build --affected --continue --filter='./examples/*'
+        run: pnpm exec turbo run build $AFFECTED --continue --filter='./examples/*'
 
   # @evlog/eve peers `eve >=1.0.0` but develops against one pinned eve. This
   # runs it and examples/eve against the floor and against npm `latest`, so an
@@ -298,7 +302,7 @@ jobs:
   # becomes blocking.
   eve-compat:
     name: eve compatibility (${{ matrix.eve }})
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     continue-on-error: ${{ matrix.eve == 'latest' }}
@@ -410,6 +414,7 @@ jobs:
     # No preview for fork PRs: pkg.pr.new would serve the fork's code under the evlog name.
     if: >-
       (github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3')
+      && github.event_name != 'merge_group'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: read
