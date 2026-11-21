@@ -31,6 +31,7 @@ describe('eviErrors', () => {
     expect(eviErrors.AMP_API_KEY_INVALID().code).toBe('evi.AMP_API_KEY_INVALID')
     expect(eviErrors.AMP_CLI_MISSING().code).toBe('evi.AMP_CLI_MISSING')
     expect(eviErrors.AMP_EXECUTE_FAILED().code).toBe('evi.AMP_EXECUTE_FAILED')
+    expect(eviErrors.AMP_THREAD_NOT_FOUND().code).toBe('evi.AMP_THREAD_NOT_FOUND')
   })
 })
 

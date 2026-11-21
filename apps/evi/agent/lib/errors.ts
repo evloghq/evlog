@@ -114,6 +114,11 @@ export const eviErrors = defineErrorCatalog('evi', {
     message: 'Amp did not finish the task.',
     fix: 'Open the Amp thread if one was returned, or do the work yourself.',
   },
+  AMP_THREAD_NOT_FOUND: {
+    status: 404,
+    message: 'No Amp thread is mapped for this conversation or issue.',
+    fix: 'Pass threadId or the Linear issue, or start one with amp__execute.',
+  },
 })
 
 declare module 'evlog' {
