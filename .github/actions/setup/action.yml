@@ -50,8 +50,11 @@ runs:
         registry-url: ${{ inputs.registry-url }}
         # A merge queue run saves under its own temporary ref, which no other
         # run can read, so its store cache would only push the branches' entries
-        # out of the 10 GB quota.
-        cache: ${{ steps.modules.outputs.cache-hit != 'true' && github.event_name != 'merge_group' && 'pnpm' || '' }}
+        # out of the 10 GB quota. Windows skips it too: neither branch runs
+        # there, so a pull request only ever reads its own entry, and a warm
+        # store does not speed up the install there, where linking is the slow
+        # part.
+        cache: ${{ steps.modules.outputs.cache-hit != 'true' && github.event_name != 'merge_group' && runner.os != 'Windows' && 'pnpm' || '' }}
 
     - name: Install dependencies
       id: install
