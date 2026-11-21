@@ -57,8 +57,10 @@ jobs:
       - name: Typecheck
         run: pnpm exec turbo run typecheck --affected --filter='!evlog-telemetry'
 
-  test:
-    name: Test
+  # The tests run as three jobs so the slowest suite, not the sum of all of
+  # them, sets how long a pull request waits.
+  test-evlog:
+    name: Test evlog
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -85,7 +87,92 @@ jobs:
         with:
           bun-version: 1.4.4
 
-      # evlog and @evlog/cli run once below, under coverage, which enforces their thresholds
+      # The coverage step bypasses turbo, so it inherits no dist/ from the
+      # affected graph — on a docs-only change nothing is affected and the
+      # dist-dependent tests (auto-import types, api-surface) would run
+      # against a missing build. Prepare it explicitly; the remote cache
+      # makes this a restore, not a rebuild, when src is untouched.
+      # test/bin.test.ts runs the evlog bin, which needs the workspace
+      # @evlog/cli built; without it the bin falls back to fetching the CLI.
+      - name: Prepare evlog dist
+        run: pnpm exec turbo run dev:prepare --filter=evlog --filter=@evlog/cli
+
+      - name: Test evlog with coverage
+        run: pnpm --filter evlog run test:coverage
+
+      # The fs drain needs no network and no secret, so its round-trip e2e runs
+      # on every pull request rather than only in e2e.yml.
+      - name: Test fs drain end to end
+        run: pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts
+
+  test-cli:
+    name: Test @evlog/cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # remote cache OIDC
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - parallel:
+          - name: Set up Turborepo remote cache
+            if: env.IS_INTERNAL == 'true'
+            uses: vercel/setup-turborepo-remote-cache-action@49d7b1b46ba4c9251e1977986bfe18336feabc8f # v1.1.0
+            with:
+              team: ${{ vars.TURBO_TEAM }}
+
+          - name: Set up pnpm and Node
+            uses: ./.github/actions/setup
+
+      # Same as for evlog: coverage bypasses turbo, so the CLI and the
+      # workspace packages it imports are prepared explicitly.
+      - name: Prepare CLI dist
+        run: pnpm exec turbo run dev:prepare --filter=@evlog/cli
+
+      - name: Test @evlog/cli with coverage
+        run: pnpm --filter @evlog/cli run test:coverage
+
+      # The sandbox smoke runs every non-interactive CLI command against a real
+      # app per framework — the end-to-end seam (detect → init → doctor → map →
+      # baseline) that unit tests cover only piecewise. Gated to changes that
+      # can affect it, so a docs-only pull request skips the cost.
+      - name: CLI sandbox smoke
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs | grep -q .; then
+            node scripts/cli-sandbox.mjs --smoke
+          else
+            echo "CLI untouched — smoke skipped"
+          fi
+
+  test:
+    name: Test workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # remote cache OIDC
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - parallel:
+          - name: Set up Turborepo remote cache
+            if: env.IS_INTERNAL == 'true'
+            uses: vercel/setup-turborepo-remote-cache-action@49d7b1b46ba4c9251e1977986bfe18336feabc8f # v1.1.0
+            with:
+              team: ${{ vars.TURBO_TEAM }}
+
+          - name: Set up pnpm and Node
+            uses: ./.github/actions/setup
+
+      # evlog and @evlog/cli run in their own jobs, under coverage, which enforces their thresholds
       - name: Test workspace
         run: pnpm exec turbo run test --affected --filter='!evlog' --filter='!@evlog/cli'
 
@@ -110,44 +197,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: pnpm run content:lint -- --since origin/${{ github.base_ref }}
 
-      # The coverage step bypasses turbo, so it inherits no dist/ from the
-      # affected graph — on a docs-only change nothing is affected and the
-      # dist-dependent tests (auto-import types, api-surface) would run
-      # against a missing build. Prepare it explicitly; the remote cache
-      # makes this a restore, not a rebuild, when src is untouched.
-      # test/bin.test.ts runs the evlog bin, which needs the workspace
-      # @evlog/cli built; without it the bin falls back to fetching the CLI.
-      - name: Prepare evlog dist
-        run: pnpm exec turbo run dev:prepare --filter=evlog --filter=@evlog/cli
-
-      - name: Test evlog with coverage
-        run: pnpm --filter evlog run test:coverage
-
-      # The fs drain needs no network and no secret, so its round-trip e2e runs
-      # on every pull request rather than only in e2e.yml.
-      - name: Test fs drain end to end
-        run: pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts
-
-      - name: Test @evlog/cli with coverage
-        run: pnpm --filter @evlog/cli run test:coverage
-
-      # The sandbox smoke runs every non-interactive CLI command against a real
-      # app per framework — the end-to-end seam (detect → init → doctor → map →
-      # baseline) that unit tests cover only piecewise. Gated to changes that
-      # can affect it, so a docs-only pull request skips the cost. Like the
-      # coverage step it bypasses turbo, so it prepares the CLI and the
-      # workspace packages it imports.
-      - name: CLI sandbox smoke
-        if: github.event_name == 'pull_request'
-        run: |
-          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs | grep -q .; then
-            pnpm exec turbo run dev:prepare --filter=@evlog/cli
-            node scripts/cli-sandbox.mjs --smoke
-          else
-            echo "CLI untouched — smoke skipped"
-          fi
-
-  # The same smoke where the Test job cannot reach: the oldest Node the CLI
+  # The same smoke where the test-cli job cannot reach: the oldest Node the CLI
   # declares in `engines`, and Windows.
   #
   # `init` hands the skills install to `npx skills add`, which does not start on
@@ -357,7 +407,7 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-slim
-    needs: [quality, test, cli-compat, examples]
+    needs: [quality, test, test-evlog, test-cli, cli-compat, examples]
     if: always()
     steps:
       - name: Verify every required job succeeded
