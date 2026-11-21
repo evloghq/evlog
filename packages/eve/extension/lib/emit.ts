@@ -88,6 +88,9 @@ export async function emitTurn(turnId: string, slot: Pick<TurnSlot, 'calls' | 'c
     requestId: id,
   })
   if (skipped) return
+  // initLogger is skipped when a host app such as Next initialised evlog first,
+  // so the mount's service reaches its turns here.
+  if (extension.config.service && logger.getContext().service === undefined) logger.set({ service: extension.config.service })
 
   const turn = turnFields({
     view: ctx.view,

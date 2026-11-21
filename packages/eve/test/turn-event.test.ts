@@ -46,7 +46,9 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
   const noOidc = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
   const refused = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
   const OIDC = `e30.${Buffer.from(JSON.stringify({ owner_id: 'team_1', project_id: 'prj_1', environment: 'production' })).toString('base64url')}.fixture-signature`
+  const hosted = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
   let readsWithoutOidc: TurnEvent[] = []
+  let hostedEvents: TurnEvent[] = []
   let readsRefused: TurnEvent[] = []
   const read = (dir: string) => readdirSync(dir).filter(file => file.endsWith('.jsonl')).flatMap(file =>
     readFileSync(join(dir, file), 'utf8').trim().split('\n').map(line => JSON.parse(line) as TurnEvent))
@@ -64,14 +66,21 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
       evaluate(logs, ['--exclude-tag', 'vercel']),
       evaluate(noOidc, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'vercel' }).catch(() => {}),
       evaluate(refused, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'vercel', VERCEL_OIDC_TOKEN: OIDC, EVLOG_FIXTURE_CONNECT_STATUS: '403' }).catch(() => {}),
+      evaluate(hosted, ['refund-ok'], { EVLOG_FIXTURE_HOST_SERVICE: 'web' }),
     ])
+    hostedEvents = read(hosted)
     events = read(logs)
     readsWithoutOidc = read(noOidc)
     readsRefused = read(refused)
   }, 180_000)
 
   afterAll(() => {
-    for (const dir of [logs, noOidc, refused]) rmSync(dir, { recursive: true, force: true })
+    for (const dir of [logs, noOidc, refused, hosted]) rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('names each turn with the mount\'s service, also when the host app initialised evlog first', () => {
+    expect(events.map(event => event.service)).toEqual(events.map(() => 'refund-agent'))
+    expect(hostedEvents.map(event => event.service)).toEqual(['refund-agent'])
   })
 
   const byOrder = (id: string) => {
