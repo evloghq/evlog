@@ -1,5 +1,87 @@
 # evlog
 
+## 3.0.0-beta.4
+
+### Minor Changes
+
+- [#1154](https://github.com/evloghq/evlog/pull/1154) [`26a564c`](https://github.com/evloghq/evlog/commit/26a564c8ec7367ad5cd0262fe10d1b80b623acd5) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog logs --source vercel` reads the linked Vercel project's runtime logs, where evlog prints one JSON line per event, with every view and filter. It reads through the Vercel API-key connector that `logs.vercel.connector` names in `evlog.config.ts`; with none configured it fails with `cli.LOGS_VERCEL_NO_CONNECTOR` and points at `npx evlog setup vercel`. The CLI authenticates with the project's OIDC token from your `vercel login`, so no token goes in an env var, and reads are pinned to the linked project.
+
+  `npx evlog setup vercel` sets it up once: it links the project if needed, lists the team's API-key connectors and asks which one to use, or creates one under a name you give, attaches it to the project, and writes the choice to `evlog.config.ts`. An existing config only gains the setting when it names no connector, and setup prints the lines it added. Without a terminal, pass `--connector vercel/mcp`, or `--connector vercel/evlog --create` to create it; a run with neither stops and lists the team's connectors. `--json` reports the config file and what setup did to it as `config: { file, state }`.
+
+- [#1204](https://github.com/evloghq/evlog/pull/1204) [`04535c1`](https://github.com/evloghq/evlog/commit/04535c192452d5ba1ce6a4f4f442c2f3dc8b80b4) Thanks [@HugoRCD](https://github.com/HugoRCD)! - More integrations deliver a `createDrainPipeline` drain when the request ends on serverless platforms, and a pipeline warns when a frozen instance left events behind.
+
+  - On Vercel, Express, Fastify, Elysia, NestJS, React Router, oRPC and SvelteKit read the request's `waitUntil` from the Vercel Functions runtime, the one `waitUntil()` from `@vercel/functions` calls, without the package installed. A pipeline drain then sends at request end instead of waiting for `batch.intervalMs`.
+  - SvelteKit reads `waitUntil` from `event.platform.context` on the Cloudflare and Netlify adapters.
+  - When request-end flushes run but a request finds events older than `batch.intervalMs`, the pipeline warns once with `stale-buffer`: a route without `waitUntil` buffered them and the runtime froze before their batch was sent.
+
+- [#1204](https://github.com/evloghq/evlog/pull/1204) [`04535c1`](https://github.com/evloghq/evlog/commit/04535c192452d5ba1ce6a4f4f442c2f3dc8b80b4) Thanks [@HugoRCD](https://github.com/HugoRCD)! - A request-end flush on a serverless platform is bounded, and AWS Lambda delivers before it freezes.
+
+  - `createDrainPipeline({ requestBudget })` caps the drain calls, retries included, that one request-end flush makes on Cloudflare Workers, Vercel, Netlify and AWS Lambda. The default is 10. Events still unsent go to `onDropped` with the new reason `deferred`.
+  - A request-end flush skips any retry that would start after the runtime stops the request: the invocation deadline on Vercel, 25 s after the request ends on Workers. Those events go to `onDropped` with the new reason `deadline`. `drain.stats().dropped` counts both reasons.
+  - On AWS Lambda, a request with no `waitUntil` delivers what the pipeline holds before the integration returns the response. A function frozen after each of 20 invocations and killed after the last delivered 0 of 20 events; it now delivers 20 of 20.
+
+- [#1165](https://github.com/evloghq/evlog/pull/1165) [`d95d09c`](https://github.com/evloghq/evlog/commit/d95d09ce87fe50736f3921b2a4e281029f8f27ee) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `createDrainPipeline` delivers buffered events when the process stops, without a shutdown hook of your own.
+
+  - On Node and Bun, every pipeline that holds events is flushed on `SIGTERM` and `SIGINT`, for up to 400 ms. Then the signal's default exit runs, so the process stops exactly as it would without evlog. When your app has its own listener for that signal, evlog flushes and leaves the exit to it. Buffered events used to be lost on a signal unless you flushed them yourself.
+  - On `beforeExit`, when the event loop runs out of work, pending pipelines flush to completion. A script that ends without calling `drain.flush()` no longer loses its last batch.
+  - The Nitro `close` hook flushes every pending pipeline, not only the `evlog.config.ts` drain. The Fastify plugin flushes on `onClose` and `EvlogModule` on `onApplicationShutdown`.
+  - A `flush()` call that starts while another is still sending now resolves once that delivery is done. It used to resolve at once, because the first call had already taken the events out of the buffer, so `await drain.flush()` before exiting could still lose them.
+  - A pipeline with nothing buffered is not tracked, and evlog adds no listener before the first pipeline receives an event.
+
+  `process.exit()` still ends the process without a flush, so keep `await drain.flush()` before it. A `process.on('SIGTERM', () => drain.flush())` listener is no longer needed; it also cancels Node's default exit, so remove it unless your app exits from it.
+
+- [#1176](https://github.com/evloghq/evlog/pull/1176) [`05bd412`](https://github.com/evloghq/evlog/commit/05bd41265116b6fab8fa8122ff0acb3f6c17b971) Thanks [@2648782102](https://github.com/2648782102)! - Jobs and other units of work can drop their own success events, and keep failures. `log.discard()` works on every request logger, and `emit: 'onError'` is added to the Effect `withLogger`.
+
+  - `log.discard()` makes the logger skip the event when the unit succeeds or is interrupted. A later `error()` or `fatal()`, an explicit `setLevel('error')` / `setLevel('fatal')`, or an `audit()` record still emits and bypasses head sampling, so `sampling.rates.error: 0` cannot hide a failure and an audit record is never dropped. `discard()` wins over `sampling.keep` and head sampling only for a run with none of those.
+  - `withLogger(action, { emit: 'onError' })` emits on failure. A failure bypasses head sampling, so `sampling.rates.error: 0` cannot drop it. A successful or interrupted run is discarded as with `log.discard()`, so it emits nothing unless it recorded an `error()`, a `fatal()` or an `audit()`.
+
+- [#1194](https://github.com/evloghq/evlog/pull/1194) [`e343b43`](https://github.com/evloghq/evlog/commit/e343b438f1b6173bcf36f946d341874cbe36d8da) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog/toolkit` exports `redactEvent` and `resolveRedactConfig`, so an integration can redact a value with the same rules as the logger before it shortens or transforms it. Pass the result of `resolveRedactConfig(redact)` to `redactEvent`, which returns a redacted copy:
+
+  ```ts
+  import { redactEvent, resolveRedactConfig } from "evlog/toolkit";
+
+  const config = resolveRedactConfig(true);
+  const safe = config ? redactEvent({ output }, config) : { output };
+  ```
+
+### Patch Changes
+
+- [#1204](https://github.com/evloghq/evlog/pull/1204) [`04535c1`](https://github.com/evloghq/evlog/commit/04535c192452d5ba1ce6a4f4f442c2f3dc8b80b4) Thanks [@HugoRCD](https://github.com/HugoRCD)! - On Cloudflare Workers, Vercel, Netlify and AWS Lambda, a `createDrainPipeline` drain sends its buffered events when the request ends, instead of after `batch.intervalMs`, and the integration keeps the runtime alive with `waitUntil` until they are delivered or dropped. Before, the timer that sends the batch could die with the request: a Worker sending one event every 1.2 s with a 1 s interval delivered 0 of 21 events.
+
+  - Applies to the middleware integrations, `log.fork()`, standalone loggers created with `waitUntil`, Next's `after()`, and Nitro, including pipelines registered on the `evlog:drain` hook.
+  - Concurrent requests on one instance share the batch. A provider pause longer than `retry.maxDelayMs` drops the request's events as `rate-limited` rather than holding the instance.
+  - Long-lived servers that expose `waitUntil` (Nitro 3 on Node, `next start`) keep batching until `batch.intervalMs`.
+  - A pipeline that holds events past `batch.intervalMs` on one of these platforms, with no request-end flush in the process, logs one warning asking for the platform's `waitUntil`.
+
+- [#1145](https://github.com/evloghq/evlog/pull/1145) [`549e907`](https://github.com/evloghq/evlog/commit/549e907c8ca76f11164ee7aa8136d96f2d7de6bc) Thanks [@HugoRCD](https://github.com/HugoRCD)! - HTTP drains retry only failures that can succeed later, and wait as long as the provider asks.
+
+  - Retried: network errors, timeouts, and `408`, `429`, `502`, `503` and `504` responses, plus Datadog's `500`, which its intake documents as retryable. Any other status, such as a `400` for a malformed payload, is sent once. Inside `createDrainPipeline` a `400` used to cost `retry.maxAttempts` requests before the batch was dropped; it now goes to `onDropped` after one. A plain `500` is no longer retried outside Datadog.
+  - `Retry-After` (seconds or an HTTP date) replaces the backoff delay. In `createDrainPipeline`, a `Retry-After` longer than `retry.maxDelayMs` pauses the pipeline and keeps the batch buffered until the delay has passed, where it used to retry after 1 s and 3 s and then drop the batch. `flush()` does not wait out a pause: it hands the buffered events to `onDropped`.
+  - Retry delays are jittered, between half and all of the configured backoff.
+  - HyperDX, Sazabi and PostHog logs (`mode: 'logs'`) make one request per pipeline attempt, like the other adapters. Against a failing backend, one event cost 9 requests inside a default pipeline; it now costs 3.
+  - `httpPost` throws a `DrainDeliveryError` (exported from `evlog/toolkit`) carrying `status`, `retryable`, `retryAfterMs` and the response `headers`. The message is unchanged. A custom drain can throw one with `retryable: false` so the pipeline drops the batch without retrying. Plain errors thrown by a custom drain are retried as before.
+
+- [#1179](https://github.com/evloghq/evlog/pull/1179) [`e09968c`](https://github.com/evloghq/evlog/commit/e09968c963e2e2d8c81c575c1166ffb88b413aa7) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `EvlogLogsConfig` accepts `source: 'auto' | 'files' | 'vercel'`, the store `evlog logs` reads when no `--source` is passed.
+
+- [#1162](https://github.com/evloghq/evlog/pull/1162) [`6ec6f8f`](https://github.com/evloghq/evlog/commit/6ec6f8fbc4904243f8a5643e4f8ef8809fbf655c) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The OTLP drain reads the `partialSuccess` an OTLP collector can return with a `2xx`, in JSON and protobuf responses. HyperDX, Sazabi and PostHog logs (`mode: 'logs'`) send through it and get the same handling.
+
+  - When the collector rejected records, the request fails with a `DrainDeliveryError` that is not retried and carries the count in `rejected`. Those records used to be lost without a log line. `sendBatchToOTLP` and `sendToOTLP` now throw in that case instead of resolving.
+  - In `createDrainPipeline`, `onDropped` gets the batch with reason `rejected`, and `drain.stats()` counts only the rejected records as dropped and the rest as delivered. A custom drain can do the same by throwing a `DrainDeliveryError` with `retryable: false` and `rejected`.
+  - A `partialSuccess` with only an `errorMessage` is logged with `console.warn`.
+
+- [#1145](https://github.com/evloghq/evlog/pull/1145) [`549e907`](https://github.com/evloghq/evlog/commit/549e907c8ca76f11164ee7aa8136d96f2d7de6bc) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `createDrainPipeline` reports every event it drops.
+
+  - `onDropped(events, error, reason)` gets a third argument: `'buffer-full'`, `'rejected'` (a status such as `400` that no retry fixes), `'retries-exhausted'` or `'rate-limited'` (`flush()` ran during a provider's `Retry-After`). Existing two-argument callbacks keep working.
+  - Without `onDropped`, buffer overflow used to drop events with no log line. Every drop is now logged with `console.error`, at most once a minute with the count per reason, and once more on `flush()` for what is left.
+  - `drain.stats()` returns `{ delivered, dropped }`, the events delivered and dropped per reason since the pipeline was created.
+
+- [#1145](https://github.com/evloghq/evlog/pull/1145) [`549e907`](https://github.com/evloghq/evlog/commit/549e907c8ca76f11164ee7aa8136d96f2d7de6bc) Thanks [@HugoRCD](https://github.com/HugoRCD)! - The Sentry drain honours Sentry's rate limits per data category, like the official SDKs.
+
+  - It reads `X-Sentry-Rate-Limits` and `Retry-After` on every response, including accepted ones, and remembers them per DSN.
+  - While error events are limited, `issues: true` skips issues without sending them and logs one warning per limit window. The logs keep going out. Before, a burst of 500 errors made 500 issue requests while Sentry was dropping them.
+  - While logs are limited, `sendBatchToSentry` rejects without sending, with a `DrainDeliveryError` whose `retryAfterMs` is the remaining delay, so `createDrainPipeline` holds the batch until the limit expires.
+  - An issue Sentry rejects (such as a `400`) no longer stops the other issues of the batch. A transient failure still does.
+
 ## 3.0.0-beta.3
 
 ### Major Changes
