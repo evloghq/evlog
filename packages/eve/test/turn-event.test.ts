@@ -29,7 +29,7 @@ interface TurnEvent {
     calls: number
     response: { finish_reasons: string[] }
     usage: { input_tokens: number, output_tokens: number, total_tokens: number }
-    tools: Array<{ call_id: string, name: string, success: boolean, error?: string, code?: string, why?: string, fix?: string }>
+    tools: Array<{ call_id: string, name: string, kind?: string, success: boolean, outcome?: string, error?: string, code?: string, why?: string, fix?: string }>
   }
 }
 
@@ -81,7 +81,7 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
   }
 
   it('emits one event per turn, keyed by session and turn', () => {
-    expect(events).toHaveLength(7)
+    expect(events).toHaveLength(8)
     for (const event of events) {
       expect(event.requestId).toBe(`${event.eve.sessionId}:${event.eve.turnId}`)
       expect(event.idempotencyKey).toBe(event.requestId)
@@ -100,7 +100,8 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
   it('carries the trace and invoke_agent span eve recorded for the turn', () => {
     for (const event of events) {
       const spans = spansOf(event)
-      const root = spans.find(span => span.name.startsWith('invoke_agent '))
+      // A subagent's turn adds its own invoke_agent span to the same trace.
+      const root = spans.find(span => span.name === 'invoke_agent evlog-eve-fixture')
       expect(root?.spanId).toBe(event.spanId)
       expect(root?.attributes).toContainEqual({ key: 'agent.turn.id', value: { stringValue: event.eve.turnId } })
     }
@@ -217,6 +218,23 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
     expect(call).toMatchObject({ success: false, error: 'Vercel Connect issued no token for vercel/evlog (403)' })
     expect(recorded).toMatchObject({ source: 'vercel', view: 'errors', failed: true })
     expect(JSON.stringify(turn)).not.toContain('fixture-signature')
+  })
+
+  // eve's view keeps background task calls, subagent calls and skill loads as
+  // calls of their turn, so the turn event lists them like any tool call.
+  it('records background tasks, subagents and skill loads as the turn\'s calls, without their output', () => {
+    const event = events.find(e => e.gen_ai.tools?.some(tool => tool.name === 'deploy'))
+    expect(event, 'no event for the background tasks').toBeDefined()
+    expect(event!.gen_ai.tools.map(({ name, kind, success }) => ({ name, kind, success }))).toEqual([
+      { name: 'triage', kind: 'skill', success: true },
+      { name: 'deploy', kind: 'tool', success: true },
+      { name: 'deploy', kind: 'tool', success: false },
+      { name: 'researcher', kind: 'agent', success: true },
+    ])
+    expect(event!.gen_ai.tools[2]).toMatchObject({ outcome: 'failed', error: 'Deploy failed' })
+    expect(event!.eve).toMatchObject({ outcome: 'completed', failedCalls: 1 })
+    expect(event!.level).toBe('warn')
+    expect(JSON.stringify(event)).not.toMatch(/TASK-OUTPUT-MARKER|RESEARCH-OUTPUT-MARKER|SKILL-BODY-MARKER/)
   })
 
   it('marks a completed turn with a failed call as a warning', () => {
