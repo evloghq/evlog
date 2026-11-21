@@ -10,7 +10,7 @@ import { eveAgentDirs, findEveMount } from './mount'
 function mountTemplate(input: WiringInput, file: string, service: string | undefined): string {
   const head = `import evlog from '@evlog/eve'\nimport config from '${evlogConfigImport(input, file)}'\n\n/** One wide event per agent turn, with the settings in evlog.config.ts. */\n`
   const overrides = [
-    ...(service ? [`  // The agent's own service, apart from the app's.\n  service: '${service}',`] : []),
+    ...(service ? [`  // The agent's own service, apart from the project's.\n  service: '${service}',`] : []),
     ...(input.agentLogs ? [] : ['  // Hides the evlog__logs tool. Remove to let the agent read its own events.\n  logs: { ...config.logs, access: () => false },']),
   ]
   if (overrides.length === 0) return `${head}export default evlog(config)\n`
@@ -20,10 +20,10 @@ function mountTemplate(input: WiringInput, file: string, service: string | undef
 /**
  * The service an agent's turns report under. A lone agent is the project, so
  * it keeps the config's; beside an app it is `<service>-agent`, and a
- * workspace member takes its eve name, the directory under `agents/`.
+ * workspace member `<service>-<name>`, its eve name being the directory under `agents/`.
  */
 function agentService(input: WiringInput, agentDir: string): string | undefined {
-  if (agentDir !== 'agent') return basename(dirname(agentDir))
+  if (agentDir !== 'agent') return `${input.service}-${basename(dirname(agentDir))}`
   return input.host ? `${input.service}-agent` : undefined
 }
 
