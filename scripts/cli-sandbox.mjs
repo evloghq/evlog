@@ -14,8 +14,9 @@
  *   node scripts/cli-sandbox.mjs --keep     # reuse whatever is already there
  */
 
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { availableParallelism } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -488,30 +489,64 @@ check('telemetry status', (dir) => {
 
 /* ── run ────────────────────────────────────────────────────────────────── */
 
-function smoke(apps) {
+function smokeApp(app) {
   let failed = 0
+  process.stderr.write(`${bold(app.name)}\n`)
+  for (const { name, fn } of checks) {
+    /* A fresh copy per check: `init` writes files, and a check that inherits
+       the previous one's leftovers passes or fails for the wrong reason. */
+    const dir = createApp(app)
+    try {
+      fn(dir)
+      process.stderr.write(`  ${green('✓')} ${name}\n`)
+    } catch (error) {
+      failed++
+      process.stderr.write(`  ${red('✗')} ${name}\n    ${dim(error.message)}\n`)
+    }
+  }
+  process.stderr.write('\n')
+  return failed
+}
+
+/* Each app runs in its own process, so the apps run in parallel: every check
+   spawns the CLI and git, which leaves one process mostly waiting. Each gets
+   its own npm cache because `init` runs `npx skills add`, and concurrent npx
+   runs sharing a cache race on its install directory. */
+function smokeAppInChild(app) {
+  return new Promise((done) => {
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--smoke-app', app.name], {
+      stdio: ['ignore', 'inherit', 'pipe'],
+      env: { ...process.env, npm_config_cache: join(SANDBOX, '.npm', app.name) },
+    })
+    let output = ''
+    child.stderr.setEncoding('utf8').on('data', (chunk) => { output += chunk })
+    child.on('close', code => done({ output, failed: code ?? 1 }))
+  })
+}
+
+async function smoke(apps) {
   process.stderr.write(`\n${bold('smoke')} ${dim(`${checks.length} checks × ${apps.length} apps`)}\n\n`)
 
-  for (const app of apps) {
-    process.stderr.write(`${bold(app.name)}\n`)
-    for (const { name, fn } of checks) {
-      /* A fresh copy per check: `init` writes files, and a check that inherits
-         the previous one's leftovers passes or fails for the wrong reason. */
-      const dir = createApp(app)
-      try {
-        fn(dir)
-        process.stderr.write(`  ${green('✓')} ${name}\n`)
-      } catch (error) {
-        failed++
-        process.stderr.write(`  ${red('✗')} ${name}\n    ${dim(error.message)}\n`)
-      }
+  const results = []
+  let next = 0
+  const worker = async () => {
+    while (next < apps.length) {
+      const index = next++
+      results[index] = await smokeAppInChild(apps[index])
     }
-    process.stderr.write('\n')
+  }
+  await Promise.all(Array.from({ length: Math.min(availableParallelism(), apps.length) }, worker))
+
+  let failed = 0
+  for (const result of results) {
+    process.stderr.write(result.output)
+    failed += result.failed
   }
 
   if (failed > 0) {
     process.stderr.write(`${red(`${failed} check${failed === 1 ? '' : 's'} failed`)}\n`)
-    process.exit(1)
+    process.exitCode = 1
+    return
   }
   process.stderr.write(`${green('all checks passed')}\n`)
 }
@@ -561,8 +596,10 @@ if (apps.length === 0) {
 ensureCliBuilt()
 mkdirSync(SANDBOX, { recursive: true })
 
-if (args.includes('--smoke')) {
-  smoke(apps)
+if (args.includes('--smoke-app')) {
+  process.exitCode = smokeApp(apps[0])
+} else if (args.includes('--smoke')) {
+  await smoke(apps)
 } else if (args.includes('--reset')) {
   for (const app of apps) resetApp(app)
   process.stderr.write(`${green('✓')} ${dim(`reset ${apps.map(app => app.name).join(', ')}`)}\n`)
