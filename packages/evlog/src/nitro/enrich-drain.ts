@@ -3,7 +3,7 @@ import { getHeaders } from 'h3'
 import { getGlobalPluginRunner, outputWideEvent } from '../logger'
 import type { EnrichContext, ServerEvent, WideEvent } from '../types'
 import { filterSafeHeaders } from '../utils'
-import { deliverPendingDrains, detectServerlessPlatform } from '../shared/shutdown'
+import { deliverBeforeFreeze, deliverPendingDrains, detectServerlessPlatform } from '../shared/shutdown'
 import { extendDeferredDrain } from './deferred-drain'
 
 export function getSafeHeaders(event: ServerEvent): Record<string, string> {
@@ -117,5 +117,6 @@ export async function callEnrichAndDrain(
     waitUntilCtx.waitUntil(drainPromise.then(deliverPendingDrains))
   } else {
     await drainPromise
+    await deliverBeforeFreeze()
   }
 }

@@ -30,6 +30,8 @@ interface SvelteKitRequestEvent {
   request: Request
   url: URL
   locals: Record<string, any>
+  /** Set by the Cloudflare and Netlify adapters; `context.waitUntil` keeps the runtime alive after the response. */
+  platform?: { context?: { waitUntil?: (promise: Promise<unknown>) => void } }
 }
 
 const integration = defineFrameworkIntegration<SvelteKitRequestEvent>({
@@ -42,6 +44,10 @@ const integration = defineFrameworkIntegration<SvelteKitRequestEvent>({
   }),
   attachLogger: (event, logger) => {
     event.locals.log = logger
+  },
+  extractWaitUntil: ({ platform }) => {
+    const context = platform?.context
+    return typeof context?.waitUntil === 'function' ? context.waitUntil.bind(context) : undefined
   },
   storage,
 })

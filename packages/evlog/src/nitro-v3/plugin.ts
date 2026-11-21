@@ -12,7 +12,7 @@ import { extendDeferredDrain } from '../nitro/deferred-drain'
 import { normalizeRedactConfig } from '../redact'
 import { shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
-import { deliverPendingDrains, detectServerlessPlatform, flushPendingDrains, hasPendingDrains } from '../shared/shutdown'
+import { deliverBeforeFreeze, deliverPendingDrains, detectServerlessPlatform, flushPendingDrains, hasPendingDrains } from '../shared/shutdown'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import type { EnrichContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
 import { elapsedMs, filterSafeHeaders } from '../utils'
@@ -170,6 +170,7 @@ async function callDrainHook(
     event.req.waitUntil(drainPromise.then(deliverPendingDrains))
   } else {
     await drainPromise
+    await deliverBeforeFreeze()
   }
 }
 

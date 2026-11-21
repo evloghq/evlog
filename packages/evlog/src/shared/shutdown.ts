@@ -15,9 +15,43 @@ type ShutdownSignal = 'SIGTERM' | 'SIGINT'
 export interface PendingDrain {
   flush: () => Promise<void>
   /** Sends the events held now without waiting for `batch.intervalMs`; resolves once they are delivered or dropped. */
-  flushHeld: () => Promise<void>
+  flushHeld: (deadline?: number) => Promise<void>
   /** Resolves once the events held now are delivered or dropped, on the pipeline's own schedule. */
   waitHeld: () => Promise<void>
+}
+
+/** How long Workers keep `waitUntil` work alive after the response, with margin. */
+const WORKERS_DEADLINE_MS = 25_000
+
+/** Set by the Vercel Functions runtime; read by `getDeadline()` from `@vercel/functions`. */
+const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
+
+interface VercelRequestContext {
+  waitUntil?: (promise: Promise<unknown>) => void
+  deadline?: unknown
+}
+
+function getVercelRequestContext(): VercelRequestContext | undefined {
+  return (globalThis as { [VERCEL_REQUEST_CONTEXT]?: { get?: () => VercelRequestContext | undefined } })[VERCEL_REQUEST_CONTEXT]?.get?.()
+}
+
+/**
+ * The current request's `waitUntil` inside the Vercel Functions runtime, the
+ * one `waitUntil()` from `@vercel/functions` calls, without depending on it.
+ */
+export function getVercelWaitUntil(): ((promise: Promise<unknown>) => void) | undefined {
+  const context = getVercelRequestContext()
+  return typeof context?.waitUntil === 'function' ? context.waitUntil.bind(context) : undefined
+}
+
+/** When the runtime stops the current request's `waitUntil` work, in epoch ms, if the platform says. */
+function resolveRequestDeadline(platform: string): number | undefined {
+  if (platform === 'Cloudflare Workers') return Date.now() + WORKERS_DEADLINE_MS
+  if (platform !== 'Vercel') return undefined
+  const context = getVercelRequestContext()
+  if (context?.deadline === undefined) return undefined
+  const deadline = new Date(context.deadline as string | number).getTime()
+  return Number.isNaN(deadline) ? undefined : deadline
 }
 
 /** Platforms that freeze or stop the runtime once the response is sent. */
@@ -88,8 +122,18 @@ export async function flushPendingDrains(deadlineMs?: number): Promise<void> {
 export async function deliverPendingDrains(): Promise<void> {
   registry.requestFlushSeen = true
   if (pending.size === 0) return
-  const serverless = detectServerlessPlatform() !== undefined
-  await Promise.allSettled(Array.from(pending, drain => serverless ? drain.flushHeld() : drain.waitHeld()))
+  const platform = detectServerlessPlatform()
+  const deadline = platform === undefined ? undefined : resolveRequestDeadline(platform)
+  await Promise.allSettled(Array.from(pending, drain => platform === undefined ? drain.waitHeld() : drain.flushHeld(deadline)))
+}
+
+/**
+ * For a request with no `waitUntil`: on AWS Lambda, which freezes the runtime
+ * as soon as the handler returns, deliver what the pipelines hold before the
+ * response is returned. Elsewhere it resolves at once.
+ */
+export async function deliverBeforeFreeze(): Promise<void> {
+  if (detectServerlessPlatform() === 'AWS Lambda') await deliverPendingDrains()
 }
 
 /** Whether any pipeline holds events or is still delivering them. */

@@ -3,7 +3,7 @@ import type { AuditableLogger, ForkableLogger } from '../audit'
 import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, markWideEventDrainStarted, noopLogger, outputWideEvent, shouldKeep } from '../logger'
 import { isGloballyRedacted, redactEvent, resolveRedactConfig } from '../redact'
 import { elapsedMs } from '../utils'
-import { deliverPendingDrains } from './shutdown'
+import { deliverBeforeFreeze, deliverPendingDrains } from './shutdown'
 import { extractErrorStatus } from './errors'
 import type { EvlogPlugin, PluginRunner } from './plugin'
 import { createPluginRunner, getEmptyPluginRunner } from './plugin'
@@ -219,6 +219,7 @@ export async function runEnrichAndDrain(
       return
     }
     await drainPromise
+    await deliverBeforeFreeze()
   }
 }
 
