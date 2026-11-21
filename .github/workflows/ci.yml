@@ -91,7 +91,10 @@ jobs:
           - name: Set up pnpm and Node
             uses: ./.github/actions/setup
             with:
-              node-version: ${{ matrix.node-version }}
+              # The 24 leg reads .node-version itself, so it restores the same
+              # node_modules cache entry as every other job instead of saving
+              # a second copy under a key that says "24".
+              node-version: ${{ matrix.node-version != '24' && matrix.node-version || '' }}
 
       - name: Set up Bun for import regressions
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
