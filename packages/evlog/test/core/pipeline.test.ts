@@ -9,6 +9,7 @@ import { defineDrain, defineHttpDrain } from '../../src/shared/drain'
 import { DrainDeliveryError } from '../../src/shared/http'
 import { deliverPendingDrains } from '../../src/shared/shutdown'
 import { defined } from '../helpers/defined'
+import { expectLinearTime } from '../helpers/timers'
 
 function getBatchArg(call: unknown[]): DrainContext[] {
   return defined(call[0], 'batch arg') as DrainContext[]
@@ -898,6 +899,16 @@ describe('createDrainPipeline', () => {
   })
 
   describe('request-end flush', () => {
+    it('keeps request-end waits linear in held events while the backend hangs', () => {
+      expectLinearTime<number>((events) => {
+        (globalThis as Record<symbol, { pending?: Set<unknown> } | undefined>)[Symbol.for('evlog.drains.v2')]?.pending?.clear()
+        const hook = createDrainPipeline<DrainContext>({ batch: { size: 1, intervalMs: 5000 }, maxBufferSize: events, onDropped: () => {} })(() => new Promise<void>(() => {}))
+        for (let id = 0; id < events; id++) hook(createTestContext(id))
+        for (let i = 0; i < events; i++) void deliverPendingDrains()
+        for (let id = 0; id < events; id++) hook(createTestContext(events + id))
+      }, n => 250 * n, 'request-end waits')
+    })
+
     it('resolves every request at 20 events/s with a 300 ms backend, within two round trips of its end', async () => {
       vi.stubEnv('VERCEL', '1')
       onTestFinished(() => vi.unstubAllEnvs())

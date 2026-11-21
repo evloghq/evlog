@@ -460,7 +460,7 @@ jobs:
       - name: Benchmark the pull request head
         working-directory: packages/evlog
         run: |
-          pnpm exec vitest bench bench/core/
+          pnpm exec vitest bench bench/core/ --project evlog
           cp bench/results.json "$RUNNER_TEMP/head.json"
 
       # The base commit gets its own worktree. It reuses this checkout's
@@ -471,7 +471,7 @@ jobs:
           ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/base/node_modules"
           ln -s "$GITHUB_WORKSPACE/packages/evlog/node_modules" "$RUNNER_TEMP/base/packages/evlog/node_modules"
           cd "$RUNNER_TEMP/base/packages/evlog"
-          pnpm exec vitest bench bench/core/
+          pnpm exec vitest bench bench/core/ --project evlog
           cp bench/results.json "$RUNNER_TEMP/base.json"
 
       - name: Compare the benchmarks
