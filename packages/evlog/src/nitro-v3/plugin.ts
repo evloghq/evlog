@@ -12,7 +12,7 @@ import { extendDeferredDrain } from '../nitro/deferred-drain'
 import { normalizeRedactConfig } from '../redact'
 import { shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
-import { deliverPendingDrains, detectServerlessPlatform, flushPendingDrains } from '../shared/shutdown'
+import { deliverPendingDrains, detectServerlessPlatform, flushPendingDrains, hasPendingDrains } from '../shared/shutdown'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import type { EnrichContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
 import { elapsedMs, filterSafeHeaders } from '../utils'
@@ -141,6 +141,9 @@ async function callDrainHook(
           console.error('[evlog] drain failed:', err)
         }),
       )
+    } else if (hasPendingDrains()) {
+      // hookable 6 returns undefined when every hook is synchronous, such as a pipeline that only buffered.
+      drainTasks.push(Promise.resolve())
     }
   } catch (err) {
     console.error('[evlog] drain failed:', err)

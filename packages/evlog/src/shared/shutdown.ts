@@ -92,6 +92,11 @@ export async function deliverPendingDrains(): Promise<void> {
   await Promise.allSettled(Array.from(pending, drain => serverless ? drain.flushHeld() : drain.waitHeld()))
 }
 
+/** Whether any pipeline holds events or is still delivering them. */
+export function hasPendingDrains(): boolean {
+  return pending.size > 0
+}
+
 /** Whether an integration has run a request-end flush in this process. */
 export function hasRequestFlushRun(): boolean {
   return registry.requestFlushSeen
