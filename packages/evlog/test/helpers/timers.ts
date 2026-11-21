@@ -113,7 +113,7 @@ function fastestPerCallMs(fn: () => unknown, runs = 3): number {
  * expectLinearTime(value => redactEvent({ input: value }, config), n => 'ghp_'.repeat(2_048 * n))
  * ```
  */
-export function expectLinearTime(fn: (input: string) => unknown, build: (n: number) => string, label?: string): void {
+export function expectLinearTime<T = string>(fn: (input: T) => unknown, build: (n: number) => T, label?: string): void {
   const short = build(1)
   const long = build(SIZE_RATIO)
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
