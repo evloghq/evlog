@@ -8,7 +8,7 @@ import { detectServerlessPlatform, hasRequestFlushRun, trackPendingDrain } from 
  * - `retries-exhausted`: every one of `retry.maxAttempts` failed.
  * - `rate-limited`: `flush()` ran while the provider's `Retry-After` was still in force.
  */
-export type DrainDropReason = 'buffer-full' | 'rejected' | 'retries-exhausted' | 'rate-limited'
+export type DrainDropReason = 'buffer-full' | 'rejected' | 'retries-exhausted' | 'rate-limited' | 'deferred' | 'deadline'
 
 /** Counters returned by {@link PipelineDrainFn.stats}, in events since the pipeline was created. */
 export interface DrainPipelineStats {
@@ -40,6 +40,13 @@ export interface DrainPipelineOptions<T = unknown> {
   }
   /** Maximum number of events held in the buffer. When exceeded, the oldest event is dropped. @default 1000 */
   maxBufferSize?: number
+  /**
+   * Calls to the drain, retries included, that one request-end flush may make
+   * on a serverless platform. Events still unsent when it is spent are dropped
+   * as `deferred`. Workers Free allows 50 subrequests per request.
+   * @default 10
+   */
+  requestBudget?: number
   /**
    * Called with every event the pipeline drops, the delivery error when there
    * is one, and the reason. Without it, drops are logged with `console.error`
@@ -129,6 +136,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
   const initialDelayMs = options?.retry?.initialDelayMs ?? 1000
   const maxDelayMs = options?.retry?.maxDelayMs ?? 30000
   const onDropped = options?.onDropped
+  const requestBudget = options?.requestBudget ?? 10
 
   if (batchSize <= 0 || !Number.isFinite(batchSize)) {
     throw new Error(`[evlog/pipeline] batch.size must be a positive finite number, got: ${batchSize}`)
@@ -138,6 +146,9 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
   }
   if (maxBufferSize <= 0 || !Number.isFinite(maxBufferSize)) {
     throw new Error(`[evlog/pipeline] maxBufferSize must be a positive finite number, got: ${maxBufferSize}`)
+  }
+  if (requestBudget <= 0 || !Number.isFinite(requestBudget)) {
+    throw new Error(`[evlog/pipeline] requestBudget must be a positive finite number, got: ${requestBudget}`)
   }
   if (maxAttempts <= 0 || !Number.isFinite(maxAttempts)) {
     throw new Error(`[evlog/pipeline] retry.maxAttempts must be a positive finite number, got: ${maxAttempts}`)
@@ -166,7 +177,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     let pausedUntil = 0
     let pauseError: Error | undefined
     let delivered = 0
-    const dropped: Record<DrainDropReason, number> = { 'buffer-full': 0, 'rejected': 0, 'retries-exhausted': 0, 'rate-limited': 0 }
+    const dropped: Record<DrainDropReason, number> = { 'buffer-full': 0, 'rejected': 0, 'retries-exhausted': 0, 'rate-limited': 0, 'deferred': 0, 'deadline': 0 }
     let unlogged: Partial<Record<DrainDropReason, number>> = {}
     let unloggedError: Error | undefined
     let lastDropLogAt = Number.NEGATIVE_INFINITY
@@ -174,8 +185,12 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     let bufferedSince = 0
     /** Events taken out of the buffer for a send and not yet delivered or dropped. */
     const inFlight = new Set<T>()
-    /** Request-end waits on a snapshot of events; `sending` ones also send those events now instead of at `batch.intervalMs`. */
-    let heldWaiters: Array<{ events: Set<T>, resolve: () => void, sending: boolean }> = []
+    /**
+     * Request-end waits on a snapshot of events, with the sends made for them and
+     * the runtime's deadline. `sending` ones also send those events now instead
+     * of at `batch.intervalMs`, and only they are bound by the budget and deadline.
+     */
+    let heldWaiters: Array<{ events: Set<T>, resolve: () => void, sending: boolean, sends: number, deadline: number }> = []
 
     function pauseRemainingMs(): number {
       return Math.max(0, pausedUntil - Date.now())
@@ -262,6 +277,15 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       })
     }
 
+    /** The limit a send of `batch` hits first for the request-end flushes waiting on its events. */
+    function requestLimit(batch: T[]): 'deadline' | 'deferred' | undefined {
+      const serving = heldWaiters.filter(waiter => waiter.sending && batch.some(event => waiter.events.has(event)))
+      if (serving.some(waiter => Date.now() >= waiter.deadline)) return 'deadline'
+      if (serving.some(waiter => waiter.sends >= requestBudget)) return 'deferred'
+      for (const waiter of serving) waiter.sends++
+      return undefined
+    }
+
     function drop(events: T[], reason: DrainDropReason, error?: Error, count = events.length): void {
       if (events.length === 0) return
       release(events)
@@ -280,9 +304,15 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
      * longer than `maxDelayMs`: the caller decides whether the batch waits.
      */
     async function sendWithRetry(batch: T[]): Promise<'done' | 'paused'> {
+      let lastAttemptError: Error | undefined
       for (let attempt = 1; ; attempt++) {
         // Another delivery may have paused the pipeline while this one waited to retry.
         if (attempt > 1 && pauseRemainingMs() > 0) return 'paused'
+        const limit = heldWaiters.some(waiter => waiter.sending) ? requestLimit(batch) : undefined
+        if (limit) {
+          drop(batch, limit, lastAttemptError)
+          return 'done'
+        }
         try {
           await send(batch)
           delivered += batch.length
@@ -314,7 +344,14 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
             drop(batch, 'retries-exhausted', lastError)
             return 'done'
           }
-          await new Promise<void>(r => setTimeout(r, retryAfterMs ?? getRetryDelay(attempt)))
+          const delay = retryAfterMs ?? getRetryDelay(attempt)
+          // The runtime stops at the deadline: a retry that cannot start before it would be cut off.
+          if (heldWaiters.some(waiter => waiter.deadline <= Date.now() + delay && batch.some(event => waiter.events.has(event)))) {
+            drop(batch, 'deadline', lastError)
+            return 'done'
+          }
+          lastAttemptError = lastError
+          await new Promise<void>(r => setTimeout(r, delay))
         }
       }
     }
@@ -420,11 +457,11 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       return run
     }
 
-    function waitHeld(sending: boolean): Promise<void> {
+    function waitHeld(sending: boolean, deadline = Number.POSITIVE_INFINITY): Promise<void> {
       const events = new Set<T>([...buffer, ...inFlight])
       if (events.size === 0) return Promise.resolve()
       const done = new Promise<void>((resolve) => {
-        heldWaiters.push({ events, resolve, sending })
+        heldWaiters.push({ events, resolve, sending, sends: 0, deadline })
       })
       if (!sending) return done
       dropHeldWhilePaused()
@@ -435,7 +472,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       return done
     }
 
-    const registration: PendingDrain = { flush, flushHeld: () => waitHeld(true), waitHeld: () => waitHeld(false) }
+    const registration: PendingDrain = { flush, flushHeld: deadline => waitHeld(true, deadline), waitHeld: () => waitHeld(false) }
 
     function settled(): Promise<void> {
       if (isIdle()) return Promise.resolve()

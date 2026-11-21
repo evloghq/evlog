@@ -547,6 +547,46 @@ describe('createMiddlewareLogger', () => {
       })
     })
 
+    it('delivers a pipeline batch before finish() resolves on AWS Lambda without waitUntil', async () => {
+      vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'orders')
+      onTestFinished(() => vi.unstubAllEnvs())
+      await withFakeTimers(async () => {
+        let accept!: () => void
+        const send = vi.fn(() => new Promise<void>((resolve) => {
+          accept = resolve
+        }))
+        const drain = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 } })(send)
+        const { finish } = createMiddlewareLogger({ method: 'GET', path: '/api/test', drain })
+
+        let finished = false
+        const done = finish({ status: 200 }).then(() => {
+          finished = true
+        })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(send).toHaveBeenCalledOnce()
+        expect(finished).toBe(false)
+
+        accept()
+        await done
+        expect(drain.pending).toBe(0)
+      })
+    })
+
+    it('does not wait for a pipeline batch without waitUntil on a long-lived server', async () => {
+      for (const name of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME']) vi.stubEnv(name, '')
+      onTestFinished(() => vi.unstubAllEnvs())
+      await withFakeTimers(async () => {
+        const send = vi.fn().mockResolvedValue(undefined)
+        const drain = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 } })(send)
+        const { finish } = createMiddlewareLogger({ method: 'GET', path: '/api/test', drain })
+
+        await finish({ status: 200 })
+        expect(send).not.toHaveBeenCalled()
+        expect(drain.pending).toBe(1)
+        await drain.flush()
+      })
+    })
+
     it('still awaits enrich before registering waitUntil drain', async () => {
       let enrichDone = false
       const enrich = vi.fn(async () => {

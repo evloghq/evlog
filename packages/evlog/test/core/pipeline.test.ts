@@ -748,7 +748,7 @@ describe('createDrainPipeline', () => {
       ])
       expect(hook.stats()).toEqual({
         delivered: 1,
-        dropped: { 'buffer-full': 2, 'rejected': 1, 'retries-exhausted': 1, 'rate-limited': 1 },
+        dropped: { 'buffer-full': 2, 'rejected': 1, 'retries-exhausted': 1, 'rate-limited': 1, 'deferred': 0, 'deadline': 0 },
       })
     })
 
@@ -769,7 +769,7 @@ describe('createDrainPipeline', () => {
 
       expect(hook.stats()).toEqual({
         delivered: 3,
-        dropped: { 'buffer-full': 0, 'rejected': 2, 'retries-exhausted': 0, 'rate-limited': 0 },
+        dropped: { 'buffer-full': 0, 'rejected': 2, 'retries-exhausted': 0, 'rate-limited': 0, 'deferred': 0, 'deadline': 0 },
       })
       expect(onDropped).toHaveBeenCalledTimes(1)
       const [batch, error, reason] = defined(onDropped.mock.calls[0], 'onDropped call')
@@ -949,6 +949,85 @@ describe('createDrainPipeline', () => {
       expect(hook.stats().dropped['rate-limited']).toBe(2)
       expect(hook.pending).toBe(0)
       expect(onDropped.mock.calls.map(([events, , reason]) => [events.map((ctx: DrainContext) => ctx.event.id), reason])).toEqual([[[1], 'rate-limited'], [[2], 'rate-limited']])
+    })
+  })
+
+  describe('request budget and deadline', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+      delete (globalThis as Record<symbol, unknown>)[Symbol.for('@vercel/request-context')]
+    })
+
+    it('stops a request-end flush at requestBudget sends, retries included, and drops the rest as deferred', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('unavailable', { status: 503, retryable: true }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5, initialDelayMs: 10 }, requestBudget: 2, onDropped })(drain)
+
+      hook(createTestContext(1))
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(done).toBe(true)
+      expect(drain).toHaveBeenCalledTimes(2)
+      expect(hook.stats().dropped.deferred).toBe(1)
+      expect(onDropped.mock.calls.map(([, , reason]) => reason)).toEqual(['deferred'])
+    })
+
+    it('skips a retry that would start past 25 s after the request ended on Workers', async () => {
+      vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' })
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 20_000 }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5 }, onDropped })(drain)
+
+      hook(createTestContext(1))
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(20_000)
+
+      expect(drain).toHaveBeenCalledTimes(2)
+      expect(done).toBe(true)
+      expect(hook.stats().dropped.deadline).toBe(1)
+      expect(onDropped.mock.calls.map(([, , reason]) => reason)).toEqual(['deadline'])
+    })
+
+    it('reads the invocation deadline from the Vercel request context', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const deadline = Date.now() + 3000
+      ;(globalThis as Record<symbol, unknown>)[Symbol.for('@vercel/request-context')] = { get: () => ({ deadline }) }
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 2000 }))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5 }, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      void deliverPendingDrains()
+      await vi.advanceTimersByTimeAsync(5000)
+
+      expect(drain).toHaveBeenCalledTimes(2)
+      expect(hook.stats().dropped.deadline).toBe(1)
+    })
+
+    it('leaves timer and flush() deliveries outside a request window unbounded', async () => {
+      const drain = vi.fn()
+        .mockRejectedValueOnce(new Error('a'))
+        .mockRejectedValueOnce(new Error('b'))
+        .mockResolvedValue(undefined)
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 3, initialDelayMs: 10 }, requestBudget: 1 })(drain)
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(6000)
+
+      expect(drain).toHaveBeenCalledTimes(3)
+      expect(hook.stats().delivered).toBe(1)
+    })
+
+    it('rejects a non-positive requestBudget', () => {
+      expect(() => createDrainPipeline({ requestBudget: 0 })).toThrow('requestBudget must be a positive finite number')
     })
   })
 

@@ -45,8 +45,9 @@ const pipeline = createDrainPipeline<DrainContext>({
     maxDelayMs: 30000,        // Upper bound for any retry delay (default: 30000)
   },
   maxBufferSize: 1000,  // Max buffered events; oldest dropped on overflow (default: 1000)
+  requestBudget: 10,    // Drain calls, retries included, per request-end flush on serverless (default: 10)
   onDropped: (events, error, reason) => {
-    // reason: 'buffer-full' | 'rejected' | 'retries-exhausted' | 'rate-limited'
+    // reason: 'buffer-full' | 'rejected' | 'retries-exhausted' | 'rate-limited' | 'deferred' | 'deadline'
     // A partial rejection passes the whole batch; error.rejected is how many were lost.
     const lost = (error instanceof DrainDeliveryError ? error.rejected : undefined) ?? events.length
     console.error(`[evlog] Dropped ${lost} events (${reason}):`, error?.message)
@@ -82,12 +83,12 @@ drain(ctx)            // Push a single event (synchronous, non-blocking)
 await drain.flush()   // Force-flush all buffered events
 await drain.settled() // Resolves once everything buffered is delivered or dropped, without forcing a flush
 drain.pending         // Number of events currently buffered (readonly)
-drain.stats()         // { delivered, dropped: { 'buffer-full', rejected, 'retries-exhausted', 'rate-limited' } }
+drain.stats()         // { delivered, dropped: { 'buffer-full', rejected, 'retries-exhausted', 'rate-limited', deferred, deadline } }
 ```
 
 ## Serverless
 
-`drain(ctx)` returns after buffering, so delivery must outlive the response. On Cloudflare Workers, Vercel, Netlify and AWS Lambda, every integration that has the request's `waitUntil` (Next `after()`, Workers `ctx.waitUntil`, Nitro's request context, including `evlog:drain` hook pipelines) sends what the pipeline holds at request end, without waiting for `batch.intervalMs`, and keeps the instance alive until those events are delivered or dropped. A provider pause longer than `retry.maxDelayMs` drops them as `rate-limited`. On long-lived servers that expose `waitUntil` (Nitro 3 on Node, `next start`), batches still wait for `batch.intervalMs`. A pipeline holding events past `intervalMs` on those platforms with no request-end flush warns once.
+`drain(ctx)` returns after buffering, so delivery must outlive the response. On Cloudflare Workers, Vercel, Netlify and AWS Lambda, every integration that has the request's `waitUntil` (Next `after()`, Workers `ctx.waitUntil`, Nitro's request context, including `evlog:drain` hook pipelines) sends what the pipeline holds at request end, without waiting for `batch.intervalMs`, and keeps the instance alive until those events are delivered or dropped. A provider pause longer than `retry.maxDelayMs` drops them as `rate-limited`. On long-lived servers that expose `waitUntil` (Nitro 3 on Node, `next start`), batches still wait for `batch.intervalMs`. A pipeline holding events past `intervalMs` on those platforms with no request-end flush warns once. A request-end flush makes at most `requestBudget` drain calls (default 10, retries included; the rest drop as `deferred`) and skips retries past the runtime's deadline (Vercel's invocation deadline, 25 s after the request on Workers; dropped as `deadline`). On AWS Lambda without `waitUntil`, the integration delivers before returning the response.
 
 ## Common Patterns
 
