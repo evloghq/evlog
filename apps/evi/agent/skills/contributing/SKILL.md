@@ -56,6 +56,8 @@ Read the changed pages together before shipping. Each should answer a distinct r
 
 ## Shipping a change
 
+If the task matches the `amp` skill (more than two files, tests, a refactor, the Linear `amp` label, or an explicit ask), load `amp` and call `amp__execute` before you edit. After Amp returns, stay on this skill for verification and review, and never merge. Do not `git__push` a branch Amp already pushed. If Amp did not open a pull request, open it with `github__createPullRequest` as usual.
+
 The whole flow runs in `/workspace/repo`; nothing ships through the GitHub file API.
 
 1. Branch off the current `main` the session starts on: `git checkout -b <branch>`.

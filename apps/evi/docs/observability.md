@@ -33,7 +33,8 @@ untrusted URLs, so the metadata-only PostHog policy holds. The namespaces:
 `vercel.{env,key,project,target,reason,status}`,
 `gateway.report.{mode,groupBy,matchedRows}`,
 `content.{scanned,candidates,eligible,targets,group,surface,reason}`,
-`image.{host,fetched,bytes,mediaType,reason}`. A content pass that held everything or
+`image.{host,fetched,bytes,mediaType,reason}`,
+`amp.{ok,route,project,threadId,turns,reason}`. A content pass that held everything or
 a push that was refused is chartable from the turn event alone. Tool executes
 are the one place `useLogger()` is contractually bound (see the caller gap
 below); hooks and the subagents stay uninstrumented, and the pieces of

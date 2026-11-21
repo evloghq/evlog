@@ -21,6 +21,17 @@ describe('eviErrors', () => {
     expect(eviErrors.GIT_COMMAND_FAILED({ command: 'push', exitCode: 128 }).message).toBe('git push exited 128')
     expect(eviErrors.CAPTURE_ORIGIN_REFUSED({ message: 'nope' }).message).toBe('nope')
   })
+
+  it('tells the model to keep the work when Amp cannot run', () => {
+    expect(refusal(eviErrors.AMP_API_KEY_MISSING())).toEqual({
+      success: false,
+      code: 'evi.AMP_API_KEY_MISSING',
+      error: 'AMP_API_KEY is not configured. Set AMP_API_KEY on the evi Vercel project (Production and Preview) to an Amp access token that starts with sgamp_. Then do the work yourself for this turn.',
+    })
+    expect(eviErrors.AMP_API_KEY_INVALID().code).toBe('evi.AMP_API_KEY_INVALID')
+    expect(eviErrors.AMP_CLI_MISSING().code).toBe('evi.AMP_CLI_MISSING')
+    expect(eviErrors.AMP_EXECUTE_FAILED().code).toBe('evi.AMP_EXECUTE_FAILED')
+  })
 })
 
 describe('refusal', () => {

@@ -64,9 +64,12 @@ At that point, add a local `repo-research` subagent: isolated context, the
 sandbox file tools only, optionally a cheaper model, returning a synthesized
 answer. Nothing else about Evi's routing changes.
 
-A second, later trigger is an independent authority boundary: a capability
-whose credentials, failure modes, or release cadence should not move with Evi.
-None exists today.
+A second trigger is an independent authority boundary: a capability whose
+credentials, failure modes, or release cadence should not move with Evi. Amp
+is that boundary (Hugo's Amp subscription, the Amp CLI, Amp's orb runtime).
+It is a tool (`amp__execute`), not an eve subagent, because Amp is not an eve
+agent. Logic lives in `agent/lib/amp.ts`. The parent still verifies (tests,
+`before-after`) and never merges.
 
 A third trigger is now in use, and it is the one the content pass hit: a task
 whose correctness depends on two parties not sharing a context. `content_review`
