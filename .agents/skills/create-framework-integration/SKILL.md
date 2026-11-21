@@ -83,7 +83,7 @@ All integrations share the same core utilities. **Never reimplement logic that e
 - calls `createMiddlewareLogger` and surfaces its `{ logger, finish, skipped, middlewareOptions }`
 - attaches `log.fork()` automatically when `storage` is provided
 - exposes `runWith(fn)` to run downstream handlers inside the integration's ALS
-- forwards `waitUntil` when the runtime provides one (Workers, Hono on Workers)
+- forwards `waitUntil` when the runtime provides one: `options.waitUntil`, then the spec's `extractWaitUntil` (Workers `ctx`, Hono's `executionCtx`, SvelteKit's `event.platform.context`), then the Vercel Functions request context
 
 ## Step 1: Integration Source
 

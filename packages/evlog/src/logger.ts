@@ -9,6 +9,7 @@ import type { TreeEntry } from './shared/pretty-ai'
 import { resolveDevTerminal } from './shared/dev-terminal'
 import { globalConfig } from './shared/globalRegistry'
 import { publishWideEvent } from './shared/wideEventChannel'
+import { deliverPendingDrains } from './shared/shutdown'
 import { createErrorSerializer } from './shared/serialize-error'
 import { colors, cssColors, detectEnvironment, elapsedMs, escapeControlChars, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern } from './utils'
 
@@ -375,7 +376,7 @@ function emitWideEvent(
       drainPromises.push(state.pluginRunner.runDrain({ event: formatted }))
     }
     if (drainPromises.length > 0 && waitUntil) {
-      waitUntil(Promise.all(drainPromises))
+      waitUntil(Promise.all(drainPromises).then(deliverPendingDrains))
     }
   }
 

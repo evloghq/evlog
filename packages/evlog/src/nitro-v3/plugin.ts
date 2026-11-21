@@ -13,7 +13,7 @@ import { extendDeferredDrain } from '../nitro/deferred-drain'
 import { normalizeRedactConfig } from '../redact'
 import { shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
-import { flushPendingDrains } from '../shared/shutdown'
+import { deliverBeforeFreeze, deliverPendingDrains, detectServerlessPlatform, flushPendingDrains, hasPendingDrains } from '../shared/shutdown'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import { setNitroRequestLoggerResolver } from '../shared/globalRegistry'
 import type { MiddlewareLoggerOptions } from '../shared/middleware'
@@ -180,6 +180,9 @@ async function callDrainHook(
           console.error('[evlog] drain failed:', err)
         }),
       )
+    } else if (hasPendingDrains()) {
+      // hookable 6 returns undefined when every hook is synchronous, such as a pipeline that only buffered.
+      drainTasks.push(Promise.resolve())
     }
   } catch (err) {
     console.error('[evlog] drain failed:', err)
@@ -193,19 +196,20 @@ async function callDrainHook(
   if (drainTasks.length === 0) return
   const drainPromise = Promise.all(drainTasks)
 
-  // deferDrain: never block Nitro Node responses; extend lifetime on Cloudflare only.
+  // deferDrain: never block Nitro Node responses; extend lifetime only where the runtime freezes after the response.
   if (options?.deferDrain) {
-    const waitUntil = globalThis.navigator?.userAgent === 'Cloudflare-Workers' && typeof event.req.waitUntil === 'function'
+    const waitUntil = detectServerlessPlatform() !== undefined && typeof event.req.waitUntil === 'function'
       ? event.req.waitUntil.bind(event.req)
       : undefined
-    extendDeferredDrain(drainPromise, waitUntil)
+    extendDeferredDrain(waitUntil ? drainPromise.then(deliverPendingDrains) : drainPromise, waitUntil)
     return
   }
 
   if (typeof event.req.waitUntil === 'function') {
-    event.req.waitUntil(drainPromise)
+    event.req.waitUntil(drainPromise.then(deliverPendingDrains))
   } else {
     await drainPromise
+    await deliverBeforeFreeze()
   }
 }
 

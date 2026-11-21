@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from 'vitest'
 import type { DrainContext } from '../../src/types'
 import { createDrainPipeline } from '../../src/pipeline'
 import { defined } from '../helpers/defined'
@@ -105,7 +105,10 @@ describe('createInstrumentation global drain lifecycle', () => {
     expect(consoleErrorSpy).not.toHaveBeenCalled()
   })
 
-  it('waits for buffered batches and their retries before completing after work', async () => {
+  it('sends buffered batches at request end and waits for their retries before completing after work', async () => {
+    vi.stubEnv('VERCEL', '1')
+
+    onTestFinished(() => vi.unstubAllEnvs())
     const send = vi.fn()
       .mockRejectedValueOnce(new Error('retry delivery'))
       .mockResolvedValue(undefined)
@@ -124,18 +127,12 @@ describe('createInstrumentation global drain lifecycle', () => {
       const completion = Promise.resolve(callback()).then(() => {
         completed = true
       })
-      await flushMicrotasks(10)
-      const completedBeforeFlush = completed
-      expect(send).not.toHaveBeenCalled()
-      expect(drain.pending).toBe(1)
-
-      await vi.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(0)
       const completedBeforeRetry = completed
       expect(send).toHaveBeenCalledTimes(1)
       await vi.advanceTimersByTimeAsync(100)
       await completion
 
-      expect(completedBeforeFlush).toBe(false)
       expect(completedBeforeRetry).toBe(false)
       expect(send).toHaveBeenCalledTimes(2)
       expect(send).toHaveBeenLastCalledWith([expect.objectContaining({ event: expect.objectContaining({ message: 'buffered delivery' }) }),])
