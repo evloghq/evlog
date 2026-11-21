@@ -1166,6 +1166,38 @@ describe('createDrainPipeline', () => {
       expect(warn).not.toHaveBeenCalled()
     })
 
+    it('warns stale-buffer once when a request finds events a frozen invocation left behind', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create, deliver } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+      await deliver()
+
+      hook(createTestContext(1))
+      // A frozen runtime: the clock moves on but the batch timer never fires.
+      vi.setSystemTime(Date.now() + 5000)
+      hook(createTestContext(2))
+      vi.setSystemTime(Date.now() + 5000)
+      hook(createTestContext(3))
+
+      expect(warn).toHaveBeenCalledOnce()
+      expect(warn.mock.calls[0]?.[0]).toContain('stale-buffer: 1 event(s)')
+    })
+
+    it('does not warn stale-buffer when the batch timer fired on time', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create, deliver } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+      await deliver()
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1500)
+      hook(createTestContext(2))
+
+      expect(warn).not.toHaveBeenCalled()
+    })
+
     it('stays quiet on a long-lived server', async () => {
       for (const name of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME']) vi.stubEnv(name, '')
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})

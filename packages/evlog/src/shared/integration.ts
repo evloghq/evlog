@@ -6,6 +6,7 @@ import { attachForkToLogger } from './fork'
 import { extractSafeHeaders, extractSafeNodeHeaders } from './headers'
 import type { BaseEvlogOptions, MiddlewareLoggerOptions, MiddlewareLoggerResult } from './middleware'
 import { createMiddlewareLogger } from './middleware'
+import { getVercelWaitUntil } from './shutdown'
 
 export interface ExtractedRequest {
   method: string
@@ -27,7 +28,8 @@ interface FrameworkIntegrationBase<TCtx> {
   /**
    * Extract platform `waitUntil` from the framework context (Cloudflare Workers
    * `ExecutionContext`, Vercel Edge, …). Applied on each `start()` call;
-   * per-request `options.waitUntil` takes precedence.
+   * per-request `options.waitUntil` takes precedence. Without either, the
+   * Vercel Functions request context supplies it when there is one.
    */
   extractWaitUntil?: (ctx: TCtx) => ((promise: Promise<unknown>) => void) | undefined
 }
@@ -121,7 +123,7 @@ export function defineFrameworkIntegration<TCtx>(
     start(ctx, options = {}) {
       const extracted = spec.extractRequest(ctx)
       const headers = normalizeHeaders(extracted.headers)
-      const waitUntil = options.waitUntil ?? spec.extractWaitUntil?.(ctx)
+      const waitUntil = options.waitUntil ?? spec.extractWaitUntil?.(ctx) ?? getVercelWaitUntil()
       const middlewareOptions: MiddlewareLoggerOptions = {
         method: extracted.method,
         path: extracted.path,

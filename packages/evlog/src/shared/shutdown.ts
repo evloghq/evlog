@@ -26,11 +26,29 @@ const WORKERS_DEADLINE_MS = 25_000
 /** Set by the Vercel Functions runtime; read by `getDeadline()` from `@vercel/functions`. */
 const VERCEL_REQUEST_CONTEXT = Symbol.for('@vercel/request-context')
 
+interface VercelRequestContext {
+  waitUntil?: (promise: Promise<unknown>) => void
+  deadline?: unknown
+}
+
+function getVercelRequestContext(): VercelRequestContext | undefined {
+  return (globalThis as { [VERCEL_REQUEST_CONTEXT]?: { get?: () => VercelRequestContext | undefined } })[VERCEL_REQUEST_CONTEXT]?.get?.()
+}
+
+/**
+ * The current request's `waitUntil` inside the Vercel Functions runtime, the
+ * one `waitUntil()` from `@vercel/functions` calls, without depending on it.
+ */
+export function getVercelWaitUntil(): ((promise: Promise<unknown>) => void) | undefined {
+  const context = getVercelRequestContext()
+  return typeof context?.waitUntil === 'function' ? context.waitUntil.bind(context) : undefined
+}
+
 /** When the runtime stops the current request's `waitUntil` work, in epoch ms, if the platform says. */
 function resolveRequestDeadline(platform: string): number | undefined {
   if (platform === 'Cloudflare Workers') return Date.now() + WORKERS_DEADLINE_MS
   if (platform !== 'Vercel') return undefined
-  const context = (globalThis as { [VERCEL_REQUEST_CONTEXT]?: { get?: () => { deadline?: unknown } | undefined } })[VERCEL_REQUEST_CONTEXT]?.get?.()
+  const context = getVercelRequestContext()
   if (context?.deadline === undefined) return undefined
   const deadline = new Date(context.deadline as string | number).getTime()
   return Number.isNaN(deadline) ? undefined : deadline

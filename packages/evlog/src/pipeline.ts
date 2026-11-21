@@ -76,6 +76,7 @@ export interface PipelineDrainFn<T> {
 const DROP_LOG_INTERVAL_MS = 60_000
 
 let serverlessWarned = false
+let staleBufferWarned = false
 
 /**
  * Unref a timer on runtimes that support it (Node, Bun) so an idle flush
@@ -265,6 +266,18 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       console.warn(`[evlog/pipeline] Events waited longer than batch.intervalMs on ${platform}, which can freeze or stop the runtime once the response is sent. Pass the platform's waitUntil to the evlog integration so each request delivers its events before it ends.`)
     }
 
+    /**
+     * A push that finds events older than `batch.intervalMs` means their timer never fired:
+     * the runtime was frozen between invocations with events a request left without waitUntil.
+     */
+    function warnIfStaleBuffer(): void {
+      if (staleBufferWarned || buffer.length === 0 || Date.now() - bufferedSince <= intervalMs || !hasRequestFlushRun()) return
+      const platform = detectServerlessPlatform()
+      if (!platform) return
+      staleBufferWarned = true
+      console.warn(`[evlog/pipeline] stale-buffer: ${buffer.length} event(s) left by an earlier invocation waited longer than batch.intervalMs on ${platform}, because the runtime was frozen before their batch was sent. A request without waitUntil buffered them; pass waitUntil on every route that logs.`)
+    }
+
     /** Resolves request-end waiters whose events are all delivered or dropped. */
     function release(events: T[]): void {
       for (const event of events) inFlight.delete(event)
@@ -417,6 +430,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
 
     function push(ctx: T): void {
       trackPendingDrain(registration, true)
+      warnIfStaleBuffer()
       warnIfNotFlushedAtRequestEnd()
       if (buffer.length >= maxBufferSize) {
         drop(buffer.splice(0, 1), 'buffer-full')
