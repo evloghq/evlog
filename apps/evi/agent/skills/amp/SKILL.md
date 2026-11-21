@@ -29,13 +29,13 @@ Otherwise do the work yourself with `contributing`.
 
 ## How to call
 
-Pass a scoped brief (what to change, acceptance criteria, what not to touch), `route` matching the reason above, the `repository` (`owner/repo`, omit for the home repo), the base `branch` when it is not `main`, the Linear or GitHub `issue` when there is one, and `paths` when you already know them. Set `requester` to the person's GitHub login or display name when you have it.
+Pass a scoped brief (what to change, acceptance criteria, what not to touch), `route` matching the reason above, the `repository` (`owner/repo`, omit for the home repo), the base `branch` when it is not `main`, the Linear or GitHub `issue` when there is one, and `paths` when you already know them.
 
 Amp runs `amp --execute --stream-json --visibility private --executor orb` against that repository. It clones on Amp's servers. Do not wait in the sandbox checkout for Amp's files to appear.
 
 ## After Amp returns
 
-1. Report the Amp thread URL and the pull request URL from the summary.
+1. Report the Amp thread URL and the pull request URL from the summary. If Amp opened the pull request, the body must start with `Written by an AI agent on behalf of @HugoRCD. @HugoRCD has not reviewed it yet.` If it does not, say so.
 2. Load `contributing` for verification. Run the checks Amp claimed, in `/workspace/repo` on Amp's branch (`git fetch` then `git checkout`). For a visual change, load `before-after` and capture proof.
 3. If Amp did not open a pull request, open it with `github__createPullRequest` after the local readiness gate. If Amp already pushed the branch, do not `git__push` it again.
 4. Request review from the code owners once CI is green. Never merge.

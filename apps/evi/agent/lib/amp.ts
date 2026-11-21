@@ -2,7 +2,9 @@ import { spawn } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { renderPrAttribution } from './github/outbound'
+
+/** First line of a PR Amp opens on Hugo's behalf. */
+export const AMP_PR_DISCLAIMER = 'Written by an AI agent on behalf of @HugoRCD. @HugoRCD has not reviewed it yet.'
 
 /** Linear issue label that always sends the coding work to Amp. */
 export const AMP_LINEAR_LABEL = 'amp'
@@ -69,13 +71,10 @@ export interface AmpPromptInput {
   readonly branch?: string
   readonly issue?: string
   readonly paths?: readonly string[]
-  readonly requester: string
-  readonly channel: string
 }
 
 /** Prompt Amp sees: the brief, repo context, and the shipping rules Evi already enforces. */
 export function buildAmpPrompt(input: AmpPromptInput): string {
-  const disclaimer = renderPrAttribution('Evi', input.requester, input.channel)
   const paths = input.paths && input.paths.length > 0 ? input.paths.join(', ') : 'the paths the brief names'
   const branch = input.branch ?? 'main'
   const issue = input.issue ?? 'none'
@@ -99,7 +98,7 @@ export function buildAmpPrompt(input: AmpPromptInput): string {
     '- Never use an em dash. Use a comma, a colon, or a period.',
     '- Conventional Commits titles, lowercase subject.',
     '- A pull request body has this shape and nothing else: Why, Proof, Risk, Checks, then a GitHub ELI5 <details> block.',
-    `- The first line of the pull request body must be exactly: ${disclaimer}`,
+    `- The first line of the pull request body must be exactly: ${AMP_PR_DISCLAIMER}`,
     '- Stop after the branch is pushed and the pull request is open. Evi will verify (tests, screenshots) and will not merge.',
     '',
     '## Done',

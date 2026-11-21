@@ -10,7 +10,6 @@ import {
   buildAmpPrompt,
   runAmpExecute,
 } from '../lib/amp'
-import { channelName } from '../lib/channel'
 import { eviErrors, refusal } from '../lib/errors'
 import { homeRepository, parseRepository, repositorySlug } from '../lib/repo'
 import { isMaintainer } from '../lib/trust'
@@ -27,7 +26,6 @@ export default defineDynamic((ctx) => {
         branch: z.string().trim().min(1).optional().describe('Base branch Amp should start from. Defaults to main.'),
         issue: z.string().trim().min(1).optional().describe('Linear issue id (EVL-123) or GitHub issue number, when the task has one.'),
         paths: z.array(z.string().trim().min(1)).optional().describe('Paths Amp should prefer. Omit to let the brief name them.'),
-        requester: z.string().trim().min(1).max(80).optional().describe('GitHub login or display name of the person who asked, for the PR disclaimer. Defaults to "the maintainer".'),
       }),
       async execute(input, toolCtx) {
         const log = useLogger(toolCtx)
@@ -54,16 +52,12 @@ export default defineDynamic((ctx) => {
           repository = parsed
         }
         const project = repositorySlug(repository)
-        const channel = channelName(toolCtx.channel.kind)
-        const requester = input.requester ?? 'the maintainer'
         const prompt = buildAmpPrompt({
           brief: input.brief,
           repository: project,
           branch: input.branch,
           issue: input.issue,
           paths: input.paths,
-          requester,
-          channel,
         })
         const run = await runAmpExecute({
           prompt,
