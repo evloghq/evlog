@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from 'vitest'
 import type { DrainContext } from '../../src/types'
 import { createDrainPipeline } from '../../src/pipeline'
 import { createHyperDXDrain } from '../../src/adapters/hyperdx'
@@ -7,6 +7,7 @@ import { createPostHogDrain } from '../../src/adapters/posthog'
 import { createSazabiDrain } from '../../src/adapters/sazabi'
 import { defineDrain, defineHttpDrain } from '../../src/shared/drain'
 import { DrainDeliveryError } from '../../src/shared/http'
+import { deliverPendingDrains } from '../../src/shared/shutdown'
 import { defined } from '../helpers/defined'
 
 function getBatchArg(call: unknown[]): DrainContext[] {
@@ -891,6 +892,118 @@ describe('createDrainPipeline', () => {
 
       expect(resolved).toBe(true)
       expect(drain).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('request-end flush', () => {
+    it('resolves every request at 20 events/s with a 300 ms backend, within two round trips of its end', async () => {
+      vi.stubEnv('VERCEL', '1')
+      onTestFinished(() => vi.unstubAllEnvs())
+      const drain = vi.fn((_batch: DrainContext[]) => new Promise<void>(resolve => setTimeout(resolve, 300)))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 50, intervalMs: 5000 } })(drain)
+      const latencies: number[] = []
+
+      for (let id = 1; id <= 60; id++) {
+        const endedAt = Date.now()
+        hook(createTestContext(id))
+        void deliverPendingDrains().then(() => {
+          latencies.push(Date.now() - endedAt)
+        })
+        await vi.advanceTimersByTimeAsync(50)
+      }
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(latencies).toHaveLength(60)
+      expect(Math.max(...latencies)).toBeLessThanOrEqual(600)
+      expect(drain.mock.calls.flatMap(call => getBatchArg(call).map(ctx => ctx.event.id))).toEqual(Array.from({ length: 60 }, (_, i) => i + 1))
+      expect(drain.mock.calls.length).toBeLessThan(20)
+    })
+
+    it('drops the request\'s events as rate-limited instead of outwaiting a provider pause', async () => {
+      vi.stubEnv('VERCEL', '1')
+
+      onTestFinished(() => vi.unstubAllEnvs())
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 60_000 }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, onDropped })(drain)
+
+      hook(createTestContext(1))
+      let first = false
+      void deliverPendingDrains().then(() => {
+        first = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(first).toBe(true)
+
+      hook(createTestContext(2))
+      let second = false
+      void deliverPendingDrains().then(() => {
+        second = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(second).toBe(true)
+      expect(drain).toHaveBeenCalledOnce()
+      expect(hook.stats().dropped['rate-limited']).toBe(2)
+      expect(hook.pending).toBe(0)
+      expect(onDropped.mock.calls.map(([events, , reason]) => [events.map((ctx: DrainContext) => ctx.event.id), reason])).toEqual([[[1], 'rate-limited'], [[2], 'rate-limited']])
+    })
+  })
+
+  describe('serverless warning', () => {
+    async function loadFresh() {
+      delete (globalThis as Record<symbol, unknown>)[Symbol.for('evlog.drains.v2')]
+      vi.resetModules()
+      const [{ createDrainPipeline: create }, { deliverPendingDrains: deliver }] = await Promise.all([
+        import('../../src/pipeline'),
+        import('../../src/shared/shutdown'),
+      ])
+      return { create, deliver }
+    }
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.restoreAllMocks()
+    })
+
+    it('warns once on Vercel when events wait past batch.intervalMs and no request-end flush ever ran', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1000)
+      hook(createTestContext(2))
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(warn).toHaveBeenCalledOnce()
+      expect(warn.mock.calls[0]?.[0]).toContain('on Vercel')
+    })
+
+    it('stays quiet once an integration flushed at request end', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create, deliver } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+
+      await deliver()
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it('stays quiet on a long-lived server', async () => {
+      for (const name of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME']) vi.stubEnv(name, '')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(warn).not.toHaveBeenCalled()
     })
   })
 })

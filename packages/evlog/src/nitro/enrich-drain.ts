@@ -3,6 +3,7 @@ import { getHeaders } from 'h3'
 import { getGlobalPluginRunner, outputWideEvent } from '../logger'
 import type { EnrichContext, ServerEvent, WideEvent } from '../types'
 import { filterSafeHeaders } from '../utils'
+import { deliverPendingDrains } from '../shared/shutdown'
 import { extendDeferredDrain } from './deferred-drain'
 
 export function getSafeHeaders(event: ServerEvent): Record<string, string> {
@@ -106,13 +107,14 @@ export async function callEnrichAndDrain(
   // deferDrain: never block the HTTP error response on Nitro Node (h3 2.13+ waitUntil
   // queues work before send). On Cloudflare, register waitUntil so drains survive.
   if (options?.deferDrain) {
-    extendDeferredDrain(drainPromise, resolveDeferredWaitUntil(event))
+    const waitUntil = resolveDeferredWaitUntil(event)
+    extendDeferredDrain(waitUntil ? drainPromise.then(deliverPendingDrains) : drainPromise, waitUntil)
     return
   }
 
   const waitUntilCtx = event.context.cloudflare?.context ?? event.context
   if (typeof waitUntilCtx?.waitUntil === 'function') {
-    waitUntilCtx.waitUntil(drainPromise)
+    waitUntilCtx.waitUntil(drainPromise.then(deliverPendingDrains))
   } else {
     await drainPromise
   }

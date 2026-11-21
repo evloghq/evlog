@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from 'vitest'
 import type { NitroApp } from 'nitropack/types'
 import { getHeaders } from 'h3'
 import type { DrainContext, EnrichContext, ServerEvent, WideEvent } from '../../src/types'
 import { defined } from '../helpers/defined'
 import { callEnrichAndDrain } from '../../src/nitro/enrich-drain'
 import { initLogger } from '../../src/logger'
+import { createDrainPipeline } from '../../src/pipeline'
 
 vi.mock('h3', () => ({
   getHeaders: vi.fn(),
@@ -320,5 +321,43 @@ describe('nitro plugin - enrichment pipeline (T7)', () => {
 
     resolveDrain()
     await slowDrain
+  })
+
+  it('keeps waitUntil open until a pipeline registered on evlog:drain delivers the request\'s event', async () => {
+    vi.stubEnv('VERCEL', '1')
+
+    onTestFinished(() => vi.unstubAllEnvs())
+    let accept!: () => void
+    const send = vi.fn((_batch: DrainContext[]) => new Promise<void>((resolve) => {
+      accept = resolve
+    }))
+    const pipeline = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 60_000 } })(send)
+    const waitUntil = vi.fn()
+    vi.mocked(getHeaders).mockReturnValue({})
+
+    const mockHooks = {
+      callHook: vi.fn().mockImplementation((hookName: string, ctx: DrainContext) => {
+        if (hookName === 'evlog:drain') pipeline(ctx)
+        return Promise.resolve()
+      }),
+    }
+    const mockEvent: ServerEvent = {
+      method: 'GET',
+      path: '/api/orders',
+      context: { requestId: 'req-pipeline', waitUntil },
+    }
+
+    await callEnrichAndDrain(asNitroApp(mockHooks), { timestamp: new Date().toISOString(), level: 'info', service: 'test', environment: 'test' }, mockEvent)
+
+    let delivered = false
+    void (defined(waitUntil.mock.calls[0], 'waitUntil registration')[0] as Promise<unknown>).then(() => {
+      delivered = true
+    })
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce())
+    expect(delivered).toBe(false)
+
+    accept()
+    await vi.waitFor(() => expect(delivered).toBe(true))
+    expect(pipeline.pending).toBe(0)
   })
 })

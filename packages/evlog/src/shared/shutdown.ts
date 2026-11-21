@@ -11,8 +11,41 @@ const SIGNAL_FLUSH_DEADLINE_MS = 400
 
 type ShutdownSignal = 'SIGTERM' | 'SIGINT'
 
-const pending = new Set<() => Promise<void>>()
-let installed = false
+/** What a pipeline that holds events registers. */
+export interface PendingDrain {
+  flush: () => Promise<void>
+  /** Sends the events held now without waiting for `batch.intervalMs`; resolves once they are delivered or dropped. */
+  flushHeld: () => Promise<void>
+  settled: () => Promise<void>
+}
+
+/** Platforms that freeze or stop the runtime once the response is sent. */
+export function detectServerlessPlatform(): string | undefined {
+  if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') return 'Cloudflare Workers'
+  if ('Netlify' in globalThis) return 'Netlify'
+  const env = typeof process === 'undefined' ? undefined : process.env
+  if (env?.VERCEL) return 'Vercel'
+  if (env?.NETLIFY) return 'Netlify'
+  if (env?.AWS_LAMBDA_FUNCTION_NAME) return 'AWS Lambda'
+  return undefined
+}
+
+interface DrainRegistry {
+  pending: Set<PendingDrain>
+  /** Whether a copy of evlog installed the signal listeners. */
+  installed: boolean
+  requestFlushSeen: boolean
+}
+
+/** Shared by every 2.x copy of evlog, so an integration flushes pipelines created by another copy and signals are handled once. */
+const REGISTRY_KEY = Symbol.for('evlog.drains.v2')
+
+const registry: DrainRegistry = ((globalThis as { [REGISTRY_KEY]?: DrainRegistry })[REGISTRY_KEY] ??= {
+  pending: new Set(),
+  installed: false,
+  requestFlushSeen: false,
+})
+const { pending } = registry
 let shuttingDown = false
 
 function hasSignalSupport(): boolean {
@@ -27,7 +60,7 @@ function hasSignalSupport(): boolean {
  */
 export async function flushPendingDrains(deadlineMs?: number): Promise<void> {
   if (pending.size === 0) return
-  const flushes = Promise.allSettled(Array.from(pending, flush => flush()))
+  const flushes = Promise.allSettled(Array.from(pending, drain => drain.flush()))
   if (deadlineMs === undefined) {
     await flushes
     return
@@ -40,6 +73,27 @@ export async function flushPendingDrains(deadlineMs?: number): Promise<void> {
     }),
   ])
   clearTimeout(timer)
+}
+
+/**
+ * What an integration registers with a request's `waitUntil`. On a runtime
+ * that freezes or stops after the response, it sends what every pipeline holds
+ * now, including events of concurrent requests, and resolves once those are
+ * delivered or dropped; events pushed afterwards do not extend it. On a
+ * long-lived server, where srvx and `next start` also expose `waitUntil`, it
+ * waits for the pipelines to settle on their own schedule so batches keep
+ * filling up to `batch.intervalMs`.
+ */
+export async function deliverPendingDrains(): Promise<void> {
+  registry.requestFlushSeen = true
+  if (pending.size === 0) return
+  const serverless = detectServerlessPlatform() !== undefined
+  await Promise.allSettled(Array.from(pending, drain => serverless ? drain.flushHeld() : drain.settled()))
+}
+
+/** Whether an integration has run a request-end flush in this process. */
+export function hasRequestFlushRun(): boolean {
+  return registry.requestFlushSeen
 }
 
 function removeListeners(): void {
@@ -81,14 +135,14 @@ function onBeforeExit(): void {
 }
 
 /** Called by a pipeline when it starts holding events (`true`) and once it is idle again (`false`). */
-export function trackPendingDrain(flush: () => Promise<void>, isPending: boolean): void {
+export function trackPendingDrain(drain: PendingDrain, isPending: boolean): void {
   if (!isPending) {
-    pending.delete(flush)
+    pending.delete(drain)
     return
   }
-  pending.add(flush)
-  if (installed || !hasSignalSupport()) return
-  installed = true
+  pending.add(drain)
+  if (registry.installed || !hasSignalSupport()) return
+  registry.installed = true
   process.prependListener('SIGTERM', onSigterm)
   process.prependListener('SIGINT', onSigint)
   process.on('beforeExit', onBeforeExit)

@@ -12,7 +12,7 @@ import { extendDeferredDrain } from '../nitro/deferred-drain'
 import { normalizeRedactConfig } from '../redact'
 import { shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
-import { flushPendingDrains } from '../shared/shutdown'
+import { deliverPendingDrains, flushPendingDrains } from '../shared/shutdown'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import type { EnrichContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
 import { elapsedMs, filterSafeHeaders } from '../utils'
@@ -159,12 +159,12 @@ async function callDrainHook(
     const waitUntil = globalThis.navigator?.userAgent === 'Cloudflare-Workers' && typeof event.req.waitUntil === 'function'
       ? event.req.waitUntil.bind(event.req)
       : undefined
-    extendDeferredDrain(drainPromise, waitUntil)
+    extendDeferredDrain(waitUntil ? drainPromise.then(deliverPendingDrains) : drainPromise, waitUntil)
     return
   }
 
   if (typeof event.req.waitUntil === 'function') {
-    event.req.waitUntil(drainPromise)
+    event.req.waitUntil(drainPromise.then(deliverPendingDrains))
   } else {
     await drainPromise
   }
