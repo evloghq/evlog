@@ -17,5 +17,5 @@ async function deploy(service: string) {
   'use step'
   // FatalError fails the step at once instead of after the step retries.
   if (service === 'broken') throw new FatalError('Deploy failed')
-  return { url: `https://${service}.example.invalid`, note: 'TASK-OUTPUT-MARKER' }
+  return { contact: 'ops@clearbill.dev', url: `https://${service}.example.invalid`, note: 'TASK-OUTPUT-MARKER' }
 }
