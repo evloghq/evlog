@@ -310,12 +310,15 @@ export async function runAmpContinue(input: {
     env: input.env,
   }, processAmp)
   if (result.cliMissing) return { threadId: null, threadUrl: null, cliMissing: true, aborted: false }
+  if (result.aborted || (result.exitCode !== null && result.exitCode !== 0)) {
+    return { threadId: null, threadUrl: null, cliMissing: false, aborted: result.aborted }
+  }
   const launched = parseAmpLaunch(`${result.stdout}\n${result.stderr}`)
   return {
     threadId: launched?.threadId ?? input.threadId,
     threadUrl: launched?.threadUrl ?? ampThreadUrl(input.threadId),
     cliMissing: false,
-    aborted: result.aborted,
+    aborted: false,
   }
 }
 

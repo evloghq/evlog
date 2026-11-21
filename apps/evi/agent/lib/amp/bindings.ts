@@ -29,7 +29,12 @@ export function rememberAmpBinding(bindings: readonly AmpBinding[], next: AmpBin
 
 export function findAmpBinding(
   bindings: readonly AmpBinding[],
-  query: { readonly threadId?: string, readonly issue?: string, readonly sessionId?: string },
+  query: {
+    readonly threadId?: string
+    readonly issue?: string
+    readonly sessionId?: string
+    readonly repository?: string
+  },
 ): AmpBinding | null {
   if (query.threadId) {
     const id = parseAmpThreadId(query.threadId)
@@ -44,7 +49,12 @@ export function findAmpBinding(
     if (hit) return hit
   }
   if (query.sessionId && query.issue === undefined && query.threadId === undefined) {
-    return bindings.find(binding => binding.sessionId === query.sessionId && binding.issue === null) ?? null
+    const repository = query.repository === undefined || query.repository === '' ? undefined : query.repository
+    return bindings.find(binding =>
+      binding.sessionId === query.sessionId
+      && binding.issue === null
+      && (repository === undefined || binding.repository === repository),
+    ) ?? null
   }
   return null
 }
@@ -56,7 +66,7 @@ export function resolveStoredAmpThread(input: {
   readonly sessionId: string
   readonly repository?: string
 }): AmpBinding | null {
-  const stored = findAmpBinding(input.bindings, input.query)
+  const stored = findAmpBinding(input.bindings, { ...input.query, repository: input.repository })
   if (stored) return stored
   const picked = pickAmpThread(input.listed, input.query)
   const repository = input.repository ?? ''

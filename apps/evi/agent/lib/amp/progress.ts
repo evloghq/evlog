@@ -46,9 +46,9 @@ export function pickAmpThread(
     if (id) return threads.find(thread => thread.id === id) ?? null
   }
   if (query.issue) {
-    const needle = query.issue.toLowerCase()
+    const needle = query.issue.trim().toLowerCase()
     return threads.find(thread =>
-      (thread.title !== null && thread.title.toLowerCase().includes(needle))
+      (thread.title !== null && titleCarriesIssue(thread.title, needle))
       || thread.labels.some(label => label.toLowerCase() === needle),
     ) ?? null
   }
@@ -59,7 +59,7 @@ export function digestAmpProgress(input: {
   readonly markdown: string
   readonly listed?: AmpListedThread | null
 }): AmpProgress {
-  const prUrl = input.markdown.match(PR_URL)?.[0] ?? null
+  const prUrl = resultingPrUrl(input.markdown)
   const files = uniqueFiles(input.markdown)
   const excerpt = lastExcerpt(input.markdown)
   const listedStatus = input.listed?.status ?? 'unknown'
@@ -87,6 +87,20 @@ export function ampProgressUpdate(
     return `Amp is still working on ${threadId} (${progress.files.slice(0, 3).join(', ')}).`
   }
   return `Amp is still working on ${threadId}.`
+}
+
+function titleCarriesIssue(title: string, issue: string): boolean {
+  const hay = title.toLowerCase()
+  if (hay.startsWith(`${issue}:`) || hay.includes(` ${issue}:`)) return true
+  const escaped = issue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?![a-z0-9])`, 'i').test(title)
+}
+
+function resultingPrUrl(markdown: string): string | null {
+  const opened = /(?:opened|pull request:)\s+(https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+)/i.exec(markdown)
+  if (opened?.[1]) return opened[1]
+  const matches = markdown.match(new RegExp(PR_URL.source, 'g'))
+  return matches?.[matches.length - 1] ?? null
 }
 
 function progressKey(status: AmpThreadStatus, prUrl: string | null, files: readonly string[]): string {

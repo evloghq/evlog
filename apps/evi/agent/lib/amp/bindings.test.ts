@@ -55,6 +55,29 @@ describe('findAmpBinding', () => {
     expect(findAmpBinding(stored, { issue: 'EVL-1' })).toBeNull()
   })
 
+  it('reuses a session thread only for the same repository when one is requested', () => {
+    const sessionWork = [
+      binding({ issue: null, sessionId: 'sess-2', repository: 'evloghq/other' }),
+      binding({
+        threadId: THREAD_B,
+        threadUrl: `https://ampcode.com/threads/${THREAD_B}`,
+        issue: null,
+        sessionId: 'sess-2',
+        repository: 'evloghq/evlog',
+      }),
+    ]
+    expect(findAmpBinding(sessionWork, { sessionId: 'sess-2' })?.repository).toBe('evloghq/other')
+    expect(findAmpBinding(sessionWork, { sessionId: 'sess-2', repository: 'evloghq/evlog' })?.threadId).toBe(THREAD_B)
+    expect(findAmpBinding(sessionWork, { sessionId: 'sess-2', repository: 'acme/widgets' })).toBeNull()
+    expect(resolveStoredAmpThread({
+      bindings: sessionWork,
+      listed: [],
+      query: { sessionId: 'sess-2' },
+      sessionId: 'sess-2',
+      repository: 'evloghq/evlog',
+    })?.threadId).toBe(THREAD_B)
+  })
+
   it('fills a binding from Amp search results or a bare thread id when session state is empty', () => {
     const listed: AmpListedThread[] = [
       {

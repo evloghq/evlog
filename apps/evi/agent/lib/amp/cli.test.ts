@@ -195,4 +195,24 @@ describe('runAmpLaunch and runAmpContinue', () => {
     expect(result.cliMissing).toBe(false)
     expect(result.threadId).toBe('T-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
   })
+
+  it('does not treat a nonzero or aborted continue as accepted', async () => {
+    const failed = await runAmpContinue({
+      threadId: 'T-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      prompt: 'the check failed',
+      apiKey: 'sgamp_test',
+    }, () => Promise.resolve({ stdout: '', stderr: 'denied', exitCode: 1 }))
+    expect(failed.threadId).toBeNull()
+    expect(failed.threadUrl).toBeNull()
+    expect(failed.cliMissing).toBe(false)
+
+    const aborted = await runAmpContinue({
+      threadId: 'T-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      prompt: 'the check failed',
+      apiKey: 'sgamp_test',
+      signal: AbortSignal.abort(),
+    }, () => Promise.resolve({ stdout: '', stderr: '', exitCode: null }))
+    expect(aborted.threadId).toBeNull()
+    expect(aborted.aborted).toBe(true)
+  })
 })

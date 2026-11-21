@@ -51,6 +51,27 @@ describe('parseAmpThreadList', () => {
     expect(pickAmpThread(threads, { threadId: 'T-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' })?.title).toBe('EVL-41: old work')
     expect(pickAmpThread(threads, { issue: 'EVL-99' })).toBeNull()
   })
+
+  it('does not treat EVL-420 as EVL-42', () => {
+    const threads: ReturnType<typeof parseAmpThreadList> = [
+      {
+        id: 'T-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        title: 'EVL-420: longer id first',
+        url: 'https://ampcode.com/threads/T-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        labels: ['evi'],
+        status: 'idle',
+      },
+      {
+        id: 'T-f9941a55-3765-421e-972f-05dc1138c3a3',
+        title: 'EVL-42: Split the Loki adapter',
+        url: 'https://ampcode.com/threads/T-f9941a55-3765-421e-972f-05dc1138c3a3',
+        labels: ['evi'],
+        status: 'running',
+      },
+    ]
+    expect(pickAmpThread(threads, { issue: 'EVL-42' })?.id).toBe('T-f9941a55-3765-421e-972f-05dc1138c3a3')
+    expect(pickAmpThread(threads, { issue: 'evl-42' })?.title).toBe('EVL-42: Split the Loki adapter')
+  })
 })
 
 describe('digestAmpProgress', () => {
@@ -99,5 +120,20 @@ describe('digestAmpProgress', () => {
       'Amp finished. Pull request: https://github.com/evloghq/evlog/pull/900',
     )
     expect(ampProgressUpdate(done, done.key, 'T-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')).toBeNull()
+  })
+
+  it('uses the PR Amp opened, not an earlier PR the thread only mentioned', () => {
+    const markdown = [
+      'Related work: https://github.com/evloghq/evlog/pull/800',
+      '',
+      'Opened https://github.com/evloghq/evlog/pull/900',
+    ].join('\n')
+    const done = digestAmpProgress({ markdown, listed: { ...parseAmpThreadList(LIST_JSON)[0]!, status: 'idle' } })
+    expect(done.prUrl).toBe('https://github.com/evloghq/evlog/pull/900')
+    expect(ampProgressUpdate(done, AMP_LAUNCH_PROGRESS_KEY, 'T-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')).toBe(
+      'Amp finished. Pull request: https://github.com/evloghq/evlog/pull/900',
+    )
+    expect(done.key).toContain('/pull/900')
+    expect(done.key).not.toContain('/pull/800')
   })
 })
