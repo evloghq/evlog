@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from 'vitest'
 import { initLogger } from '../../src/logger'
 import type { RequestLogger } from '../../src/types'
 import { evlog, evlogHandleError, createEvlogHooks, useLogger } from '../../src/sveltekit/index'
+import { createDrainPipeline } from '../../src/pipeline'
 import { EvlogError } from '../../src/error'
 import {
   assertDrainCalledWith,
@@ -692,5 +693,25 @@ describe('evlog/sveltekit', () => {
 
     expect(warnSpy.mock.calls.some(([message]) => String(message).includes('Keys dropped: ai'))).toBe(false)
     expect(findEventViaDrain(drain, e => e.path === '/api/chat')?.ai).toEqual({ calls: 1, totalTokens: 42 })
+  })
+})
+
+describe('evlog/sveltekit platform waitUntil', () => {
+  it('registers the request-end flush with event.platform.context.waitUntil on Cloudflare', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' })
+    onTestFinished(() => {
+      vi.unstubAllGlobals()
+    })
+    initLogger({ silent: true, _suppressDrainWarning: true } as Parameters<typeof initLogger>[0])
+    const send = vi.fn().mockResolvedValue(undefined)
+    const drain = createDrainPipeline({ batch: { size: 50, intervalMs: 60_000 } })(send)
+    const waitUntil = vi.fn()
+    const event = { ...createMockEvent('GET', '/api/orders'), platform: { context: { waitUntil } } }
+
+    await evlog({ drain })({ event, resolve: createMockResolve() })
+
+    expect(waitUntil).toHaveBeenCalledOnce()
+    await waitUntil.mock.calls[0]?.[0]
+    expect(send).toHaveBeenCalledOnce()
   })
 })
