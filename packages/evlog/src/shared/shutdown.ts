@@ -16,7 +16,8 @@ export interface PendingDrain {
   flush: () => Promise<void>
   /** Sends the events held now without waiting for `batch.intervalMs`; resolves once they are delivered or dropped. */
   flushHeld: () => Promise<void>
-  settled: () => Promise<void>
+  /** Resolves once the events held now are delivered or dropped, on the pipeline's own schedule. */
+  waitHeld: () => Promise<void>
 }
 
 /** Platforms that freeze or stop the runtime once the response is sent. */
@@ -81,14 +82,14 @@ export async function flushPendingDrains(deadlineMs?: number): Promise<void> {
  * now, including events of concurrent requests, and resolves once those are
  * delivered or dropped; events pushed afterwards do not extend it. On a
  * long-lived server, where srvx and `next start` also expose `waitUntil`, it
- * waits for the pipelines to settle on their own schedule so batches keep
- * filling up to `batch.intervalMs`.
+ * waits for the events held now on the pipelines' own schedule, so batches
+ * keep filling up to `batch.intervalMs` and steady traffic cannot hold it open.
  */
 export async function deliverPendingDrains(): Promise<void> {
   registry.requestFlushSeen = true
   if (pending.size === 0) return
   const serverless = detectServerlessPlatform() !== undefined
-  await Promise.allSettled(Array.from(pending, drain => serverless ? drain.flushHeld() : drain.settled()))
+  await Promise.allSettled(Array.from(pending, drain => serverless ? drain.flushHeld() : drain.waitHeld()))
 }
 
 /** Whether an integration has run a request-end flush in this process. */

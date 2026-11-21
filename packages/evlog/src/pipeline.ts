@@ -174,7 +174,8 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     let bufferedSince = 0
     /** Events taken out of the buffer for a send and not yet delivered or dropped. */
     const inFlight = new Set<T>()
-    let heldWaiters: Array<{ events: Set<T>, resolve: () => void }> = []
+    /** Request-end waits on a snapshot of events; `sending` ones also send those events now instead of at `batch.intervalMs`. */
+    let heldWaiters: Array<{ events: Set<T>, resolve: () => void, sending: boolean }> = []
 
     function pauseRemainingMs(): number {
       return Math.max(0, pausedUntil - Date.now())
@@ -337,8 +338,9 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
 
     /** A request-end flush cannot outwait a provider pause: the runtime may stop first. */
     function dropHeldWhilePaused(): void {
-      if (heldWaiters.length === 0 || pauseRemainingMs() === 0) return
-      const held = new Set(heldWaiters.flatMap(waiter => [...waiter.events]))
+      const sending = heldWaiters.filter(waiter => waiter.sending)
+      if (sending.length === 0 || pauseRemainingMs() === 0) return
+      const held = new Set(sending.flatMap(waiter => [...waiter.events]))
       const kept = buffer.filter(event => !held.has(event))
       const gone = buffer.filter(event => held.has(event))
       buffer.splice(0, buffer.length, ...kept)
@@ -354,7 +356,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       activeFlush = drainBuffer().finally(() => {
         activeFlush = null
         dropHeldWhilePaused()
-        if (buffer.length > 0 && (buffer.length >= batchSize || heldWaiters.length > 0) && pauseRemainingMs() === 0) {
+        if (buffer.length > 0 && (buffer.length >= batchSize || heldWaiters.some(waiter => waiter.sending)) && pauseRemainingMs() === 0) {
           startFlush()
         } else if (buffer.length > 0) {
           scheduleFlush()
@@ -418,12 +420,13 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       return run
     }
 
-    function flushHeld(): Promise<void> {
+    function waitHeld(sending: boolean): Promise<void> {
       const events = new Set<T>([...buffer, ...inFlight])
       if (events.size === 0) return Promise.resolve()
       const done = new Promise<void>((resolve) => {
-        heldWaiters.push({ events, resolve })
+        heldWaiters.push({ events, resolve, sending })
       })
+      if (!sending) return done
       dropHeldWhilePaused()
       if (buffer.length > 0 && pauseRemainingMs() === 0) {
         clearTimer()
@@ -432,7 +435,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       return done
     }
 
-    const registration: PendingDrain = { flush, flushHeld, settled }
+    const registration: PendingDrain = { flush, flushHeld: () => waitHeld(true), waitHeld: () => waitHeld(false) }
 
     function settled(): Promise<void> {
       if (isIdle()) return Promise.resolve()

@@ -955,6 +955,27 @@ describe('createDrainPipeline', () => {
       vi.unstubAllEnvs()
     })
 
+    it('resolves each request on a long-lived server within one interval and a send, under traffic that never lets the pipeline idle', async () => {
+      for (const name of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME']) vi.stubEnv(name, '')
+      const drain = vi.fn((_batch: DrainContext[]) => new Promise<void>(resolve => setTimeout(resolve, 300)))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 50, intervalMs: 1000 } })(drain)
+      const latencies: number[] = []
+
+      for (let id = 1; id <= 50; id++) {
+        const endedAt = Date.now()
+        hook(createTestContext(id))
+        void deliverPendingDrains().then(() => {
+          latencies.push(Date.now() - endedAt)
+        })
+        await vi.advanceTimersByTimeAsync(100)
+      }
+      await vi.advanceTimersByTimeAsync(1300)
+
+      expect(latencies).toHaveLength(50)
+      expect(Math.max(...latencies)).toBeLessThanOrEqual(1300)
+      expect(drain.mock.calls[0]?.[0]).toHaveLength(10)
+    })
+
     it('waits for events an explicit flush() is still sending', async () => {
       vi.stubEnv('VERCEL', '1')
       let accept!: () => void
