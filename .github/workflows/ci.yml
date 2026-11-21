@@ -101,8 +101,25 @@ jobs:
       - name: Prepare evlog dist
         run: pnpm exec turbo run dev:prepare --filter=evlog --filter=@evlog/cli
 
+      # Vitest starts the slowest files first when it has their durations from
+      # an earlier run; without them a long file can start last and set the
+      # job's length. Only main saves them.
+      - name: Restore test durations
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: packages/evlog/node_modules/.vite/vitest
+          key: vitest-durations-${{ github.sha }}
+          restore-keys: vitest-durations-
+
       - name: Test evlog with coverage
         run: pnpm --filter evlog run test:coverage
+
+      - name: Save test durations
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: packages/evlog/node_modules/.vite/vitest
+          key: vitest-durations-${{ github.sha }}
 
       # The fs drain needs no network and no secret, so its round-trip e2e runs
       # on every pull request rather than only in e2e.yml.
@@ -250,9 +267,14 @@ jobs:
         with:
           team: ${{ vars.TURBO_TEAM }}
 
+      # Windows has no node_modules cache to restore (only main saves one, and
+      # main never runs this job), so it installs only the CLI and the
+      # workspace packages it builds from. Linux restores main's full cache.
       - name: Set up pnpm and Node
         if: steps.cli.outputs.changed == 'true'
         uses: ./.github/actions/setup
+        with:
+          filters: ${{ runner.os == 'Windows' && '--filter=@evlog/cli...' || '' }}
 
       - name: Build the CLI
         if: steps.cli.outputs.changed == 'true'
