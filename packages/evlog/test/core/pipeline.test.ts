@@ -1018,6 +1018,22 @@ describe('createDrainPipeline', () => {
       expect(hook.stats().delivered).toBe(2)
     })
 
+    it('reports every copy of an event pushed twice when its request runs out of budget', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('unavailable', { status: 503, retryable: true }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5, initialDelayMs: 10 }, requestBudget: 1, onDropped })(drain)
+
+      const ctx = createTestContext(1)
+      hook(ctx)
+      hook(ctx)
+      void deliverPendingDrains()
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(onDropped.mock.calls.map(([events, , reason]) => [events.length, reason])).toEqual([[2, 'deferred']])
+      expect(hook.stats().dropped.deferred).toBe(2)
+    })
+
     it('keeps every flush() retry when a request-end flush joins the batch', async () => {
       vi.stubEnv('VERCEL', '1')
       const drain = vi.fn()
@@ -1222,6 +1238,22 @@ describe('createDrainPipeline', () => {
 
       expect(warn).toHaveBeenCalledOnce()
       expect(warn.mock.calls[0]?.[0]).toContain('stale-buffer: 1 event(s)')
+    })
+
+    it('does not warn stale-buffer while a slow send holds later events back', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create, deliver } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn(() => new Promise<void>(() => {})))
+      await deliver()
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1000)
+      hook(createTestContext(2))
+      await vi.advanceTimersByTimeAsync(5000)
+      hook(createTestContext(3))
+
+      expect(warn).not.toHaveBeenCalled()
     })
 
     it('does not warn stale-buffer when the batch timer fired on time', async () => {

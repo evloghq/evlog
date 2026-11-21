@@ -184,6 +184,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     let lastDropLogAt = Number.NEGATIVE_INFINITY
     /** When the buffer last went from empty to holding events. */
     let bufferedSince = 0
+    let timerDueAt = 0
     /** Events taken out of the buffer for a send and not yet delivered or dropped. */
     const inFlight = new Set<T>()
     /**
@@ -221,12 +222,14 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
 
     function scheduleFlush(): void {
       if (timer !== null || activeFlush) return
+      const delay = Math.min(pauseRemainingMs() || intervalMs, MAX_TIMER_DELAY_MS)
+      timerDueAt = Date.now() + delay
       timer = setTimeout(() => {
         timer = null
         warnIfNotFlushedAtRequestEnd()
         if (!activeFlush) startFlush()
       // A paused pipeline resumes when the pause ends; startFlush() re-arms the timer if it was extended.
-      }, Math.min(pauseRemainingMs() || intervalMs, MAX_TIMER_DELAY_MS))
+      }, delay)
       unrefTimer(timer)
     }
 
@@ -269,11 +272,11 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     }
 
     /**
-     * A push that finds events older than `batch.intervalMs` means their timer never fired:
-     * the runtime was frozen between invocations with events a request left without waitUntil.
+     * A push that finds the batch timer overdue means it never fired: the runtime was frozen
+     * between invocations with events a request left without waitUntil. No timer is armed while a send runs.
      */
     function warnIfStaleBuffer(): void {
-      if (staleBufferWarned || buffer.length === 0 || Date.now() - bufferedSince <= intervalMs || !hasRequestFlushRun()) return
+      if (staleBufferWarned || buffer.length === 0 || timer === null || Date.now() <= timerDueAt || !hasRequestFlushRun()) return
       const platform = detectServerlessPlatform()
       if (!platform) return
       staleBufferWarned = true
@@ -309,9 +312,11 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       }
       if (limited.size === 0) return
       const kept = batch.filter(event => !limited.has(event))
+      const pastDeadline = batch.filter(event => limited.get(event) === 'deadline')
+      const deferred = batch.filter(event => limited.get(event) === 'deferred')
       batch.splice(0, batch.length, ...kept)
-      drop([...limited].filter(([, reason]) => reason === 'deadline').map(([event]) => event), 'deadline', error)
-      drop([...limited].filter(([, reason]) => reason === 'deferred').map(([event]) => event), 'deferred', error)
+      drop(pastDeadline, 'deadline', error)
+      drop(deferred, 'deferred', error)
     }
 
     function drop(events: T[], reason: DrainDropReason, error?: Error, count = events.length): void {
