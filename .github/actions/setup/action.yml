@@ -26,22 +26,53 @@ runs:
   steps:
     - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
+    # Restoring node_modules skips both the pnpm store download and the link
+    # step. Only main and v3 save it, so pull requests read their base
+    # branch's entry instead of each filling the 10 GB repo quota with their
+    # own. The key covers every manifest: a hit skips the install, and with it
+    # the --frozen-lockfile check that a package.json agrees with the lockfile.
+    - name: Restore node_modules
+      id: modules
+      if: inputs.install == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+          examples/*/node_modules
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.node-version || hashFiles('.node-version') }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'apps/*/package.json', 'packages/*/package.json', 'examples/*/package.json') }}-${{ inputs.filters }}
+
     - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
       with:
         node-version-file: .node-version
         node-version: ${{ inputs.node-version }}
         registry-url: ${{ inputs.registry-url }}
-        cache: pnpm
+        # A merge queue run saves under its own temporary ref, which no other
+        # run can read, so its store cache would only push the branches' entries
+        # out of the 10 GB quota.
+        cache: ${{ steps.modules.outputs.cache-hit != 'true' && github.event_name != 'merge_group' && 'pnpm' || '' }}
 
     - name: Install dependencies
       id: install
-      if: inputs.install == 'true'
+      if: inputs.install == 'true' && steps.modules.outputs.cache-hit != 'true'
       # The registry flakes often enough to be worth one retry
       continue-on-error: true
       shell: bash
       run: pnpm install --frozen-lockfile ${{ inputs.filters }}
 
     - name: Install dependencies (retry)
-      if: inputs.install == 'true' && steps.install.outcome == 'failure'
+      if: inputs.install == 'true' && steps.modules.outputs.cache-hit != 'true' && steps.install.outcome == 'failure'
       shell: bash
       run: pnpm install --frozen-lockfile ${{ inputs.filters }}
+
+    - name: Save node_modules
+      if: inputs.install == 'true' && steps.modules.outputs.cache-hit != 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3')
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+          examples/*/node_modules
+        key: ${{ steps.modules.outputs.cache-primary-key }}
