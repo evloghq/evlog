@@ -360,4 +360,35 @@ describe('nitro plugin - enrichment pipeline (T7)', () => {
     await vi.waitFor(() => expect(delivered).toBe(true))
     expect(pipeline.pending).toBe(0)
   })
+
+  it('deferDrain registers the request-end flush with waitUntil on Vercel', async () => {
+    vi.stubEnv('VERCEL', '1')
+    onTestFinished(() => vi.unstubAllEnvs())
+    let accept!: () => void
+    const send = vi.fn((_batch: DrainContext[]) => new Promise<void>((resolve) => {
+      accept = resolve
+    }))
+    const pipeline = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 60_000 } })(send)
+    const waitUntil = vi.fn()
+    vi.mocked(getHeaders).mockReturnValue({})
+    const mockHooks = {
+      callHook: vi.fn().mockImplementation((hookName: string, ctx: DrainContext) => {
+        if (hookName === 'evlog:drain') pipeline(ctx)
+        return Promise.resolve()
+      }),
+    }
+    const mockEvent: ServerEvent = { method: 'GET', path: '/api/fail', context: { requestId: 'req-deferred', waitUntil } }
+
+    await callEnrichAndDrain(asNitroApp(mockHooks), { timestamp: new Date().toISOString(), level: 'error', service: 'test', environment: 'test' }, mockEvent, { deferDrain: true })
+
+    expect(waitUntil).toHaveBeenCalledOnce()
+    let delivered = false
+    void (defined(waitUntil.mock.calls[0], 'waitUntil registration')[0] as Promise<unknown>).then(() => {
+      delivered = true
+    })
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce())
+    expect(delivered).toBe(false)
+    accept()
+    await vi.waitFor(() => expect(delivered).toBe(true))
+  })
 })

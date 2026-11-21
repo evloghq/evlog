@@ -172,7 +172,8 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     let lastDropLogAt = Number.NEGATIVE_INFINITY
     /** When the buffer last went from empty to holding events. */
     let bufferedSince = 0
-    const inFlight = new Set<T[]>()
+    /** Events taken out of the buffer for a send and not yet delivered or dropped. */
+    const inFlight = new Set<T>()
     let heldWaiters: Array<{ events: Set<T>, resolve: () => void }> = []
 
     function pauseRemainingMs(): number {
@@ -250,6 +251,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
 
     /** Resolves request-end waiters whose events are all delivered or dropped. */
     function release(events: T[]): void {
+      for (const event of events) inFlight.delete(event)
       if (heldWaiters.length === 0) return
       heldWaiters = heldWaiters.filter((waiter) => {
         for (const event of events) waiter.events.delete(event)
@@ -324,9 +326,9 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     async function drainBuffer(): Promise<void> {
       while (buffer.length > 0 && pauseRemainingMs() === 0) {
         const batch = buffer.splice(0, batchSize)
-        inFlight.add(batch)
-        const outcome = await sendWithRetry(batch).finally(() => inFlight.delete(batch))
-        if (outcome === 'paused') {
+        for (const event of batch) inFlight.add(event)
+        if (await sendWithRetry(batch) === 'paused') {
+          for (const event of batch) inFlight.delete(event)
           buffer.unshift(...batch)
           dropOverflow()
         }
@@ -387,6 +389,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       const snapshot = buffer.length
       if (snapshot === 0) return
       const toFlush = buffer.splice(0, snapshot)
+      for (const event of toFlush) inFlight.add(event)
       while (toFlush.length > 0) {
         const batch = toFlush.splice(0, batchSize)
         // flush() delivers now or gives up: a pause left by the provider drops the batch instead of holding shutdown.
@@ -416,10 +419,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     }
 
     function flushHeld(): Promise<void> {
-      const events = new Set<T>(buffer)
-      for (const batch of inFlight) {
-        for (const event of batch) events.add(event)
-      }
+      const events = new Set<T>([...buffer, ...inFlight])
       if (events.size === 0) return Promise.resolve()
       const done = new Promise<void>((resolve) => {
         heldWaiters.push({ events, resolve })

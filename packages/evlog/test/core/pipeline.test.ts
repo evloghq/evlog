@@ -950,6 +950,36 @@ describe('createDrainPipeline', () => {
     })
   })
 
+  describe('request-end snapshot', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it('waits for events an explicit flush() is still sending', async () => {
+      vi.stubEnv('VERCEL', '1')
+      let accept!: () => void
+      const drain = vi.fn((_batch: DrainContext[]) => new Promise<void>((resolve) => {
+        accept = resolve
+      }))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 } })(drain)
+
+      hook(createTestContext(1))
+      const flushed = hook.flush()
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(drain).toHaveBeenCalledOnce()
+      expect(done).toBe(false)
+
+      accept()
+      await flushed
+      await vi.advanceTimersByTimeAsync(0)
+      expect(done).toBe(true)
+    })
+  })
+
   describe('serverless warning', () => {
     async function loadFresh() {
       delete (globalThis as Record<symbol, unknown>)[Symbol.for('evlog.drains.v2')]
