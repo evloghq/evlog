@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -23,6 +24,9 @@ env:
   TURBO_CACHE: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'remote:rw' || 'local:rw' }}
   # Without this, turbo silently treats every package as affected
   TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+  # Pull requests run what their diff can reach; the merge queue runs
+  # everything, so nothing reaches main on a narrowed selection.
+  AFFECTED: ${{ github.event_name != 'merge_group' && '--affected' || '' }}
 
 jobs:
   quality:
@@ -52,10 +56,10 @@ jobs:
       # any on a cold CI checkout, so vue-tsc reports implicit-any on every
       # query callback. It never ran here before either. Tracked separately.
       - name: Lint
-        run: pnpm exec turbo run lint --affected
+        run: pnpm exec turbo run lint $AFFECTED
 
       - name: Typecheck
-        run: pnpm exec turbo run typecheck --affected --filter='!evlog-telemetry'
+        run: pnpm exec turbo run typecheck $AFFECTED --filter='!evlog-telemetry'
 
   # The tests run as three jobs so the slowest suite, not the sum of all of
   # them, sets how long a pull request waits.
@@ -141,9 +145,9 @@ jobs:
       # baseline) that unit tests cover only piecewise. Gated to changes that
       # can affect it, so a docs-only pull request skips the cost.
       - name: CLI sandbox smoke
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         run: |
-          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs | grep -q .; then
+          if [ "${{ github.event_name }}" = merge_group ] || git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs | grep -q .; then
             node scripts/cli-sandbox.mjs --smoke
           else
             echo "CLI untouched — smoke skipped"
@@ -174,7 +178,7 @@ jobs:
 
       # evlog and @evlog/cli run in their own jobs, under coverage, which enforces their thresholds
       - name: Test workspace
-        run: pnpm exec turbo run test --affected --filter='!evlog' --filter='!@evlog/cli'
+        run: pnpm exec turbo run test $AFFECTED --filter='!evlog' --filter='!@evlog/cli'
 
       # content-lint lives in scripts/, outside the workspace graph, so turbo
       # never sees it. Its fixture test is what keeps the content pass honest.
@@ -204,7 +208,7 @@ jobs:
   # Node 22.0 or 22.1, so that leg runs `init` with --no-agents.
   cli-compat:
     name: CLI smoke (${{ matrix.name }})
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -234,7 +238,7 @@ jobs:
       - name: Check whether the CLI changed
         id: cli
         run: |
-          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs .github/workflows/ci.yml | grep -q .; then
+          if [ "${{ github.event_name }}" = merge_group ] || git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs .github/workflows/ci.yml | grep -q .; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "CLI untouched — smoke skipped"
@@ -294,7 +298,7 @@ jobs:
 
       # --continue: one broken example must not cancel the others
       - name: Build affected examples
-        run: pnpm exec turbo run build --affected --continue --filter='./examples/*'
+        run: pnpm exec turbo run build $AFFECTED --continue --filter='./examples/*'
 
   # Report-only (no fail threshold in 3.0). Base and head run on this same
   # runner, so the comparison measures the change, not the machine. The job is
@@ -373,6 +377,7 @@ jobs:
     # No preview for fork PRs: pkg.pr.new would serve the fork's code under the evlog name.
     if: >-
       (github.event_name != 'push' || github.ref == 'refs/heads/main')
+      && github.event_name != 'merge_group'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: read
