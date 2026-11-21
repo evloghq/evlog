@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from 'vitest'
 import type { DrainContext } from '../../src/types'
 import { initLogger } from '../../src/logger'
 import { createDrainPipeline } from '../../src/pipeline'
@@ -484,9 +484,15 @@ describe('createMiddlewareLogger', () => {
       expect(drainSettled).toBe(true)
     })
 
-    it('registers pipeline settled() with waitUntil so buffered batches are delivered', async () => {
+    it('sends a pipeline batch at request end and keeps waitUntil open until it is delivered', async () => {
+      vi.stubEnv('VERCEL', '1')
+
+      onTestFinished(() => vi.unstubAllEnvs())
       await withFakeTimers(async () => {
-        const send = vi.fn().mockResolvedValue(undefined)
+        let accept!: () => void
+        const send = vi.fn(() => new Promise<void>((resolve) => {
+          accept = resolve
+        }))
         const drain = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(send)
         const waitUntil = vi.fn()
 
@@ -499,20 +505,45 @@ describe('createMiddlewareLogger', () => {
 
         await finish({ status: 200 })
 
-        expect(waitUntil).toHaveBeenCalledTimes(2)
-        const [settledPromise] = defined(waitUntil.mock.calls[1], 'settled registration')
+        expect(waitUntil).toHaveBeenCalledOnce()
         let delivered = false
-        void (settledPromise as Promise<void>).then(() => {
+        void (defined(waitUntil.mock.calls[0], 'waitUntil registration')[0] as Promise<void>).then(() => {
           delivered = true
         })
 
         await vi.advanceTimersByTimeAsync(0)
+        expect(send).toHaveBeenCalledOnce()
         expect(delivered).toBe(false)
-        expect(send).not.toHaveBeenCalled()
 
-        await vi.advanceTimersByTimeAsync(1000)
+        accept()
+        await vi.advanceTimersByTimeAsync(0)
         expect(delivered).toBe(true)
-        expect(send).toHaveBeenCalledTimes(1)
+        expect(drain.pending).toBe(0)
+      })
+    })
+
+    it('leaves a pipeline batch to batch.intervalMs on a long-lived server that exposes waitUntil', async () => {
+      for (const name of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME']) vi.stubEnv(name, '')
+      onTestFinished(() => vi.unstubAllEnvs())
+      await withFakeTimers(async () => {
+        const send = vi.fn().mockResolvedValue(undefined)
+        const drain = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(send)
+        const waitUntil = vi.fn()
+
+        const { finish } = createMiddlewareLogger({ method: 'GET', path: '/api/test', drain, waitUntil })
+        await finish({ status: 200 })
+
+        let settled = false
+        void (defined(waitUntil.mock.calls[0], 'waitUntil registration')[0] as Promise<void>).then(() => {
+          settled = true
+        })
+        await vi.advanceTimersByTimeAsync(999)
+        expect(send).not.toHaveBeenCalled()
+        expect(settled).toBe(false)
+
+        await vi.advanceTimersByTimeAsync(1)
+        expect(send).toHaveBeenCalledOnce()
+        expect(settled).toBe(true)
       })
     })
 

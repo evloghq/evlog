@@ -1,4 +1,5 @@
 import { registerDiskPrettyErrorSnippetReader } from '../shared/register-disk-snippet'
+import { deliverPendingDrains } from '../shared/shutdown'
 import type { DrainContext, EnvironmentContext, LogLevel, Log, RedactConfig, SamplingConfig } from '../types'
 import type {
   NextInstrumentationErrorContext,
@@ -107,9 +108,8 @@ function createLifecycleSafeDrain(
       const run = async (): Promise<void> => {
         try {
           await drain(ctx)
-          // Buffered drains finish enqueueing before their batches are delivered.
-          const { settled } = drain as { settled?: () => Promise<void> }
-          if (typeof settled === 'function') await settled()
+          // A pipeline drain only buffers: deliver its events before after() lets the invocation end.
+          await deliverPendingDrains()
           resolve()
         } catch (error) {
           reject(error)

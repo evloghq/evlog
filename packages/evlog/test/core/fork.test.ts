@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach, onTestFinished } from 'vitest'
 import type { DrainContext, RequestLogger, WideEvent } from '../../src/types'
 import { createRequestLogger, initLogger } from '../../src/logger'
 import { createDrainPipeline } from '../../src/pipeline'
@@ -234,8 +234,14 @@ describe('log.fork() lifetime', () => {
   })
 
   it('keeps waitUntil open until a pipeline drain delivers the child event, without making the fork wait for it', async () => {
+    vi.stubEnv('VERCEL', '1')
+
+    onTestFinished(() => vi.unstubAllEnvs())
     await withFakeTimers(async () => {
-      const send = vi.fn<(batch: DrainContext[]) => Promise<void>>().mockResolvedValue(undefined)
+      let accept!: () => void
+      const send = vi.fn((_batch: DrainContext[]) => new Promise<void>((resolve) => {
+        accept = resolve
+      }))
       const registered: Array<Promise<unknown>> = []
       const fork = startRequest({
         drain: createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(send),
@@ -245,18 +251,18 @@ describe('log.fork() lifetime', () => {
       })
 
       await fork('enqueue', () => {})
-      expect(send).not.toHaveBeenCalled()
 
       let delivered = false
       void defined(registered[0], 'registered lifetime').then(() => {
         delivered = true
       })
       await vi.advanceTimersByTimeAsync(0)
+      expect(send).toHaveBeenCalledOnce()
       expect(delivered).toBe(false)
 
-      await vi.advanceTimersByTimeAsync(1000)
+      accept()
+      await vi.advanceTimersByTimeAsync(0)
       expect(delivered).toBe(true)
-      expect(send).toHaveBeenCalledOnce()
       expect(send.mock.calls[0]?.[0][0]?.event).toMatchObject({ operation: 'enqueue' })
       expect(registered).toHaveLength(1)
     })

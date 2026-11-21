@@ -87,7 +87,7 @@ drain.stats()         // { delivered, dropped: { 'buffer-full', rejected, 'retri
 
 ## Serverless
 
-`drain(ctx)` returns after buffering, so delivery must outlive the response. When the pipeline is passed as the `drain` option of a framework integration, the shared middleware registers `drain.settled()` with the runtime's `waitUntil` (Next `after()`, Workers `ctx.waitUntil`) automatically: the instance stays alive until the batch is delivered or dropped. Next.js global drains configured through `createInstrumentation()` start inside `after()` and await `drain.settled()` after enqueueing. `batch.intervalMs` bounds when the first delivery attempt starts; retry backoff can extend the lifetime past it. Nitro's `evlog:drain` hook path can't do this for you; on Cloudflare register `drain.settled()` with the execution context's `waitUntil` where the hook is wired.
+`drain(ctx)` returns after buffering, so delivery must outlive the response. On Cloudflare Workers, Vercel, Netlify and AWS Lambda, every integration that has the request's `waitUntil` (Next `after()`, Workers `ctx.waitUntil`, Nitro's request context, including `evlog:drain` hook pipelines) sends what the pipeline holds at request end, without waiting for `batch.intervalMs`, and keeps the instance alive until those events are delivered or dropped. A provider pause longer than `retry.maxDelayMs` drops them as `rate-limited`. On long-lived servers that expose `waitUntil` (Nitro 3 on Node, `next start`), batches still wait for `batch.intervalMs`. A pipeline holding events past `intervalMs` on those platforms with no request-end flush warns once.
 
 ## Common Patterns
 
@@ -175,7 +175,7 @@ process.on('SIGTERM', () => drain.flush())
 
 - [ ] Pipeline wraps the adapter for production use
 - [ ] `await drain.flush()` before any `process.exit()`; no `process.on('SIGTERM', () => drain.flush())` listener that blocks the default exit
-- [ ] On serverless, the pipeline is passed as the integration's `drain` option (settled() registration is automatic); Nitro-on-Cloudflare wires `drain.settled()` into `waitUntil` manually
+- [ ] On serverless, the integration receives the platform's `waitUntil` (Workers `ctx`, Next `after()`, Nitro context), so the request-end flush runs; no manual `drain.settled()` registration
 - [ ] `onDropped` callback logs or reports dropped events
 - [ ] Retries are owned by one layer: no explicit `retries` on the adapter config when the pipeline wraps it
 - [ ] Batch size and interval are appropriate for the traffic volume
