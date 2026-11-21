@@ -23,7 +23,9 @@ import { configuredService, planWiring } from './wiring'
 import type { FileAction, ManualStep } from './wiring'
 import { readProject } from './insight'
 import type { ProjectInsight } from './insight'
-import { detectPackageManager, installCommand, runInstall } from './pm'
+import { previewActions, previewInstall } from './diff'
+import type { FilePreview } from './diff'
+import { detectPackageManager, installCommand, installSpecs, runInstall } from './pm'
 import type { PackageManager } from './pm'
 import {
   askAnswers,
@@ -40,6 +42,7 @@ import {
   noteSkillsStarting,
   noteStep,
   openInteractive,
+  showPreview,
   runVerification,
 } from './prompts'
 import type { ConnectorChoice, InitAnswers } from './prompts'
@@ -62,6 +65,8 @@ export interface InitResult {
   install: InstallOutcome
   /** Files written (or that would be, under `--dry-run`). */
   written: FileAction[]
+  /** Under `--dry-run`, what each written file and the install would change. Empty otherwise. */
+  preview: FilePreview[]
   already: string[]
   /** What the setup gives that no file shows, such as the agent's logs tool. */
   notes: string[]
@@ -297,6 +302,7 @@ export async function runInit(
       packageManager,
       install: { status: 'already', command },
       written: [],
+      preview: [],
       already: [],
       notes: [],
       manual: [],
@@ -447,11 +453,17 @@ export async function runInit(
     ...(wouldAddSkills ? [agentGuide!.command] : []),
   ]
 
+  /* Read before anything is written: the diff is against the files as they are. */
+  const preview = dryRun
+    ? [...(wouldInstall ? [previewInstall(project.packageDir, installSpecs(packages), command)] : []), ...previewActions(plan.actions)]
+    : []
+
   if (interactive && dryRun) {
     /* `--dry-run` promises the plan. The confirm step is the only thing that
        renders it, and interactive runs suppress the written report — so
        without this the terminal shows the questions and then nothing. */
     showPlan(plan.actions, plan.already, runs)
+    showPreview(ctx, preview)
   }
 
   if (interactive && !dryRun) {
@@ -571,6 +583,7 @@ export async function runInit(
     packageManager,
     install,
     written: plan.actions,
+    preview,
     already: plan.already,
     notes: plan.notes,
     host: host ?? null,
@@ -612,6 +625,7 @@ function cancelledResult(input: {
     packageManager: input.packageManager,
     install: { status: 'skipped', command: input.command },
     written: [],
+    preview: [],
     already: [],
     notes: [],
     manual: [],

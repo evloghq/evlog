@@ -4,6 +4,7 @@ import { DOCS_URL, createStyle } from '../../core/output'
 import { skillsReportLines } from '../agents/report'
 import { getFramework } from '../frameworks'
 import { findDestination, findEnricher, findExtra, findSamplingPreset } from './catalog'
+import type { FilePreview } from './diff'
 import type { InitResult } from './run'
 
 function docLink(ctx: CliContext, path: string): string {
@@ -72,12 +73,15 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
     if (install.error) lines.push(`   ${paint('dim', install.error)}`)
   }
 
-  for (const action of result.written) {
-    const verb = result.dryRun
-      ? (action.kind === 'create' ? 'would create' : 'would update')
-      : (action.kind === 'create' ? 'created' : 'updated')
-    const glyph = result.dryRun ? paint('yellow', '·') : paint('green', '✓')
-    lines.push(`${glyph} ${paint('dim', verb)} ${action.relative}`)
+  if (result.dryRun) {
+    for (const preview of result.preview) {
+      lines.push(`${paint('yellow', '·')} ${paint('dim', preview.kind === 'create' ? 'would create' : 'would update')} ${preview.file}${preview.by ? paint('dim', ` · by ${preview.by}`) : ''}`)
+      lines.push(...previewLines(ctx, preview).map(line => `   ${line}`))
+    }
+  } else {
+    for (const action of result.written) {
+      lines.push(`${paint('green', '✓')} ${paint('dim', action.kind === 'create' ? 'created' : 'updated')} ${action.relative}`)
+    }
   }
 
   for (const note of result.already) {
@@ -137,6 +141,17 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
   lines.push(`${paint('dim', 'setup guide →')} ${docLink(ctx, getFramework(answers.framework).docs)}`)
 
   return lines.join('\n')
+}
+
+/** A preview's diff hunks, coloured the way `git diff` colours them. */
+export function previewLines(ctx: CliContext, preview: FilePreview): string[] {
+  const { paint } = createStyle(ctx)
+  return preview.lines.map((line) => {
+    if (line.startsWith('@@')) return paint('cyan', line)
+    if (line.startsWith('+')) return paint('green', line)
+    if (line.startsWith('-')) return paint('red', line)
+    return paint('dim', line)
+  })
 }
 
 /** Header for a workspace run, above each app's own report. */

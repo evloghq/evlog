@@ -35,9 +35,14 @@ export function evlogPackageSpec(cliVersion: string, name = 'evlog'): string {
   return cliVersion.includes('-') ? `${name}@beta` : name
 }
 
+/** The specs init installs the packages with, such as `evlog@beta`. */
+export function installSpecs(packages: readonly string[]): string[] {
+  return packages.map(name => evlogPackageSpec(VERSION, name))
+}
+
 /** The command line that adds the packages, as the user would type it. */
 export function installCommand(manager: PackageManager, packages: readonly string[] = ['evlog']): string {
-  const specs = packages.map(name => evlogPackageSpec(VERSION, name)).join(' ')
+  const specs = installSpecs(packages).join(' ')
   return manager === 'npm' ? `npm install ${specs}` : `${manager} add ${specs}`
 }
 
@@ -47,7 +52,7 @@ export async function runInstall(
   cwd: string,
   packages: readonly string[] = ['evlog'],
 ): Promise<{ ok: true } | { ok: false, error: string }> {
-  const specs = packages.map(name => evlogPackageSpec(VERSION, name))
+  const specs = installSpecs(packages)
   const args = manager === 'npm' ? ['install', ...specs] : ['add', ...specs]
   try {
     await exec(manager, args, { cwd, timeout: 5 * 60_000 })

@@ -206,6 +206,7 @@ function toJson(result: InitResult): Record<string, unknown> {
     packageManager: result.packageManager,
     install: result.install,
     written: result.written.map(action => ({ file: action.relative, kind: action.kind })),
+    preview: result.preview.map(file => ({ file: file.file, kind: file.kind, ...(file.by ? { by: file.by } : {}), diff: file.lines.join('\n') })),
     already: result.already,
     notes: result.notes,
     agentServices: result.agentServices,

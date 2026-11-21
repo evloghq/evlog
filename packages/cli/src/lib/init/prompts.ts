@@ -31,6 +31,8 @@ import {
 } from './catalog'
 import type { DrainId, EnricherId, ExtraGroup, ExtraId, OfferContext, SamplingProfile } from './catalog'
 import type { FileAction, ManualStep } from './wiring'
+import type { FilePreview } from './diff'
+import { previewLines } from './report'
 
 /** Every answer `init` needs, however it was obtained. */
 export interface InitAnswers {
@@ -295,6 +297,13 @@ export async function askVercelConnector(projectId: string, reusable: readonly L
   }))
   if (answer === '\0skip') return null
   return answer === '\0create' ? { connector: create, create: true } : { connector: answer, create: false }
+}
+
+/** Each file's diff under `--dry-run`, one box per file. */
+export function showPreview(ctx: CliContext, preview: readonly FilePreview[]): void {
+  for (const file of preview) {
+    note(previewLines(ctx, file).join('\n'), file.by ? `${file.file} · by ${file.by}` : file.file)
+  }
 }
 
 export async function confirmPlan(
