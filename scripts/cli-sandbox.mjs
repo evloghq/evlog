@@ -596,7 +596,7 @@ ensureCliBuilt()
 mkdirSync(SANDBOX, { recursive: true })
 
 if (args.includes('--smoke-app')) {
-  process.exit(smokeApp(apps[0]))
+  process.exitCode = smokeApp(apps[0])
 } else if (args.includes('--smoke')) {
   await smoke(apps)
 } else if (args.includes('--reset')) {
