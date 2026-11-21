@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { CliContext } from '../core/context'
+import { eveAgentDirs } from './frameworks/eve/mount'
 import { resolveProject } from './project'
 
 export const EVE_INSTRUMENTATION = `import { evlogTraces } from '@evlog/eve/instrumentation'
@@ -22,11 +23,12 @@ export interface SetupEveResult {
 }
 
 /**
- * Where an eve agent's `evlogTraces()` instrumentation stands, without writing.
+ * Where an eve agent's `evlogTraces()` instrumentation stands, without writing,
+ * for the agent at `agentDir` (`agents/<name>/agent` in a workspace).
  * `evlog init` plans the file from this, and `evlog setup eve` writes it.
  */
-export function inspectEveInstrumentation(packageDir: string): SetupEveResult & { state: 'present' | 'missing' | 'conflict' } {
-  const dir = join('agent', 'instrumentation')
+export function inspectEveInstrumentation(packageDir: string, agentDir = 'agent'): SetupEveResult & { state: 'present' | 'missing' | 'conflict' } {
+  const dir = join(agentDir, 'instrumentation')
   const file = join(dir, 'evlog.ts')
   if (existsSync(join(packageDir, dir))) {
     for (const name of readdirSync(join(packageDir, dir))) {
@@ -39,17 +41,26 @@ export function inspectEveInstrumentation(packageDir: string): SetupEveResult & 
 }
 
 /**
- * Writes `agent/instrumentation/evlog.ts` for an eve agent, which extensions
- * cannot declare themselves. Never overwrites: a run on a project that has
- * it, or another file exporting `evlogTraces()`, changes nothing.
- * With `check`, it only reports what it would do.
+ * Writes `instrumentation/evlog.ts` into each agent of an eve project (`agent/`,
+ * or every `agents/<name>/agent/` of a workspace), which extensions cannot
+ * declare themselves. Never overwrites: an agent that has it, or another file
+ * exporting `evlogTraces()`, is left as it is. With `check`, it only reports
+ * what it would do.
  */
-export async function runSetupEve(ctx: CliContext, options: { check?: boolean } = {}): Promise<SetupEveResult> {
+export async function runSetupEve(ctx: CliContext, options: { check?: boolean } = {}): Promise<SetupEveResult[]> {
   const project = await resolveProject(ctx.cwd)
-  const found = inspectEveInstrumentation(project.packageDir)
-  if (found.state !== 'missing' || options.check) return found
-  const path = join(project.packageDir, found.file)
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, EVE_INSTRUMENTATION)
-  return { file: found.file, state: 'written' }
+  const agents = eveAgentDirs(project.packageDir)
+  const results: SetupEveResult[] = []
+  for (const agentDir of agents.length > 0 ? agents : ['agent']) {
+    const found = inspectEveInstrumentation(project.packageDir, agentDir)
+    if (found.state !== 'missing' || options.check) {
+      results.push(found)
+      continue
+    }
+    const path = join(project.packageDir, found.file)
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(path, EVE_INSTRUMENTATION)
+    results.push({ file: found.file, state: 'written' })
+  }
+  return results
 }

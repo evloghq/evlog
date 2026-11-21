@@ -38,7 +38,7 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
   const dev = findDestination(answers.devDrain)?.label ?? answers.devDrain
   const prod = answers.prodDrains.map(id => findDestination(id)?.label ?? id)
   lines.push([
-    paint('bold', answers.framework),
+    paint('bold', result.host ? `${answers.framework} + ${result.host}` : answers.framework),
     paint('dim', `service ${answers.service}`),
     paint('dim', `dev → ${dev}`),
     paint('dim', `prod → ${prod.length > 0 ? prod.join(' + ') : 'not set'}`),
@@ -81,6 +81,17 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
 
   for (const note of result.already) {
     lines.push(paint('dim', `· ${note}`))
+  }
+
+  for (const note of result.notes) {
+    lines.push(`${paint('cyan', 'ℹ')} ${paint('dim', note)}`)
+  }
+
+  if (result.vercel) {
+    const { vercel } = result
+    if (vercel.status === 'ready') lines.push(`${paint('green', '✓')} ${paint('dim', `the deployed agent reads its Vercel runtime logs through ${vercel.connector}`)}`)
+    else if (vercel.status === 'pending') lines.push(`${paint('yellow', '·')} ${paint('dim', `would attach ${vercel.connector} to ${vercel.projectId} for the agent's Vercel logs`)}`)
+    else lines.push(`${paint('red', '✗')} ${paint('dim', `${vercel.connector} is named in evlog.config.ts but not ready: ${vercel.error}`)}`)
   }
 
   for (const id of result.dropped) {

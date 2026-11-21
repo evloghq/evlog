@@ -14,7 +14,7 @@ export interface FrameworkDetection {
   configs?: readonly string[]
   /** Any of these dependencies rules the framework out. */
   unlessDeps?: readonly string[]
-  /** Paths relative to the package root that must all exist, on top of a match above. */
+  /** Paths relative to the package root, at least one of which must exist, on top of a match above. */
   requires?: readonly string[]
   /**
    * The lowest major the declared dependency in `deps` may be. A range with no

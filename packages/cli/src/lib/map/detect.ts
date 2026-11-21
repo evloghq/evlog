@@ -9,6 +9,8 @@ import type { Framework } from './types'
 
 export interface DetectionResult {
   framework: Framework
+  /** The other frameworks that matched, most specific first. */
+  also: Framework[]
   warnings: string[]
 }
 
@@ -18,7 +20,7 @@ function hasDep(pkg: NonNullable<ProjectInfo['packageJson']>, names: readonly st
 }
 
 /** The major a dependency range names, or `null` when it names none (`workspace:*`, `catalog:`, `latest`). */
-function rangeMajor(range: string): number | null {
+export function rangeMajor(range: string): number | null {
   const version = range.startsWith('npm:') ? range.slice(range.lastIndexOf('@') + 1) : range
   const major = /\d+/.exec(version)
   return major ? Number(major[0]) : null
@@ -37,7 +39,7 @@ function hasConfig(root: string, patterns: readonly string[]): boolean {
 
 function matches(detect: FrameworkDetection, root: string, pkg: NonNullable<ProjectInfo['packageJson']>): boolean {
   if (detect.unlessDeps && hasDep(pkg, detect.unlessDeps)) return false
-  if (detect.requires && !detect.requires.every(path => existsSync(join(root, path)))) return false
+  if (detect.requires && !detect.requires.some(path => existsSync(join(root, path)))) return false
   if (detect.minMajor !== undefined && !meetsMajor(pkg, detect.deps, detect.minMajor)) return false
   return hasDep(pkg, detect.deps) || (!!detect.configs && hasConfig(root, detect.configs))
 }
@@ -50,7 +52,7 @@ function matches(detect: FrameworkDetection, root: string, pkg: NonNullable<Proj
  */
 export function detectFramework(project: ProjectInfo, override?: Framework): DetectionResult {
   if (override) {
-    return { framework: override, warnings: [] }
+    return { framework: override, also: [], warnings: [] }
   }
 
   if (!project.packageJson) {
@@ -79,5 +81,5 @@ export function detectFramework(project: ProjectInfo, override?: Framework): Det
     warnings.push(`Multiple frameworks detected; using ${best.id} (${others} also matched)`)
   }
 
-  return { framework: best.id, warnings }
+  return { framework: best.id, also: found.slice(1).map(m => m.id), warnings }
 }

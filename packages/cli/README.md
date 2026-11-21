@@ -48,6 +48,7 @@ pnpm evlog map
 | `evlog init --dry-run` | Print the plan without touching a file |
 | `evlog init --service <name>` | Service name on every wide event (default: package name, unscoped) |
 | `evlog init --no-install` | Print the install command instead of running it |
+| `evlog init --no-agent-logs` | eve: hide the agent's `evlog__logs` tool, which reads its own events |
 | `evlog init --no-agents` | Skip all of it: no `AGENTS.md`, no skills |
 | `evlog agents` | Write the evlog conventions into `AGENTS.md`, install the skills globally via `npx skills add` |
 | `evlog agents --skills <a,b>` | Install only these skills (default: every published one) |

@@ -81,6 +81,7 @@ describe('resolveAnswers', () => {
       enrichers: [],
       sampling: 'all',
       agentGuide: false,
+      agentLogs: true,
       install: true,
     })
   })

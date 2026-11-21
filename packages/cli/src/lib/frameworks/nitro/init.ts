@@ -36,7 +36,7 @@ export default defineNitroConfig({
 
 /** Registers the module only: it loads `evlog.config.ts`, where the settings live. */
 export default function planNitro(input: WiringInput): WiringPlan {
-  const plan: WiringPlan = { actions: [], manual: [], already: [] }
+  const plan: WiringPlan = { actions: [], manual: [], already: [], notes: [] }
   const specifier = nitroModuleSpecifier(input.nitroMajor, input.evlogMajor)
   const configPath = firstExisting(input.root, configCandidates('nitro.config'))
 

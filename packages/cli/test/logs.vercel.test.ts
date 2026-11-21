@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -470,9 +471,9 @@ describe('evlog setup vercel --check', () => {
     const { vercel } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
     const check = () => runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
     expect((await check()).at(-1)).toMatchObject({ id: 'traces', status: 'warn' })
-    expect(await runSetupEve(ctxAt(cwd), { check: true })).toEqual({ file: join('agent', 'instrumentation', 'evlog.ts'), state: 'missing' })
-    expect(await runSetupEve(ctxAt(cwd))).toEqual({ file: join('agent', 'instrumentation', 'evlog.ts'), state: 'written' })
-    expect(await runSetupEve(ctxAt(cwd))).toMatchObject({ state: 'present' })
+    expect(await runSetupEve(ctxAt(cwd), { check: true })).toEqual([{ file: join('agent', 'instrumentation', 'evlog.ts'), state: 'missing' }])
+    expect(await runSetupEve(ctxAt(cwd))).toEqual([{ file: join('agent', 'instrumentation', 'evlog.ts'), state: 'written' }])
+    expect(await runSetupEve(ctxAt(cwd))).toMatchObject([{ state: 'present' }])
     expect((await check()).at(-1)).toMatchObject({ id: 'traces', status: 'ok' })
   })
 
@@ -480,7 +481,18 @@ describe('evlog setup vercel --check', () => {
     const cwd = await linkedProject()
     await mkdir(join(cwd, 'agent', 'instrumentation'), { recursive: true })
     await writeFile(join(cwd, 'agent', 'instrumentation', 'evlog.ts'), 'export default {}\n')
-    expect(await runSetupEve(ctxAt(cwd))).toMatchObject({ state: 'conflict' })
+    expect(await runSetupEve(ctxAt(cwd))).toMatchObject([{ state: 'conflict' }])
+  })
+
+  it('writes into each member of an agent workspace, never a root agent/', async () => {
+    const cwd = await linkedProject()
+    await mkdir(join(cwd, 'agents', 'support', 'agent'), { recursive: true })
+    await mkdir(join(cwd, 'agents', 'research', 'agent'), { recursive: true })
+    expect(await runSetupEve(ctxAt(cwd))).toEqual([
+      { file: join('agents', 'research', 'agent', 'instrumentation', 'evlog.ts'), state: 'written' },
+      { file: join('agents', 'support', 'agent', 'instrumentation', 'evlog.ts'), state: 'written' },
+    ])
+    expect(existsSync(join(cwd, 'agent'))).toBe(false)
   })
 })
 

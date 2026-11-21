@@ -75,7 +75,7 @@ npx evlog init --yes \
   --sampling medium
 ```
 
-Useful flags: `--framework` (override detection: `nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`, `effect`, `eve`), `--prodDrain` (comma-separated: `axiom`, `otlp`, `posthog`, `sentry`, `better-stack`, `datadog`, `hyperdx`, `sazabi`, `loki`, `clickhouse`), `--extras` (`enrichers`, `pipeline`, `sampling`, `vite`, `error-catalog`, `audit-catalog`, `ai`, `better-auth`), `--enrichers`, `--sampling` (traffic tier: `all`, `low`, `medium`, `high`, `very-high`), `--apps` (monorepo: which workspace packages), `--no-install`. Review the `--dry-run` output with the user before applying. Docs: https://www.evlog.dev/cli/init
+Useful flags: `--framework` (override detection: `nuxt`, `nitro`, `next`, `tanstack-start`, `hono`, `express`, `fastify`, `effect`, `eve`), `--prodDrain` (comma-separated: `axiom`, `otlp`, `posthog`, `sentry`, `better-stack`, `datadog`, `hyperdx`, `sazabi`, `loki`, `clickhouse`), `--extras` (`enrichers`, `pipeline`, `sampling`, `vite`, `error-catalog`, `audit-catalog`, `ai`, `better-auth`), `--enrichers`, `--sampling` (traffic tier: `all`, `low`, `medium`, `high`, `very-high`), `--apps` (monorepo: which workspace packages), `--no-install`, `--no-agent-logs` (eve: hide the agent's `evlog__logs` tool). In an eve agent inside a Next.js or Nuxt app, init sets up both from one `evlog.config.ts`; `--framework eve` or `--framework next` picks one. Review the `--dry-run` output with the user before applying. Docs: https://www.evlog.dev/cli/init
 
 ### 2. Score: `evlog map`
 
