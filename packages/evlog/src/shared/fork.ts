@@ -2,6 +2,7 @@ import type { AsyncLocalStorage } from 'node:async_hooks'
 import type { RequestLogger } from '../types'
 import type { AuditableLogger } from '../audit'
 import { createRequestLogger, getGlobalDrain, outputWideEvent } from '../logger'
+import { deliverPendingDrains } from './shutdown'
 import { extractErrorStatus } from './errors'
 import type { MiddlewareLoggerOptions } from './middleware'
 import { runEnrichAndDrain } from './middleware'
@@ -128,8 +129,7 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): Prom
 
   if (waitUntil) {
     // Covers a pipeline's batch delivery without making an awaited fork wait for it.
-    const { settled } = (middlewareOptions.drain ?? getGlobalDrain() ?? {}) as { settled?: () => Promise<void> }
-    waitUntil(typeof settled === 'function' ? lifetime.then(() => settled()) : lifetime)
+    waitUntil(lifetime.then(deliverPendingDrains))
   }
 
   return lifetime

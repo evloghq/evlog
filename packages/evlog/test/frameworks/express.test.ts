@@ -1,11 +1,12 @@
 import http from 'node:http'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from 'vitest'
 import express from 'express'
 import request from 'supertest'
 import { initLogger } from '../../src/logger'
 import { createError } from '../../src/error'
 import type { RequestLogger } from '../../src/types'
 import { evlog, useLogger } from '../../src/express/index'
+import { createDrainPipeline } from '../../src/pipeline'
 import {
   assertDrainCalledWith,
   assertEnrichBeforeDrain,
@@ -479,5 +480,31 @@ describe('evlog/express', () => {
       expect(ctx.event.connectionClosed).toBe(true)
       expect(ctx.event.path).toBe('/api/slow')
     })
+  })
+})
+
+describe('evlog/express on Vercel', () => {
+  it('registers the request-end flush with the Vercel request context waitUntil', async () => {
+    vi.stubEnv('VERCEL', '1')
+    const context = Symbol.for('@vercel/request-context')
+    const waitUntil = vi.fn()
+    ;(globalThis as Record<symbol, unknown>)[context] = { get: () => ({ waitUntil }) }
+    onTestFinished(() => {
+      vi.unstubAllEnvs()
+      delete (globalThis as Record<symbol, unknown>)[context]
+    })
+    initLogger({ silent: true, _suppressDrainWarning: true } as Parameters<typeof initLogger>[0])
+    const send = vi.fn().mockResolvedValue(undefined)
+    const drain = createDrainPipeline({ batch: { size: 50, intervalMs: 60_000 } })(send)
+    const app = express()
+    app.use(evlog({ drain }))
+    app.get('/api/orders', (_req, res) => res.json({ ok: true }))
+
+    await request(app).get('/api/orders').expect(200)
+
+    await vi.waitFor(() => expect(waitUntil).toHaveBeenCalledOnce())
+    await waitUntil.mock.calls[0]?.[0]
+    expect(send).toHaveBeenCalledOnce()
+    expect(drain.pending).toBe(0)
   })
 })

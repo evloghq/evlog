@@ -1,5 +1,5 @@
 import 'next/dist/server/node-environment-baseline'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi, onTestFinished } from 'vitest'
 import { NextRequest } from 'next/server'
 import { createWorkStore } from 'next/dist/server/async-storage/work-store'
 import { createRequestStoreForRender } from 'next/dist/server/async-storage/request-store'
@@ -98,8 +98,14 @@ describe('instrumentation with the Next after runtime', () => {
   })
 
   it('returns a wrapped route response before delivering its buffered global drain', async () => {
+    vi.stubEnv('VERCEL', '1')
+
+    onTestFinished(() => vi.unstubAllEnvs())
     const request = createRequestLifecycle()
-    const send = vi.fn().mockResolvedValue(undefined)
+    let accept!: () => void
+    const send = vi.fn((_batch: DrainContext[]) => new Promise<void>((resolve) => {
+      accept = resolve
+    }))
     const drain = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(send)
     await createInstrumentation({ silent: true, drain }).register()
     const handler = createWithEvlog({})(() => Response.json({ ok: true }))
@@ -117,12 +123,12 @@ describe('instrumentation with the Next after runtime', () => {
       })
       request.close()
       await flushMicrotasks(30)
-      const completedBeforeFlush = completed
-      expect(drain.pending).toBe(1)
-      await vi.advanceTimersByTimeAsync(1000)
+      const completedBeforeDelivery = completed
+      expect(send).toHaveBeenCalledOnce()
+      accept()
       await completion
 
-      expect(completedBeforeFlush).toBe(false)
+      expect(completedBeforeDelivery).toBe(false)
       expect(send).toHaveBeenCalledExactlyOnceWith([expect.objectContaining({ event: expect.objectContaining({ status: 200 }) }),])
       expect(completed).toBe(true)
       expect(request.onAfterTaskError).not.toHaveBeenCalled()

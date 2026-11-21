@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from 'vitest'
 import type { DrainContext } from '../../src/types'
 import { createDrainPipeline } from '../../src/pipeline'
 import { createHyperDXDrain } from '../../src/adapters/hyperdx'
@@ -7,6 +7,7 @@ import { createPostHogDrain } from '../../src/adapters/posthog'
 import { createSazabiDrain } from '../../src/adapters/sazabi'
 import { defineDrain, defineHttpDrain } from '../../src/shared/drain'
 import { DrainDeliveryError } from '../../src/shared/http'
+import { deliverPendingDrains } from '../../src/shared/shutdown'
 import { defined } from '../helpers/defined'
 
 function getBatchArg(call: unknown[]): DrainContext[] {
@@ -28,6 +29,8 @@ function createTestContext(id: number): DrainContext {
 describe('createDrainPipeline', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    // Request-end flushes wait on every pipeline in the process: forget the ones earlier tests left holding events.
+    ;(globalThis as Record<symbol, { pending?: Set<unknown> } | undefined>)[Symbol.for('evlog.drains.v2')]?.pending?.clear()
   })
 
   afterEach(() => {
@@ -745,7 +748,7 @@ describe('createDrainPipeline', () => {
       ])
       expect(hook.stats()).toEqual({
         delivered: 1,
-        dropped: { 'buffer-full': 2, 'rejected': 1, 'retries-exhausted': 1, 'rate-limited': 1 },
+        dropped: { 'buffer-full': 2, 'rejected': 1, 'retries-exhausted': 1, 'rate-limited': 1, 'deferred': 0, 'deadline': 0 },
       })
     })
 
@@ -766,7 +769,7 @@ describe('createDrainPipeline', () => {
 
       expect(hook.stats()).toEqual({
         delivered: 3,
-        dropped: { 'buffer-full': 0, 'rejected': 2, 'retries-exhausted': 0, 'rate-limited': 0 },
+        dropped: { 'buffer-full': 0, 'rejected': 2, 'retries-exhausted': 0, 'rate-limited': 0, 'deferred': 0, 'deadline': 0 },
       })
       expect(onDropped).toHaveBeenCalledTimes(1)
       const [batch, error, reason] = defined(onDropped.mock.calls[0], 'onDropped call')
@@ -891,6 +894,392 @@ describe('createDrainPipeline', () => {
 
       expect(resolved).toBe(true)
       expect(drain).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('request-end flush', () => {
+    it('resolves every request at 20 events/s with a 300 ms backend, within two round trips of its end', async () => {
+      vi.stubEnv('VERCEL', '1')
+      onTestFinished(() => vi.unstubAllEnvs())
+      const drain = vi.fn((_batch: DrainContext[]) => new Promise<void>(resolve => setTimeout(resolve, 300)))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 50, intervalMs: 5000 } })(drain)
+      const latencies: number[] = []
+
+      for (let id = 1; id <= 60; id++) {
+        const endedAt = Date.now()
+        hook(createTestContext(id))
+        void deliverPendingDrains().then(() => {
+          latencies.push(Date.now() - endedAt)
+        })
+        await vi.advanceTimersByTimeAsync(50)
+      }
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(latencies).toHaveLength(60)
+      expect(Math.max(...latencies)).toBeLessThanOrEqual(600)
+      expect(drain.mock.calls.flatMap(call => getBatchArg(call).map(ctx => ctx.event.id))).toEqual(Array.from({ length: 60 }, (_, i) => i + 1))
+      expect(drain.mock.calls.length).toBeLessThan(20)
+    })
+
+    it('drops the request\'s events as rate-limited instead of outwaiting a provider pause', async () => {
+      vi.stubEnv('VERCEL', '1')
+
+      onTestFinished(() => vi.unstubAllEnvs())
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 60_000 }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, onDropped })(drain)
+
+      hook(createTestContext(1))
+      let first = false
+      void deliverPendingDrains().then(() => {
+        first = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(first).toBe(true)
+
+      hook(createTestContext(2))
+      let second = false
+      void deliverPendingDrains().then(() => {
+        second = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(second).toBe(true)
+      expect(drain).toHaveBeenCalledOnce()
+      expect(hook.stats().dropped['rate-limited']).toBe(2)
+      expect(hook.pending).toBe(0)
+      expect(onDropped.mock.calls.map(([events, , reason]) => [events.map((ctx: DrainContext) => ctx.event.id), reason])).toEqual([[[1], 'rate-limited'], [[2], 'rate-limited']])
+    })
+  })
+
+  describe('request budget and deadline', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+      delete (globalThis as Record<symbol, unknown>)[Symbol.for('@vercel/request-context')]
+    })
+
+    it('stops a request-end flush at requestBudget sends, retries included, and drops the rest as deferred', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('unavailable', { status: 503, retryable: true }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5, initialDelayMs: 10 }, requestBudget: 2, onDropped })(drain)
+
+      hook(createTestContext(1))
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(done).toBe(true)
+      expect(drain).toHaveBeenCalledTimes(2)
+      expect(hook.stats().dropped.deferred).toBe(1)
+      expect(onDropped.mock.calls.map(([, , reason]) => reason)).toEqual(['deferred'])
+    })
+
+    it('drops an exhausted request-end flush without waiting for a retry it cannot make', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 20_000 }))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5 }, requestBudget: 1, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(drain).toHaveBeenCalledOnce()
+      expect(done).toBe(true)
+      expect(hook.stats().dropped.deferred).toBe(1)
+    })
+
+    it('drops only the exhausted flush\'s events from a batch that also holds later ones', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn()
+        .mockRejectedValueOnce(new DrainDeliveryError('unavailable', { status: 503, retryable: true }))
+        .mockResolvedValue(undefined)
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5, initialDelayMs: 10 }, requestBudget: 1, onDropped })(drain)
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(drain).toHaveBeenCalledOnce()
+
+      // Holds event 1 (waiting to retry) and event 2; the retry of 1 spends its only send.
+      hook(createTestContext(2))
+      void deliverPendingDrains()
+      hook(createTestContext(3))
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(drain.mock.calls.map(([batch]) => (batch as DrainContext[]).map(ctx => ctx.event.id))).toEqual([[1], [1], [3]])
+      expect(onDropped.mock.calls.map(([events, , reason]) => [events.map((ctx: DrainContext) => ctx.event.id), reason])).toEqual([[[2], 'deferred']])
+      expect(hook.stats().delivered).toBe(2)
+    })
+
+    it('reports every copy of an event pushed twice when its request runs out of budget', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('unavailable', { status: 503, retryable: true }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5, initialDelayMs: 10 }, requestBudget: 1, onDropped })(drain)
+
+      const ctx = createTestContext(1)
+      hook(ctx)
+      hook(ctx)
+      void deliverPendingDrains()
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(onDropped.mock.calls.map(([events, , reason]) => [events.length, reason])).toEqual([[2, 'deferred']])
+      expect(hook.stats().dropped.deferred).toBe(2)
+    })
+
+    it('keeps every flush() retry when a request-end flush joins the batch', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn()
+        .mockRejectedValueOnce(new Error('a'))
+        .mockRejectedValueOnce(new Error('b'))
+        .mockResolvedValue(undefined)
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 3, initialDelayMs: 10 }, requestBudget: 1, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      void hook.flush()
+      void deliverPendingDrains()
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(drain).toHaveBeenCalledTimes(3)
+      expect(hook.stats().delivered).toBe(1)
+      expect(hook.stats().dropped.deferred).toBe(0)
+    })
+
+    it('cuts a running retry wait short when a later request-end flush brings an earlier deadline', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 20_000 }))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5 }, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(drain).toHaveBeenCalledOnce()
+
+      const deadline = Date.now() + 3000
+      ;(globalThis as Record<symbol, unknown>)[Symbol.for('@vercel/request-context')] = { get: () => ({ deadline }) }
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(done).toBe(true)
+      expect(drain).toHaveBeenCalledOnce()
+      expect(hook.stats().dropped.deadline).toBe(1)
+    })
+
+    it('skips a retry that would start past 25 s after the request ended on Workers', async () => {
+      vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' })
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 20_000 }))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5 }, onDropped })(drain)
+
+      hook(createTestContext(1))
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(20_000)
+
+      expect(drain).toHaveBeenCalledTimes(2)
+      expect(done).toBe(true)
+      expect(hook.stats().dropped.deadline).toBe(1)
+      expect(onDropped.mock.calls.map(([, , reason]) => reason)).toEqual(['deadline'])
+    })
+
+    it('reads the invocation deadline from the Vercel request context', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const deadline = Date.now() + 3000
+      ;(globalThis as Record<symbol, unknown>)[Symbol.for('@vercel/request-context')] = { get: () => ({ deadline }) }
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 2000 }))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5 }, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      void deliverPendingDrains()
+      await vi.advanceTimersByTimeAsync(5000)
+
+      expect(drain).toHaveBeenCalledTimes(2)
+      expect(hook.stats().dropped.deadline).toBe(1)
+    })
+
+    it('leaves timer and flush() deliveries outside a request window unbounded', async () => {
+      const drain = vi.fn()
+        .mockRejectedValueOnce(new Error('a'))
+        .mockRejectedValueOnce(new Error('b'))
+        .mockResolvedValue(undefined)
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 3, initialDelayMs: 10 }, requestBudget: 1 })(drain)
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(6000)
+
+      expect(drain).toHaveBeenCalledTimes(3)
+      expect(hook.stats().delivered).toBe(1)
+    })
+
+    it('rejects a non-positive requestBudget', () => {
+      expect(() => createDrainPipeline({ requestBudget: 0 })).toThrow('requestBudget must be a positive finite number')
+    })
+  })
+
+  describe('request-end snapshot', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it('resolves each request on a long-lived server within one interval and a send, under traffic that never lets the pipeline idle', async () => {
+      for (const name of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME']) vi.stubEnv(name, '')
+      const drain = vi.fn((_batch: DrainContext[]) => new Promise<void>(resolve => setTimeout(resolve, 300)))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 50, intervalMs: 1000 } })(drain)
+      const latencies: number[] = []
+
+      for (let id = 1; id <= 50; id++) {
+        const endedAt = Date.now()
+        hook(createTestContext(id))
+        void deliverPendingDrains().then(() => {
+          latencies.push(Date.now() - endedAt)
+        })
+        await vi.advanceTimersByTimeAsync(100)
+      }
+      await vi.advanceTimersByTimeAsync(1300)
+
+      expect(latencies).toHaveLength(50)
+      expect(Math.max(...latencies)).toBeLessThanOrEqual(1300)
+      expect(drain.mock.calls[0]?.[0]).toHaveLength(10)
+    })
+
+    it('waits for events an explicit flush() is still sending', async () => {
+      vi.stubEnv('VERCEL', '1')
+      let accept!: () => void
+      const drain = vi.fn((_batch: DrainContext[]) => new Promise<void>((resolve) => {
+        accept = resolve
+      }))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 } })(drain)
+
+      hook(createTestContext(1))
+      const flushed = hook.flush()
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(drain).toHaveBeenCalledOnce()
+      expect(done).toBe(false)
+
+      accept()
+      await flushed
+      await vi.advanceTimersByTimeAsync(0)
+      expect(done).toBe(true)
+    })
+  })
+
+  describe('serverless warning', () => {
+    async function loadFresh() {
+      delete (globalThis as Record<symbol, unknown>)[Symbol.for('evlog.drains.v2')]
+      vi.resetModules()
+      const [{ createDrainPipeline: create }, { deliverPendingDrains: deliver }] = await Promise.all([
+        import('../../src/pipeline'),
+        import('../../src/shared/shutdown'),
+      ])
+      return { create, deliver }
+    }
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.restoreAllMocks()
+    })
+
+    it('warns once on Vercel when events wait past batch.intervalMs and no request-end flush ever ran', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1000)
+      hook(createTestContext(2))
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(warn).toHaveBeenCalledOnce()
+      expect(warn.mock.calls[0]?.[0]).toContain('on Vercel')
+    })
+
+    it('stays quiet once an integration flushed at request end', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create, deliver } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+
+      await deliver()
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it('warns stale-buffer once when a request finds events a frozen invocation left behind', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create, deliver } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+      await deliver()
+
+      hook(createTestContext(1))
+      // A frozen runtime: the clock moves on but the batch timer never fires.
+      vi.setSystemTime(Date.now() + 5000)
+      hook(createTestContext(2))
+      vi.setSystemTime(Date.now() + 5000)
+      hook(createTestContext(3))
+
+      expect(warn).toHaveBeenCalledOnce()
+      expect(warn.mock.calls[0]?.[0]).toContain('stale-buffer: 1 event(s)')
+    })
+
+    it('does not warn stale-buffer while a slow send holds later events back', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create, deliver } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn(() => new Promise<void>(() => {})))
+      await deliver()
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1000)
+      hook(createTestContext(2))
+      await vi.advanceTimersByTimeAsync(5000)
+      hook(createTestContext(3))
+
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it('does not warn stale-buffer when the batch timer fired on time', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create, deliver } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+      await deliver()
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1500)
+      hook(createTestContext(2))
+
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it('stays quiet on a long-lived server', async () => {
+      for (const name of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME']) vi.stubEnv(name, '')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { create } = await loadFresh()
+      const hook = create<DrainContext>({ batch: { size: 10, intervalMs: 1000 } })(vi.fn().mockResolvedValue(undefined))
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(warn).not.toHaveBeenCalled()
     })
   })
 })

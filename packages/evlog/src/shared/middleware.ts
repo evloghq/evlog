@@ -3,6 +3,7 @@ import type { AuditableLogger, ForkableLogger } from '../audit'
 import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, markWideEventDrainStarted, noopLogger, outputWideEvent, shouldKeep } from '../logger'
 import { isGloballyRedacted, redactEvent, resolveRedactConfig } from '../redact'
 import { elapsedMs } from '../utils'
+import { deliverBeforeFreeze, deliverPendingDrains } from './shutdown'
 import { extractErrorStatus } from './errors'
 import type { EvlogPlugin, PluginRunner } from './plugin'
 import { createPluginRunner, getEmptyPluginRunner } from './plugin'
@@ -218,18 +219,12 @@ export async function runEnrichAndDrain(
     }
     const drainPromise = Promise.all(tasks)
     if (options.waitUntil) {
-      extendDeferredDrain(drainPromise, options.waitUntil)
-      // A pipeline drain buffers and returns immediately; extend the runtime's
-      // lifetime until the buffered batch is delivered, not just until push().
-      if (hasUserDrain) {
-        const { settled } = drain as { settled?: () => Promise<void> }
-        if (typeof settled === 'function') {
-          extendDeferredDrain(settled(), options.waitUntil)
-        }
-      }
+      // A pipeline drain only buffers: keep the runtime alive until the request-end flush delivers it.
+      extendDeferredDrain(drainPromise.then(deliverPendingDrains), options.waitUntil)
       return
     }
     await drainPromise
+    await deliverBeforeFreeze()
   }
 }
 
