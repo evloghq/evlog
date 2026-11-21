@@ -734,3 +734,23 @@ describe('evlog/sveltekit platform waitUntil', () => {
     expect(send).toHaveBeenCalledOnce()
   })
 })
+
+describe('evlog/sveltekit platform waitUntil', () => {
+  it('registers the request-end flush with event.platform.context.waitUntil on Cloudflare', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' })
+    onTestFinished(() => {
+      vi.unstubAllGlobals()
+    })
+    initLogger({ silent: true, _suppressDrainWarning: true } as Parameters<typeof initLogger>[0])
+    const send = vi.fn().mockResolvedValue(undefined)
+    const drain = createDrainPipeline({ batch: { size: 50, intervalMs: 60_000 } })(send)
+    const waitUntil = vi.fn()
+    const event = { ...createMockEvent('GET', '/api/orders'), platform: { context: { waitUntil } } }
+
+    await evlog({ drain })({ event, resolve: createMockResolve() })
+
+    expect(waitUntil).toHaveBeenCalledOnce()
+    await waitUntil.mock.calls[0]?.[0]
+    expect(send).toHaveBeenCalledOnce()
+  })
+})
