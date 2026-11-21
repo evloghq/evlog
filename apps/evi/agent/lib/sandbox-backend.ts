@@ -7,10 +7,20 @@ type PrepareSandbox = (sandbox: SandboxSession) => Promise<void>
 type VercelEnvironment = ReturnType<typeof VercelSandbox.environment>
 type SandboxEnvironment = VercelEnvironment | ReturnType<typeof DockerSandbox.environment>
 
-export function createSandboxEnvironment(deployedOnVercel: boolean, prepare: PrepareSandbox): SandboxEnvironment {
-  if (!deployedOnVercel) return DockerSandbox.environment({ prepare })
+export function sandboxEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const key = env.AMP_API_KEY?.trim()
+  return key ? { AMP_API_KEY: key } : {}
+}
+
+export function createSandboxEnvironment(
+  deployedOnVercel: boolean,
+  prepare: PrepareSandbox,
+  env: Record<string, string> = {},
+): SandboxEnvironment {
+  if (!deployedOnVercel) return DockerSandbox.environment({ prepare, env })
   return VercelSandbox.environment({
     prepare,
+    env,
     resources: { vcpus: 4 },
     keepLastSnapshots: { count: 1, deleteEvicted: true },
     snapshotExpiration: 14 * 24 * 60 * 60 * 1000,

@@ -96,29 +96,6 @@ export const eviErrors = defineErrorCatalog('evi', {
   REPOSITORY_SLUG_INVALID: {
     message: ({ slug }: { slug: string }) => `EVI_REPOSITORY must be an owner/repo slug, got "${slug}".`,
   },
-
-  AMP_API_KEY_MISSING: {
-    message: 'AMP_API_KEY is not configured.',
-    fix: 'Set AMP_API_KEY on the evi Vercel project (Production and Preview) to an Amp access token that starts with sgamp_. Then do the work yourself for this turn.',
-  },
-  AMP_API_KEY_INVALID: {
-    message: 'AMP_API_KEY is not an Amp access token.',
-    fix: 'Use a Settings access token that starts with sgamp_, not the short-lived token from amp login. Then do the work yourself for this turn.',
-  },
-  AMP_CLI_MISSING: {
-    message: 'The Amp CLI is not installed.',
-    fix: 'Install the Amp CLI on PATH, set AMP_CLI to its binary, or allow npx to fetch @ampcode/cli. Then do the work yourself for this turn.',
-  },
-  AMP_EXECUTE_FAILED: {
-    status: 502,
-    message: 'Amp did not finish the task.',
-    fix: 'Open the Amp thread if one was returned, or do the work yourself.',
-  },
-  AMP_THREAD_NOT_FOUND: {
-    status: 404,
-    message: 'No Amp thread is mapped for this conversation or issue.',
-    fix: 'Pass threadId or the Linear issue, or start one with amp__execute.',
-  },
 })
 
 declare module 'evlog' {
