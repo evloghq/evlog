@@ -1018,6 +1018,46 @@ describe('createDrainPipeline', () => {
       expect(hook.stats().delivered).toBe(2)
     })
 
+    it('keeps every flush() retry when a request-end flush joins the batch', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn()
+        .mockRejectedValueOnce(new Error('a'))
+        .mockRejectedValueOnce(new Error('b'))
+        .mockResolvedValue(undefined)
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 3, initialDelayMs: 10 }, requestBudget: 1, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      void hook.flush()
+      void deliverPendingDrains()
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(drain).toHaveBeenCalledTimes(3)
+      expect(hook.stats().delivered).toBe(1)
+      expect(hook.stats().dropped.deferred).toBe(0)
+    })
+
+    it('cuts a running retry wait short when a later request-end flush brings an earlier deadline', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 20_000 }))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5 }, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(drain).toHaveBeenCalledOnce()
+
+      const deadline = Date.now() + 3000
+      ;(globalThis as Record<symbol, unknown>)[Symbol.for('@vercel/request-context')] = { get: () => ({ deadline }) }
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(done).toBe(true)
+      expect(drain).toHaveBeenCalledOnce()
+      expect(hook.stats().dropped.deadline).toBe(1)
+    })
+
     it('skips a retry that would start past 25 s after the request ended on Workers', async () => {
       vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' })
       const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 20_000 }))

@@ -192,6 +192,8 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
      * of at `batch.intervalMs`, and only they are bound by the budget and deadline.
      */
     let heldWaiters: Array<{ events: Set<T>, resolve: () => void, sending: boolean, sends: number, deadline: number }> = []
+    /** Batches waiting to retry, so a deadline registered later can cut the wait short. */
+    const retryWaits: Set<{ batch: T[], until: number, explicit: boolean, error: Error, wake: () => void }> = new Set()
 
     function pauseRemainingMs(): number {
       return Math.max(0, pausedUntil - Date.now())
@@ -293,12 +295,13 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     /**
      * Removes from `batch` and drops the events whose request-end flush cannot send again within `delay`:
      * past its deadline, or out of budget. Events no exhausted flush holds stay in the batch.
+     * `flush()` batches are not charged to the budget: only the deadline limits them.
      */
-    function dropRequestLimited(batch: T[], delay: number, error?: Error): void {
+    function dropRequestLimited(batch: T[], delay: number, explicit: boolean, error?: Error): void {
       const limited = new Map<T, 'deadline' | 'deferred'>()
       for (const waiter of heldWaiters) {
         if (!waiter.sending) continue
-        const reason = waiter.deadline <= Date.now() + delay ? 'deadline' : waiter.sends >= requestBudget ? 'deferred' : undefined
+        const reason = waiter.deadline <= Date.now() + delay ? 'deadline' : !explicit && waiter.sends >= requestBudget ? 'deferred' : undefined
         if (!reason) continue
         for (const event of batch) {
           if (waiter.events.has(event) && limited.get(event) !== 'deadline') limited.set(event, reason)
@@ -328,16 +331,16 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
      * Resolves `'paused'` without dropping when the provider asked to wait
      * longer than `maxDelayMs`: the caller decides whether the batch waits.
      */
-    async function sendWithRetry(batch: T[]): Promise<'done' | 'paused'> {
+    async function sendWithRetry(batch: T[], explicit = false): Promise<'done' | 'paused'> {
       let lastAttemptError: Error | undefined
       for (let attempt = 1; ; attempt++) {
         // Another delivery may have paused the pipeline while this one waited to retry.
         if (attempt > 1 && pauseRemainingMs() > 0) return 'paused'
         if (heldWaiters.some(waiter => waiter.sending)) {
-          dropRequestLimited(batch, 0, lastAttemptError)
+          dropRequestLimited(batch, 0, explicit, lastAttemptError)
           if (batch.length === 0) return 'done'
           for (const waiter of heldWaiters) {
-            if (waiter.sending && batch.some(event => waiter.events.has(event))) waiter.sends++
+            if (!explicit && waiter.sending && batch.some(event => waiter.events.has(event))) waiter.sends++
           }
         }
         try {
@@ -373,10 +376,25 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
           }
           const delay = retryAfterMs ?? getRetryDelay(attempt)
           // A retry that cannot start before the deadline, or that the budget forbids, is not worth waiting for.
-          dropRequestLimited(batch, delay, lastError)
+          dropRequestLimited(batch, delay, explicit, lastError)
           if (batch.length === 0) return 'done'
           lastAttemptError = lastError
-          await new Promise<void>(r => setTimeout(r, delay))
+          await new Promise<void>((resolve) => {
+            const wait = {
+              batch,
+              until: Date.now() + delay,
+              explicit,
+              error: lastError,
+              wake: () => {
+                clearTimeout(handle)
+                retryWaits.delete(wait)
+                resolve()
+              },
+            }
+            const handle = setTimeout(wait.wake, delay)
+            retryWaits.add(wait)
+          })
+          if (batch.length === 0) return 'done'
         }
       }
     }
@@ -458,7 +476,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       while (toFlush.length > 0) {
         const batch = toFlush.splice(0, batchSize)
         // flush() delivers now or gives up: a pause left by the provider drops the batch instead of holding shutdown.
-        if (pauseRemainingMs() > 0 || await sendWithRetry(batch) === 'paused') {
+        if (pauseRemainingMs() > 0 || await sendWithRetry(batch, true) === 'paused') {
           drop(batch, 'rate-limited', pauseError)
         }
       }
@@ -490,6 +508,10 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
         heldWaiters.push({ events, resolve, sending, sends: 0, deadline })
       })
       if (!sending) return done
+      for (const wait of retryWaits) {
+        dropRequestLimited(wait.batch, wait.until - Date.now(), wait.explicit, wait.error)
+        if (wait.batch.length === 0) wait.wake()
+      }
       dropHeldWhilePaused()
       if (buffer.length > 0 && pauseRemainingMs() === 0) {
         clearTimer()
