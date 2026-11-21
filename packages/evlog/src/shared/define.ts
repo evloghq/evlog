@@ -61,9 +61,9 @@ export interface EvlogLogsConfig {
   /** Reading runtime logs from Vercel with `evlog logs --source vercel`. */
   vercel?: {
     /**
-     * The Vercel Connect connector the read goes through. Set it to reuse a
-     * Vercel API-key connector the team already has, such as `vercel/mcp`.
-     * @default 'vercel/evlog'
+     * The Vercel Connect connector the read goes through, such as `vercel/mcp`.
+     * Required: without it, `evlog logs --source vercel` refuses to read.
+     * `evlog setup vercel` offers the team's connectors and writes the one picked here.
      */
     connector?: string
   }

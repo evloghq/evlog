@@ -3,7 +3,7 @@ import type { LogLevel, WideEvent } from 'evlog'
 import { readFsLogs } from 'evlog/fs'
 import { buildQuery, createSelection, failedCallsOf, outcomeOf, parseDuration, parseStatus, parseWhere, timeOf } from './vendor/logs-query'
 import type { LogsStats, LogsView, Outcome, SessionSummary, Where } from './vendor/logs-query'
-import { DEFAULT_VERCEL_CONNECTOR, readVercelLogs, requestConnectToken, VercelReadError, vercelScope } from './vendor/logs-vercel'
+import { readVercelLogs, requestConnectToken, VercelReadError, vercelScope } from './vendor/logs-vercel'
 
 /** What the model asks the `logs` tool for. */
 export interface LogsToolInput {
@@ -404,7 +404,7 @@ export async function readLogs(input: LogsToolInput, options: { source: LogsSour
       message: `Vercel Connect issued no token for ${source.connector} (${error.status})`,
       status: 503,
       why: 'The connector does not exist on the team, or is not attached to this project and environment',
-      fix: `Run npx evlog setup vercel in the agent's project${source.connector === DEFAULT_VERCEL_CONNECTOR ? '' : `, or check logs.vercel.connector (${source.connector})`}`,
+      fix: `Run npx evlog setup vercel in the agent's project, or check logs.vercel.connector (${source.connector})`,
       link: 'https://evlog.dev/cli/logs',
     })
   }

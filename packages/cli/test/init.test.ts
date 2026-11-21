@@ -1695,6 +1695,20 @@ describe('eve agents', () => {
     expect(existing.manual.find(step => step.title === 'Read the agent\'s Vercel logs through vercel/mcp')?.snippet).toBe(`logs: { vercel: { connector: 'vercel/mcp' } },`)
   })
 
+  it('gives the line to add when the connector is not ready and the config init left alone does not name it', async () => {
+    const cwd = await project(EVE)
+    const result = await run(cwd, { dryRun: true })
+    const error = 'No OIDC token for the linked Vercel project'
+    const report = (vercel: NonNullable<typeof result.vercel>) => formatInitReport(fakeContext(cwd), { ...result, vercel })
+
+    const unnamed = report({ projectId: 'prj_1', connector: 'vercel/agent-logs', status: 'failed', error, addTo: 'evlog.config.ts' })
+    expect(unnamed).toContain(`add logs: { vercel: { connector: 'vercel/agent-logs' } } to evlog.config.ts; vercel/agent-logs is not ready yet: ${error}`)
+    expect(unnamed).not.toContain('is named in')
+    expect(report({ projectId: 'prj_1', connector: 'vercel/agent-logs', status: 'failed', error })).toContain(`vercel/agent-logs is named in evlog.config.ts but not ready: ${error}`)
+    expect(report({ projectId: 'prj_1', connector: 'vercel/agent-logs', status: 'ready', addTo: 'evlog.config.ts' }))
+      .toContain(`vercel/agent-logs is attached; add logs: { vercel: { connector: 'vercel/agent-logs' } } to evlog.config.ts so the deployed agent reads its Vercel runtime logs through it`)
+  })
+
   it('points a linked project at evlog setup vercel without contacting Vercel under --yes', async () => {
     const cwd = await project({ ...EVE, '.vercel/project.json': '{"projectId":"prj_1","orgId":"team_1"}' })
 

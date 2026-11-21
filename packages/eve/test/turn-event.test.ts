@@ -45,11 +45,13 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
 
   const noOidc = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
   const refused = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
+  const noConnector = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
   const OIDC = `e30.${Buffer.from(JSON.stringify({ owner_id: 'team_1', project_id: 'prj_1', environment: 'production' })).toString('base64url')}.fixture-signature`
   const hosted = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
   let readsWithoutOidc: TurnEvent[] = []
   let hostedEvents: TurnEvent[] = []
   let readsRefused: TurnEvent[] = []
+  let readsWithoutConnector: TurnEvent[] = []
   const read = (dir: string) => readdirSync(dir).filter(file => file.endsWith('.jsonl')).flatMap(file =>
     readFileSync(join(dir, file), 'utf8').trim().split('\n').map(line => JSON.parse(line) as TurnEvent))
   const evaluate = (dir: string, args: string[], env: Record<string, string> = {}) => {
@@ -64,18 +66,21 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
   beforeAll(async () => {
     await Promise.all([
       evaluate(logs, ['--exclude-tag', 'vercel']),
-      evaluate(noOidc, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'vercel' }).catch(() => {}),
-      evaluate(refused, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'vercel', VERCEL_OIDC_TOKEN: OIDC, EVLOG_FIXTURE_CONNECT_STATUS: '403' }).catch(() => {}),
+      evaluate(noOidc, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'vercel', EVLOG_FIXTURE_CONNECTOR: 'vercel/evlog' }).catch(() => {}),
+      evaluate(refused, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'vercel', EVLOG_FIXTURE_CONNECTOR: 'vercel/evlog', VERCEL_OIDC_TOKEN: OIDC, EVLOG_FIXTURE_CONNECT_STATUS: '403' }).catch(() => {}),
+      // On Vercel with nothing configured: auto must not fall back to the (empty) local files.
+      evaluate(noConnector, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'auto', VERCEL: '1', VERCEL_OIDC_TOKEN: OIDC }).catch(() => {}),
       evaluate(hosted, ['refund-ok'], { EVLOG_FIXTURE_HOST_SERVICE: 'web' }),
     ])
     hostedEvents = read(hosted)
     events = read(logs)
     readsWithoutOidc = read(noOidc)
     readsRefused = read(refused)
+    readsWithoutConnector = read(noConnector)
   }, 180_000)
 
   afterAll(() => {
-    for (const dir of [logs, noOidc, refused, hosted]) rmSync(dir, { recursive: true, force: true })
+    for (const dir of [logs, noOidc, refused, hosted, noConnector]) rmSync(dir, { recursive: true, force: true })
   })
 
   it('names each turn with the mount\'s service, also when the host app initialised evlog first', () => {
@@ -214,6 +219,12 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
     const { call, recorded } = recordedCall(events.filter(e => JSON.stringify(e).includes('"expect"')))
     expect(call).toMatchObject({ success: false, error: expect.stringMatching(/\(files, development\), not production$/) })
     expect(recorded).toMatchObject({ source: 'files', view: 'errors', input: { expect: { environment: 'production' } }, failed: true })
+  })
+
+  it('records a logs call on Vercel with no connector configured as failed, instead of reading local files', () => {
+    const { call, recorded } = recordedCall(readsWithoutConnector)
+    expect(call).toMatchObject({ success: false, error: 'Vercel logs are not set up: logs.vercel.connector is not set' })
+    expect(recorded).toMatchObject({ source: 'vercel', view: 'errors', failed: true })
   })
 
   it('records a logs call that found no OIDC token to read Vercel with', () => {

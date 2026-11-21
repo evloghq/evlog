@@ -19,7 +19,8 @@ import type { CliContext } from '../../core/context'
 import { DOCS_URL, createStyle } from '../../core/output'
 import type { Framework } from '../map/types'
 import { INIT_FRAMEWORK_IDS, getFramework } from '../frameworks'
-import type { ListedConnector } from '../setup-vercel'
+import { connectorNameProblem } from '../setup-vercel'
+import type { ConnectorChoice, ListedConnector } from '../setup-vercel'
 import {
   availableExtras,
   DEFAULT_ENRICHERS,
@@ -272,31 +273,31 @@ export function noteStep(ctx: CliContext, step: string): void {
   clackLog.message(createStyle(ctx).paint('dim', `→ ${step}`))
 }
 
-/** The answer to which connector a deployed agent reads its Vercel runtime logs through. */
-export interface ConnectorChoice {
-  connector: string
-  /** The connector does not exist yet: `evlog setup vercel` creates it, asking for an access token. */
-  create: boolean
-}
-
 /**
  * Which Vercel connector the deployed agent reads its runtime logs through:
- * one the team has, a new one, or none. Locally the agent reads its files
- * whatever the answer.
+ * one the team has, a new one named after `suggested` unless the user edits
+ * it, or none. Locally the agent reads its files whatever the answer.
  */
-export async function askVercelConnector(projectId: string, reusable: readonly ListedConnector[], attached: ReadonlySet<string>, create: string): Promise<ConnectorChoice | null> {
+export async function askVercelConnector(projectId: string, reusable: readonly ListedConnector[], attached: ReadonlySet<string>, suggested: string): Promise<ConnectorChoice | null> {
   const ordered = [...reusable].sort((a, b) => Number(attached.has(b.uid)) - Number(attached.has(a.uid)))
   const answer = required(await select<string>({
     message: `On Vercel, the agent reads its runtime logs through a connector of ${projectId}'s team. Which one? A connector gives the project's deployments the whole authority of the key it stores`,
     options: [
       ...ordered.map(connector => ({ value: connector.uid, label: `Use ${connector.uid}`, hint: attached.has(connector.uid) ? 'already attached to this project' : `attaches it to ${projectId}` })),
-      { value: '\0create', label: `Create a new connector, ${create}`, hint: 'asks for a Vercel access token scoped to the team' },
+      { value: '\0create', label: 'Create a new connector', hint: 'asks for its name and a Vercel access token scoped to the team' },
       { value: '\0skip', label: 'Skip', hint: 'the agent reads local files only; npx evlog setup vercel later' },
     ],
     initialValue: ordered[0]?.uid ?? '\0skip',
   }))
   if (answer === '\0skip') return null
-  return answer === '\0create' ? { connector: create, create: true } : { connector: answer, create: false }
+  if (answer !== '\0create') return { connector: answer, create: false }
+  const taken = new Set(reusable.map(connector => connector.uid))
+  const name = required(await text({
+    message: 'Name of the new Vercel connector',
+    initialValue: suggested.replace(/^vercel\//, ''),
+    validate: value => connectorNameProblem(value?.trim() ?? '', taken),
+  }))
+  return { connector: `vercel/${name.trim()}`, create: true }
 }
 
 /** Each file's diff under `--dry-run`, one box per file. */

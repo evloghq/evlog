@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import type { ObjectExpression, ObjectProperty } from 'oxc-parser'
 import { mergeEvlogConfig } from 'evlog'
 import type { EvlogConfig } from 'evlog'
 import { cliErrors } from '../errors'
@@ -8,7 +9,7 @@ import type { CheckId } from '../map/types'
 import { prettyPath } from '../project'
 import type { ProjectInfo } from '../project'
 import type { ConfigDocument } from './read'
-import { formatPath, isPlainObject, readConfig, readModuleOptions, RuntimeValue } from './read'
+import { findConfigObject, formatPath, isPlainObject, readConfig, readModuleOptions, RuntimeValue } from './read'
 
 export { formatPath, RuntimeValue } from './read'
 
@@ -248,4 +249,91 @@ export function loadCliConfig(project: ProjectInfo): CliConfig | null {
     map: readMap(resolved.map, at),
     logs: readLogs(resolved.logs, project.packageDir, at),
   }
+}
+
+/** What {@link writeLogsConnector} did to the config, by its path relative to the working directory. */
+export interface ConnectorWrite {
+  file: string
+  /**
+   * `manual` when the config is computed or already names another connector,
+   * so the setting has to be changed by hand.
+   */
+  state: 'created' | 'updated' | 'unchanged' | 'manual'
+  /** The lines written, `+` added and `-` removed, when the file was created or updated. */
+  diff?: string[]
+}
+
+/** The lines `after` changes in `before`, between the lines they share at either end. */
+function lineDiff(before: string, after: string): string[] {
+  const old = before.split('\n')
+  const next = after.split('\n')
+  let start = 0
+  while (start < old.length && start < next.length && old[start] === next[start]) start++
+  let end = 0
+  while (end < old.length - start && end < next.length - start && old[old.length - 1 - end] === next[next.length - 1 - end]) end++
+  return [
+    ...old.slice(start, old.length - end).map(line => `- ${line}`),
+    ...next.slice(start, next.length - end).map(line => `+ ${line}`),
+  ]
+}
+
+function propertyNamed(node: ObjectExpression, name: string): ObjectProperty | undefined {
+  return node.properties.find((prop): prop is ObjectProperty => prop.type === 'Property' && !prop.computed
+    && ((prop.key.type === 'Identifier' && prop.key.name === name) || (prop.key.type === 'Literal' && prop.key.value === name)))
+}
+
+/** The edit that adds `code` as the first property of `node`, on its own line when the object spans several. */
+function insertProperty(source: string, node: ObjectExpression, code: string): { at: number, end: number, text: string } {
+  const [first] = node.properties
+  if (!first) return { at: node.start, end: node.end, text: `{ ${code} }` }
+  const lineStart = source.lastIndexOf('\n', first.start - 1) + 1
+  const indent = source.slice(lineStart, first.start)
+  return /^\s*$/.test(indent)
+    ? { at: lineStart, end: lineStart, text: `${indent}${code},\n` }
+    : { at: first.start, end: first.start, text: `${code}, ` }
+}
+
+/**
+ * Name `connector` as `logs.vercel.connector` in the `evlog.config` that
+ * applies to `project`, or create `evlog.config.ts` with it. An existing file
+ * is edited only to add the setting where none is set, in place, leaving
+ * every other setting as written; a different connector already named there
+ * is left for the developer to change.
+ */
+export function writeLogsConnector(project: ProjectInfo, connector: string): ConnectorWrite {
+  const existing = findConfigFile(project)
+  const label = (path: string): string => prettyPath(project.cwd, path)
+  const value = `'${connector}'`
+  if (!existing) {
+    const file = join(project.packageDir, 'evlog.config.ts')
+    const created = `import { defineEvlog } from 'evlog'\n\nexport default defineEvlog({\n  logs: {\n    vercel: { connector: ${value} },\n  },\n})\n`
+    writeFileSync(file, created)
+    return { file: label(file), state: 'created', diff: lineDiff('', created).filter(line => line !== '+ ') }
+  }
+  const found = findConfigObject(existing, label)
+  const manual: ConnectorWrite = { file: label(existing), state: 'manual' }
+  if (!found) return manual
+  const { source } = found
+  let edit: { at: number, end: number, text: string }
+  const logs = propertyNamed(found.node, 'logs')
+  if (!logs) {
+    edit = insertProperty(source, found.node, `logs: { vercel: { connector: ${value} } }`)
+  } else {
+    if (logs.value.type !== 'ObjectExpression') return manual
+    const vercel = propertyNamed(logs.value, 'vercel')
+    if (!vercel) {
+      edit = insertProperty(source, logs.value, `vercel: { connector: ${value} }`)
+    } else {
+      if (vercel.value.type !== 'ObjectExpression') return manual
+      const current = propertyNamed(vercel.value, 'connector')
+      if (!current) {
+        edit = insertProperty(source, vercel.value, `connector: ${value}`)
+      } else {
+        return current.value.type === 'Literal' && current.value.value === connector ? { file: label(existing), state: 'unchanged' } : manual
+      }
+    }
+  }
+  const updated = source.slice(0, edit.at) + edit.text + source.slice(edit.end)
+  writeFileSync(existing, updated)
+  return { file: label(existing), state: 'updated', diff: lineDiff(source, updated) }
 }

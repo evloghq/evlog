@@ -5,7 +5,20 @@ import { skillsReportLines } from '../agents/report'
 import { getFramework } from '../frameworks'
 import { findDestination, findEnricher, findExtra, findSamplingPreset } from './catalog'
 import type { FilePreview } from './diff'
-import type { InitResult } from './run'
+import type { InitResult, VercelSummary } from './run'
+
+/** What attaching the connector came to, with the line to add when init left the config alone. */
+export function vercelOutcome(vercel: VercelSummary): string {
+  const add = vercel.addTo && `add logs: { vercel: { connector: '${vercel.connector}' } } to ${vercel.addTo}`
+  if (vercel.status === 'ready') {
+    return add
+      ? `${vercel.connector} is attached; ${add} so the deployed agent reads its Vercel runtime logs through it`
+      : `the deployed agent reads its Vercel runtime logs through ${vercel.connector}`
+  }
+  return add
+    ? `${add}; ${vercel.connector} is not ready yet: ${vercel.error}`
+    : `${vercel.connector} is named in evlog.config.ts but not ready: ${vercel.error}`
+}
 
 function docLink(ctx: CliContext, path: string): string {
   const style = createStyle(ctx)
@@ -94,9 +107,9 @@ export function formatInitReport(ctx: CliContext, result: InitResult): string {
 
   if (result.vercel) {
     const { vercel } = result
-    if (vercel.status === 'ready') lines.push(`${paint('green', '✓')} ${paint('dim', `the deployed agent reads its Vercel runtime logs through ${vercel.connector}`)}`)
-    else if (vercel.status === 'pending') lines.push(`${paint('yellow', '·')} ${paint('dim', `would attach ${vercel.connector} to ${vercel.projectId} for the agent's Vercel logs`)}`)
-    else lines.push(`${paint('red', '✗')} ${paint('dim', `${vercel.connector} is named in evlog.config.ts but not ready: ${vercel.error}`)}`)
+    if (vercel.status === 'pending') lines.push(`${paint('yellow', '·')} ${paint('dim', `would attach ${vercel.connector} to ${vercel.projectId} for the agent's Vercel logs`)}`)
+    else if (vercel.status === 'ready' && !vercel.addTo) lines.push(`${paint('green', '✓')} ${paint('dim', vercelOutcome(vercel))}`)
+    else lines.push(`${paint(vercel.status === 'ready' ? 'yellow' : 'red', vercel.status === 'ready' ? '!' : '✗')} ${paint('dim', vercelOutcome(vercel))}`)
   }
 
   for (const id of result.dropped) {

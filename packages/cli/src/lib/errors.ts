@@ -421,6 +421,14 @@ export const cliErrors = defineErrorCatalog('cli', {
     link: 'https://evlog.dev/cli/logs',
     tags: ['logs', 'vercel'],
   },
+  LOGS_VERCEL_NO_CONNECTOR: {
+    status: 412,
+    message: 'Vercel logs are not set up: evlog.config names no logs.vercel.connector',
+    why: 'Runtime logs are read through a Vercel Connect connector the project names, never one evlog picks for it',
+    fix: 'Run npx evlog setup vercel: it offers the team\'s connectors and writes the one you pick to evlog.config.ts',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['logs', 'vercel'],
+  },
   LOGS_VERCEL_NOT_SET_UP: {
     status: 403,
     message: ({ connector, reason }: { connector: string, reason: string }) =>
@@ -453,6 +461,23 @@ export const cliErrors = defineErrorCatalog('cli', {
       value ? `"${value}" is not a Vercel environment name` : 'No environment to attach the connector for',
     why: 'The connector is attached only for the environments named, and a name is passed to the Vercel CLI as is',
     fix: 'Pass environment names separated by commas, such as --environment production,development',
+    tags: ['setup', 'vercel'],
+  },
+  SETUP_VERCEL_NO_CONNECTOR: {
+    status: 400,
+    message: ({ reusable }: { reusable: string[] }) =>
+      `No connector chosen to read Vercel logs through. ${reusable.length > 0 ? `The team has ${reusable.join(', ')}` : 'The team has no Vercel API-key connector'}`,
+    why: 'Setup reads through the connector you pick, or creates one you name, and this run cannot ask',
+    fix: 'Pass --connector with one of the team\'s connectors, or --connector vercel/<name> --create to create one',
+    link: 'https://evlog.dev/cli/logs',
+    tags: ['setup', 'vercel'],
+  },
+  SETUP_INVALID_CONNECTOR: {
+    status: 400,
+    message: ({ value }: { value: string }) =>
+      `"${value}" is not a Vercel connector UID that can be created`,
+    why: 'Setup creates Vercel API-key connectors, whose UID is vercel/ followed by the name',
+    fix: 'Pass --connector vercel/<name>, such as vercel/evlog, with --create',
     tags: ['setup', 'vercel'],
   },
   SETUP_VERCEL_FAILED: {
@@ -578,6 +603,8 @@ const USAGE_ERRORS = new Set<string>([
   cliErrors.LOGS_SOURCE_CONFLICT,
   cliErrors.SETUP_INVALID_TARGET,
   cliErrors.SETUP_INVALID_ENVIRONMENT,
+  cliErrors.SETUP_INVALID_CONNECTOR,
+  cliErrors.SETUP_VERCEL_NO_CONNECTOR,
   cliErrors.LOGS_ASK_UNSUPPORTED,
 ].map(entry => entry.code))
 
