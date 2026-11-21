@@ -71,7 +71,7 @@ Both open eve's terminal UI. The title bar says which agent answers and which lo
 | Command | Talks to | The logs tool reads |
 | --- | --- | --- |
 | `pnpm dev:local` | the agent running on this machine (`eve dev`) | `.evlog/logs` |
-| `pnpm dev:remote` | the deployed agent at `EVE_REMOTE_URL` | the Vercel project's runtime logs, through `vercel/evlog` |
+| `pnpm dev:remote` | the deployed agent at `EVE_REMOTE_URL` | the Vercel project's runtime logs, through the connector `evlog.config.ts` names (`vercel/evlog`) |
 
 `dev:remote` reads `EVE_REMOTE_URL`, and `VERCEL_AUTOMATION_BYPASS_SECRET` when the deployment has protection on, from `.env.local`. Neither goes in a prompt. The URL has to be `https` with no credentials in it, and `--url` or `--header` on the command line are refused, so the target stays the one in `.env.local`. The secret never reaches the command line: eve reads it from the environment and sends it only once the target is the deployment it checked.
 

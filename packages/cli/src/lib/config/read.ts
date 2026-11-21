@@ -432,6 +432,18 @@ export function readConfig(file: string, label: (file: string) => string): ReadC
 }
 
 /**
+ * The object literal `file` default-exports as its config, through
+ * `defineEvlog(...)` and named bindings, with the source it is written in.
+ * `null` when the config is computed or written in another file.
+ */
+export function findConfigObject(file: string, label: (file: string) => string): { source: string, node: ObjectExpression } | null {
+  const reader = new Reader(label)
+  const exported = reader.exported(file, 'default', 0)
+  const object = exported && reader.configObject(exported.module, exported.node, 0)
+  return object && object.module.file === file ? { source: object.module.source, node: object.node } : null
+}
+
+/**
  * Read the options `nuxt.config` or `nitro.config` passes to the evlog module
  * without running the file: Nuxt's `evlog` key, or the argument of the
  * evlog Nitro module in `modules`. `null` when it passes none.

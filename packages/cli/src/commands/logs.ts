@@ -18,7 +18,7 @@ import { formatLine, formatLogsReport, SOURCE } from '../lib/logs/render'
 import type { LogsOrigin, LogsResult, Sourced } from '../lib/logs/render'
 import { findConfiguredFsDrain, findLogsSink, prettyPath, resolveProject } from '../lib/project'
 import type { ProjectInfo } from '../lib/project'
-import { DEFAULT_VERCEL_CONNECTOR, findVercelProject, readVercelLogs, resolveVercelAccess, VercelReadError } from '../lib/logs/vercel'
+import { findVercelProject, readVercelLogs, resolveVercelAccess, VercelReadError } from '../lib/logs/vercel'
 import type { VercelAccess, VercelLogsSummary, VercelProject } from '../lib/logs/vercel'
 
 export type { LogsResult } from '../lib/logs/render'
@@ -244,7 +244,9 @@ export async function runLogs(ctx: CliContext, args: LogsArgs, options: RunLogsO
   if (source === 'vercel') {
     const conflict = options.follow ? 'follow' : options.dir !== undefined ? 'dir' : options.url !== undefined ? 'url' : undefined
     if (conflict) throw cliErrors.LOGS_SOURCE_CONFLICT({ flag: conflict })
-    const result = await readVercel(ctx, options, { query, search: args.session, connector: config?.logs.vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR, inRange, expect })
+    const connector = config?.logs.vercel?.connector
+    if (connector === undefined) throw cliErrors.LOGS_VERCEL_NO_CONNECTOR()
+    const result = await readVercel(ctx, options, { query, search: args.session, connector, inRange, expect })
     await ask(result)
     return result
   }

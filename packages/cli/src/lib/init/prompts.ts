@@ -19,7 +19,7 @@ import type { CliContext } from '../../core/context'
 import { DOCS_URL, createStyle } from '../../core/output'
 import type { Framework } from '../map/types'
 import { INIT_FRAMEWORK_IDS, getFramework } from '../frameworks'
-import type { ListedConnector } from '../setup-vercel'
+import type { ConnectorChoice, ListedConnector } from '../setup-vercel'
 import {
   availableExtras,
   DEFAULT_ENRICHERS,
@@ -270,13 +270,6 @@ export function noteInfo(notes: readonly string[]): void {
 /** A step a subprocess is about to take, such as a Vercel command, shown before it runs. */
 export function noteStep(ctx: CliContext, step: string): void {
   clackLog.message(createStyle(ctx).paint('dim', `→ ${step}`))
-}
-
-/** The answer to which connector a deployed agent reads its Vercel runtime logs through. */
-export interface ConnectorChoice {
-  connector: string
-  /** The connector does not exist yet: `evlog setup vercel` creates it, asking for an access token. */
-  create: boolean
 }
 
 /**

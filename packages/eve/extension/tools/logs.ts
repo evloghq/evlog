@@ -5,7 +5,6 @@ import { createError } from 'evlog'
 import { z } from 'zod'
 import { useLogger } from '../lib/logger'
 import { VIEWS } from '../lib/vendor/logs-query'
-import { DEFAULT_VERCEL_CONNECTOR } from '../lib/vendor/logs-vercel'
 import extension from '../extension'
 import type { EvlogEveLogsAccess } from '../extension'
 import { DEFAULT_LIMIT, readLogs } from '../lib/read-logs'
@@ -31,13 +30,24 @@ export function source(): LogsSource {
   if (sourceKind() === 'files') {
     return { kind: 'fs', dir: dir ?? '.evlog/logs', environment: extension.config.env?.environment ?? process.env.NODE_ENV ?? 'development' }
   }
+  /* No fallback to the files here: on Vercel they are empty, which would read as nothing failed. */
+  const connector = vercel?.connector
+  if (!connector) {
+    throw createError({
+      message: 'Vercel logs are not set up: logs.vercel.connector is not set',
+      status: 412,
+      why: 'The logs tool reads Vercel runtime logs through the Vercel Connect connector the agent names, never one it picks itself',
+      fix: 'Run npx evlog setup vercel in the agent\'s project, then pass its evlog.config to the evlog mount, or set logs: { vercel: { connector } } there',
+      link: 'https://evlog.dev/use-cases/eve',
+    })
+  }
   const oidcToken = deploymentOidcToken()
   if (!oidcToken) {
     throw createError(onVercel
       ? { message: 'No OIDC token in this deployment', status: 503, why: 'The logs tool reads runtime logs through Vercel Connect, which accepts the deployment\'s OIDC token', fix: 'Turn on OIDC federation for the project in its Vercel settings' }
       : { message: 'No VERCEL_OIDC_TOKEN in this process', status: 503, why: 'logs.source is vercel, and a local run reads the linked project\'s runtime logs with the token vercel env pull writes to .env.local', fix: 'Run eve link, or vercel env pull, then restart eve dev. The token lasts 12 hours' })
   }
-  return { kind: 'vercel', oidcToken, connector: vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR }
+  return { kind: 'vercel', oidcToken, connector }
 }
 
 /** The agent's own scheduled work reads every turn, a signed-in caller its own session, an anonymous one nothing. */

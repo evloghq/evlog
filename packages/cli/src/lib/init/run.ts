@@ -11,8 +11,9 @@ import { cliErrors } from '../errors'
 import { detectFramework, rangeMajor } from '../map/detect'
 import type { DetectionResult } from '../map/detect'
 import { eveAgentDirs, findEveRoot } from '../frameworks/eve/mount'
-import { DEFAULT_VERCEL_CONNECTOR, findVercelProject } from '../logs/vercel'
+import { findVercelProject } from '../logs/vercel'
 import { findLogConnectors, runSetupVercel } from '../setup-vercel'
+import type { ConnectorChoice } from '../setup-vercel'
 import type { Framework } from '../map/types'
 import { evlogReached, resolveEvlog, resolveProject } from '../project'
 import type { PackageJson, ProjectInfo } from '../project'
@@ -45,7 +46,7 @@ import {
   showPreview,
   runVerification,
 } from './prompts'
-import type { ConnectorChoice, InitAnswers } from './prompts'
+import type { InitAnswers } from './prompts'
 import { droppedExtras, resolveAnswers } from './resolve'
 import { writeActions } from './write'
 import { recordInitAnswers } from './telemetry'
@@ -366,7 +367,7 @@ export async function runInit(
   if (vercelProject && interactive) {
     try {
       const found = await findLogConnectors(vercelProject)
-      connector = await askVercelConnector(vercelProject.projectId, found.reusable, found.attached, DEFAULT_VERCEL_CONNECTOR)
+      connector = await askVercelConnector(vercelProject.projectId, found.reusable, found.attached, 'vercel/evlog')
     } catch (error) {
       if (error instanceof InitCancelled) {
         closeCancelled()
@@ -513,6 +514,9 @@ export async function runInit(
       try {
         await runSetupVercel({ ...ctx, cwd: project.packageDir }, {
           connector: connector.connector,
+          create: connector.create,
+          /* The plan already wrote the connector into a new config, or listed it as a manual step for an existing one. */
+          writeConfig: false,
           onStep: step => noteStep(ctx, step),
         })
         vercel.status = 'ready'

@@ -4,8 +4,9 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CliContext } from '../core/context'
 import { cliErrors } from './errors'
-import { loadCliConfig } from './config'
-import { DEFAULT_VERCEL_CONNECTOR, findVercelProject, projectOidc, readVercelLogs, requestConnectToken, resolveVercelAccess, VercelReadError } from './logs/vercel'
+import { loadCliConfig, writeLogsConnector } from './config'
+import type { ConnectorWrite } from './config'
+import { findVercelProject, projectOidc, readVercelLogs, requestConnectToken, resolveVercelAccess, VercelReadError } from './logs/vercel'
 import type { VercelAccess, VercelProject, VercelScope } from './logs/vercel'
 import { resolveProject } from './project'
 import { eveAgentDirs } from './frameworks/eve/mount'
@@ -128,8 +129,8 @@ export interface SetupVercelResult {
    * already attached: `vercel connect list` does not say for which environments.
    */
   environments?: string[]
-  /** Whether the connector is one the team already had, which `logs.vercel.connector` has to name. */
-  reused: boolean
+  /** Where `logs.vercel.connector` now names the connector, which reads go through. Absent with `writeConfig: false`. */
+  config?: ConnectorWrite
   /** Events the check read back from the last hour of runtime logs. */
   events: number
 }
@@ -141,21 +142,39 @@ export interface SetupVercelOptions {
   now?: Date
   /** The connector to use, over `logs.vercel.connector` in `evlog.config`. */
   connector?: string
+  /** Create `connector`, which the team must not have yet, instead of using one it has. */
+  create?: boolean
   /**
-   * Asked when the team has Vercel connectors to reuse and none is configured.
-   * Returns the one to reuse, or `undefined` to create the default one.
-   * Without it, setup creates the default one.
+   * Name the connector in `evlog.config` as `logs.vercel.connector`. Off for a
+   * caller that writes the config itself, such as `evlog init`.
+   * @default true
    */
-  choose?: (reusable: ListedConnector[], attached: ReadonlySet<string>) => Promise<string | undefined>
+  writeConfig?: boolean
+  /**
+   * Asked when neither `connector` nor `evlog.config` names one, with the
+   * team's Vercel API-key connectors (possibly none). Returns the connector
+   * to use or create, or `undefined` for none, which stops the setup.
+   * Without it, setup stops and lists the connectors `connector` could name.
+   */
+  choose?: (reusable: ListedConnector[], attached: ReadonlySet<string>) => Promise<ConnectorChoice | undefined>
   /**
    * The environments to attach the connector for. Each one's deployments can
    * exchange their OIDC token for the key the connector stores.
    * @default ['production', 'development']
    */
   environments?: string[]
-  /** Called before each step that changes something on Vercel, and with what an attachment grants. */
+  /** Called before each step that changes something on Vercel, with what an attachment grants, and with each line `evlog.config` gained. */
   onStep?: (command: string) => void
 }
+
+/** A connector to read through, and whether setup creates it. */
+export interface ConnectorChoice {
+  connector: string
+  create: boolean
+}
+
+/* The UID `vercel connect create vercel --name <name>` gives a connector. */
+const CREATABLE = /^vercel\/[a-z0-9][\w-]*$/i
 
 const HOUR_MS = 3_600_000
 /* Production for deployed agents, development for the token `evlog logs` and this check read with. Preview runs any branch's code, so it is asked for by name. */
@@ -164,16 +183,18 @@ const ENVIRONMENT = /^[a-z0-9][\w-]*$/i
 
 /**
  * Lets the linked project read its own runtime logs: links it if needed,
- * settles on a connector (the configured one, the default one, or one the
- * team already has), creates the default one if that is the choice, attaches
- * it to the project for the chosen environments, then reads the last hour through it
- * the way `evlog logs --source vercel` and the agent do. Each step is skipped
- * when already done, so it runs again safely.
+ * settles on a connector (the one passed, the configured one, or the one
+ * `choose` picks), creates it when that is the choice, attaches it to the
+ * project for the chosen environments, names it in `evlog.config`, then reads
+ * the last hour through it the way `evlog logs --source vercel` and the agent
+ * do. No connector is ever assumed. Each step is skipped when already done,
+ * so it runs again safely.
  */
 export async function runSetupVercel(ctx: CliContext, options: SetupVercelOptions = {}): Promise<SetupVercelResult> {
   const environments = options.environments ?? DEFAULT_ATTACH_ENVIRONMENTS
   const invalid = environments.find(environment => !ENVIRONMENT.test(environment))
   if (environments.length === 0 || invalid !== undefined) throw cliErrors.SETUP_INVALID_ENVIRONMENT({ value: invalid ?? '' })
+  if (options.create && !CREATABLE.test(options.connector ?? '')) throw cliErrors.SETUP_INVALID_CONNECTOR({ value: options.connector ?? '' })
   const vercel = options.vercel ?? createVercelCli()
   const project = await resolveProject(ctx.cwd)
   let linked = await findVercelProject(project.packageDir, project.root)
@@ -188,18 +209,24 @@ export async function runSetupVercel(ctx: CliContext, options: SetupVercelOption
   const onProject = new Set((await listConnectors(vercel, linked.dir, false)).map(connector => connector.uid))
   const onTeam = new Set(team.map(connector => connector.uid))
   const configured = options.connector ?? loadCliConfig(project)?.logs.vercel?.connector
-  let connector = configured ?? DEFAULT_VERCEL_CONNECTOR
-  if (configured === undefined && !onTeam.has(DEFAULT_VERCEL_CONNECTOR)) {
+  let choice: ConnectorChoice | undefined = configured === undefined ? undefined : { connector: configured, create: options.create === true }
+  if (!choice) {
     const reusable = reusableConnectors(team)
-    if (reusable.length > 0 && options.choose) connector = await options.choose(reusable, onProject) ?? DEFAULT_VERCEL_CONNECTOR
+    choice = await options.choose?.(reusable, onProject)
+    if (!choice) throw cliErrors.SETUP_VERCEL_NO_CONNECTOR({ reusable: reusable.map(listed => listed.uid) })
+    if (choice.create && !CREATABLE.test(choice.connector)) throw cliErrors.SETUP_INVALID_CONNECTOR({ value: choice.connector })
+  }
+  const { connector, create } = choice
+  const step = 'vercel connect list --json --all-projects'
+  if (create && onTeam.has(connector)) {
+    throw cliErrors.SETUP_VERCEL_FAILED({ step, reason: `the team already has a ${connector} connector; drop --create to use it` })
+  }
+  if (!create && !onTeam.has(connector)) {
+    throw cliErrors.SETUP_VERCEL_FAILED({ step, reason: `the team has no ${connector} connector; pass --connector ${connector} --create to create it` })
   }
 
-  const created = !onTeam.has(connector)
-  if (created) {
-    if (connector !== DEFAULT_VERCEL_CONNECTOR) {
-      throw cliErrors.SETUP_VERCEL_FAILED({ step: 'vercel connect list --json --all-projects', reason: `the team has no ${connector} connector` })
-    }
-    const args = ['connect', 'create', 'vercel', '--name', DEFAULT_VERCEL_CONNECTOR.split('/')[1]!]
+  if (create) {
+    const args = ['connect', 'create', 'vercel', '--name', connector.split('/')[1]!]
     options.onStep?.(`vercel ${args.join(' ')}`)
     await interactive(vercel, args, linked.dir)
     if (!(await listConnectors(vercel, linked.dir, true)).some(listed => listed.uid === connector)) {
@@ -215,6 +242,13 @@ export async function runSetupVercel(ctx: CliContext, options: SetupVercelOption
     await interactive(vercel, args, linked.dir)
   }
 
+  const config = options.writeConfig === false ? undefined : writeLogsConnector(project, connector)
+  if (config?.diff) {
+    options.onStep?.(`${config.state === 'created' ? 'wrote' : 'edited'} ${config.file}:`)
+    for (const line of config.diff) options.onStep?.(line)
+  } else if (config?.state === 'manual') {
+    options.onStep?.(`left ${config.file} as it is: it computes its config or names another connector. Set logs: { vercel: { connector: '${connector}' } } in it`)
+  }
   const { token, scope } = await (options.access ?? resolveVercelAccess)(linked, connector)
   const now = options.now ?? new Date()
   let events = 0
@@ -224,7 +258,7 @@ export async function runSetupVercel(ctx: CliContext, options: SetupVercelOption
     if (error instanceof VercelReadError) throw cliErrors.LOGS_VERCEL_READ_FAILED({ httpStatus: error.status, reason: error.message })
     throw error
   }
-  return { projectId: linked.projectId, connector, created, attached, ...(attached && { environments }), reused: !created && connector !== DEFAULT_VERCEL_CONNECTOR && configured === undefined, events }
+  return { projectId: linked.projectId, connector, created: create, attached, ...(attached && { environments }), ...(config && { config }), events }
 }
 
 /** One stage of `evlog setup vercel --check`. */
@@ -278,7 +312,11 @@ export async function runSetupVercelCheck(ctx: CliContext, options: PreflightOpt
   }
   stages.push({ id: 'oidc', status: 'ok', message: `token for ${scope.projectId}, reads ${scope.environment}` })
 
-  const connector = options.connector ?? loadCliConfig(project)?.logs.vercel?.connector ?? DEFAULT_VERCEL_CONNECTOR
+  const connector = options.connector ?? loadCliConfig(project)?.logs.vercel?.connector
+  if (connector === undefined) {
+    stages.push({ id: 'connector', status: 'fail', message: 'evlog.config names no logs.vercel.connector', fix: 'npx evlog setup vercel (offers the team\'s connectors and writes the one you pick to evlog.config.ts)' })
+    return done()
+  }
   let onTeam: ListedConnector | undefined
   let onProject: boolean
   try {
@@ -289,7 +327,7 @@ export async function runSetupVercelCheck(ctx: CliContext, options: PreflightOpt
     return done()
   }
   if (!onTeam) {
-    stages.push({ id: 'connector', status: 'fail', message: `the team has no ${connector} connector`, fix: 'npx evlog setup vercel (creates it; asks for a Vercel access token scoped to the team)' })
+    stages.push({ id: 'connector', status: 'fail', message: `the team has no ${connector} connector`, fix: `npx evlog setup vercel --connector ${connector} --create (asks for a Vercel access token scoped to the team), or name a connector the team has in logs.vercel.connector` })
     return done()
   }
   stages.push({ id: 'connector', status: onTeam.type === 'api-key' ? 'ok' : 'warn', message: `${connector} (${onTeam.type ?? 'unknown type'})`, ...(onTeam.type !== 'api-key' && { fix: 'Reads need an API-key connector holding a Vercel access token' }) })

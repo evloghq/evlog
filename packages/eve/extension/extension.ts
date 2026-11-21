@@ -33,7 +33,8 @@ export type EvlogEveLogsAccess = 'agent' | 'session' | false
 export interface EvlogEveConfig extends Omit<EvlogConfig, 'extends' | 'map' | 'logs'> {
   /**
    * Where the `logs` tool reads the agent's events. On Vercel it reads the
-   * project's runtime logs through `vercel.connector`; elsewhere the files in `dir`.
+   * project's runtime logs through `vercel.connector`, and fails until one is
+   * set; elsewhere the files in `dir`.
    */
   logs?: {
     /**
@@ -48,7 +49,12 @@ export interface EvlogEveConfig extends Omit<EvlogConfig, 'extends' | 'map' | 'l
     /** @default '.evlog/logs' */
     dir?: string
     vercel?: {
-      /** @default 'vercel/evlog' */
+      /**
+       * The Vercel Connect connector runtime logs are read through, such as
+       * `vercel/mcp`. No default: a read from Vercel without it fails and
+       * says to run `npx evlog setup vercel`, which writes the one picked to
+       * `evlog.config.ts`.
+       */
       connector?: string
     }
     /**

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -11,6 +11,8 @@ import { projectOidc, readVercelLogs } from '../src/lib/logs/vercel'
 import type { VercelAccess } from '../src/lib/logs/vercel'
 import { runSetupVercel, runSetupVercelCheck } from '../src/lib/setup-vercel'
 import { runSetupEve } from '../src/lib/setup-eve'
+import { loadCliConfig } from '../src/lib/config'
+import { resolveProject } from '../src/lib/project'
 import type { VercelCli } from '../src/lib/setup-vercel'
 
 const oidcSdk = vi.hoisted(() => ({ getVercelOidcToken: vi.fn<(options: { team: string, project: string }) => Promise<string>>() }))
@@ -47,12 +49,14 @@ function fakeVercel(pages: Page[]): { fetchFn: typeof fetch, bodies: Record<stri
   return { fetchFn, bodies, urls }
 }
 
-async function linkedProject(): Promise<string> {
+/** A project `vercel link` linked, with `connector` as its `logs.vercel.connector` when given. */
+async function linkedProject(connector?: string): Promise<string> {
   const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-vercel-'))
   tempDirs.push(cwd)
   await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'agent' }))
   await mkdir(join(cwd, '.vercel'))
   await writeFile(join(cwd, '.vercel', 'project.json'), JSON.stringify({ projectId: 'prj_1', orgId: 'team_1' }))
+  if (connector) await writeFile(join(cwd, 'evlog.config.ts'), `export default { logs: { vercel: { connector: '${connector}' } } }\n`)
   return cwd
 }
 
@@ -110,7 +114,7 @@ describe('readVercelLogs', () => {
 
 describe('evlog logs --source vercel', () => {
   it('reads the linked project\'s events over the last day, narrowed to a session', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { fetchFn, bodies } = fakeVercel([
       { events: [
         { message: line('2026-10-01T11:00:00.000Z', { gen_ai: { conversation: { id: 'wrun_A' } }, status: 500, level: 'error' }) },
@@ -129,7 +133,7 @@ describe('evlog logs --source vercel', () => {
   })
 
   it('says what it read: the project, its environment, the window, and that a cut line leaves it incomplete', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { fetchFn } = fakeVercel([{ events: [{ message: line('2026-10-01T11:00:00.000Z') }, { truncated: true }] }])
     const ctx = ctxAt(cwd)
     const result = await runLogs(ctx, { what: 'errors' }, { source: 'vercel', vercelAccess: access, fetchFn, now: NOW })
@@ -141,7 +145,7 @@ describe('evlog logs --source vercel', () => {
   })
 
   it('ranks the Vercel events with --ask, and refuses --ask on the sessions view', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { fetchFn } = fakeVercel([
       { events: [
         { message: line('2026-10-01T11:00:00.000Z', { path: '/api/checkout', status: 402 }) },
@@ -158,15 +162,15 @@ describe('evlog logs --source vercel', () => {
   })
 
   it('reads Vercel when evlog.config says so, and a flag still wins', async () => {
-    const cwd = await linkedProject()
-    await writeFile(join(cwd, 'evlog.config.ts'), `export default { logs: { source: 'vercel' } }\n`)
+    const cwd = await linkedProject('vercel/evlog')
+    await writeFile(join(cwd, 'evlog.config.ts'), `export default { logs: { source: 'vercel', vercel: { connector: 'vercel/evlog' } } }\n`)
     const { fetchFn } = fakeVercel([{ events: [] }])
     expect((await runLogs(ctxAt(cwd), {}, { vercelAccess: access, fetchFn, now: NOW })).origin.kind).toBe('vercel')
     await expect(runLogs(ctxAt(cwd), {}, { source: 'files', vercelAccess: access, fetchFn, now: NOW })).rejects.toMatchObject({ code: 'cli.LOGS_NO_SINK' })
   })
 
   it('refuses to answer for production from local files, or for preview from production', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     await mkdir(join(cwd, '.evlog', 'logs'), { recursive: true })
     await writeFile(join(cwd, '.evlog', 'logs', '2026-10-01.jsonl'), `${line('2026-10-01T11:00:00.000Z', { environment: 'development', status: 500, level: 'error' })}\n`)
     const ctx = ctxAt(cwd)
@@ -182,7 +186,7 @@ describe('evlog logs --source vercel', () => {
   })
 
   it('points an empty read at the window, not at the fs drain', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { fetchFn } = fakeVercel([{ events: [] }])
     const ctx = ctxAt(cwd)
 
@@ -192,10 +196,23 @@ describe('evlog logs --source vercel', () => {
     expect(report).not.toContain('fs drain')
   })
 
+  it('refuses to read Vercel until a connector is configured, rather than guess one', async () => {
+    const cwd = await linkedProject()
+    const used: string[] = []
+    const vercelAccess = (_: unknown, connector: string) => (used.push(connector), access())
+    const refused = { code: 'cli.LOGS_VERCEL_NO_CONNECTOR', message: 'Vercel logs are not set up: evlog.config names no logs.vercel.connector', fix: 'Run npx evlog setup vercel: it offers the team\'s connectors and writes the one you pick to evlog.config.ts' }
+
+    await expect(runLogs(ctxAt(cwd), {}, { source: 'vercel', vercelAccess, now: NOW })).rejects.toMatchObject(refused)
+    await writeFile(join(cwd, 'evlog.config.ts'), `export default { logs: { source: 'vercel' } }\n`)
+    await expect(runLogs(ctxAt(cwd), {}, { vercelAccess, now: NOW })).rejects.toMatchObject(refused)
+    expect(used).toEqual([])
+  })
+
   it('needs a linked project', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'evlog-cli-vercel-'))
     tempDirs.push(cwd)
     await writeFile(join(cwd, 'package.json'), '{"name":"x"}')
+    await writeFile(join(cwd, 'evlog.config.ts'), `export default { logs: { vercel: { connector: 'vercel/evlog' } } }\n`)
 
     await expect(runLogs(ctxAt(cwd), {}, { source: 'vercel', vercelAccess: access })).rejects.toMatchObject({ code: 'cli.LOGS_VERCEL_NOT_LINKED' })
   })
@@ -205,17 +222,17 @@ describe('evlog logs --source vercel', () => {
     [{ dir: 'logs' }, 'dir'],
     [{ url: 'http://x' }, 'url'],
   ])('refuses %o', async (options, flag) => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     await expect(runLogs(ctxAt(cwd), {}, { source: 'vercel', vercelAccess: access, ...options })).rejects.toThrow(`--source vercel cannot be combined with --${flag}`)
   })
 
   it('refuses an unknown source instead of reading files', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     await expect(runLogs(ctxAt(cwd), {}, { source: 'blob' })).rejects.toMatchObject({ code: 'cli.LOGS_INVALID_SOURCE' })
   })
 
   it('maps a refused read to its error', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const fetchFn = (() => Promise.resolve(new Response('forbidden', { status: 403 }))) as typeof fetch
     await expect(runLogs(ctxAt(cwd), {}, { source: 'vercel', vercelAccess: access, fetchFn, now: NOW })).rejects.toThrow('Vercel refused the read (403): forbidden')
   })
@@ -240,29 +257,39 @@ describe('evlog setup vercel', () => {
 
   const changes = (calls: string[]) => calls.filter(call => !call.includes('list'))
 
-  it('creates and attaches the connector, then reads the last hour through it', async () => {
+  it('creates the connector it is told to create, attaches it, names it in evlog.config.ts, then reads the last hour through it', async () => {
     const cwd = await linkedProject()
     const { vercel, calls } = fakeCli({ team: [{ uid: 'slack/bot', type: 'slack' }], onProject: [] })
     const { fetchFn, bodies } = fakeVercel([{ events: [{ message: line('2026-10-01T11:30:00.000Z') }] }])
     const used: string[] = []
 
-    const result = await runSetupVercel(ctxAt(cwd), { vercel, access: (_, connector) => (used.push(connector), access()), fetchFn, now: NOW })
+    const result = await runSetupVercel(ctxAt(cwd), { vercel, access: (_, connector) => (used.push(connector), access()), fetchFn, now: NOW, connector: 'vercel/logs-reader', create: true })
 
-    expect(result).toEqual({ projectId: 'prj_1', connector: 'vercel/evlog', created: true, attached: true, environments: ['production', 'development'], reused: false, events: 1 })
-    expect(changes(calls)).toEqual(['connect create vercel --name evlog', 'connect attach vercel/evlog --yes --environment production,development'])
-    expect(used).toEqual(['vercel/evlog'])
+    expect(result).toEqual({ projectId: 'prj_1', connector: 'vercel/logs-reader', created: true, attached: true, environments: ['production', 'development'], config: { file: 'evlog.config.ts', state: 'created', diff: [
+      `+ import { defineEvlog } from 'evlog'`,
+      `+ export default defineEvlog({`,
+      `+   logs: {`,
+      `+     vercel: { connector: 'vercel/logs-reader' },`,
+      `+   },`,
+      `+ })`,
+    ] }, events: 1 })
+    expect(changes(calls)).toEqual(['connect create vercel --name logs-reader', 'connect attach vercel/logs-reader --yes --environment production,development'])
+    expect(used).toEqual(['vercel/logs-reader'])
     expect(bodies[0]!.timeRange.start).toBe('2026-10-01T11:00:00.000Z')
+    expect(loadCliConfig(await resolveProject(cwd))?.logs.vercel).toEqual({ connector: 'vercel/logs-reader' })
   })
 
   it('changes nothing on a second run', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { vercel, calls } = fakeCli({ team: [{ uid: 'vercel/evlog', type: 'api-key' }], onProject: ['vercel/evlog'] })
     const { fetchFn } = fakeVercel([{ events: [] }])
+    const before = await readFile(join(cwd, 'evlog.config.ts'), 'utf8')
 
     const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW })
 
-    expect(result).toMatchObject({ created: false, attached: false, reused: false, events: 0 })
+    expect(result).toMatchObject({ created: false, attached: false, config: { file: 'evlog.config.ts', state: 'unchanged' }, events: 0 })
     expect(changes(calls)).toEqual([])
+    expect(await readFile(join(cwd, 'evlog.config.ts'), 'utf8')).toBe(before)
   })
 
   it('offers the team\'s Vercel API-key connectors and reuses the pick', async () => {
@@ -280,25 +307,112 @@ describe('evlog setup vercel', () => {
       now: NOW,
       choose: (reusable, attached) => {
         offered.push({ uids: reusable.map(connector => connector.uid), attached: [...attached] })
-        return Promise.resolve('vercel/mcp')
+        return Promise.resolve({ connector: 'vercel/mcp', create: false })
       },
     })
 
     expect(offered).toEqual([{ uids: ['vercel/mcp', 'vercel/ops'], attached: ['vercel/mcp'] }])
-    expect(result).toMatchObject({ connector: 'vercel/mcp', created: false, attached: false, reused: true })
+    expect(result).toMatchObject({ connector: 'vercel/mcp', created: false, attached: false, config: { state: 'created' } })
     expect(changes(calls)).toEqual([])
     expect(used).toEqual(['vercel/mcp'])
+    expect(loadCliConfig(await resolveProject(cwd))?.logs.vercel).toEqual({ connector: 'vercel/mcp' })
   })
 
-  it('creates the default connector when nothing can ask, even with one to reuse', async () => {
+  it('offers a vercel/evlog connector the team already has like any other, instead of using it unasked', async () => {
     const cwd = await linkedProject()
-    const { vercel, calls } = fakeCli({ team: [{ uid: 'vercel/mcp', type: 'api-key' }], onProject: ['vercel/mcp'] })
+    const { vercel } = fakeCli({ team: [{ uid: 'vercel/evlog', type: 'api-key' }, { uid: 'vercel/mcp', type: 'api-key' }], onProject: [] })
+    const offered: string[][] = []
+
+    await expect(runSetupVercel(ctxAt(cwd), { vercel, access, choose: (reusable) => {
+      offered.push(reusable.map(connector => connector.uid))
+      return Promise.resolve(undefined)
+    } })).rejects.toMatchObject({ code: 'cli.SETUP_VERCEL_NO_CONNECTOR' })
+    expect(offered).toEqual([['vercel/evlog', 'vercel/mcp']])
+  })
+
+  it('creates nothing and names the team\'s connectors when nothing can ask and no connector is passed', async () => {
+    const cwd = await linkedProject()
+    const { vercel, calls } = fakeCli({ team: [{ uid: 'vercel/mcp', type: 'api-key' }, { uid: 'vercel/ops', type: 'api-key' }], onProject: ['vercel/mcp'] })
+
+    await expect(runSetupVercel(ctxAt(cwd), { vercel, access })).rejects.toMatchObject({
+      code: 'cli.SETUP_VERCEL_NO_CONNECTOR',
+      message: 'No connector chosen to read Vercel logs through. The team has vercel/mcp, vercel/ops',
+      fix: 'Pass --connector with one of the team\'s connectors, or --connector vercel/<name> --create to create one',
+    })
+    expect(changes(calls)).toEqual([])
+    expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(false)
+  })
+
+  it('refuses to create a connector that is not a Vercel one, or one the team already has', async () => {
+    const cwd = await linkedProject()
+    const { vercel, calls } = fakeCli({ team: [{ uid: 'vercel/mcp', type: 'api-key' }], onProject: [] })
+
+    await expect(runSetupVercel(ctxAt(cwd), { vercel, access, connector: 'slack/evlog', create: true })).rejects.toMatchObject({ code: 'cli.SETUP_INVALID_CONNECTOR' })
+    await expect(runSetupVercel(ctxAt(cwd), { vercel, access, connector: 'vercel/mcp', create: true })).rejects.toThrow('the team already has a vercel/mcp connector; drop --create to use it')
+    expect(changes(calls)).toEqual([])
+  })
+
+  it('adds the connector to an evlog.config.ts that has other settings, and leaves them as they are', async () => {
+    const cwd = await linkedProject()
+    const config = `import { defineEvlog } from 'evlog'
+
+export default defineEvlog({
+  service: 'agent',
+  logs: {
+    dir: '.evlog/logs',
+  },
+})
+`
+    await writeFile(join(cwd, 'evlog.config.ts'), config)
+    const { vercel } = fakeCli({ team: [{ uid: 'vercel/mcp', type: 'api-key' }], onProject: ['vercel/mcp'] })
     const { fetchFn } = fakeVercel([{ events: [] }])
 
-    const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW })
+    const said: string[] = []
 
-    expect(result).toMatchObject({ connector: 'vercel/evlog', created: true, reused: false })
+    const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW, connector: 'vercel/mcp', onStep: step => said.push(step) })
+
+    expect(result.config).toEqual({ file: 'evlog.config.ts', state: 'updated', diff: [`+     vercel: { connector: 'vercel/mcp' },`] })
+    expect(said).toEqual(['edited evlog.config.ts:', `+     vercel: { connector: 'vercel/mcp' },`])
+    expect(await readFile(join(cwd, 'evlog.config.ts'), 'utf8')).toBe(config.replace(`    dir: '.evlog/logs',\n`, `    vercel: { connector: 'vercel/mcp' },\n    dir: '.evlog/logs',\n`))
+    const loaded = loadCliConfig(await resolveProject(cwd))
+    expect(loaded?.logs.vercel).toEqual({ connector: 'vercel/mcp' })
+    expect(loaded?.resolved.service).toBe('agent')
+  })
+
+  it('leaves a connector evlog.config.ts already names when another is passed', async () => {
+    const cwd = await linkedProject('vercel/old')
+    const { vercel } = fakeCli({ team: [{ uid: 'vercel/mcp', type: 'api-key' }], onProject: ['vercel/mcp'] })
+    const { fetchFn } = fakeVercel([{ events: [] }])
+
+    const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW, connector: 'vercel/mcp' })
+
+    expect(result.config).toEqual({ file: 'evlog.config.ts', state: 'manual' })
+    expect(await readFile(join(cwd, 'evlog.config.ts'), 'utf8')).toBe(`export default { logs: { vercel: { connector: 'vercel/old' } } }\n`)
+  })
+
+  it('leaves evlog.config.ts alone with writeConfig: false, for a caller that writes it itself', async () => {
+    const cwd = await linkedProject()
+    await writeFile(join(cwd, 'evlog.config.ts'), `export default { service: 'agent' }\n`)
+    const { vercel, calls } = fakeCli({ team: [], onProject: [] })
+    const { fetchFn } = fakeVercel([{ events: [] }])
+
+    const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW, connector: 'vercel/evlog', create: true, writeConfig: false })
+
+    expect(result).toMatchObject({ connector: 'vercel/evlog', created: true, attached: true })
+    expect(result).not.toHaveProperty('config')
     expect(changes(calls)).toEqual(['connect create vercel --name evlog', 'connect attach vercel/evlog --yes --environment production,development'])
+    expect(await readFile(join(cwd, 'evlog.config.ts'), 'utf8')).toBe(`export default { service: 'agent' }\n`)
+  })
+
+  it('prints the setting when evlog.config.ts computes its config', async () => {
+    const cwd = await linkedProject()
+    await writeFile(join(cwd, 'evlog.config.ts'), `import base from './base'\nexport default makeConfig(base)\n`)
+    const { vercel } = fakeCli({ team: [{ uid: 'vercel/mcp', type: 'api-key' }], onProject: ['vercel/mcp'] })
+    const { fetchFn } = fakeVercel([{ events: [] }])
+
+    const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW, connector: 'vercel/mcp' })
+
+    expect(result.config).toEqual({ file: 'evlog.config.ts', state: 'manual' })
   })
 
   it('attaches a configured connector without asking, and refuses one the team does not have', async () => {
@@ -310,13 +424,13 @@ describe('evlog setup vercel', () => {
 
     const result = await runSetupVercel(ctxAt(cwd), { vercel, access, fetchFn, now: NOW, choose })
 
-    expect(result).toMatchObject({ connector: 'vercel/ops', created: false, attached: true, reused: false })
+    expect(result).toMatchObject({ connector: 'vercel/ops', created: false, attached: true, config: { state: 'unchanged' } })
     expect(changes(calls)).toEqual(['connect attach vercel/ops --yes --environment production,development'])
     await expect(runSetupVercel(ctxAt(cwd), { vercel, access, connector: 'vercel/gone' })).rejects.toThrow('the team has no vercel/gone connector')
   })
 
   it('grants preview only when asked, and says what the attachment grants before running it', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { vercel, calls } = fakeCli({ team: [{ uid: 'vercel/evlog', type: 'api-key' }], onProject: [] })
     const { fetchFn } = fakeVercel([{ events: [] }])
     const said: string[] = []
@@ -330,7 +444,7 @@ describe('evlog setup vercel', () => {
   })
 
   it('leaves an existing attachment as it is and does not claim which environments it covers', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { vercel, calls } = fakeCli({ team: [{ uid: 'vercel/evlog', type: 'api-key' }], onProject: ['vercel/evlog'] })
     const { fetchFn } = fakeVercel([{ events: [] }])
 
@@ -355,7 +469,7 @@ describe('evlog setup vercel', () => {
       ? { code: 0, stdout: JSON.stringify(args.includes('--all-projects') ? [{ uid: 'vercel/evlog', type: 'api-key' }] : []), stderr: '' }
       : { code: 1, stdout: '', stderr: '' })
     let read = false
-    await expect(runSetupVercel(ctxAt(cwd), { vercel, access: () => (read = true, access()) }))
+    await expect(runSetupVercel(ctxAt(cwd), { vercel, connector: 'vercel/evlog', access: () => (read = true, access()) }))
       .rejects.toThrow('vercel connect attach vercel/evlog --yes --environment production,development failed: exited 1')
     expect(read).toBe(false)
   })
@@ -388,7 +502,7 @@ describe('evlog setup vercel --check', () => {
   const summary = (stages: Array<{ id: string, status: string }>) => stages.map(stage => `${stage.id}:${stage.status}`)
 
   it('passes every stage and changes nothing', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { vercel, calls } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
     const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200, [{ message: line('2026-10-01T11:30:00.000Z') }]), now: NOW })
     expect(summary(stages)).toEqual(['linked:ok', 'oidc:ok', 'connector:ok', 'attached:ok', 'token:ok', 'read:ok'])
@@ -397,7 +511,7 @@ describe('evlog setup vercel --check', () => {
   })
 
   it('fails on the read, not the token, when Connect issues one but the stored key may not read logs', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { vercel } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
     const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 403), now: NOW })
     expect(summary(stages)).toEqual(['linked:ok', 'oidc:ok', 'connector:ok', 'attached:ok', 'token:ok', 'read:fail'])
@@ -405,14 +519,23 @@ describe('evlog setup vercel --check', () => {
   })
 
   it('tells an empty window from a refused one', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { vercel } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
     const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
     expect(stages.at(-1)).toEqual({ id: 'read', status: 'ok', message: 'allowed; no runtime log lines in the last hour' })
   })
 
-  it('stops at the first failing stage and skips the rest', async () => {
+  it('fails the connector stage when evlog.config names no connector, without listing any', async () => {
     const cwd = await linkedProject()
+    const { vercel, calls } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
+    const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
+    expect(summary(stages)).toEqual(['linked:ok', 'oidc:ok', 'connector:fail', 'attached:skipped', 'token:skipped', 'read:skipped'])
+    expect(stages[2]).toMatchObject({ message: 'evlog.config names no logs.vercel.connector', fix: 'npx evlog setup vercel (offers the team\'s connectors and writes the one you pick to evlog.config.ts)' })
+    expect(calls).toEqual([])
+  })
+
+  it('stops at the first failing stage and skips the rest', async () => {
+    const cwd = await linkedProject('vercel/evlog')
     const { vercel } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], [])
     expect(summary(await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })))
       .toEqual(['linked:ok', 'oidc:ok', 'connector:ok', 'attached:fail', 'token:skipped', 'read:skipped'])
@@ -437,7 +560,7 @@ describe('evlog setup vercel --check', () => {
   const team = [{ uid: 'slack/bot', type: 'slack' }, { uid: 'vercel/other', type: 'api-key' }, { uid: 'github/app', type: 'github' }, { uid: 'vercel/evlog', type: 'api-key' }]
 
   it('finds the connector and its attachment past the first page of the list', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { vercel, calls } = paged(team, ['slack/bot', 'github/app', 'vercel/evlog'])
     const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
     expect(summary(stages)).toEqual(['linked:ok', 'oidc:ok', 'connector:ok', 'attached:ok', 'token:ok', 'read:ok'])
@@ -446,7 +569,7 @@ describe('evlog setup vercel --check', () => {
   })
 
   it('says the team has no such connector only after the last page', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const { vercel, calls } = paged(team.filter(connector => connector.uid !== 'vercel/evlog'), [])
     const stages = await runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
     expect(stages.find(stage => stage.id === 'connector')).toMatchObject({ status: 'fail', message: 'the team has no vercel/evlog connector' })
@@ -454,7 +577,7 @@ describe('evlog setup vercel --check', () => {
   })
 
   it('fails the connector stage when a later page cannot be read, or the cursor repeats', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     const broken: VercelCli = args => Promise.resolve(args.includes('--next')
       ? { code: 1, stdout: '', stderr: 'Error: rate limited\n' }
       : { code: 0, stdout: JSON.stringify({ connectors: [{ uid: 'slack/bot', type: 'slack' }], pagination: { next: 'c1' } }), stderr: '' })
@@ -466,7 +589,7 @@ describe('evlog setup vercel --check', () => {
   })
 
   it('flags an eve agent without trace instrumentation, and evlog setup eve writes it once', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     await mkdir(join(cwd, 'agent'))
     const { vercel } = cli([{ uid: 'vercel/evlog', type: 'api-key' }], ['vercel/evlog'])
     const check = () => runSetupVercelCheck(ctxAt(cwd), { vercel, oidc, fetchFn: vercelApi(200, 200), now: NOW })
@@ -478,7 +601,7 @@ describe('evlog setup vercel --check', () => {
   })
 
   it('leaves an instrumentation file it did not write alone', async () => {
-    const cwd = await linkedProject()
+    const cwd = await linkedProject('vercel/evlog')
     await mkdir(join(cwd, 'agent', 'instrumentation'), { recursive: true })
     await writeFile(join(cwd, 'agent', 'instrumentation', 'evlog.ts'), 'export default {}\n')
     expect(await runSetupEve(ctxAt(cwd))).toMatchObject([{ state: 'conflict' }])

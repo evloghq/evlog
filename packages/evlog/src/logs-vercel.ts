@@ -38,9 +38,6 @@ export function vercelScope(oidcToken: string): VercelScope | undefined {
   return { teamId, projectId, environment: environment === 'preview' ? 'preview' : 'production' }
 }
 
-/** The connector `evlog setup vercel` creates when the team has none to reuse. */
-export const DEFAULT_VERCEL_CONNECTOR = 'vercel/evlog'
-
 /** Vercel refused a request: the status and its message. */
 export class VercelReadError extends Error {
   constructor(readonly status: number, message: string) {

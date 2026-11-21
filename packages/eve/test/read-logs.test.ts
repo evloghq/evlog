@@ -96,7 +96,7 @@ describe('readLogs on Vercel', () => {
     const { fetchFn } = fakeVercel([], 404)
 
     await expect(readLogs({}, { source: { kind: 'vercel', oidcToken: OIDC, connector: 'vercel/evlog', fetchFn }, now: NOW }))
-      .rejects.toMatchObject({ message: 'Vercel Connect issued no token for vercel/evlog (404)', fix: 'Run npx evlog setup vercel in the agent\'s project' })
+      .rejects.toMatchObject({ message: 'Vercel Connect issued no token for vercel/evlog (404)', fix: 'Run npx evlog setup vercel in the agent\'s project, or check logs.vercel.connector (vercel/evlog)' })
   })
 
   it('refuses input it cannot read instead of widening the query', async () => {

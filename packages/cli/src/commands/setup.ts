@@ -1,14 +1,13 @@
-import { isCancel, select } from '@clack/prompts'
+import { isCancel, select, text } from '@clack/prompts'
 import { telemetry } from '@evlog/telemetry'
 import { EvlogError } from 'evlog'
 import { createStyle, EXIT_FAIL, EXIT_USAGE } from '../core/output'
 import { defineEvlogCommand } from '../lib/command'
 import { cliErrors, isUsageError } from '../lib/errors'
-import { DEFAULT_VERCEL_CONNECTOR } from '../lib/logs/vercel'
 import { runSetupEve } from '../lib/setup-eve'
 import type { SetupEveResult } from '../lib/setup-eve'
 import { runSetupVercel, runSetupVercelCheck } from '../lib/setup-vercel'
-import type { ListedConnector, PreflightStage } from '../lib/setup-vercel'
+import type { ConnectorChoice, ListedConnector, PreflightStage } from '../lib/setup-vercel'
 
 const MARK: Record<PreflightStage['status'], { mark: string, color: 'green' | 'yellow' | 'red' | 'dim' }> = {
   ok: { mark: '✓', color: 'green' },
@@ -17,16 +16,33 @@ const MARK: Record<PreflightStage['status'], { mark: string, color: 'green' | 'y
   skipped: { mark: '·', color: 'dim' },
 }
 
-async function chooseConnector(reusable: ListedConnector[], attached: ReadonlySet<string>): Promise<string | undefined> {
+const CREATE = Symbol('create')
+
+async function chooseConnector(reusable: ListedConnector[], attached: ReadonlySet<string>): Promise<ConnectorChoice | undefined> {
   const ordered = [...reusable].sort((a, b) => Number(attached.has(b.uid)) - Number(attached.has(a.uid)))
-  const answer = await select({
-    message: 'The team already has a Vercel API-key connector. Read logs through it? Reusing one gives this project\'s deployments the whole authority of the key it stores',
-    options: [
-      ...ordered.map(connector => ({ value: connector.uid, label: `Reuse ${connector.uid}`, hint: attached.has(connector.uid) ? 'attached to this project' : undefined })),
-      { value: DEFAULT_VERCEL_CONNECTOR, label: `Create ${DEFAULT_VERCEL_CONNECTOR}`, hint: 'asks for a new Vercel access token' },
-    ],
+  if (ordered.length > 0) {
+    const answer = await select<string | typeof CREATE>({
+      message: 'The team has Vercel API-key connectors that can read runtime logs. Use one? It gives this project\'s deployments the whole authority of the key it stores',
+      options: [
+        ...ordered.map(connector => ({ value: connector.uid, label: `Use ${connector.uid}`, hint: attached.has(connector.uid) ? 'attached to this project' : undefined })),
+        { value: CREATE, label: 'Create a new connector', hint: 'asks for a Vercel access token' },
+      ],
+    })
+    if (isCancel(answer)) return undefined
+    if (answer !== CREATE) return { connector: answer, create: false }
+  }
+  const taken = new Set(reusable.map(connector => connector.uid))
+  const name = await text({
+    message: 'Name of the new Vercel connector',
+    placeholder: 'evlog',
+    validate: (value) => {
+      const uid = `vercel/${value?.trim() ?? ''}`
+      if (!/^vercel\/[a-z0-9][\w-]*$/i.test(uid)) return 'Letters, digits, - and _, starting with a letter or digit'
+      if (taken.has(uid)) return `The team already has ${uid}`
+      return undefined
+    },
   })
-  return isCancel(answer) ? undefined : answer
+  return isCancel(name) ? undefined : { connector: `vercel/${name.trim()}`, create: true }
 }
 
 /**
@@ -38,7 +54,8 @@ export default defineEvlogCommand('setup', {
   args: {
     target: { type: 'positional', required: true, description: 'What to set up: vercel, or eve for an eve agent\'s trace instrumentation' },
     check: { type: 'boolean', description: 'Report each stage without changing anything: link, OIDC, connector, attachment, token, log read, traces' },
-    connector: { type: 'string', description: 'The Vercel Connect connector to read through, such as vercel/mcp (default: logs.vercel.connector in evlog.config, else vercel/evlog)' },
+    connector: { type: 'string', description: 'The Vercel Connect connector to read through, such as vercel/mcp (default: logs.vercel.connector in evlog.config; asked for when neither names one)' },
+    create: { type: 'boolean', description: 'Create the --connector connector, such as --connector vercel/evlog --create, instead of using one the team has' },
     environment: { type: 'string', description: 'Environments to attach the connector for, separated by commas (default: production,development). Add preview only if every branch may use the key' },
   },
   async run({ args, cli, ui }) {
@@ -76,12 +93,21 @@ export default defineEvlogCommand('setup', {
       }
       const result = await runSetupVercel(cli, {
         connector: args.connector,
+        create: args.create === true,
         environments: typeof args.environment === 'string' ? args.environment.split(',').map(name => name.trim()) : undefined,
         choose: cli.tty && !args.json ? chooseConnector : undefined,
         onStep: command => ui.human(style.paint('dim', `→ ${command}`)),
       })
+      const written = result.config!
+      const config = {
+        created: `wrote ${written.file} with logs.vercel.connector`,
+        updated: `set logs.vercel.connector in ${written.file}`,
+        unchanged: `${written.file} already names it in logs.vercel.connector`,
+        manual: '',
+      }[written.state]
       const steps = [
         `${result.connector} connector ${result.created ? 'created' : 'already on the team'}`,
+        ...(config ? [config] : []),
         result.attached ? `attached to ${result.projectId} for ${result.environments!.join(', ')}` : `already attached to ${result.projectId}, left as it is; its environments are in the project's Connect tab`,
         `read ${result.events} event${result.events === 1 ? '' : 's'} from the last hour of runtime logs`,
       ]
@@ -91,9 +117,6 @@ export default defineEvlogCommand('setup', {
         human: [
           ...steps.map(step => `${style.paint('green', '✓')} ${step}`),
           '',
-          ...(result.reused
-            ? [`Add logs: { vercel: { connector: '${result.connector}' } } to evlog.config.ts, and to the evlog mount of an eve agent, so reads go through it`, '']
-            : []),
           style.paint('dim', 'evlog logs --source vercel reads them from here; deployed agents read them through the same connector'),
         ].join('\n'),
       })

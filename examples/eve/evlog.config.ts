@@ -18,4 +18,9 @@ export default defineEvlog({
     ctx.event.runtime = process.env.VERCEL_REGION ?? 'local'
     ctx.event.demo = 'evlog-eve-support-refund'
   },
+  // The connector `evlog setup vercel` picked: the deployed agent and
+  // `evlog logs --source vercel` read runtime logs through it.
+  logs: {
+    vercel: { connector: 'vercel/evlog' },
+  },
 })

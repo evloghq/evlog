@@ -5,7 +5,7 @@ import { requestConnectToken, VercelReadError, vercelScope } from '../../../../e
 import type { VercelScope } from '../../../../evlog/src/logs-vercel'
 import { cliErrors } from '../errors'
 
-export { DEFAULT_VERCEL_CONNECTOR, readVercelLogs, requestConnectToken, VercelReadError } from '../../../../evlog/src/logs-vercel'
+export { readVercelLogs, requestConnectToken, VercelReadError } from '../../../../evlog/src/logs-vercel'
 export type { VercelLogsSummary, VercelScope } from '../../../../evlog/src/logs-vercel'
 
 /** A project `vercel link` linked: where its `.vercel` directory is, and its ids. */
