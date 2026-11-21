@@ -978,6 +978,46 @@ describe('createDrainPipeline', () => {
       expect(onDropped.mock.calls.map(([, , reason]) => reason)).toEqual(['deferred'])
     })
 
+    it('drops an exhausted request-end flush without waiting for a retry it cannot make', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 20_000 }))
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5 }, requestBudget: 1, onDropped: vi.fn() })(drain)
+
+      hook(createTestContext(1))
+      let done = false
+      void deliverPendingDrains().then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(drain).toHaveBeenCalledOnce()
+      expect(done).toBe(true)
+      expect(hook.stats().dropped.deferred).toBe(1)
+    })
+
+    it('drops only the exhausted flush\'s events from a batch that also holds later ones', async () => {
+      vi.stubEnv('VERCEL', '1')
+      const drain = vi.fn()
+        .mockRejectedValueOnce(new DrainDeliveryError('unavailable', { status: 503, retryable: true }))
+        .mockResolvedValue(undefined)
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 10, intervalMs: 5000 }, retry: { maxAttempts: 5, initialDelayMs: 10 }, requestBudget: 1, onDropped })(drain)
+
+      hook(createTestContext(1))
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(drain).toHaveBeenCalledOnce()
+
+      // Holds event 1 (waiting to retry) and event 2; the retry of 1 spends its only send.
+      hook(createTestContext(2))
+      void deliverPendingDrains()
+      hook(createTestContext(3))
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(drain.mock.calls.map(([batch]) => (batch as DrainContext[]).map(ctx => ctx.event.id))).toEqual([[1], [1], [3]])
+      expect(onDropped.mock.calls.map(([events, , reason]) => [events.map((ctx: DrainContext) => ctx.event.id), reason])).toEqual([[[2], 'deferred']])
+      expect(hook.stats().delivered).toBe(2)
+    })
+
     it('skips a retry that would start past 25 s after the request ended on Workers', async () => {
       vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' })
       const drain = vi.fn().mockRejectedValue(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 20_000 }))

@@ -548,6 +548,7 @@ describe('createMiddlewareLogger', () => {
     })
 
     it('delivers a pipeline batch before finish() resolves on AWS Lambda without waitUntil', async () => {
+      for (const name of ['VERCEL', 'NETLIFY']) vi.stubEnv(name, '')
       vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'orders')
       onTestFinished(() => vi.unstubAllEnvs())
       await withFakeTimers(async () => {

@@ -277,13 +277,25 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       })
     }
 
-    /** The limit a send of `batch` hits first for the request-end flushes waiting on its events. */
-    function requestLimit(batch: T[]): 'deadline' | 'deferred' | undefined {
-      const serving = heldWaiters.filter(waiter => waiter.sending && batch.some(event => waiter.events.has(event)))
-      if (serving.some(waiter => Date.now() >= waiter.deadline)) return 'deadline'
-      if (serving.some(waiter => waiter.sends >= requestBudget)) return 'deferred'
-      for (const waiter of serving) waiter.sends++
-      return undefined
+    /**
+     * Removes from `batch` and drops the events whose request-end flush cannot send again within `delay`:
+     * past its deadline, or out of budget. Events no exhausted flush holds stay in the batch.
+     */
+    function dropRequestLimited(batch: T[], delay: number, error?: Error): void {
+      const limited = new Map<T, 'deadline' | 'deferred'>()
+      for (const waiter of heldWaiters) {
+        if (!waiter.sending) continue
+        const reason = waiter.deadline <= Date.now() + delay ? 'deadline' : waiter.sends >= requestBudget ? 'deferred' : undefined
+        if (!reason) continue
+        for (const event of batch) {
+          if (waiter.events.has(event) && limited.get(event) !== 'deadline') limited.set(event, reason)
+        }
+      }
+      if (limited.size === 0) return
+      const kept = batch.filter(event => !limited.has(event))
+      batch.splice(0, batch.length, ...kept)
+      drop([...limited].filter(([, reason]) => reason === 'deadline').map(([event]) => event), 'deadline', error)
+      drop([...limited].filter(([, reason]) => reason === 'deferred').map(([event]) => event), 'deferred', error)
     }
 
     function drop(events: T[], reason: DrainDropReason, error?: Error, count = events.length): void {
@@ -308,10 +320,12 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       for (let attempt = 1; ; attempt++) {
         // Another delivery may have paused the pipeline while this one waited to retry.
         if (attempt > 1 && pauseRemainingMs() > 0) return 'paused'
-        const limit = heldWaiters.some(waiter => waiter.sending) ? requestLimit(batch) : undefined
-        if (limit) {
-          drop(batch, limit, lastAttemptError)
-          return 'done'
+        if (heldWaiters.some(waiter => waiter.sending)) {
+          dropRequestLimited(batch, 0, lastAttemptError)
+          if (batch.length === 0) return 'done'
+          for (const waiter of heldWaiters) {
+            if (waiter.sending && batch.some(event => waiter.events.has(event))) waiter.sends++
+          }
         }
         try {
           await send(batch)
@@ -345,11 +359,9 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
             return 'done'
           }
           const delay = retryAfterMs ?? getRetryDelay(attempt)
-          // The runtime stops at the deadline: a retry that cannot start before it would be cut off.
-          if (heldWaiters.some(waiter => waiter.deadline <= Date.now() + delay && batch.some(event => waiter.events.has(event)))) {
-            drop(batch, 'deadline', lastError)
-            return 'done'
-          }
+          // A retry that cannot start before the deadline, or that the budget forbids, is not worth waiting for.
+          dropRequestLimited(batch, delay, lastError)
+          if (batch.length === 0) return 'done'
           lastAttemptError = lastError
           await new Promise<void>(r => setTimeout(r, delay))
         }
