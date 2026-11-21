@@ -46,6 +46,7 @@ import {
   showPreview,
   runVerification,
 } from './prompts'
+import { vercelOutcome } from './report'
 import type { InitAnswers } from './prompts'
 import { droppedExtras, resolveAnswers } from './resolve'
 import { writeActions } from './write'
@@ -105,6 +106,8 @@ export interface VercelSummary {
   /** `pending` under `--dry-run`, `ready` once attached and read back, `failed` with why. */
   status: 'pending' | 'ready' | 'failed'
   error?: string
+  /** The config init left as it is, which still has to name the connector. */
+  addTo?: string
 }
 
 /** What the scan found, summarised for the report and the telemetry event. */
@@ -509,7 +512,9 @@ export async function runInit(
      Vercel answers. The same steps as `evlog setup vercel`, each skipped when done. */
   let vercel: VercelSummary | null = null
   if (vercelProject && connector) {
-    vercel = { projectId: vercelProject.projectId, connector: connector.connector, status: 'pending' }
+    const uid = connector.connector
+    const addTo = plan.manual.find(step => step.title === `Read the agent's Vercel logs through ${uid}`)?.file
+    vercel = { projectId: vercelProject.projectId, connector: uid, status: 'pending', ...(addTo && { addTo }) }
     if (!dryRun) {
       try {
         await runSetupVercel({ ...ctx, cwd: project.packageDir }, {
@@ -573,8 +578,8 @@ export async function runInit(
   if (interactive) {
     if (agentGuide) noteSkills(ctx, agentGuide)
     noteInfo(plan.notes)
-    if (vercel?.status === 'ready') clackLog.success(`The deployed agent reads its Vercel runtime logs through ${vercel.connector}`)
-    if (vercel?.status === 'failed') clackLog.error(`${vercel.connector} is named in evlog.config.ts but not ready: ${vercel.error}`)
+    if (vercel?.status === 'ready') (vercel.addTo ? clackLog.warn : clackLog.success)(vercelOutcome(vercel))
+    if (vercel?.status === 'failed') clackLog.error(vercelOutcome(vercel))
     noteManual(plan.manual)
     closeInteractive(ctx, answers.framework, getFramework(answers.framework).docs, dryRun)
   }
