@@ -289,6 +289,50 @@ jobs:
       - name: Build affected examples
         run: pnpm exec turbo run build --affected --continue --filter='./examples/*'
 
+  # @evlog/eve peers `eve >=1.0.0` but develops against one pinned eve. This
+  # runs it and examples/eve against the floor and against npm `latest`, so an
+  # eve release that breaks them fails here (eve is exempt from
+  # minimumReleaseAge, so `latest` is the release npm serves today). The latest
+  # leg is allowed to fail: an upstream release must not block unrelated pull
+  # requests, and the Renovate PR that bumps the pinned eve is where a break
+  # becomes blocking.
+  eve-compat:
+    name: eve compatibility (${{ matrix.eve }})
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.eve == 'latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        eve: ['1.0.0', 'latest']
+    env:
+      # The dependency graph differs from the lockfile, so nothing is shared with the remote cache
+      TURBO_CACHE: local:rw
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm and Node
+        uses: ./.github/actions/setup
+
+      - name: Install eve ${{ matrix.eve }}
+        env:
+          EVE: ${{ matrix.eve }}
+        run: |
+          (cd packages/eve && npm pkg set "devDependencies.eve=$EVE")
+          (cd examples/eve && npm pkg set "dependencies.eve=$EVE")
+          pnpm install --no-frozen-lockfile
+          for dir in packages/eve examples/eve; do
+            echo "$dir: eve $(node -p "require('./$dir/node_modules/eve/package.json').version")" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Build, typecheck and test
+        run: pnpm exec turbo run build typecheck test --continue --filter=@evlog/eve --filter=evlog-eve-example
+
   # Report-only (no fail threshold in 3.0). Base and head run on this same
   # runner, so the comparison measures the change, not the machine. The job is
   # left out of the `ci` aggregate below on purpose: it can never block a merge.
@@ -400,7 +444,7 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-slim
-    needs: [quality, test, cli-compat, examples]
+    needs: [quality, test, cli-compat, examples, eve-compat]
     if: always()
     steps:
       # v3 publishes prereleases until 3.0 GA; drop this step on v3 when GA is cut
