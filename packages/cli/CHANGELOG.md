@@ -1,5 +1,11 @@
 # @evlog/cli
 
+## 0.13.0
+
+### Minor Changes
+
+- [#1172](https://github.com/evloghq/evlog/pull/1172) [`d1e83ac`](https://github.com/evloghq/evlog/commit/d1e83ac71c0c22768841a1a525c6802d938de768) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog logs --ask "<question>"` ranks the selected events by a yes/no question a decision model answers, for what no `--where` can express: `evlog logs --path /api/checkout --ask 'The customer tried to pay but did not end up with a confirmed order'`. Filters run first, so the model sees at most `--limit` events. Each event is cut down before it is sent (strings to 256 characters, arrays to 10 items, stacks to 3 lines), events that differ only in timestamps, request ids, idempotency keys, trace, span and parent span ids and a few milliseconds share one call, and `--dry-run` prints the calls and input tokens a run would take without sending anything. It needs `@evlog/signals` 0.2.0 or later and `ai` 7 from 7.0.130 (`>=7.0.130 <8`) in the project, now optional peer dependencies of `@evlog/cli`, and a model key such as `AI_GATEWAY_API_KEY`. `--model <gateway id>` picks the decision model; without it `--ask` uses the `@evlog/signals` default. A failed call stops the run with the reason; `--json` carries `answers` as `{ probability, event }`.
+
 ## 0.12.0
 
 ### Minor Changes
