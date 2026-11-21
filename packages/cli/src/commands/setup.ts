@@ -6,7 +6,7 @@ import { defineEvlogCommand } from '../lib/command'
 import { cliErrors, isUsageError } from '../lib/errors'
 import { runSetupEve } from '../lib/setup-eve'
 import type { SetupEveResult } from '../lib/setup-eve'
-import { runSetupVercel, runSetupVercelCheck } from '../lib/setup-vercel'
+import { connectorNameProblem, runSetupVercel, runSetupVercelCheck } from '../lib/setup-vercel'
 import type { ConnectorChoice, ListedConnector, PreflightStage } from '../lib/setup-vercel'
 
 const MARK: Record<PreflightStage['status'], { mark: string, color: 'green' | 'yellow' | 'red' | 'dim' }> = {
@@ -35,12 +35,7 @@ async function chooseConnector(reusable: ListedConnector[], attached: ReadonlySe
   const name = await text({
     message: 'Name of the new Vercel connector',
     placeholder: 'evlog',
-    validate: (value) => {
-      const uid = `vercel/${value?.trim() ?? ''}`
-      if (!/^vercel\/[a-z0-9][\w-]*$/i.test(uid)) return 'Letters, digits, - and _, starting with a letter or digit'
-      if (taken.has(uid)) return `The team already has ${uid}`
-      return undefined
-    },
+    validate: value => connectorNameProblem(value?.trim() ?? '', taken),
   })
   return isCancel(name) ? undefined : { connector: `vercel/${name.trim()}`, create: true }
 }

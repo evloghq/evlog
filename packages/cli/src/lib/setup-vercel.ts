@@ -176,6 +176,13 @@ export interface ConnectorChoice {
 /* The UID `vercel connect create vercel --name <name>` gives a connector. */
 const CREATABLE = /^vercel\/[a-z0-9][\w-]*$/i
 
+/** Why `vercel/<name>` cannot be created on a team that has `taken`, or `undefined` when it can. */
+export function connectorNameProblem(name: string, taken: ReadonlySet<string>): string | undefined {
+  if (!CREATABLE.test(`vercel/${name}`)) return 'Letters, digits, - and _, starting with a letter or digit'
+  if (taken.has(`vercel/${name}`)) return `The team already has vercel/${name}`
+  return undefined
+}
+
 const HOUR_MS = 3_600_000
 /* Production for deployed agents, development for the token `evlog logs` and this check read with. Preview runs any branch's code, so it is asked for by name. */
 export const DEFAULT_ATTACH_ENVIRONMENTS = ['production', 'development']
