@@ -45,7 +45,7 @@ pnpm evlog map
 | `evlog init --prod-drain <a,b>` | `axiom`, `otlp`, `posthog`, `sentry`, `better-stack`, `datadog`, `hyperdx`, `sazabi`, `loki`, `clickhouse`. Several fan out. |
 | `evlog init --extras <a,b>` | `enrichers`, `pipeline`, `sampling`, `error-catalog`, `audit-catalog`, `ai`, `better-auth`, `vite` |
 | `evlog init --apps <a,b>` | Workspace packages to set up, from a monorepo root |
-| `evlog init --dry-run` | Print the plan without touching a file |
+| `evlog init --dry-run` | Print the plan and a diff of every file it would change, without touching one |
 | `evlog init --service <name>` | Service name on every wide event (default: package name, unscoped) |
 | `evlog init --no-install` | Print the install command instead of running it |
 | `evlog init --no-agent-logs` | eve: hide the agent's `evlog__logs` tool, which reads its own events |

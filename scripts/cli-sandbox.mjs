@@ -359,6 +359,7 @@ check('init --dry-run writes nothing', (dir) => {
   const payload = json(cli(dir, initArgs('--json', '--yes', '--dry-run', '--no-install')))
   expect(payload.written.length > 0, 'nothing was planned')
   expect(payload.dryRun === true, 'dryRun was not reported')
+  expect(payload.written.every(file => payload.preview.some(diff => diff.file === file.file && diff.diff.length > 0)), 'a planned file has no diff')
   expect(git(dir, 'status', '--porcelain').trim() === '', 'the working tree changed')
 })
 

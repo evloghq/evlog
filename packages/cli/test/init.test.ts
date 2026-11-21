@@ -13,6 +13,7 @@ import { formatInitReport } from '../src/lib/init/report'
 import { configuredService, planWiring } from '../src/lib/init/wiring'
 import type { FileAction, WiringPlan } from '../src/lib/init/wiring'
 import type { DrainId } from '../src/lib/init/catalog'
+import { unifiedDiff } from '../src/lib/init/diff'
 import { detectPackageManager, evlogPackageSpec, installCommand } from '../src/lib/init/pm'
 import { detectEvlogMajor, detectNitroMajor, runInit } from '../src/lib/init/run'
 import { EVE_INSTRUMENTATION } from '../src/lib/setup-eve'
@@ -456,6 +457,96 @@ describe('runInit', () => {
     const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
 
     expect(result.install).toMatchObject({ status: 'skipped', command: `pnpm add ${evlogPackageSpec(VERSION)}` })
+  })
+})
+
+describe('dry-run diff', () => {
+  it('diffs a changed line with its context, the removal before the addition', () => {
+    // Expected output copied from GNU `diff -u` on the same two files.
+    const before = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'm'].join('\n')
+    const after = ['a', 'b', 'c', 'd', 'E', 'f', 'g', 'h', 'i', 'j', 'k', 'm', 'l'].join('\n')
+
+    expect(unifiedDiff(`${before}\n`, `${after}\n`)).toEqual([
+      '@@ -2,7 +2,7 @@',
+      ' b',
+      ' c',
+      ' d',
+      '-e',
+      '+E',
+      ' f',
+      ' g',
+      ' h',
+      '@@ -10,3 +10,4 @@',
+      ' j',
+      ' k',
+      ' m',
+      '+l',
+    ])
+  })
+
+  it('shows a new file as additions and an unchanged one as nothing', () => {
+    expect(unifiedDiff('', 'one\ntwo\n')).toEqual(['@@ -0,0 +1,2 @@', '+one', '+two'])
+    expect(unifiedDiff('same\n', 'same\n')).toEqual([])
+  })
+
+  it('shows what each edit would change in a file that exists, and leaves it as it was', async () => {
+    const config = `export default defineNuxtConfig({\n  modules: ['@nuxt/ui'],\n  devtools: { enabled: true },\n})\n`
+    const cwd = await project({ 'package.json': '{"name":"shop","dependencies":{"nuxt":"^4.0.0"}}', 'nuxt.config.ts': config })
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, dryRun: true, yes: true })
+
+    expect(result.preview.find(file => file.file === 'nuxt.config.ts')).toEqual({
+      file: 'nuxt.config.ts',
+      kind: 'patch',
+      lines: [
+        '@@ -1,4 +1,4 @@',
+        ' export default defineNuxtConfig({',
+        '-  modules: [\'@nuxt/ui\'],',
+        '+  modules: [\'@nuxt/ui\', \'evlog/nuxt\'],',
+        '   devtools: { enabled: true },',
+        ' })',
+      ],
+    })
+    expect(result.preview.find(file => file.file === 'evlog.config.ts')?.lines[0]).toMatch(/^@@ -0,0 \+1,\d+ @@$/)
+    expect(await readFile(join(cwd, 'nuxt.config.ts'), 'utf8')).toBe(config)
+    expect(formatInitReport(fakeContext(cwd), result)).toContain('   -  modules: [\'@nuxt/ui\'],\n   +  modules: [\'@nuxt/ui\', \'evlog/nuxt\'],')
+  })
+
+  it('shows the package.json the install would leave, in its own indentation', async () => {
+    const pkg = '{\n    "name": "agent",\n    "dependencies": {\n        "eve": "1.0.2"\n    }\n}\n'
+    const cwd = await project({ 'package.json': pkg, 'agent/agent.ts': '', 'pnpm-lock.yaml': '' })
+    const tag = VERSION.includes('-') ? 'beta' : 'latest'
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, dryRun: true, yes: true })
+
+    expect(result.preview[0]).toEqual({
+      file: 'package.json',
+      kind: 'patch',
+      by: `pnpm add ${evlogPackageSpec(VERSION)} ${evlogPackageSpec(VERSION, '@evlog/eve')}`,
+      lines: [
+        '@@ -1,6 +1,8 @@',
+        ' {',
+        '     "name": "agent",',
+        '     "dependencies": {',
+        '-        "eve": "1.0.2"',
+        `+        "@evlog/eve": "${tag}",`,
+        '+        "eve": "1.0.2",',
+        `+        "evlog": "${tag}"`,
+        '     }',
+        ' }',
+      ],
+    })
+    expect(await readFile(join(cwd, 'package.json'), 'utf8')).toBe(pkg)
+    expect(installs.calls).toEqual([])
+  })
+
+  it('previews nothing on a run that writes', async () => {
+    const cwd = await project({ 'package.json': '{"name":"shop","dependencies":{"nuxt":"^4.0.0"}}' })
+
+    const result = await runInit(fakeContext(cwd), undefined, { agentGuide: false, install: false, yes: true })
+
+    expect(result.written.length).toBeGreaterThan(0)
+    expect(result.preview).toEqual([])
   })
 })
 
@@ -1828,6 +1919,8 @@ describe('init command', () => {
 
     expect(json().install).toMatchObject({ status: 'skipped', command: `npm install ${evlogPackageSpec(VERSION)}` })
     expect(json().agentGuide).toMatchObject({ status: 'pending' })
+    expect(json().preview).toContainEqual({ file: 'evlog.config.ts', kind: 'create', diff: expect.stringMatching(/^@@ -0,0 \+1,\d+ @@\n\+import \{ defineEvlog \} from 'evlog'\n/) })
+    expect(json().preview[0]).toMatchObject({ file: 'package.json', by: `npm install ${evlogPackageSpec(VERSION)}` })
     expect(installs.calls).toEqual([])
     expect(skills.calls).toBe(0)
     expect(existsSync(join(cwd, 'evlog.config.ts'))).toBe(false)
