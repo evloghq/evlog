@@ -63,14 +63,97 @@ jobs:
       - name: Typecheck
         run: pnpm exec turbo run typecheck $AFFECTED --filter='!evlog-telemetry'
 
-  test:
-    name: Test
+  # The tests run as three jobs so the slowest suite, not the sum of all of
+  # them, sets how long a pull request waits. Each runs on 22, the engines
+  # floor, and on 24, the .node-version pin. The 24 legs read .node-version
+  # themselves, so they restore the same node_modules cache entry as the other
+  # jobs instead of saving a second copy under a key that says "24".
+  test-evlog:
+    name: Test evlog (${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        # 22 is the engines floor; 24 is the .node-version pin
+        node-version: ['22', '24']
+    permissions:
+      contents: read
+      id-token: write # remote cache OIDC
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - parallel:
+          - name: Set up Turborepo remote cache
+            if: env.IS_INTERNAL == 'true'
+            uses: vercel/setup-turborepo-remote-cache-action@49d7b1b46ba4c9251e1977986bfe18336feabc8f # v1.1.0
+            with:
+              team: ${{ vars.TURBO_TEAM }}
+
+          # @evlog/cli depends on evlog, so this installs both packages and
+          # everything they build and test with: half the workspace, and a
+          # cache entry that unpacks in half the time.
+          - name: Set up pnpm and Node
+            uses: ./.github/actions/setup
+            with:
+              node-version: ${{ matrix.node-version != '24' && matrix.node-version || '' }}
+              filters: --filter=@evlog/cli...
+
+      - name: Set up Bun for import regressions
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      # The coverage step bypasses turbo, so it inherits no dist/ from the
+      # affected graph — on a docs-only change nothing is affected and the
+      # dist-dependent tests (auto-import types, api-surface) would run
+      # against a missing build. Prepare it explicitly; the remote cache
+      # makes this a restore, not a rebuild, when src is untouched.
+      # test/bin.test.ts runs the evlog bin, which needs the workspace
+      # @evlog/cli built; without it the bin falls back to fetching the CLI.
+      - name: Prepare evlog dist
+        run: pnpm exec turbo run dev:prepare --filter=evlog --filter=@evlog/cli
+
+      # Vitest starts the slowest files first when it has their durations from
+      # an earlier run; without them a long file can start last and set the
+      # job's length. Only v3 saves them.
+      - name: Restore test durations
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: packages/evlog/node_modules/.vite/vitest
+          key: vitest-durations-${{ matrix.node-version }}-${{ github.sha }}
+          restore-keys: vitest-durations-${{ matrix.node-version }}-
+
+      - name: Test evlog with coverage
+        run: pnpm --filter evlog run test:coverage
+
+      - name: Save test durations
+        if: github.ref == 'refs/heads/v3'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: packages/evlog/node_modules/.vite/vitest
+          key: vitest-durations-${{ matrix.node-version }}-${{ github.sha }}
+
+      # test/build/size-budget.test.ts enforces the budget; this writes the table,
+      # including when that test failed.
+      - name: Bundle size report
+        if: ${{ !cancelled() && matrix.node-version == '24' }}
+        run: pnpm --filter evlog run size:budget >> "$GITHUB_STEP_SUMMARY"
+
+      # The fs drain needs no network and no secret, so its round-trip e2e runs
+      # on every pull request rather than only in e2e.yml.
+      - name: Test fs drain end to end
+        run: pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts
+
+  test-cli:
+    name: Test @evlog/cli (${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
         node-version: ['22', '24']
     permissions:
       contents: read
@@ -91,17 +174,85 @@ jobs:
           - name: Set up pnpm and Node
             uses: ./.github/actions/setup
             with:
-              # The 24 leg reads .node-version itself, so it restores the same
-              # node_modules cache entry as every other job instead of saving
-              # a second copy under a key that says "24".
+              node-version: ${{ matrix.node-version != '24' && matrix.node-version || '' }}
+              filters: --filter=@evlog/cli...
+
+      # Same as for evlog: coverage bypasses turbo, so the CLI and the
+      # workspace packages it imports are prepared explicitly.
+      - name: Prepare CLI dist
+        run: pnpm exec turbo run dev:prepare --filter=@evlog/cli
+
+      - name: Test @evlog/cli with coverage
+        run: pnpm --filter @evlog/cli run test:coverage
+
+      # The sandbox smoke runs every non-interactive CLI command against a real
+      # app per framework — the end-to-end seam (detect → init → doctor → map →
+      # baseline) that unit tests cover only piecewise. Gated to changes that
+      # can affect it, so a docs-only pull request skips the cost.
+      - name: CLI sandbox smoke
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: |
+          if [ "${{ github.event_name }}" = merge_group ] || git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs | grep -q .; then
+            node scripts/cli-sandbox.mjs --smoke
+          else
+            echo "CLI untouched — smoke skipped"
+          fi
+
+      # A project already on evlog 2.x has to be able to add the CLI next to
+      # it. npm resolves peers strictly here (no --legacy-peer-deps), so a peer
+      # range that rejects 2.x fails the install with ERESOLVE. Checks the
+      # lowest 2.x the CLI supports and the 2.33 line it is released against.
+      - name: CLI installs next to evlog 2.x
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: |
+          if [ "${{ github.event_name }}" = merge_group ] || git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli | grep -q .; then
+            pack_dir=$(mktemp -d)
+            (cd packages/cli && pnpm pack --pack-destination "$pack_dir" >/dev/null)
+            tarball=$(ls "$pack_dir"/*.tgz)
+            for evlog in 2.31.0 2.33.1; do
+              app=$(mktemp -d)
+              (
+                cd "$app"
+                npm init -y >/dev/null
+                npm install "evlog@$evlog"
+                npm install --save-dev "$tarball"
+                ./node_modules/.bin/evlog doctor --json >/dev/null
+              )
+            done
+          else
+            echo "CLI untouched, install check skipped"
+          fi
+
+  test:
+    name: Test workspace (${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22', '24']
+    permissions:
+      contents: read
+      id-token: write # remote cache OIDC
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - parallel:
+          - name: Set up Turborepo remote cache
+            if: env.IS_INTERNAL == 'true'
+            uses: vercel/setup-turborepo-remote-cache-action@49d7b1b46ba4c9251e1977986bfe18336feabc8f # v1.1.0
+            with:
+              team: ${{ vars.TURBO_TEAM }}
+
+          - name: Set up pnpm and Node
+            uses: ./.github/actions/setup
+            with:
               node-version: ${{ matrix.node-version != '24' && matrix.node-version || '' }}
 
-      - name: Set up Bun for import regressions
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: 1.4.4
-
-      # evlog and @evlog/cli run once below, under coverage, which enforces their thresholds.
+      # evlog and @evlog/cli run in their own jobs, under coverage, which enforces their thresholds.
       # The eve CLI refuses to start below Node 24, so the packages that build
       # with it only run on the 24 leg.
       - name: Test workspace
@@ -128,76 +279,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: pnpm run content:lint -- --since origin/${{ github.base_ref }}
 
-      # The coverage step bypasses turbo, so it inherits no dist/ from the
-      # affected graph — on a docs-only change nothing is affected and the
-      # dist-dependent tests (auto-import types, api-surface) would run
-      # against a missing build. Prepare it explicitly; the remote cache
-      # makes this a restore, not a rebuild, when src is untouched.
-      # test/bin.test.ts runs the evlog bin, which needs the workspace
-      # @evlog/cli built; without it the bin falls back to fetching the CLI.
-      - name: Prepare evlog dist
-        run: pnpm exec turbo run dev:prepare --filter=evlog --filter=@evlog/cli
-
-      - name: Test evlog with coverage
-        run: pnpm --filter evlog run test:coverage
-
-      # test/build/size-budget.test.ts enforces the budget; this writes the table,
-      # including when that test failed.
-      - name: Bundle size report
-        if: ${{ !cancelled() && matrix.node-version == '24' }}
-        run: pnpm --filter evlog run size:budget >> "$GITHUB_STEP_SUMMARY"
-
-      # The fs drain needs no network and no secret, so its round-trip e2e runs
-      # on every pull request rather than only in e2e.yml.
-      - name: Test fs drain end to end
-        run: pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts
-
-      - name: Test @evlog/cli with coverage
-        run: pnpm --filter @evlog/cli run test:coverage
-
-      # The sandbox smoke runs every non-interactive CLI command against a real
-      # app per framework — the end-to-end seam (detect → init → doctor → map →
-      # baseline) that unit tests cover only piecewise. Gated to changes that
-      # can affect it, so a docs-only pull request skips the cost. Like the
-      # coverage step it bypasses turbo, so it prepares the CLI and the
-      # workspace packages it imports.
-      - name: CLI sandbox smoke
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        run: |
-          if [ "${{ github.event_name }}" = merge_group ] || git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli scripts/cli-sandbox.mjs | grep -q .; then
-            pnpm exec turbo run dev:prepare --filter=@evlog/cli
-            node scripts/cli-sandbox.mjs --smoke
-          else
-            echo "CLI untouched — smoke skipped"
-          fi
-
-      # A project already on evlog 2.x has to be able to add the CLI next to
-      # it. npm resolves peers strictly here (no --legacy-peer-deps), so a peer
-      # range that rejects 2.x fails the install with ERESOLVE. Checks the
-      # lowest 2.x the CLI supports and the 2.33 line it is released against.
-      - name: CLI installs next to evlog 2.x
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        run: |
-          if [ "${{ github.event_name }}" = merge_group ] || git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- packages/cli | grep -q .; then
-            pnpm exec turbo run dev:prepare --filter=@evlog/cli
-            pack_dir=$(mktemp -d)
-            (cd packages/cli && pnpm pack --pack-destination "$pack_dir" >/dev/null)
-            tarball=$(ls "$pack_dir"/*.tgz)
-            for evlog in 2.31.0 2.33.1; do
-              app=$(mktemp -d)
-              (
-                cd "$app"
-                npm init -y >/dev/null
-                npm install "evlog@$evlog"
-                npm install --save-dev "$tarball"
-                ./node_modules/.bin/evlog doctor --json >/dev/null
-              )
-            done
-          else
-            echo "CLI untouched, install check skipped"
-          fi
-
-  # The same smoke where the Test job cannot reach: the oldest Node the CLI
+  # The same smoke where the test-cli job cannot reach: the oldest Node the CLI
   # declares in `engines`, and Windows.
   #
   # `init` hands the skills install to `npx skills add`, which does not start on
@@ -246,9 +328,14 @@ jobs:
         with:
           team: ${{ vars.TURBO_TEAM }}
 
+      # The same install as the test jobs. Linux restores the entry v3 saves
+      # for them; Windows has none (v3 never runs this job), so it installs,
+      # and the filter keeps that to half the workspace.
       - name: Set up pnpm and Node
         if: steps.cli.outputs.changed == 'true'
         uses: ./.github/actions/setup
+        with:
+          filters: --filter=@evlog/cli...
 
       - name: Build the CLI
         if: steps.cli.outputs.changed == 'true'
@@ -452,7 +539,7 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-slim
-    needs: [quality, test, cli-compat, examples, eve-compat]
+    needs: [quality, test, test-evlog, test-cli, cli-compat, examples, eve-compat]
     if: always()
     steps:
       # v3 publishes prereleases until 3.0 GA; drop this step on v3 when GA is cut
