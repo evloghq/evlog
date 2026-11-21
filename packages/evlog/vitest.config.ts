@@ -21,6 +21,7 @@ export default defineConfig({
   ],
   test: {
     hookTimeout: 30_000,
+    setupFiles: ['./test/helpers/serverless-platform.ts'],
     environment: 'node',
     // The `hono` peer accepts Hono 4 and Hono 5, so the Hono suite runs once per major.
     projects: [

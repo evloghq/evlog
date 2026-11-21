@@ -33,22 +33,20 @@ export function toGenAIField(data: AIFieldData): GenAIEventData {
 
   if (data.steps !== undefined) out.steps = data.steps
   if (data.stepsUsage) {
-    out.steps_usage = data.stepsUsage.map(s => ({
-      model: s.model,
-      input_tokens: s.inputTokens,
-      output_tokens: s.outputTokens,
-      ...(s.toolCalls ? { tool_calls: s.toolCalls } : {}),
-    }))
+    out.steps_usage = data.stepsUsage.map((s) => {
+      const step: NonNullable<GenAIEventData['steps_usage']>[number] = { model: s.model, input_tokens: s.inputTokens, output_tokens: s.outputTokens }
+      if (s.toolCalls) step.tool_calls = [...s.toolCalls]
+      return step
+    })
   }
   if (data.toolCalls) out.tool_calls = data.toolCalls
   if (data.tools) {
-    out.tools = data.tools.map(t => ({
-      name: t.name,
-      duration_ms: t.durationMs,
-      success: t.success,
-      ...(t.error !== undefined ? { error: t.error } : {}),
-      ...(t.inputTokens !== undefined ? { input_tokens: t.inputTokens } : {}),
-    }))
+    out.tools = data.tools.map((t) => {
+      const tool: NonNullable<GenAIEventData['tools']>[number] = { name: t.name, duration_ms: t.durationMs, success: t.success }
+      if (t.error !== undefined) tool.error = t.error
+      if (t.inputTokens !== undefined) tool.input_tokens = t.inputTokens
+      return tool
+    })
   }
   if (data.prompt !== undefined) out.input = { text: data.prompt }
   if (data.output !== undefined) out.output = { text: data.output }

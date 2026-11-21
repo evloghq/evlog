@@ -773,13 +773,12 @@ function buildMetadata(state: AccumulatorState, since: Watermarks = freshWaterma
 
   if (state.steps > 1 && state.stepsUsage.length > since.stepsUsage) {
     data.steps = state.steps
-    data.stepsUsage = state.stepsUsage
-      .slice(since.stepsUsage)
-      .map(s => ({ ...s, ...(s.toolCalls ? { toolCalls: [...s.toolCalls] } : {}) }))
+    // toGenAIField copies each step and its tool calls.
+    data.stepsUsage = state.stepsUsage.slice(since.stepsUsage)
   }
 
   if (state.toolExecutions.length > since.toolExecutions) {
-    data.tools = state.toolExecutions.slice(since.toolExecutions).map(t => ({ ...t }))
+    data.tools = state.toolExecutions.slice(since.toolExecutions)
   }
 
   // `models` is only emitted once a second distinct model appears, then

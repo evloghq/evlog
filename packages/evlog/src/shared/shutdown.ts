@@ -54,8 +54,16 @@ function resolveRequestDeadline(platform: string): number | undefined {
   return Number.isNaN(deadline) ? undefined : deadline
 }
 
-/** Platforms that freeze or stop the runtime once the response is sent. */
+/**
+ * Platforms that freeze or stop the runtime once the response is sent. Read once
+ * per process: every request end asks, and each `process.env` read costs about 250 ns.
+ */
 export function detectServerlessPlatform(): string | undefined {
+  if (registry.platform === undefined) registry.platform = readServerlessPlatform() ?? null
+  return registry.platform ?? undefined
+}
+
+function readServerlessPlatform(): string | undefined {
   if (globalThis.navigator?.userAgent === 'Cloudflare-Workers') return 'Cloudflare Workers'
   if ('Netlify' in globalThis) return 'Netlify'
   const env = typeof process === 'undefined' ? undefined : process.env
@@ -70,6 +78,8 @@ interface DrainRegistry {
   /** Whether a copy of evlog installed the signal listeners. */
   installed: boolean
   requestFlushSeen: boolean
+  /** The detected serverless platform, `null` for none, `undefined` until first asked. */
+  platform?: string | null
 }
 
 /** Shared by every 2.x copy of evlog, so an integration flushes pipelines created by another copy and signals are handled once. */
@@ -119,12 +129,13 @@ export async function flushPendingDrains(deadlineMs?: number): Promise<void> {
  * waits for the events held now on the pipelines' own schedule, so batches
  * keep filling up to `batch.intervalMs` and steady traffic cannot hold it open.
  */
-export async function deliverPendingDrains(): Promise<void> {
+export function deliverPendingDrains(): Promise<unknown> {
   registry.requestFlushSeen = true
-  if (pending.size === 0) return
   const platform = detectServerlessPlatform()
-  const deadline = platform === undefined ? undefined : resolveRequestDeadline(platform)
-  await Promise.allSettled(Array.from(pending, drain => platform === undefined ? drain.waitHeld() : drain.flushHeld(deadline)))
+  const deadline = platform ? resolveRequestDeadline(platform) : undefined
+  // Neither waitHeld nor flushHeld rejects, so one pipeline, the common case, needs no allSettled.
+  const held = Array.from(pending, drain => platform ? drain.flushHeld(deadline) : drain.waitHeld())
+  return held.length > 1 ? Promise.all(held) : held[0] ?? Promise.resolve()
 }
 
 /**
