@@ -1,9 +1,9 @@
 import type { SessionView } from 'eve/events'
 import { calls, interactions, reply, runs, turn } from 'eve/events'
 import type { RedactConfig } from 'evlog'
+import { redactEvent } from 'evlog/toolkit'
 import type { EvlogEveCapture, EvlogEveRecord, EvlogEveToolRule } from '../extension'
 import type { RecordedError } from './state'
-import { redactEvent } from './vendor/redact'
 
 const REPLY_PREVIEW_LENGTH = 200
 const IO_PREVIEW_LENGTH = 2000
