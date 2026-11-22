@@ -58,6 +58,20 @@ describe('serializeErrorsIn', () => {
     expect(result.b).toBe(shared)
   })
 
+  it('cuts a cycle in a value that holds no error', () => {
+    const value: Record<string, unknown> = { id: 'a' }
+    value.self = value
+    expect(serializeErrorsIn(value)).toEqual({ id: 'a', self: '[Circular]' })
+  })
+
+  it('serializes an error nested deeper than a few levels', () => {
+    let value: Record<string, unknown> = { error: new Error('deep') }
+    for (let i = 0; i < 40; i++) value = { child: value }
+    let node = serializeErrorsIn(value) as Record<string, unknown>
+    for (let i = 0; i < 40; i++) node = node.child as Record<string, unknown>
+    expect(node.error).toMatchObject({ name: 'Error', message: 'deep' })
+  })
+
   describe('EvlogError guidance', () => {
     const guided = () => createError({ code: 'PAYMENT_DECLINED', message: 'Payment failed', status: 402, why: 'Card declined', fix: 'Try another card', link: 'https://example.test', data: { retryAfter: 30 } })
 
