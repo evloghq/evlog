@@ -1,6 +1,7 @@
 import type { DrainContext, EnrichContext, RedactConfig, RequestLogger, RouteConfig, TailSamplingContext, WideEvent } from '../types'
 import type { AuditableLogger, ForkableLogger } from '../audit'
-import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, markWideEventDrainStarted, noopLogger, outputWideEvent, shouldKeep } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, noopLogger, outputWideEvent, shouldKeep } from '../logger'
+import type { DrainWindow } from '../logger'
 import { isGloballyRedacted, redactEvent, resolveRedactConfig } from '../redact'
 import { elapsedMs } from '../utils'
 import { deliverBeforeFreeze, deliverPendingDrains } from './shutdown'
@@ -158,6 +159,7 @@ export async function runEnrichAndDrain(
   requestInfo: EnrichContext['request'],
   responseStatus?: number,
   plugins?: PluginRunner,
+  drainWindow?: DrainWindow,
 ): Promise<void> {
   const runner = plugins ?? resolveMiddlewarePluginRunner(options)
   const resolvedRedact = resolveRedactConfig(options.redact)
@@ -186,7 +188,7 @@ export async function runEnrichAndDrain(
 
   outputWideEvent(emittedEvent)
   publishWideEvent(emittedEvent)
-  markWideEventDrainStarted(emittedEvent)
+  if (drainWindow) drainWindow.started = true
 
   const drain = options.drain ?? getGlobalDrain()
   const hasUserDrain = !!drain
@@ -241,12 +243,13 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
   }
 
   const resolvedRequestId = requestId || crypto.randomUUID()
+  const drainWindow: DrainWindow = { started: false }
 
   const logger = createRequestLogger({
     method,
     path,
     requestId: resolvedRequestId,
-  }, { _deferDrain: true })
+  }, { _deferDrain: true, _drainWindow: drainWindow })
 
   const routeService = getServiceForPath(path, routes)
   if (routeService) {
@@ -332,28 +335,32 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
       ? extractErrorStatus(error)
       : status ?? (requestLogger.getContext().status as number | undefined)
 
-    const tailCtx: TailSamplingContext = {
-      status: resolvedStatus,
-      duration: durationMs,
-      path,
-      method,
-      context: requestLogger.getContext(),
-      shouldKeep: false,
+    let forceKeep: boolean
+    // Only keep hooks read `context`, so the copy is made for them alone.
+    if (keep || pluginRunner.hasKeep) {
+      const tailCtx: TailSamplingContext = {
+        status: resolvedStatus,
+        duration: durationMs,
+        path,
+        method,
+        context: requestLogger.getContext(),
+        shouldKeep: false,
+      }
+      if (keep) {
+        await keep(tailCtx)
+      }
+      if (pluginRunner.hasKeep) {
+        await pluginRunner.runKeep(tailCtx)
+      }
+      forceKeep = tailCtx.shouldKeep || shouldKeep(tailCtx)
+    } else {
+      forceKeep = shouldKeep({ status: resolvedStatus, duration: durationMs, path })
     }
-
-    if (keep) {
-      await keep(tailCtx)
-    }
-    if (pluginRunner.hasKeep) {
-      await pluginRunner.runKeep(tailCtx)
-    }
-
-    const forceKeep = tailCtx.shouldKeep || shouldKeep(tailCtx)
     const emittedEvent = requestLogger.emit({ _forceKeep: forceKeep, _durationMs: durationMs })
 
     if (emittedEvent) {
       if (options.enrich || options.drain || pluginRunner.hasEnrich || pluginRunner.hasDrain || getGlobalDrain() || hasWideEventPublisher()) {
-        await runEnrichAndDrain(emittedEvent, drainOptions, requestInfo, resolvedStatus, pluginRunner)
+        await runEnrichAndDrain(emittedEvent, drainOptions, requestInfo, resolvedStatus, pluginRunner, drainWindow)
       } else {
         outputWideEvent(emittedEvent)
       }
