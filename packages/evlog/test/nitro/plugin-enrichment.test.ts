@@ -361,6 +361,46 @@ describe('nitro plugin - enrichment pipeline (T7)', () => {
     expect(pipeline.pending).toBe(0)
   })
 
+  it.each([
+    ['a request event', undefined],
+    ['an error event', { deferDrain: true }],
+  ])('registers the drain of %s with the Vercel runtime waitUntil when the event has none', async (_name, options) => {
+    vi.stubEnv('VERCEL', '1')
+    const contextKey = Symbol.for('@vercel/request-context')
+    const waitUntil = vi.fn()
+    ;(globalThis as Record<symbol, unknown>)[contextKey] = { get: () => ({ waitUntil }) }
+    onTestFinished(() => {
+      vi.unstubAllEnvs()
+      delete (globalThis as Record<symbol, unknown>)[contextKey]
+    })
+    let resolveDrain!: () => void
+    const slowDrain = new Promise<void>((resolve) => {
+      resolveDrain = resolve
+    })
+    vi.mocked(getHeaders).mockReturnValue({})
+    const mockHooks = {
+      callHook: vi.fn().mockImplementation((hookName: string) => hookName === 'evlog:drain' ? slowDrain : Promise.resolve()),
+    }
+    const mockEvent: ServerEvent = { method: 'POST', path: '/api/teams', context: { requestId: 'req-vercel' } }
+
+    let returned = false
+    const call = callEnrichAndDrain(asNitroApp(mockHooks), { timestamp: new Date().toISOString(), level: 'info', service: 'test', environment: 'test' }, mockEvent, options).then(() => {
+      returned = true
+    })
+    await vi.waitFor(() => expect(returned).toBe(true))
+
+    expect(waitUntil).toHaveBeenCalledOnce()
+    let settled = false
+    void (defined(waitUntil.mock.calls[0], 'waitUntil registration')[0] as Promise<unknown>).then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    resolveDrain()
+    await vi.waitFor(() => expect(settled).toBe(true))
+    await call
+  })
+
   it('deferDrain registers the request-end flush with waitUntil on Vercel', async () => {
     vi.stubEnv('VERCEL', '1')
     onTestFinished(() => vi.unstubAllEnvs())
