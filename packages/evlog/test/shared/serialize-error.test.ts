@@ -64,12 +64,23 @@ describe('serializeErrorsIn', () => {
     expect(serializeErrorsIn(value)).toEqual({ id: 'a', self: '[Circular]' })
   })
 
+  it('does not read inherited fields', () => {
+    const proto = {
+      get boom(): never {
+        throw new Error('inherited getter')
+      },
+    }
+    const value = Object.assign(Object.create(proto), { id: 'a' })
+    expect(serializeErrorsIn({ value })).toEqual({ value })
+  })
+
   it('serializes an error nested deeper than a few levels', () => {
     let value: Record<string, unknown> = { error: new Error('deep') }
     for (let i = 0; i < 40; i++) value = { child: value }
     let node = serializeErrorsIn(value) as Record<string, unknown>
     for (let i = 0; i < 40; i++) node = node.child as Record<string, unknown>
     expect(node.error).toMatchObject({ name: 'Error', message: 'deep' })
+    expect(node.error).not.toBeInstanceOf(Error)
   })
 
   describe('EvlogError guidance', () => {

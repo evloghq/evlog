@@ -1,7 +1,7 @@
 {
   "reference": "evlog@2.35.1",
   "scenarios": {
-    "axiom": { "gzip": 14200, "reference": 14435 },
+    "axiom": { "gzip": 14250, "reference": 14435 },
     "basic": { "gzip": 11700, "reference": 11905 },
     "create-logger": { "gzip": 13200, "reference": 13250 },
     "hono": { "gzip": 16050, "reference": 16037 }

@@ -96,18 +96,18 @@ function isH3InputOf(error: Error, cause: unknown): cause is Record<string, unkn
 
 const SCAN_DEPTH = 16
 
-// Allocation-free check run before `walk`, which tracks ancestors and lists keys
+// Copy-free check run before `walk`, which tracks ancestors and lists keys
 // for every object. Past `SCAN_DEPTH` it answers true, so `walk` handles cycles.
 function mayHoldError(value: object, depth: number): boolean {
   if (value instanceof Error || depth > SCAN_DEPTH) return true
   if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return false
   if (Array.isArray(value)) {
-    for (const item of value as unknown[]) {
-      if (item !== null && typeof item === 'object' && mayHoldError(item, depth + 1)) return true
-    }
-    return false
+    return value.some(item => item !== null && typeof item === 'object' && mayHoldError(item, depth + 1))
   }
+  // Inherited enumerable keys only come from a custom prototype; `walk` reads own keys only.
+  const custom = Object.getPrototypeOf(value) !== Object.prototype
   for (const key in value) {
+    if (custom && !Object.hasOwn(value, key)) continue
     const item = (value as Record<string, unknown>)[key]
     if (item !== null && typeof item === 'object' && mayHoldError(item, depth + 1)) return true
   }
