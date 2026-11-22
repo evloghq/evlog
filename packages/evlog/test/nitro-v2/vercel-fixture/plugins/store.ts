@@ -1,6 +1,6 @@
 import { defineNitroPlugin } from 'nitropack/runtime'
-import type { AuditFields, WideEvent } from '../../../../src/types'
 import { auditOnly } from 'evlog'
+import type { AuditFields, WideEvent } from '../../../../src/types'
 
 /**
  * What the test reads: the audit store an app would write to, the request

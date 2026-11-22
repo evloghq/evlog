@@ -1,5 +1,5 @@
-import type { WideEvent } from '../../../../../src/types'
 import { auditOnly } from 'evlog'
+import type { WideEvent } from '../../../../../src/types'
 
 export const drained: WideEvent[] = []
 
