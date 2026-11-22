@@ -64,6 +64,13 @@ describe('serializeErrorsIn', () => {
     expect(serializeErrorsIn(value)).toEqual({ id: 'a', self: '[Circular]' })
   })
 
+  it('scans an array that overrides its own methods', () => {
+    const items = Object.assign([new Error('boom')], { some: undefined })
+    const { items: result } = serializeErrorsIn({ items }) as { items: unknown[] }
+    expect(result[0]).toMatchObject({ message: 'boom' })
+    expect(result[0]).not.toBeInstanceOf(Error)
+  })
+
   it('does not read inherited fields', () => {
     const proto = {
       get boom(): never {

@@ -102,7 +102,7 @@ function mayHoldError(value: object, depth: number): boolean {
   if (value instanceof Error || depth > SCAN_DEPTH) return true
   if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return false
   if (Array.isArray(value)) {
-    return value.some(item => item !== null && typeof item === 'object' && mayHoldError(item, depth + 1))
+    return Array.prototype.some.call(value, (item: unknown) => item !== null && typeof item === 'object' && mayHoldError(item, depth + 1))
   }
   // Inherited enumerable keys only come from a custom prototype; `walk` reads own keys only.
   const custom = Object.getPrototypeOf(value) !== Object.prototype
