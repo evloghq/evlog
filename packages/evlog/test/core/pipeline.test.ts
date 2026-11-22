@@ -268,6 +268,25 @@ describe('createDrainPipeline', () => {
       const batch = getBatchArg(defined(drain.mock.calls[0], 'drain call'))
       expect(batch.map(c => c.event.id)).toEqual([2, 3, 4])
     })
+
+    it('puts a paused batch back ahead of the events left after an overflow during its send', async () => {
+      const pending: Array<(error: Error) => void> = []
+      const drain = vi.fn(() => new Promise<void>((_, reject) => pending.push(reject)))
+      const onDropped = vi.fn()
+      const hook = createDrainPipeline<DrainContext>({ batch: { size: 1, intervalMs: 600_000 }, maxBufferSize: 2, onDropped })(drain)
+
+      hook(createTestContext(0))
+      hook(createTestContext(1))
+      hook(createTestContext(2))
+      hook(createTestContext(3))
+      defined(pending[0], 'send')(new DrainDeliveryError('quota', { status: 429, retryable: true, retryAfterMs: 60_000 }))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(onDropped.mock.calls.map(call => getBatchArg(call).map(ctx => ctx.event.id))).toEqual([[1], [0]])
+      expect(hook.pending).toBe(2)
+      await hook.flush()
+      expect(onDropped.mock.calls.slice(2).flatMap(call => getBatchArg(call).map(ctx => ctx.event.id))).toEqual([2, 3])
+    })
   })
 
   describe('flush()', () => {
@@ -907,6 +926,14 @@ describe('createDrainPipeline', () => {
         for (let i = 0; i < events; i++) void deliverPendingDrains()
         for (let id = 0; id < events; id++) hook(createTestContext(events + id))
       }, n => 250 * n, 'request-end waits')
+    })
+
+    it('keeps pushes into a full buffer linear in its size while the backend hangs', () => {
+      expectLinearTime<number>((events) => {
+        (globalThis as Record<symbol, { pending?: Set<unknown> } | undefined>)[Symbol.for('evlog.drains.v2')]?.pending?.clear()
+        const hook = createDrainPipeline<DrainContext>({ batch: { size: 1, intervalMs: 5000 }, maxBufferSize: events, onDropped: () => {} })(() => new Promise<void>(() => {}))
+        for (let id = 0; id < 2 * events; id++) hook(createTestContext(id))
+      }, n => 4_000 * n, 'buffer-full pushes')
     })
 
     it('resolves every request at 20 events/s with a 300 ms backend, within two round trips of its end', async () => {
