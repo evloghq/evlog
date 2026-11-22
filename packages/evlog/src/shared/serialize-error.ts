@@ -61,6 +61,26 @@ function isH3InputOf(error: Error, cause: unknown): cause is Record<string, unkn
   })
 }
 
+const SCAN_DEPTH = 16
+
+// Allocation-free check run before `walk`, which tracks ancestors and lists entries
+// for every object. Past `SCAN_DEPTH` it answers true, so `walk` handles cycles.
+function mayHoldError(value: object, depth: number): boolean {
+  if (value instanceof Error || depth > SCAN_DEPTH) return true
+  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return false
+  if (Array.isArray(value)) {
+    for (const item of value as unknown[]) {
+      if (item !== null && typeof item === 'object' && mayHoldError(item, depth + 1)) return true
+    }
+    return false
+  }
+  for (const key in value) {
+    const item = (value as Record<string, unknown>)[key]
+    if (item !== null && typeof item === 'object' && mayHoldError(item, depth + 1)) return true
+  }
+  return false
+}
+
 /** Serializes errors into the shape evlog logs, on the server and in the browser. */
 export interface ErrorSerializer {
   /** `name`, `message` and `stack` live on the prototype, so a spread or `JSON.stringify` of an Error yields `{}`. */
@@ -161,6 +181,6 @@ export function createErrorSerializer(formatStack: (stack: string | undefined) =
 
   return {
     serializeError: error => serialize(error, new WeakSet()),
-    serializeErrorsIn: value => walk(value, new WeakSet()),
+    serializeErrorsIn: value => value !== null && typeof value === 'object' && mayHoldError(value, 0) ? walk(value, new WeakSet()) : value,
   }
 }
