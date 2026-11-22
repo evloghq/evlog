@@ -412,6 +412,19 @@ describe('log', () => {
     expect(event.node).toEqual({ id: 'a', self: '[Circular]' })
   })
 
+  it('serializes an error inside an array that overrides its own methods', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const items = Object.assign([new Error('boom')], { some: undefined })
+    const logger = createLogger()
+    logger.set({ items })
+    logger.emit()
+
+    const [first] = defined(findEventViaDrain(drain, () => true)).items as unknown[]
+    expect(first).toMatchObject({ message: 'boom' })
+    expect(first).not.toBeInstanceOf(Error)
+  })
+
   it('does not read inherited fields of a context value', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, drain })
