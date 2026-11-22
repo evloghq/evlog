@@ -4,7 +4,8 @@ import type { CaptureError } from 'nitro/types'
 import type { HTTPEvent } from 'nitro/h3'
 import * as h3 from 'nitro/h3'
 import { parseURL } from 'ufo'
-import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled, markWideEventDrainStarted, outputWideEvent } from '../logger'
+import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, initLogger, isEnabled, outputWideEvent } from '../logger'
+import type { DrainWindow } from '../logger'
 import { registerPrettyErrorSnippetReader } from '../shared/stack-frames'
 import { readCodeSnippetFromDisk } from '../shared/pretty-error-snippet.node'
 import { enrichErrorStackForDev } from '../shared/enrich-error-stack.node'
@@ -238,7 +239,8 @@ async function callEnrichAndDrain(
   }
 
   outputWideEvent(emittedEvent)
-  markWideEventDrainStarted(emittedEvent)
+  const drainWindow = getContext(event)._evlogDrainWindow as DrainWindow | undefined
+  if (drainWindow) drainWindow.started = true
 
   await callDrainHook(hooks, emittedEvent, event, hookContext, options)
 }
@@ -311,11 +313,13 @@ export default definePlugin(async (nitroApp) => {
     ctx._evlogStartTime = Date.now()
 
     const requestId = resolveRequestId(event, ctx)
+    const drainWindow: DrainWindow = { started: false }
+    ctx._evlogDrainWindow = drainWindow
     const log = createRequestLogger({
       method: event.req.method,
       path: pathname,
       requestId,
-    }, { _deferDrain: true })
+    }, { _deferDrain: true, _drainWindow: drainWindow })
 
     const routeService = getServiceForPath(pathname, evlogConfig?.routes)
     if (routeService) {

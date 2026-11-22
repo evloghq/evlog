@@ -2,6 +2,7 @@ import type { Tracer } from 'effect'
 import { Cause, Effect, Option } from 'effect'
 import { Headers, HttpTraceContext } from 'effect/http'
 import { createLogger } from '../logger'
+import type { DrainWindow } from '../logger'
 import type { BaseEvlogOptions } from '../shared/middleware'
 import { resolveMiddlewarePluginRunner, runEnrichAndDrain } from '../shared/middleware'
 import type { TailSamplingContext } from '../types'
@@ -32,7 +33,8 @@ export interface WithLoggerOptions extends Pick<BaseEvlogOptions, 'drain' | 'enr
 
 function startUnit(action: string, span: Tracer.AnySpan, options: WithLoggerOptions): Unit {
   const start = Date.now()
-  const logger = createLogger({ ...options.fields, action, ...traceFields(span) }, { _deferDrain: true })
+  const drainWindow: DrainWindow = { started: false }
+  const logger = createLogger({ ...options.fields, action, ...traceFields(span) }, { _deferDrain: true, _drainWindow: drainWindow })
   return {
     logger,
     finish: exit => Effect.promise(async () => {
@@ -51,7 +53,7 @@ function startUnit(action: string, span: Tracer.AnySpan, options: WithLoggerOpti
         _forceKeep: tail.shouldKeep || (options.emit === 'onError' && failed),
         _durationMs: duration,
       })
-      if (event) await runEnrichAndDrain(event, options, undefined, status, runner)
+      if (event) await runEnrichAndDrain(event, options, undefined, status, runner, drainWindow)
     }),
   }
 }
