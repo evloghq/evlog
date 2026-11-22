@@ -2,6 +2,7 @@ import type { AsyncLocalStorage } from 'node:async_hooks'
 import type { RequestLogger } from '../types'
 import type { AuditableLogger } from '../audit'
 import { createRequestLogger, getGlobalDrain, outputWideEvent } from '../logger'
+import type { DrainWindow } from '../logger'
 import { deliverPendingDrains } from './shutdown'
 import { extractErrorStatus } from './errors'
 import type { MiddlewareLoggerOptions } from './middleware'
@@ -71,13 +72,14 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): Prom
   const method = String(parentCtx.method ?? middlewareOptions.method)
   const path = String(parentCtx.path ?? middlewareOptions.path)
 
+  const drainWindow: DrainWindow = { started: false }
   const child = createRequestLogger(
     {
       method,
       path,
       requestId: crypto.randomUUID(),
     },
-    { _deferDrain: true },
+    { _deferDrain: true, _drainWindow: drainWindow },
   )
 
   child.set({
@@ -112,7 +114,7 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): Prom
         const emittedEvent = child.emit()
         if (!emittedEvent) return
         if (middlewareOptions.enrich || middlewareOptions.drain || getGlobalDrain()) {
-          await runEnrichAndDrain(emittedEvent, middlewareOptions, childRequestInfo, (emittedEvent.status as number | undefined) ?? status)
+          await runEnrichAndDrain(emittedEvent, middlewareOptions, childRequestInfo, (emittedEvent.status as number | undefined) ?? status, undefined, drainWindow)
         } else {
           outputWideEvent(emittedEvent)
         }
