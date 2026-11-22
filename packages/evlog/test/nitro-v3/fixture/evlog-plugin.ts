@@ -4,9 +4,11 @@ import type { HTTPEvent } from 'nitro/h3'
 import evlogPlugin from '../../../src/nitro-v3/plugin'
 import { useLogger } from '../../../src/nitro-v3/useLogger'
 import { results } from './delayed-error-hook'
+import { captureDrains } from './drain-capture'
 
 export default definePlugin(async (nitroApp) => {
   await evlogPlugin(nitroApp)
+  captureDrains(nitroApp)
 
   const requests = new Map<unknown, HTTPEvent>()
   nitroApp.hooks.hook('request', (event) => {

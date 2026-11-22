@@ -315,29 +315,33 @@ describe.sequential('Nitro v3 Server with evlog', () => {
   })
 
   it.sequential('emits one event carrying the audit when an excluded route records one and fails', async () => {
-    const logs: string[] = []
-    consola.mockTypes(() => vi.fn((context) => {
-      logs.push(String(context))
-    }))
-    consola.wrapAll()
-
-    try {
-      expect((await server.fetch(new Request(new URL('/internal/probe', server.url)))).status).toBe(200)
-      const res = await server.fetch(new Request(new URL('/internal/audit-throws', server.url)))
-      expect(res.status).toBe(500)
-
-      const drains = (path: string) => [...logs.join('\n').matchAll(/\[TEST:DRAIN\] (.+)/g)]
-        .map(match => JSON.parse(match[1] as string))
-        .filter(drain => drain.requestPath === path)
-      await vi.waitFor(() => expect(drains('/internal/audit-throws')).not.toHaveLength(0))
-      // Nitro does not await error hooks: leave a late second emit time to show up.
-      await new Promise(resolve => setTimeout(resolve, 100))
-      expect(drains('/internal/audit-throws')).toEqual([expect.objectContaining({ eventLevel: 'error', status: 500, audit: 'token.revoke' })])
-      // The same route filter drops a request that records no audit.
-      expect(drains('/internal/probe')).toEqual([])
-    } finally {
-      consola.restoreAll()
+    const request = async (path: string) => {
+      const id = crypto.randomUUID()
+      const res = await server.fetch(new Request(new URL(path, server.url), { headers: { 'x-test-capture': id } }))
+      return { id, status: res.status }
     }
+    const readCapture = async (id: string) => (await server.fetch(new Request(new URL(`/drain-capture?id=${id}`, server.url)))).json()
+
+    // Response hooks finish before the response is returned, so this route can no longer emit.
+    const probe = await request('/internal/probe')
+    expect(probe.status).toBe(200)
+    expect(await readCapture(probe.id)).toEqual({ emits: 0, events: [], errorHooksDone: false })
+
+    const failed = await request('/internal/audit-throws')
+    expect(failed.status).toBe(500)
+    const settled = await vi.waitFor(async () => {
+      const snapshot = await readCapture(failed.id)
+      expect(snapshot.errorHooksDone).toBe(true)
+      return snapshot
+    })
+    expect(settled.emits).toBe(1)
+    await vi.waitFor(async () => expect((await readCapture(failed.id)).events).toEqual([
+      expect.objectContaining({
+        level: 'error',
+        status: 500,
+        audit: expect.objectContaining({ action: 'token.revoke' }),
+      })
+    ]))
   })
 
   it('keeps a drain another plugin set with initLogger during startup', async () => {
