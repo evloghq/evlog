@@ -14,7 +14,7 @@ import {
   waitForDrainCalls,
 } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudit } from '../helpers/frameworkMatrix'
 
 function createMockEvent(method = 'GET', path = '/api/test', headers: Record<string, string> = {}) {
   const reqHeaders = new Headers(headers)
@@ -37,7 +37,13 @@ describeStandardHttpMatrix({
       async fire(req) {
         const event = createMockEvent(req.method || 'GET', req.path, req.headers || {})
         const resolve = createMockResolve()
-        await handle({ event, resolve })
+        await handle({
+          event,
+          resolve: (ev) => {
+            if (req.path === EXCLUDED_AUDIT_PATH) recordMatrixAudit(useLogger())
+            return resolve(ev)
+          },
+        })
         return { status: 200 }
       },
     })

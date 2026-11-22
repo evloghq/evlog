@@ -13,7 +13,7 @@ import {
   waitForDrainCalls,
 } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudit } from '../helpers/frameworkMatrix'
 import { createDeferredStream } from '../helpers/stream'
 
 describeStandardHttpMatrix({
@@ -22,6 +22,10 @@ describeStandardHttpMatrix({
     const app = new Elysia()
     app.use(evlog(options))
     app.get('/api/users', () => ({ users: [] }))
+    app.get(EXCLUDED_AUDIT_PATH, () => {
+      recordMatrixAudit(useLogger())
+      return { ok: true }
+    })
     return Promise.resolve({
       async fire(req) {
         const res = await app.handle(new Request(`http://localhost${req.path}`, {
@@ -272,7 +276,7 @@ describe('evlog/elysia', () => {
         .use(evlog({ exclude: ['/_internal/**'] }))
         .get('/_internal/probe', async ({ log }) => {
           await log.fork('probe', () => {
-            useLogger().set({ probe: true })
+            throw new Error('probe failed')
           })
           return { ok: true }
         })
@@ -281,7 +285,7 @@ describe('evlog/elysia', () => {
       expect(response.status).toBe(200)
       expect(consoleError).toHaveBeenCalledWith(
         '[evlog] log.fork() work "probe" failed:',
-        expect.objectContaining({ message: expect.stringContaining('[evlog] useLogger()') }),
+        expect.objectContaining({ message: 'probe failed' }),
       )
     } finally {
       consoleError.mockRestore()
@@ -441,6 +445,25 @@ describe('evlog/elysia', () => {
   describe('useLogger()', () => {
     it('throws outside middleware context', () => {
       expect(() => useLogger()).toThrow('[evlog] useLogger()')
+    })
+
+    it('keeps working with logging disabled while a concurrent request ends', async () => {
+      initLogger({ enabled: false })
+      const gate = Promise.withResolvers<void>()
+      const app = new Elysia()
+        .use(evlog())
+        .get('/slow', async () => {
+          await gate.promise
+          useLogger().set({ late: true })
+          return { ok: true }
+        })
+        .get('/fast', () => ({ ok: true }))
+
+      const slow = request(app, '/slow')
+      await request(app, '/fast')
+      gate.resolve()
+
+      expect((await slow).status).toBe(200)
     })
 
     it('returns same logger as context log', async () => {

@@ -163,7 +163,7 @@ export function evlog(options: EvlogSvelteKitOptions = {}): SvelteKitHandle {
 
     if (skipped) {
       event.locals.log = logger
-      return await resolve(event)
+      return await runWith(() => resolve(event))
     }
 
     return runWith(async () => {

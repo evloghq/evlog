@@ -143,8 +143,9 @@ export function defineFrameworkIntegration<TCtx>(
       }
 
       const { storage } = spec
+      // A filtered route runs in the storage too, so `useLogger()` reaches its `audit()`.
       const runWith = async <T>(fn: () => T | Promise<T>): Promise<T> => {
-        if (!storage || result.skipped) return await fn()
+        if (!storage) return await fn()
         return await storage.run(result.logger, fn)
       }
 

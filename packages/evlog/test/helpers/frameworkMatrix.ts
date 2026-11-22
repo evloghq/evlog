@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
+import type { AuditableLogger } from '../../src/audit'
 import type { BaseEvlogOptions } from '../../src/shared/middleware'
 import { assertHttpEventEmitted, createPipelineSpies, findEventViaDrain, waitForDrainCalls } from './framework'
-import { defined } from './defined'
+import { defined, getDrainCallArg } from './defined'
+
+/** Route the matrix filters out with `exclude`; it runs {@link recordMatrixAudit}. */
+export const EXCLUDED_AUDIT_PATH = '/api/audit-excluded'
+
+/** What {@link EXCLUDED_AUDIT_PATH} does with the request logger. */
+export function recordMatrixAudit(log: Pick<AuditableLogger, 'audit'>): void {
+  log.audit({ action: 'token.create', actor: { type: 'api', id: 'tok_12' }, target: { type: 'token', id: 'tok_99' } })
+}
 
 /**
  * Minimal viable surface every framework adapter must expose for the shared
@@ -19,6 +28,8 @@ export interface FrameworkAdapter {
    *
    * The single GET route at `/api/users` returns `{ users: [] }` with status
    * 200; tests use other paths only when relevant (e.g. include/exclude).
+   * `GET` {@link EXCLUDED_AUDIT_PATH} runs {@link recordMatrixAudit} with the
+   * request logger, then answers 200.
    */
   mount: (options: BaseEvlogOptions) => Promise<{
     fire: (req: { method?: string, path: string, headers?: Record<string, string> }) => Promise<{ status: number }>
@@ -103,6 +114,25 @@ export function describeStandardHttpMatrix(adapter: FrameworkAdapter): void {
           'event with service override',
         )
         expect(event.service).toBe('matrix-service')
+      } finally {
+        await cleanup?.()
+      }
+    })
+
+    it('records the audit of a route filtered out by exclude', async () => {
+      const { drain } = createPipelineSpies()
+      const { fire, cleanup } = await adapter.mount({ drain, exclude: [EXCLUDED_AUDIT_PATH] })
+      try {
+        const { status } = await fire({ method: 'GET', path: EXCLUDED_AUDIT_PATH, headers: { 'x-request-id': 'matrix-audit-excluded' } })
+        expect(status).toBe(200)
+        await waitForDrainCalls(drain)
+        expect(drain).toHaveBeenCalledTimes(1)
+        expect(getDrainCallArg(drain.mock.calls[0]).event).toMatchObject({
+          method: 'GET',
+          path: EXCLUDED_AUDIT_PATH,
+          requestId: 'matrix-audit-excluded',
+          audit: { action: 'token.create', actor: { type: 'api', id: 'tok_12' }, target: { type: 'token', id: 'tok_99' }, outcome: 'success' },
+        })
       } finally {
         await cleanup?.()
       }

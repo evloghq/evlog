@@ -60,6 +60,11 @@ async function emitWithTailSampling(
 
 const DEFAULT_TRANSPORT_ENDPOINT = '/api/_evlog/ingest'
 
+/** Route filters are for request logs: a request that recorded an audit still emits it. */
+function shouldEmitRequest(e: ServerEvent, requestLog: RequestLogger): boolean {
+  return e.context._evlogShouldEmit === true || requestLog.getContext().audit !== undefined
+}
+
 /**
  * The client transport endpoint answers each batch with a 204, and the client
  * events it carries are already logged on their own. A successful request to
@@ -149,10 +154,8 @@ export default defineNitroPlugin(async (nitroApp) => {
   nitroApp.hooks.hook('error', async (error, { event }) => {
     const e = event as ServerEvent | undefined
     if (!e) return
-    if (!e.context._evlogShouldEmit) return
-
     const requestLog = e.context.log as RequestLogger | undefined
-    if (!requestLog) return
+    if (!requestLog || !shouldEmitRequest(e, requestLog)) return
 
     e.context._evlogEmitting = true
     try {
@@ -177,10 +180,10 @@ export default defineNitroPlugin(async (nitroApp) => {
 
   nitroApp.hooks.hook('afterResponse', async (event) => {
     const e = event as ServerEvent
-    if (e.context._evlogEmitted || e.context._evlogEmitting || !e.context._evlogShouldEmit) return
+    if (e.context._evlogEmitted || e.context._evlogEmitting) return
 
     const requestLog = e.context.log as RequestLogger | undefined
-    if (!requestLog) return
+    if (!requestLog || !shouldEmitRequest(e, requestLog)) return
 
     const emitSuccessResponse = async () => {
       const status = getResponseStatus(e)

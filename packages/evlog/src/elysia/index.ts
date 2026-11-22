@@ -129,9 +129,10 @@ export function evlog(options: EvlogElysiaOptions = {}) {
       const headers = (request.headers).toJSON?.() ?? Object.fromEntries(request.headers.entries())
       const ctx: ElysiaContext = { request, path: url.pathname, headers }
       const { logger, finish, skipped } = integration.start(ctx, options)
-      if (!skipped) {
-        bindAsyncLocalStorage(storage, logger)
-      }
+      // A filtered route binds its logger too, so `useLogger()` reaches its `audit()`. It is never
+      // released: with logging disabled it is the no-op logger every concurrent request shares.
+      if (skipped) activeLoggers.add(logger)
+      bindAsyncLocalStorage(storage, logger)
       requestState.set(request, { finish, skipped, logger })
     })
     .derive({ as: 'global' }, ({ request }) => {
@@ -157,17 +158,18 @@ export function evlog(options: EvlogElysiaOptions = {}) {
     })
     .onAfterResponse({ as: 'global' }, async ({ request, set }) => {
       const state = requestState.get(request)
-      if (!state || state.skipped || emitted.has(request)) return
+      if (!state || emitted.has(request)) return
       emitted.add(request)
+      if (state.skipped) return clearAsyncLocalStorage(storage)
       await state.finish({ status: set.status as number || 200 })
       releaseLogger(state.logger)
     })
     .onError({ as: 'global' }, async ({ request, error }) => {
       const state = requestState.get(request)
-      if (!state || state.skipped || emitted.has(request)) return
+      if (!state || emitted.has(request)) return
       emitted.add(request)
-      const err = error instanceof Error ? error : new Error(String(error))
-      await state.finish({ error: err })
+      if (state.skipped) return clearAsyncLocalStorage(storage)
+      await state.finish({ error: error instanceof Error ? error : new Error(String(error)) })
       releaseLogger(state.logger)
     })
 }

@@ -14,7 +14,7 @@ import {
   waitForDrainCalls,
 } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudit } from '../helpers/frameworkMatrix'
 import { createDeferredStream } from '../helpers/stream'
 
 describeStandardHttpMatrix({
@@ -23,6 +23,10 @@ describeStandardHttpMatrix({
     const app = new Hono<EvlogVariables>()
     app.use(evlog(options))
     app.get('/api/users', (c) => c.json({ users: [] }))
+    app.get(EXCLUDED_AUDIT_PATH, (c) => {
+      recordMatrixAudit(useLogger())
+      return c.json({ ok: true })
+    })
     return Promise.resolve({
       async fire(req) {
         const res = await app.request(req.path, {
@@ -583,22 +587,18 @@ describe('evlog/hono', () => {
       expect(() => useLogger()).toThrow('useLogger() was called outside of an evlog middleware context')
     })
 
-    it('throws on a route filtered out by exclude', async () => {
+    it('returns the route logger on a route filtered out by exclude, so its audits are recorded', async () => {
       const app = new Hono<EvlogVariables>()
       app.use(evlog({ exclude: ['/health'] }))
 
-      let thrown = false
+      let same = false
       app.get('/health', (c) => {
-        try {
-          useLogger()
-        } catch {
-          thrown = true
-        }
+        same = useLogger() === c.get('log')
         return c.json({ ok: true })
       })
 
       await app.request('/health')
-      expect(thrown).toBe(true)
+      expect(same).toBe(true)
     })
 
     // Attaching AsyncLocalStorage also enables `log.fork()` on Hono, which

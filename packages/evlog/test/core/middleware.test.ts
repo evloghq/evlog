@@ -71,22 +71,46 @@ describe('createMiddlewareLogger', () => {
     expect(skipped).toBe(true)
   })
 
-  it.each(['disabled', 'excluded', 'not-included'])(
-    'accepts audit calls without emitting when logging is %s', async (mode) => {
-      const { drain } = createPipelineSpies()
-      initLogger({ enabled: mode !== 'disabled', drain, silent: true })
+  it('accepts audit calls without emitting when logging is disabled', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ enabled: false, drain, silent: true })
+    const { logger, finish, skipped } = createMiddlewareLogger({ method: 'GET', path: '/health' })
+
+    expect(skipped).toBe(true)
+    expect(() => logger.audit({ action: 'health.read', actor: { type: 'user', id: 'u1' } })).not.toThrow()
+    expect(() => logger.audit.deny('denied', { action: 'health.read', actor: { type: 'user', id: 'u1' } })).not.toThrow()
+    expect(await finish({ status: 200 })).toBeNull()
+    expect(drain).not.toHaveBeenCalled()
+  })
+
+  it.each(['excluded', 'not-included'])(
+    'drains each audit as its own event through the request pipeline when the route is %s', async (mode) => {
+      const { drain, enrich } = createPipelineSpies()
+      initLogger({ drain, silent: true })
       const { logger, finish, skipped } = createMiddlewareLogger({
-        method: 'GET', path: '/health',
-        exclude: mode === 'excluded' ? ['/health'] : undefined,
+        method: 'POST', path: '/internal/tokens', requestId: 'req-filtered',
+        headers: { 'user-agent': 'test-agent/1' },
+        exclude: mode === 'excluded' ? ['/internal/**'] : undefined,
         include: mode === 'not-included' ? ['/api/**'] : undefined,
+        enrich,
       })
 
       expect(skipped).toBe(true)
-      expect(() => logger.audit({ action: 'health.read', actor: { type: 'user', id: 'u1' } })).not.toThrow()
-      expect(() => logger.audit.deny('denied', { action: 'health.read', actor: { type: 'user', id: 'u1' } })).not.toThrow()
+      logger.audit({ action: 'token.create', actor: { type: 'user', id: 'u1' }, target: { type: 'token', id: 't1' } })
+      logger.audit.deny('Missing scope', { action: 'token.delete', actor: { type: 'user', id: 'u1' }, target: { type: 'token', id: 't2' } })
       expect(logger.getContext()).toEqual({})
       expect(await finish({ status: 200 })).toBeNull()
-      expect(drain).not.toHaveBeenCalled()
+
+      await waitForDrainCalls(drain, 2)
+      const events = drain.mock.calls.map(([ctx]) => ctx.event)
+      expect(events.map(e => [e.audit?.action, e.audit?.outcome, e.audit?.reason])).toEqual([
+        ['token.create', 'success', undefined],
+        ['token.delete', 'denied', 'Missing scope'],
+      ])
+      for (const event of events) {
+        expect(event).toMatchObject({ method: 'POST', path: '/internal/tokens', requestId: 'req-filtered' })
+      }
+      expect(enrich.mock.calls.map(([ctx]) => ctx.headers?.['user-agent'])).toEqual(['test-agent/1', 'test-agent/1'])
     },
   )
 

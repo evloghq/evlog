@@ -2,7 +2,6 @@ import type { Exit } from 'effect'
 import { Context, Effect, Option, Tracer } from 'effect'
 import type { AuditableLogger } from '../audit'
 import type { FieldContext } from '../types'
-import { noopLogger } from '../logger'
 
 /**
  * The evlog logger of the current unit of work, building its wide event: the same
@@ -85,17 +84,15 @@ export function traceFields(span: Tracer.AnySpan): Record<string, string> {
 
 /**
  * @internal Run `self` as a unit of work. `open` receives the unit's span and the
- * request's `waitUntil` and returns the started unit, or `undefined` when the unit
- * is filtered out (the effect then runs against a no-op logger).
+ * request's `waitUntil` and returns the started unit.
  */
 export function provideUnit<TSuccess, TError, TContext>(
   self: Effect.Effect<TSuccess, TError, TContext>,
-  open: (span: Tracer.AnySpan, waitUntil: WaitUntilFn | undefined) => Unit<TSuccess> | undefined,
+  open: (span: Tracer.AnySpan, waitUntil: WaitUntilFn | undefined) => Unit<TSuccess>,
 ): Effect.Effect<TSuccess, TError, Exclude<TContext, EvlogLogger>> {
   return Effect.withFiber((fiber) => {
     const span = Context.getUnsafe(fiber.context, Tracer.ParentSpan)
     const unit = open(span, fiber.getRef(WaitUntil))
-    if (!unit) return Effect.provideService(self, EvlogLogger, noopLogger)
     return self.pipe(
       Effect.provideService(EvlogLogger, unit.logger),
       Effect.onExit(exit => unit.finish(exit)),

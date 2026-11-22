@@ -59,7 +59,7 @@ const evlogPlugin: FastifyPluginCallback<EvlogFastifyOptions> = (fastify, option
     if (skipped) {
       // A request evlog does not log gets the no-op logger, which has `fork`.
       request.evlog = logger as ForkableLogger
-      next()
+      void runWith(() => next())
       return
     }
     requestState.set(request, { finish })
