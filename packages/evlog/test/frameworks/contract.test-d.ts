@@ -99,6 +99,7 @@ type NotAFrameworkIntegration =
   | './toolkit'
   | './toolkit/storage'
   | './vite'
+  | './webhook'
 
 describe('integration contract', () => {
   it('classifies every package export, so a new integration gets a row', () => {

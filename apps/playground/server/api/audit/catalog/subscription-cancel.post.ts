@@ -4,7 +4,7 @@ import { billingAudit } from '~~/server/utils/audit'
  * Catalog audit with a different `target.type` (`subscription`) — proves the
  * type is fixed per entry, not per call site.
  */
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const log = useLogger(event)
 
   log.set({
@@ -12,7 +12,7 @@ export default defineEventHandler((event) => {
     plan: { id: 'plan_pro', tier: 'pro' },
   })
 
-  log.audit?.(billingAudit.SUBSCRIPTION_CANCEL({
+  await log.audit(billingAudit.SUBSCRIPTION_CANCEL({
     actor: { type: 'user', id: 'usr_42', email: 'demo@evlog.dev' },
     target: { id: 'sub_demo_x77' },
     outcome: 'success',

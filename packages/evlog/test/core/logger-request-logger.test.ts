@@ -3,7 +3,7 @@ import { createError } from '../../src/error'
 import { createRequestLogger, initLogger } from '../../src/logger'
 import type { FieldContext } from '../../src/types'
 import { withFakeTimers } from '../helpers/timers'
-import { defined } from '../helpers/defined'
+import { defined, getDrainCallArg } from '../helpers/defined'
 import { createPipelineSpies } from '../helpers/framework'
 
 describe('createRequestLogger', () => {
@@ -594,21 +594,21 @@ describe('createRequestLogger', () => {
       expect(drain).toHaveBeenCalledTimes(1)
     })
 
-    it('keeps an audit record even when info sampling is zero', () => {
+    it('drops the request event but not its audit records, even when info sampling is zero', async () => {
       const { drain } = createPipelineSpies()
       initLogger({ pretty: false, drain, sampling: { rates: { info: 0 } } })
 
       const logger = createRequestLogger({})
       logger.discard()
-      logger.audit({
+      await logger.audit({
         action: 'invoice.refund',
         actor: { type: 'user', id: 'u_1' },
         target: { type: 'invoice', id: 'inv_1' },
       })
-      const event = logger.emit()
 
-      expect(event).toMatchObject({ audit: { action: 'invoice.refund', outcome: 'success' } })
+      expect(logger.emit()).toBeNull()
       expect(drain).toHaveBeenCalledTimes(1)
+      expect(getDrainCallArg(defined(drain.mock.calls[0])).event).toMatchObject({ audit: { action: 'invoice.refund', outcome: 'success' } })
     })
 
     it('wins over a keep rule and head sampling', () => {

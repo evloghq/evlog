@@ -158,20 +158,20 @@ describe('evlog/effect withLogger', () => {
     expect(drainedEvent(drain)).toMatchObject({ action: 'digest', level: 'error', error: { message: 'partial send' } })
   })
 
-  it('keeps an audit record from a successful onError unit', async () => {
+  it('delivers an audit nobody awaited before a successful onError unit ends, without its unit event', async () => {
     const { drain } = createPipelineSpies()
 
     await Effect.runPromise(Effect.gen(function* () {
       const log = yield* EvlogLogger
-      log.audit({
+      void log.audit({
         action: 'invoice.refund',
         actor: { type: 'user', id: 'u_1' },
         target: { type: 'invoice', id: 'inv_1' },
       })
     }).pipe(withLogger('refund', { drain, emit: 'onError' })))
-    await waitForDrainCalls(drain)
 
-    expect(drainedEvent(drain)).toMatchObject({ action: 'refund', audit: { action: 'invoice.refund' } })
+    expect(drain).toHaveBeenCalledTimes(1)
+    expect(drainedEvent(drain)).toMatchObject({ audit: { action: 'invoice.refund', target: { type: 'invoice', id: 'inv_1' } } })
   })
 
   it('keeps a failing onError unit even when head sampling would drop it', async () => {

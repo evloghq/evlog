@@ -2,7 +2,8 @@
 name: build-audit-logs
 description: >-
   Build or review audit trails in TypeScript/JavaScript apps using evlog (pipelines, typed actions,
-  denials, retention, compliance-style reviews). For application code, not for extending the evlog package.
+  denials, multi-tenant audit logs, sending a customer's audit trail to their webhook, retention,
+  compliance-style reviews). For application code, not for extending the evlog package.
 ---
 
 # Build or Review an Audit System with evlog
@@ -17,29 +18,39 @@ When you already know the system is wired and just need to remember the API:
 
 | Situation | Helper |
 |---|---|
-| Inside a request handler, action succeeded | `log.audit({ action, actor, target, outcome: 'success' })` |
-| Inside a request handler, AuthZ denial | `log.audit.deny('reason', { action, actor, target })` |
-| Standalone job / script / CLI (no request) | `audit({ action, actor, target, outcome })` |
+| Inside a request handler, action succeeded | `await log.audit({ action, actor, target, tenantId })` |
+| Inside a request handler, AuthZ denial | `await log.audit.deny('reason', { action, actor, target, tenantId })` |
+| A token, agent or impersonating admin acted for a user | `actor: { type: 'api', id: token.id, onBehalfOf: { type: 'user', id: user.id } }` |
+| One action that touches several tenants | One `log.audit()` call per tenant, each with its own `tenantId` |
+| Standalone job / script / CLI (no request) | `await audit({ action, actor, target, tenantId })` |
 | Auto-record success / failure / denied for a function | `withAudit({ action, target }, fn)` |
 | Recording a state change | add `changes: auditDiff(before, after)` |
+| Free-form detail (resource name, environment) | add `metadata: { ... }` |
 | Centralised typed action vocabulary | `defineAuditCatalog('billing', { INVOICE_REFUND: { target: 'invoice' } })`, or `defineAuditAction('invoice.refund', { target: 'invoice' })` for one-offs |
+| Store audits | `auditOnly(drain)` around the drain that writes them |
+| Send each tenant's records to their endpoint | `relayAudit({ cursor, read, send, save })` with `sendAuditWebhook` from `evlog/webhook` |
 | Asserting audits in tests | `mockAudit()`, then `assertAudit()` or `toIncludeAuditOf()` |
 
-`AuditFields` schema (always provide `action`, `actor`, `outcome`; `target` strongly recommended; the rest is filled in for you):
+Each call records one action as its own event and returns a promise that resolves once every drain has it. It never rejects. `await` it when the record must exist before the response (a UI or test reads the trail right after). Without `await`, evlog keeps the runtime alive with `waitUntil`, or the integration waits for it before finishing the request.
+
+`AuditFields` schema (always provide `action` and `actor`; `target` and `tenantId` strongly recommended; `outcome` defaults to `'success'`; `id`, `timestamp`, `version` and `context` are filled in for you):
 
 ```ts
 interface AuditFields {
+  id: string                                      // UUIDv7, the dedupe key
+  timestamp: string                               // ISO 8601, when the record was made
   action: string                                  // 'invoice.refund'
-  actor: { type: 'user' | 'system' | 'api' | 'agent', id: string, email?, displayName?, model?, tools?, reason?, promptId? }
-  outcome: 'success' | 'failure' | 'denied'
+  actor: { type: 'user' | 'system' | 'api' | 'agent', id: string, email?, displayName?, model?, tools?, reason?, promptId?, onBehalfOf?: { type, id, email?, displayName?, ... } }
   target?: { type: string, id: string, [k: string]: unknown }
+  tenantId?: string                               // organization, team or workspace
+  outcome: 'success' | 'failure' | 'denied'
   reason?: string
   changes?: { before?: unknown, after?: unknown, patch?: AuditPatchOp[] }
+  metadata?: Record<string, unknown>
   causationId?: string
   correlationId?: string
-  version?: number                                // defaults to AUDIT_SCHEMA_VERSION
-  idempotencyKey?: string                         // auto-derived from action+actor+target+timestamp
-  context?: { requestId?, traceId?, ip?, userAgent?, tenantId?, ... }   // filled by auditEnricher
+  version: 2                                      // AUDIT_SCHEMA_VERSION
+  context?: { requestId?, traceId?, ip?, userAgent?, ... }   // read from the request by log.audit()
   signature?: string                              // added by signed(drain, { strategy: 'hmac' })
   prevHash?: string                               // added by signed(drain, { strategy: 'hash-chain' })
   hash?: string                                   // added by signed(drain, { strategy: 'hash-chain' })
@@ -53,29 +64,32 @@ An audit log answers a forensic question: **who did what, on which resource, whe
 |                | Audit log                                       | Observability log                  |
 | -------------- | ----------------------------------------------- | ---------------------------------- |
 | Question       | "Who tried to do what, was it allowed?"         | "How did this request behave?"     |
-| Sampling       | Never (force-keep)                              | Often (head + tail)                |
+| Sampling       | Never                                           | Often (head + tail)                |
 | Retention      | 1 – 7 years (compliance)                        | 30 – 90 days                       |
 | Mutability     | Append-only, tamper-evident                     | Mutable, lossy                     |
 | Audience       | Auditors, security, legal                       | Engineers                          |
 | Storage        | Often dedicated (separate dataset / DB)         | Shared with telemetry              |
 
-evlog ships the audit layer as a thin extension of its wide-event pipeline (a typed `audit` field on `BaseWideEvent` plus a few helpers and drain wrappers). The point is that you compose with the primitives the app already uses: same drains, same enrichers, same redact, same framework integration. There is no parallel system to maintain.
+evlog ships the audit layer as a thin extension of its wide-event pipeline: each audit is an event with a typed `audit` field, plus a few helpers and drain wrappers. You compose with the primitives the app already uses: same drains, same enrichers, same redact, same framework integration. There is no parallel system to maintain.
 
 ## Mental model
 
 ```text
-log.audit(...) ──► sets event.audit ──► force-keep ──► auditEnricher ──► redact ──► every drain
-                                                                                  └─► auditOnly(signed(fsDrain))
+log.audit(...) ──► one audit event (id, request context) ──► enrichers ──► redact ──► every drain (emails, IPs masked)
+                   sampling, discard() and route filters never apply      └──────► auditOnly(store) (emails, IPs kept)
 ```
+
+The request's own wide event is emitted separately and carries no `audit` field. The two share `requestId`.
 
 | Building block                              | Role                                                                | Required?               |
 | ------------------------------------------- | ------------------------------------------------------------------- | ----------------------- |
-| `log.audit()` / `audit()` / `withAudit()`   | Sets `event.audit` and force-keeps the event                        | Yes                     |
-| `auditEnricher()`                           | Auto-fills `event.audit.context` (req / trace / ip / ua / tenantId) | Recommended             |
-| `auditOnly(drain)`                          | Filters the drain to events with `event.audit` set                  | Recommended             |
+| `log.audit()` / `audit()` / `withAudit()`   | Record one action as its own event                                  | Yes                     |
+| `auditOnly(drain)`                          | Makes a drain the audit store: audit records only, identities kept  | Yes                     |
+| `auditEnricher({ tenantId })`               | Fills `tenantId` from the request when the call left it empty       | Optional                |
 | `signed(drain, ...)`                        | Adds tamper-evident integrity (HMAC or hash-chain)                  | Optional (compliance)   |
+| `relayAudit()` + `evlog/webhook`            | Forwards each tenant's stored records to an endpoint they own       | Optional (customers)    |
 | `auditRedactPreset`                         | Strict PII preset for audit events                                  | Recommended             |
-| `mockAudit()`                               | Captures audit events in tests                                      | Yes (in tests)          |
+| `mockAudit()`                               | Captures audit records in tests                                     | Yes (in tests)          |
 
 ## Design calls before writing code
 
@@ -87,7 +101,7 @@ Make these explicit and write them down somewhere a security reviewer can find. 
 | --------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | **FS** (`evlog/fs` + `signed`)    | Self-hosted, simple, you control the disk         | Manual rotation/backup; single-process unless you persist hash-chain `state` externally     |
 | **Dedicated Axiom dataset**       | You already use Axiom                             | Easy queries, separate retention/billing; cost scales with volume                           |
-| **Postgres / Neon / Aurora**      | You want SQL queries, joins with app data         | Need a schema, indexes, retention job; idempotency key prevents duplicates                  |
+| **Postgres / Neon / Aurora**      | You want SQL queries, joins with app data         | Need a schema, indexes, retention job; `audit.id` as primary key prevents duplicates        |
 | **S3 + Object Lock**              | Append-only WORM compliance (HIPAA / FINRA)       | Read latency; pair with a queryable mirror (Athena)                                         |
 | **Multiple drains**                | Different audiences (engineers ↔ legal)           | Use `auditOnly` per drain; drains fail in isolation by design                                 |
 
@@ -109,21 +123,51 @@ Skip if:
 Strategies:
 
 - `'hmac'`: per-event signature; quick to verify; rotate `secret` annually and embed a key id (extend `AuditFields`).
-- `'hash-chain'`: sequence integrity; deleting a row breaks the chain forward; persist `state.{load,save}` if you run multiple processes (Redis is the typical store).
+- `'hash-chain'`: sequence integrity; deleting a row breaks the chain forward; persist `state.{load,save}` across restarts (Redis is the typical store). `load` and `save` are not a compare-and-set, so concurrent writers fork the chain: keep it to one writer, and use HMAC on serverless functions that scale out.
 
 ### 3. Multi-tenancy?
 
-If the app is multi-tenant, **tenant isolation on every audit event is non-negotiable.** A query that mixes tenants is a privacy incident. Wire it once in the enricher:
+If the app is multi-tenant, **tenant isolation on every audit record is non-negotiable.** A query that mixes tenants is a privacy incident. Pass the tenant at the call site, where the handler already knows it:
 
 ```ts
-auditEnricher({ tenantId: ctx => resolveTenant(ctx) })
+await log.audit({ action: 'member.add', actor, target, tenantId: team.id })
 ```
 
-If the app uses Better Auth, `auditEnricher` can also bridge the authenticated session into `audit.context`. See the Better Auth integration (`evlog/better-auth`, https://www.evlog.dev/use-cases/better-auth/overview) for wiring `identifyUser` alongside the audit pipeline.
+An action that touches several tenants is one call per tenant. A record that lists several tenants leaks one customer's ids into another's trail.
 
-Then either (a) partition the audit dataset by `audit.context.tenantId`, or (b) one drain per tenant if hard isolation is required. Never query audits without a tenant filter.
+When every audit of a request belongs to one tenant that the request itself names (a subdomain per workspace), `auditEnricher({ tenantId: ctx => resolveTenant(ctx) })` fills it instead. The resolver sees `ctx.request` and `ctx.headers`, not the request's wide event. Never resolve it from a header the client controls.
 
-### 4. Retention
+Then filter every read on `audit.tenantId`: the list API, exports and relays. Use one drain per tenant only when hard isolation is required.
+
+### 4. Stored before or after the response?
+
+| You write | Stored | Costs |
+| --- | --- | --- |
+| `await log.audit(...)` | Before the handler continues | The drain's write time, on the response |
+| `void log.audit(...)` | After the response, kept alive with `waitUntil` | A crash in that window loses the record |
+
+Await it when anything reads the trail right after the action (an activity UI, an e2e test). An audit store batched through `createDrainPipeline` resolves when the batch is queued, not written: write to the store directly when the record must exist before the response.
+
+### 5. Do customers need their trail?
+
+Enterprise customers ask for their audit log in their own SIEM. Store every record first, then forward each tenant's records with `relayAudit`, which moves a cursor through your store and stops at the first failure without moving it:
+
+```ts
+import { relayAudit } from 'evlog'
+import { sendAuditWebhook } from 'evlog/webhook'
+
+const result = await relayAudit({
+  cursor: destination.cursor,
+  read: (after, limit) => db.audit.readTeam(destination.teamId, after, limit),
+  send: records => sendAuditWebhook(records, { url: destination.url, secret: destination.secret }),
+  save: next => db.auditDestinations.moveCursor(destination.id, destination.cursor, next),
+})
+if (result.error) await db.auditDestinations.markFailing(destination.id, result.error)
+```
+
+Messages are signed [Standard Webhooks](https://www.standardwebhooks.com). The receiver checks them with `verifyWebhook(rawBody, headers, secret)` and dedupes on the returned record's `id`. The app keeps scheduling, backoff, notifications and refusing internal URLs. With a database sequence as the cursor, `read` leaves out rows written in the last few seconds, since concurrent inserts commit out of order.
+
+### 6. Retention
 
 Pick a window per drain and document it. Enforce at the drain layer, not in app code, because the drain already has audited mechanisms for it (lifecycle policies, `DELETE` jobs, dataset retention).
 
@@ -140,7 +184,7 @@ How to enforce per drain:
 - **Postgres**: `DELETE FROM audit_events WHERE timestamp < now() - interval '7 years'` on a cron.
 - **Axiom / Datadog / Loki**: dataset-level retention policy.
 
-### 5. GDPR vs append-only
+### 7. GDPR vs append-only
 
 The right to be forgotten collides with audit immutability. Recommended pattern:
 
@@ -154,31 +198,25 @@ A built-in `cryptoShredding` helper is on the roadmap; until then, encrypt in a 
 
 ### Step 1: Wire the pipeline (one-time)
 
-The wiring shape is the same in every framework: register `auditEnricher()` so `event.audit.context` gets `requestId`, `traceId`, `ip`, `userAgent`, and (if configured) `tenantId` automatically, then add a main drain plus an audit-only drain.
+The wiring shape is the same in every framework: a main drain, plus your audit store wrapped in `auditOnly()`. `log.audit()` records `requestId`, `traceId`, IP and user agent itself, so no enricher is required.
 
 The minimal Nuxt / Nitro setup looks like this:
 
 ```ts
 // server/plugins/evlog.ts
-import { auditEnricher, auditOnly, signed } from 'evlog'
+import { auditOnly, signed } from 'evlog'
 import { createAxiomDrain } from 'evlog/axiom'
 import { createFsDrain } from 'evlog/fs'
 
 export default defineNitroPlugin((nitroApp) => {
-  const auditSink = auditOnly(
+  nitroApp.hooks.hook('evlog:drain', createAxiomDrain({ dataset: 'logs' }))
+  nitroApp.hooks.hook('evlog:drain', auditOnly(
     signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' }),
-    { await: true },
-  )
-  const main = createAxiomDrain({ dataset: 'logs' })
-
-  nitroApp.hooks.hook('evlog:enrich', auditEnricher({
-    tenantId: ctx => ctx.headers?.['x-tenant-id'],
-  }))
-  nitroApp.hooks.hook('evlog:drain', async (ctx) => {
-    await Promise.all([main(ctx), auditSink(ctx)])
-  })
+  ))
 })
 ```
+
+Wrap only stores you control in `auditOnly`: it receives emails, IPv4 addresses and phone numbers unmasked. Every other drain gets them masked.
 
 For Hono, Express, Next.js, or standalone scripts / workers, see [`references/framework-wiring.md`](references/framework-wiring.md). The pattern is identical. Only the framework integration helper changes.
 
@@ -196,7 +234,7 @@ export const billingAudit = defineAuditCatalog('billing', {
 })
 ```
 
-At the call site: `log.audit(billingAudit.INVOICE_REFUND({ actor, target, outcome: 'success' }))`.
+At the call site: `await log.audit(billingAudit.INVOICE_REFUND({ actor, target, tenantId }))`.
 
 Add the opt-in `declare module 'evlog' { interface RegisteredAuditCatalogs { billing: typeof billingAudit } }` augmentation to get autocomplete everywhere. For one-off actions that don't fit a catalog, `defineAuditAction` still works:
 
@@ -239,9 +277,11 @@ export const refundInvoice = withAudit(
 
 Outcome resolution:
 
-- `fn` resolves → `outcome: 'success'`.
-- `fn` throws `AuditDeniedError` (or any error with `status === 403`) → `outcome: 'denied'`, error message becomes `reason`.
-- Any other thrown error → `outcome: 'failure'`, then re-thrown.
+- `fn` resolves: `outcome: 'success'`.
+- `fn` throws `AuditDeniedError` (or any error with `status === 403`): `outcome: 'denied'`, and the error message becomes `reason`.
+- Any other thrown error: `outcome: 'failure'`, then re-thrown.
+
+`withAudit` records through standalone `audit()`, so pass `tenantId` and `correlationId: requestId` in its context argument.
 
 **B. Manual `log.audit()` inside a handler.** Use it when the audit is one of several decisions in a larger handler, or when you need to emit before the action completes:
 
@@ -249,35 +289,36 @@ Outcome resolution:
 const log = useLogger(event)
 
 if (!user.canRefund(invoice)) {
-  log.audit.deny('Insufficient permissions', {
+  await log.audit.deny('Insufficient permissions', {
     action: 'invoice.refund',
     actor: { type: 'user', id: user.id },
     target: { type: 'invoice', id: invoice.id },
+    tenantId: invoice.orgId,
   })
   throw createError({ status: 403 })
 }
 
 const after = await db.invoices.refund(invoice.id)
 
-log.audit({
+await log.audit({
   action: 'invoice.refund',
   actor: { type: 'user', id: user.id, email: user.email },
   target: { type: 'invoice', id: after.id },
-  outcome: 'success',
+  tenantId: invoice.orgId,
   changes: auditDiff(invoice, after),
 })
 ```
 
-**C. Standalone `audit()` for jobs / scripts.** No request, no logger. Same shape, no context auto-fill:
+**C. Standalone `audit()` for jobs / scripts.** No request, no logger. Same shape, no request context. In a Nuxt or Nitro app it goes through the `evlog:drain` hooks. Await it so the process does not exit first:
 
 ```ts
 import { audit } from 'evlog'
 
-audit({
+await audit({
   action: 'cron.cleanup',
   actor: { type: 'system', id: 'cron' },
   target: { type: 'job', id: 'cleanup-stale-sessions' },
-  outcome: 'success',
+  metadata: { deleted: 42 },
 })
 ```
 
@@ -289,7 +330,7 @@ Auditors care most about denials, because they're how you prove the policy is ac
 function authorize(actor, action, resource) {
   const allowed = policy.check(actor, action, resource)
   if (!allowed) {
-    useLogger().audit.deny(`Policy denied ${action}`, {
+    void useLogger().audit.deny(`Policy denied ${action}`, {
       action,
       actor,
       target: { type: resource.type, id: resource.id },
@@ -301,7 +342,7 @@ function authorize(actor, action, resource) {
 
 ### Step 5: Redact
 
-Apply `auditRedactPreset` (or merge it into the existing `RedactConfig`). It redacts HTTP auth headers and common credential field names (`password`, `token`, `apiKey`, `cardNumber`, `cvv`, `ssn`, plus `cookie` / `set-cookie`) at any nesting depth, including inside `audit.changes.before` / `audit.changes.after`:
+The `auditOnly` store keeps emails, IPv4 addresses and phone numbers, and every other drain gets them masked. Paths, `secrets`, custom patterns, and the credential and card maskers apply to both. Apply `auditRedactPreset` (or merge it into the existing `RedactConfig`). It redacts HTTP auth headers and common credential field names (`password`, `token`, `apiKey`, `cardNumber`, `cvv`, `ssn`, plus `cookie` / `set-cookie`) at any nesting depth, including inside `audit.changes.before` / `audit.changes.after`:
 
 ```ts
 import { initLogger, auditRedactPreset } from 'evlog'
@@ -315,7 +356,7 @@ initLogger({
 
 ### Step 6: Test it
 
-`mockAudit()` captures audit events for assertions without going through any drain. Make the denial test mandatory in code review, because untested denial paths are the most common cause of audit gaps:
+`mockAudit()` captures every record `log.audit()`, `audit()` and `withAudit()` make, as soon as the call is made, without going through any drain. Make the denial test mandatory in code review, because untested denial paths are the most common cause of audit gaps:
 
 ```ts
 import { mockAudit } from 'evlog'
@@ -353,14 +394,16 @@ it('denies refund for non-owners and records the denial', async () => {
 
 Walk through this with a security stakeholder before declaring the system production-ready (the same checklist powers the review mode below):
 
-- [ ] `auditEnricher` is registered on every framework integration.
+- [ ] The audit store is wrapped in `auditOnly()` and keyed on `audit.id`.
+- [ ] `log.audit()` is awaited wherever the trail is read right after the action.
 - [ ] Every authorisation check has a paired `log.audit.deny()` (greppable).
 - [ ] Every mutating endpoint either uses `withAudit()` or calls `log.audit()` explicitly.
 - [ ] At least two drains: one queryable (Axiom / Postgres) and one tamper-evident (FS + `signed` hash-chain, or S3 Object Lock).
 - [ ] `auditRedactPreset` (or stricter) is in the global `RedactConfig`.
 - [ ] Retention policy is documented per drain and enforced at the drain layer.
 - [ ] Multi-tenant apps: `tenantId` is set on every audit event; queries always filter by tenant.
-- [ ] Hash-chain `state.{load,save}` persists across process restarts (file / Redis / Postgres).
+- [ ] Hash-chain `state.{load,save}` persists across process restarts (file / Redis / Postgres), with a single writer.
+- [ ] Customer destinations: relayed from the store with a cursor per destination; registered URLs refuse internal addresses.
 - [ ] HMAC `secret` rotation procedure is documented; `keyId` is embedded in `AuditFields` (extend via `declare module`).
 - [ ] Tests include a denial path for every privileged action.
 - [ ] Audit dataset access is itself logged. Meta-auditing matters.
@@ -375,15 +418,16 @@ Find where the logger is initialised and where drains / enrichers are registered
 
 ```bash
 rg -n "initLogger|defineNitroPlugin|createLogger|evlog:enrich|evlog:drain" --type ts
-rg -n "auditEnricher|auditOnly|signed\(" --type ts
+rg -n "auditEnricher|auditOnly|signed\(|relayAudit|createWebhookDrain" --type ts
 ```
 
 Flag if:
-- `auditEnricher()` is missing → `event.audit.context` is empty, no requestId / IP / tenant correlation.
-- An audit-only drain exists but is not wrapped in `auditOnly(...)` → main events leak into the audit dataset (privacy & cost incident).
+- An audit-only drain exists but is not wrapped in `auditOnly(...)` → main events leak into the audit dataset (privacy & cost incident), and the stored records have emails and IPs masked.
+- `auditOnly(...)` wraps a third-party drain the app does not control → that vendor receives unmasked emails and IPs.
+- `auditOnly(drain, { await: true })` → the option is gone in evlog 3; every `log.audit()` call already waits for every drain.
 - Only one drain → no tamper-evident copy. Acceptable only if the single drain is WORM (S3 Object Lock, BigQuery append-only, Postgres immutable).
 - `signed()` is used without a persisted `state` while running multiple processes → hash-chain breaks across restarts / instances.
-- `await: true` is missing on the audit-only drain → events may be lost on crash.
+- The audit store is batched through `createDrainPipeline` while handlers rely on `await log.audit()` → the await resolves at enqueue, before the write.
 
 ### Pass 2: Coverage (call sites)
 
@@ -402,7 +446,9 @@ For each match, check:
 - `403` / `Forbidden` thrown without a paired `log.audit.deny()` → silent denial. This is the single most common gap.
 - `actor: { type: 'user', id: 'cron' }` or hard-coded actors in cron / queue handlers → wrong `actor.type`. Should be `'system'`, `'api'`, or `'agent'`.
 - `actor.id` set to a session id or token instead of the stable user id → forensic ambiguity.
-- `log.set({ audit: ... })` without using the helpers → bypasses force-keep, may be dropped by tail-sampling.
+- `log.set({ audit: ... })` instead of `log.audit()` → makes no audit record: `auditOnly` drains skip it.
+- `tenantId` missing on records in a multi-tenant app, or one record for several tenants → tenant isolation gap.
+- Reads of `audit.context.tenantId` or `audit.idempotencyKey` → evlog 2 fields; evlog 3 has `audit.tenantId` and `audit.id`.
 - `withAudit()` action name in present tense (`invoice.refund`) is fine; manual `log.audit()` after the fact should use past tense (`invoice.refunded`).
 
 ### Pass 3: Redaction & integrity
@@ -444,12 +490,12 @@ Then map each finding to the relevant step in the buildout above (e.g. P0 → St
 
 - **Logging only successes.** Auditors care most about denials. Pair `log.audit()` with `log.audit.deny()` on every negative branch of every check.
 - **Leaking PII through `changes`.** `auditDiff()` runs through `RedactConfig`, but only if the field paths are listed. Add `password`, `token`, `apiKey` once globally so it's never a per-call-site decision.
-- **Treating audits as observability.** Don't sample, downsample, or summarise audit events. Force-keep is on by default, don't disable it.
+- **Treating audits as observability.** Don't downsample or summarise audit events downstream. evlog never samples them, but a vendor's retention or sampling rules can still drop them.
 - **Conflating `actor.id` with the session id.** `actor.id` is the stable user id (or system identity); correlate sessions via `context.requestId` / `context.traceId`.
 - **Forgetting standalone jobs.** Cron, queue workers, CLIs trigger audit-worthy actions too, use `audit()` or `withAudit()`.
 - **Faking the actor type.** `actor.type: 'user'` for cron jobs gets flagged in audits. Use `'system'`, `'api'`, or `'agent'` accurately.
 - **Single global secret with no rotation.** HMAC keys must rotate; without a `keyId`, old events become unverifiable after rotation.
-- **One drain that fails takes audits down.** Drains must fail in isolation. The default `drain: [...]` array does this; if you wrap in `Promise.all`, don't throw on a single rejection. Log it.
+- **One drain that fails takes audits down.** Drains must fail in isolation. Separate `evlog:drain` hooks and `composeDrains([...])` from `evlog/toolkit` do this; a hand-written `Promise.all` must not throw on a single rejection.
 
 ## Glossary
 
@@ -457,7 +503,9 @@ Then map each finding to the relevant step in the buildout above (e.g. P0 → St
 - **Actor**: who/what performed the action (`user`, `system`, `api`, `agent`).
 - **Target**: the resource the action was performed on.
 - **Outcome**: `success`, `failure`, or `denied`.
-- **Idempotency key**: auto-derived hash of `action + actor + target + timestamp`; safe retries across drains.
+- **Id**: `audit.id`, a UUIDv7 unique per record; the primary key that makes retried writes safe.
+- **Tenant**: `audit.tenantId`, the organization, team or workspace the record belongs to.
+- **On behalf of**: `actor.onBehalfOf`, the user a token, agent or impersonating admin acted for.
 - **Causation id**: id of the action that caused this one (admin action → system reactions).
 - **Correlation id**: shared by every action in one logical operation.
 - **Hash-chain**: each event's `prevHash` matches the previous event's `hash`, forming a verifiable sequence.

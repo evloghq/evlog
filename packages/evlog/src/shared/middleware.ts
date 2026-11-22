@@ -1,11 +1,12 @@
 import type { DrainContext, EnrichContext, RedactConfig, RequestLogger, RouteConfig, TailSamplingContext, WideEvent } from '../types'
 import type { AuditableLogger, ForkableLogger } from '../audit'
-import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, noopLogger, outputWideEvent, shouldKeep } from '../logger'
+import { createAuditMethod, createRequestLogger, drainWithPlugins, getGlobalDrain, getGlobalPluginRunner, isEnabled, noopLogger, outputWideEvent, shouldKeep } from '../logger'
 import type { DrainWindow } from '../logger'
 import { isGloballyRedacted, redactEvent, resolveRedactConfig } from '../redact'
 import { elapsedMs } from '../utils'
 import { deliverBeforeFreeze, deliverPendingDrains } from './shutdown'
 import { extractErrorStatus } from './errors'
+import type { AuditPipeline } from './globalRegistry'
 import type { EvlogPlugin, PluginRunner } from './plugin'
 import { createPluginRunner, getEmptyPluginRunner } from './plugin'
 import { shouldLog, getServiceForPath } from './routes'
@@ -115,6 +116,52 @@ function skippedResult(waitUntil: MiddlewareLoggerOptions['waitUntil']): Middlew
   return { ...noopResult, logger: { ...noopLogger, fork } }
 }
 
+/** Run the integration's `enrich`, whose failure is reported, then the plugin enrichers. */
+async function enrichWith(enrich: BaseEvlogOptions['enrich'], runner: PluginRunner, ctx: EnrichContext): Promise<void> {
+  if (enrich) {
+    try {
+      await enrich(ctx)
+    } catch (err) {
+      console.error('[evlog] enrich failed:', err)
+    }
+  }
+  if (runner.hasEnrich) await runner.runEnrich(ctx)
+}
+
+/**
+ * Result for a route `include` / `exclude` filters out: no request event, but
+ * the route still records its audits, since route filters are for request logs.
+ */
+function filteredRouteResult(options: MiddlewareLoggerOptions): MiddlewareLoggerResult {
+  const skipped = skippedResult(options.waitUntil)
+  const request = { method: options.method, path: options.path, requestId: options.requestId }
+  const audit = createAuditMethod(request, () => middlewareAuditPipeline(options, request, resolveMiddlewarePluginRunner(options)))
+  return { ...skipped, logger: { ...skipped.logger, audit } }
+}
+
+/**
+ * Where a request's `log.audit()` delivers: the same enrich, drain, plugins and
+ * redaction as its request event. A delivery nobody awaited goes to `waitUntil`,
+ * or to `hold` so the end of the request can wait for it.
+ */
+export function middlewareAuditPipeline(
+  options: BaseEvlogOptions & { headers?: Record<string, string> },
+  request: EnrichContext['request'],
+  runner: PluginRunner,
+  hold?: (delivery: Promise<void>) => void,
+): AuditPipeline {
+  const { enrich, waitUntil } = options
+  const drain = options.drain ?? getGlobalDrain()
+  return {
+    request,
+    headers: options.headers,
+    redact: resolveRedactConfig(options.redact),
+    enrich: ctx => enrichWith(enrich, runner, ctx),
+    drain: ctx => drainWithPlugins(drain, runner, ctx),
+    keepAlive: waitUntil ? delivery => extendDeferredDrain(delivery.then(deliverPendingDrains), waitUntil) : hold,
+  }
+}
+
 // Memoizes the merged runner per local plugins array (stable across requests
 // because it lives in the middleware factory closure). Invalidated when
 // `initLogger` swaps the global runner, so the merge cost is paid once.
@@ -173,22 +220,12 @@ export async function runEnrichAndDrain(
   }
 
   if (options.enrich || runner.hasEnrich) {
-    const enrichCtx: EnrichContext = {
+    await enrichWith(options.enrich, runner, {
       event: emittedEvent,
       request: requestInfo,
       headers: options.headers,
       response: { status: responseStatus },
-    }
-    if (options.enrich) {
-      try {
-        await options.enrich(enrichCtx)
-      } catch (err) {
-        console.error('[evlog] enrich failed:', err)
-      }
-    }
-    if (runner.hasEnrich) {
-      await runner.runEnrich(enrichCtx)
-    }
+    })
   }
 
   outputWideEvent(emittedEvent)
@@ -196,30 +233,8 @@ export async function runEnrichAndDrain(
   if (drainWindow) drainWindow.started = true
 
   const drain = options.drain ?? getGlobalDrain()
-  const hasUserDrain = !!drain
-  const hasPluginDrain = runner.hasDrain
-  if (hasUserDrain || hasPluginDrain) {
-    const drainCtx: DrainContext = {
-      event: emittedEvent,
-      request: requestInfo,
-      headers: options.headers,
-    }
-    const tasks: Array<Promise<unknown>> = []
-    if (hasUserDrain) {
-      tasks.push(
-        (async () => {
-          try {
-            await drain!(drainCtx)
-          } catch (err) {
-            console.error('[evlog] drain failed:', err)
-          }
-        })(),
-      )
-    }
-    if (hasPluginDrain) {
-      tasks.push(runner.runDrain(drainCtx))
-    }
-    const drainPromise = Promise.all(tasks)
+  if (drain || runner.hasDrain) {
+    const drainPromise = drainWithPlugins(drain, runner, { event: emittedEvent, request: requestInfo, headers: options.headers })
     if (options.waitUntil) {
       // A pipeline drain only buffers: keep the runtime alive until the request-end flush delivers it.
       extendDeferredDrain(drainPromise.then(deliverPendingDrains), options.waitUntil)
@@ -244,30 +259,37 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
   const { method, path, requestId, include, exclude, routes, keep } = options
 
   if (!shouldLog(path, include, exclude)) {
-    return skippedResult(options.waitUntil)
+    return filteredRouteResult(options)
   }
 
   const resolvedRequestId = requestId || crypto.randomUUID()
   const drainWindow: DrainWindow = { started: false }
+  const requestInfo = { method, path, requestId: resolvedRequestId }
+  const pluginRunner = resolveMiddlewarePluginRunner(options)
+  let heldAudits: Array<Promise<void>> | undefined
 
   const logger = createRequestLogger({
     method,
     path,
     requestId: resolvedRequestId,
-  }, { _deferDrain: true, _drainWindow: drainWindow })
+  }, {
+    _deferDrain: true,
+    _drainWindow: drainWindow,
+    _audit: () => middlewareAuditPipeline(options, requestInfo, pluginRunner, (delivery) => {
+      (heldAudits ??= []).push(delivery)
+    }),
+  })
 
   const routeService = getServiceForPath(path, routes)
   if (routeService) {
     logger.set({ service: routeService })
   }
 
-  const pluginRunner = resolveMiddlewarePluginRunner(options)
   if (pluginRunner.hasExtendLogger) {
     pluginRunner.applyExtendLogger(logger)
   }
 
   const startTime = Date.now()
-  const requestInfo = { method, path, requestId: resolvedRequestId }
 
   if (pluginRunner.hasRequestLifecycle) {
     pluginRunner.runOnRequestStart({
@@ -370,6 +392,7 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
         outputWideEvent(emittedEvent)
       }
     }
+    if (heldAudits) await Promise.all(heldAudits)
 
     if (pluginRunner.hasRequestLifecycle) {
       pluginRunner.runOnRequestFinish({

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWithEvlog } from '../../src/next/handler'
-import { evlogStorage } from '../../src/next/storage'
+import { evlogStorage, useLogger } from '../../src/next/storage'
 import { initLogger } from '../../src/logger'
 import { createError } from '../../src/error'
 import { defined } from '../helpers/defined'
 import { createDeferredStream } from '../helpers/stream'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { AUDIT_PATH, EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudits } from '../helpers/frameworkMatrix'
 
 // Mock next/server to prevent import errors
 vi.mock('next/server', () => ({
@@ -650,7 +650,11 @@ describeStandardHttpMatrix({
   name: 'next',
   mount(options) {
     vi.spyOn(console, 'info').mockImplementation(() => {})
-    const handler = createWithEvlog({ ...options, pretty: false })(() => Response.json({ users: [] }))
+    const handler = createWithEvlog({ ...options, pretty: false })(async (request: Request) => {
+      const { pathname } = new URL(request.url)
+      if (pathname === AUDIT_PATH || pathname === EXCLUDED_AUDIT_PATH) await recordMatrixAudits(useLogger())
+      return Response.json({ users: [] })
+    })
     return Promise.resolve({
       async fire({ method, path, headers }) {
         const response = await handler(new Request(`http://localhost${path}`, { method, headers }))

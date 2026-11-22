@@ -41,6 +41,7 @@ export default defineConfig({
     'adapters/sazabi': 'src/adapters/sazabi.ts',
     'adapters/fs': 'src/adapters/fs.ts',
     'adapters/memory': 'src/adapters/memory.ts',
+    'adapters/webhook': 'src/adapters/webhook.ts',
     'enrichers': 'src/enrichers/index.ts',
     'pipeline': 'src/pipeline.ts',
     'diagnostics': 'src/diagnostics.ts',

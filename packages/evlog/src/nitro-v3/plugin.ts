@@ -14,9 +14,10 @@ import { extendDeferredDrain } from '../nitro/deferred-drain'
 import { normalizeRedactConfig } from '../redact'
 import { shouldDeferEmitForResponse } from '../shared/streamResponse'
 import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig } from '../shared/fileConfig'
-import { deliverBeforeFreeze, deliverPendingDrains, detectServerlessPlatform, flushPendingDrains, hasPendingDrains } from '../shared/shutdown'
+import { deliverBeforeFreeze, deliverPendingDrains, detectServerlessPlatform, flushPendingDrains, getVercelWaitUntil, hasPendingDrains } from '../shared/shutdown'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
-import { setNitroRequestLoggerResolver } from '../shared/globalRegistry'
+import type { AuditPipeline } from '../shared/globalRegistry'
+import { setGlobalAuditPipeline, setNitroRequestLoggerResolver } from '../shared/globalRegistry'
 import type { MiddlewareLoggerOptions } from '../shared/middleware'
 import { attachNitroFork } from '../shared/nitroFork'
 import type { DrainContext, EnrichContext, RequestLogger, TailSamplingContext, WideEvent } from '../types'
@@ -66,6 +67,44 @@ function forkOptions(hooks: Hooks, event: HTTPEvent): MiddlewareLoggerOptions {
       await hooks.callHook('evlog:drain', ctx)
     },
     waitUntil: typeof event.req.waitUntil === 'function' ? event.req.waitUntil.bind(event.req) : undefined,
+  }
+}
+
+/**
+ * Where `log.audit()` and `audit()` deliver in a Nitro v3 app: the
+ * `evlog:enrich` and `evlog:drain` hooks and the plugins, as request events do.
+ * An unawaited delivery goes to the request's `waitUntil`, or Vercel's; without
+ * either, a request holds it in `_evlogAudits` for the `response` hook.
+ */
+function nitroAuditPipeline(hooks: Hooks, event?: HTTPEvent, requestId?: string): AuditPipeline {
+  const waitUntil = event && typeof event.req.waitUntil === 'function' ? event.req.waitUntil.bind(event.req) : getVercelWaitUntil()
+  return {
+    request: event && { method: event.req.method, path: parseURL(event.req.url).pathname, requestId },
+    headers: event && getSafeRequestHeaders(event),
+    async enrich(ctx) {
+      try {
+        await hooks.callHook('evlog:enrich', ctx)
+      } catch (err) {
+        console.error('[evlog] enrich failed:', err)
+      }
+      await getGlobalPluginRunner().runEnrich(ctx)
+    },
+    async drain(ctx) {
+      await Promise.all([
+        (async () => {
+          try {
+            await hooks.callHook('evlog:drain', ctx)
+          } catch (err) {
+            console.error('[evlog] drain failed:', err)
+          }
+        })(),
+        getGlobalPluginRunner().runDrain(ctx),
+      ])
+    },
+    keepAlive(delivery) {
+      if (waitUntil) waitUntil(delivery.then(deliverPendingDrains))
+      else if (event) ((getContext(event)._evlogAudits ??= []) as Array<Promise<void>>).push(delivery)
+    },
   }
 }
 
@@ -284,6 +323,7 @@ export default definePlugin(async (nitroApp) => {
   hooks.hook('close', () => flushPendingDrains())
   // Only reaches a request when the app sets `experimental.asyncContext`.
   setNitroRequestLoggerResolver(currentRequestLogger)
+  setGlobalAuditPipeline(nitroAuditPipeline(hooks))
 
   // When globally disabled, createRequestLogger returns a no-op logger — still
   // attach it so handlers can call useLogger without throwing.
@@ -319,7 +359,7 @@ export default definePlugin(async (nitroApp) => {
       method: event.req.method,
       path: pathname,
       requestId,
-    }, { _deferDrain: true, _drainWindow: drainWindow })
+    }, { _deferDrain: true, _drainWindow: drainWindow, _audit: () => nitroAuditPipeline(hooks, event, requestId) })
 
     const routeService = getServiceForPath(pathname, evlogConfig?.routes)
     if (routeService) {
@@ -348,6 +388,11 @@ export default definePlugin(async (nitroApp) => {
     log.error(actualError)
     return actualError
   }
+
+  hooks.hook('response', async (_res, event) => {
+    const audits = event.req.context?._evlogAudits as Array<Promise<void>> | undefined
+    if (audits) await Promise.all(audits)
+  })
 
   hooks.hook('response', async (res, event) => {
     const ctx = event.req.context

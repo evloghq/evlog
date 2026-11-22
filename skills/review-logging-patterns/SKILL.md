@@ -1,6 +1,6 @@
 ---
 name: review-logging-patterns
-description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify, Effect, and eve agents. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Effect, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
+description: Review code for logging patterns and suggest evlog adoption. Optionally use the evlog CLI, shipped with the evlog package (`evlog init` to wire evlog, `evlog agents` to write the conventions into AGENTS.md, `evlog map` to score entry-point coverage, `--baseline` to gate regressions in CI) on Nuxt, Nitro, Next.js, TanStack Start, Hono, Express, Fastify, Effect, and eve agents. Guides setup on those plus SvelteKit, React Router, NestJS, Express, Fastify, Elysia, oRPC, Effect, Cloudflare Workers, AWS Lambda, Astro, and standalone TypeScript. Detects console.log spam, unstructured errors, and missing context. Covers wide events, structured errors, drain adapters (Axiom, OTLP, HyperDX, Sazabi, PostHog, Sentry, Better Stack, Datadog, Loki, ClickHouse, Webhook, NuxtHub, Memory), sampling, enrichers, and AI SDK integration.
 license: MIT
 metadata:
   author: HugoRCD
@@ -35,14 +35,14 @@ Review and improve logging patterns in TypeScript/JavaScript codebases. Transfor
 
 ## Audit logs
 
-For security-sensitive actions (auth, billing, admin, data export), use evlog's audit layer: a typed `audit` field on wide events, not a parallel logger. See the **`build-audit-logs`** skill for end-to-end setup (`log.audit`, `withAudit`, denials, `auditEnricher`, `auditOnly`, `signed`, `mockAudit`).
+For security-sensitive actions (auth, billing, admin, data export), use evlog's audit layer: each `log.audit()` call is its own event with a typed `audit` field, not a parallel logger. See the **`build-audit-logs`** skill for end-to-end setup (`log.audit`, `withAudit`, denials, tenants, `auditOnly`, `signed`, `relayAudit`, `mockAudit`).
 
 ```typescript
-log.audit({
+await log.audit({
   action: 'invoice.refund',
   actor: { type: 'user', id: user.id },
   target: { type: 'invoice', id: invoice.id },
-  outcome: 'success',
+  tenantId: invoice.orgId,
 })
 ```
 
@@ -1019,6 +1019,7 @@ They can also live in `evlog.config.ts`, written with `defineEvlog()`. Nuxt and 
 | Datadog | `evlog/datadog` | `DD_API_KEY` or `DATADOG_API_KEY`, optional `DD_SITE` / `DATADOG_LOGS_URL` |
 | Grafana Loki | `evlog/loki` | `LOKI_ENDPOINT`, optional `LOKI_API_KEY` + `LOKI_USER` (Grafana Cloud) or `LOKI_TENANT_ID` (multi-tenant) |
 | ClickHouse | `evlog/clickhouse` | `CLICKHOUSE_ENDPOINT`, optional `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` / `CLICKHOUSE_DATABASE` / `CLICKHOUSE_TABLE` |
+| Webhook | `evlog/webhook` | `EVLOG_WEBHOOK_URL`, `EVLOG_WEBHOOK_SECRET` (`whsec_`, from `generateWebhookSecret()`). Sends audit records only, as signed Standard Webhooks; the receiver checks them with `verifyWebhook()` |
 | File System | `evlog/fs` | None (local file system) |
 | Memory | `evlog/memory` | None (in-process ring buffer; optional `EVLOG_MEMORY_STORE`, `EVLOG_MEMORY_MAX_EVENTS`). Read back with `readMemoryLogs()`, ideal for dev-only log endpoints agents can query |
 | NuxtHub | `@evlog/nuxthub` (separate package, Nuxt module) | None: stores wide events in the NuxtHub database with retention-based cleanup (set `evlog.retention: '7d'` in the module options; accepts `d`/`h`/`m`) |

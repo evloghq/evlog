@@ -12,8 +12,8 @@ interface Stage {
 const stages: Stage[] = [
   { id: 'callsite', label: 'log.audit / audit / withAudit', hint: 'callsite', icon: 'i-lucide-file-pen-line', origin: 'audit' },
   { id: 'set', label: 'set event.audit', hint: 'reserved field', icon: 'i-lucide-square-pen', origin: 'audit' },
-  { id: 'forceKeep', label: 'force-keep tail-sample', hint: 'never dropped', icon: 'i-lucide-shield-check', origin: 'audit' },
-  { id: 'enricher', label: 'auditEnricher()', hint: '+ requestId · ip · ua', icon: 'i-lucide-sparkles', origin: 'audit' },
+  { id: 'forceKeep', label: 'skip sampling', hint: 'never dropped', icon: 'i-lucide-shield-check', origin: 'audit' },
+  { id: 'enricher', label: 'auditEnricher()', hint: '+ tenantId', icon: 'i-lucide-sparkles', origin: 'audit' },
   { id: 'redact', label: 'redact + auditRedactPreset', hint: 'PII scrubbed', icon: 'i-lucide-eye-off', origin: 'shared' },
 ]
 

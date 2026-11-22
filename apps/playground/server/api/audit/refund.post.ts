@@ -1,6 +1,6 @@
 import { auditDiff } from 'evlog'
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const log = useLogger(event)
   const userId = 'usr_42'
 
@@ -12,10 +12,11 @@ export default defineEventHandler((event) => {
   const before = { status: 'paid', refundedAmount: 0 }
   const after = { status: 'refunded', refundedAmount: 9999 }
 
-  log.audit?.({
+  await log.audit({
     action: 'invoice.refund',
     actor: { type: 'user', id: userId, email: 'demo@evlog.dev' },
     target: { type: 'invoice', id: 'inv_889' },
+    tenantId: 'tenant_demo',
     outcome: 'success',
     reason: 'Customer requested refund',
     changes: auditDiff(before, after),

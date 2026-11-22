@@ -18,7 +18,7 @@ const benefits = [
   {
     icon: 'i-lucide-shield-check',
     title: 'Reserved schema',
-    text: 'Typed action, actor, target, outcome, changes, causation. No magic strings.',
+    text: 'Typed action, actor, target, tenant, outcome, changes. No magic strings.',
   },
   {
     icon: 'i-lucide-fingerprint',
@@ -28,12 +28,12 @@ const benefits = [
   {
     icon: 'i-lucide-rotate-ccw',
     title: 'Safe retries',
-    text: 'Deterministic idempotency keys auto-derived per audit event.',
+    text: 'A unique, time-ordered id per record, so a retried write keeps one row.',
   },
   {
     icon: 'i-lucide-key-round',
     title: 'Compose, do not replace',
-    text: 'Reuses your drains, enrichers, redact, sampling. No parallel pipeline.',
+    text: 'Reuses your drains, enrichers, redaction. No parallel pipeline.',
   },
 ]
 
@@ -130,11 +130,11 @@ const benefits = [
           </div>
 
           <div class="px-5 pt-4 pb-3 font-mono text-xs sm:text-sm leading-relaxed overflow-x-auto border-b border-muted/50">
-            <pre><code>log.<span class="text-amber-400">audit</span>({
+            <pre><code>await log.<span class="text-amber-400">audit</span>({
   <span class="text-sky-400">action</span>: <span class="text-emerald-400">'invoice.refund'</span>,
   <span class="text-sky-400">actor</span>: { <span class="text-sky-400">type</span>: <span class="text-emerald-400">'user'</span>, <span class="text-sky-400">id</span>: user.id },
   <span class="text-sky-400">target</span>: { <span class="text-sky-400">type</span>: <span class="text-emerald-400">'invoice'</span>, <span class="text-sky-400">id</span>: <span class="text-emerald-400">'inv_889'</span> },
-  <span class="text-sky-400">outcome</span>: <span class="text-emerald-400">'success'</span>,
+  <span class="text-sky-400">tenantId</span>: <span class="text-emerald-400">'org_acme'</span>,
   <span class="text-sky-400">reason</span>: <span class="text-emerald-400">'Customer requested refund'</span>,
 })</code></pre>
           </div>
@@ -144,7 +144,6 @@ const benefits = [
               <span class="font-medium text-emerald-500">INFO</span>
               <span class="text-violet-400">POST</span>
               <span class="text-amber-400">/api/refund</span>
-              <span class="ml-auto text-dimmed">(82ms)</span>
             </div>
             <div class="space-y-1 border-l-2 border-emerald-500/30 pl-4">
               <div>
@@ -168,8 +167,8 @@ const benefits = [
                 <span class="text-muted"> &#123; requestId, traceId, ip, userAgent &#125;</span>
               </div>
               <div>
-                <span class="text-sky-400">audit.idempotencyKey</span><span class="text-dimmed">:</span>
-                <span class="text-pink-400"> "8f2c…"</span>
+                <span class="text-sky-400">audit.id</span><span class="text-dimmed">:</span>
+                <span class="text-pink-400"> "01a2…"</span>
               </div>
               <div>
                 <span class="text-sky-400">audit.prevHash</span><span class="text-dimmed">:</span>

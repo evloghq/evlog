@@ -16,6 +16,7 @@ One row per drain adapter that talks to a third-party API. The row names the aut
 | `posthog.ts` | https://posthog.com/docs/api/capture | `PostHog/posthog-js` (`posthog-node`) | `packages/node/src/client.ts`, `packages/core/src/posthog-core.ts` | the first run pins the files | unset |
 | `sazabi.ts` | https://docs.sazabi.com (OTLP/HTTP log streams) | none: OTLP/HTTP through evlog's own encoder (`otlp.ts`) | `packages/evlog/src/adapters/otlp.ts` | none: no client of its own | unset |
 | `sentry.ts` | https://develop.sentry.dev/sdk/data-model/envelopes/ | `getsentry/sentry-javascript` (`@sentry/core`) | `packages/core/src/logs/envelope.ts`, `packages/core/src/logs/internal.ts`, `packages/core/src/envelope.ts`, `packages/core/src/transports/base.ts` | the first run pins the files | `@sentry/core 11.12.0 @ 1e767d22` |
+| `webhook.ts` | https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md | `standard-webhooks/standard-webhooks` (`standardwebhooks`) | `libraries/javascript/src/index.ts` | none: the spec defines signing and delivery only | standardwebhooks 1.3.0 |
 
 `Aligned to` is the client's published version and the evlog commit that last matched it, written as `@sentry/core 11.2.0 @ 5e0d543`. `unset` means no run has compared the two yet; the first run over that adapter writes the first pin and files every mismatch and gap it finds along the way.
 
@@ -33,7 +34,7 @@ Each adapter splits a batch with `chunkSerialized` (`packages/evlog/src/shared/c
 | `better-stack.ts` | none | 10 MiB | https://betterstack.com/docs/logs/ingesting-data/http/logs/ |
 | `posthog.ts` (`mode: 'events'`) | none | under 20 MB | https://posthog.com/docs/api/capture |
 
-`loki.ts`, `clickhouse.ts`, `otlp.ts`, `hyperdx.ts`, `sazabi.ts`, and PostHog logs mode (OTLP) have no cap enforced yet: their limits depend on the server or collector configuration, not on a single documented value.
+`loki.ts`, `clickhouse.ts`, `otlp.ts`, `hyperdx.ts`, `sazabi.ts`, and PostHog logs mode (OTLP) have no cap enforced yet: their limits depend on the server or collector configuration, not on a single documented value. `webhook.ts` sends one record per request, so it needs none.
 
 ## What a comparison covers
 

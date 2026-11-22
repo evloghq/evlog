@@ -10,7 +10,7 @@ import { billingAudit } from '~~/server/utils/audit'
  *   - audit.action: 'billing.INVOICE_REFUND' (auto-derived)
  *   - audit.target: { id: 'inv_889', type: 'invoice' } (type auto-injected)
  */
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const log = useLogger(event)
 
   log.set({
@@ -21,7 +21,7 @@ export default defineEventHandler((event) => {
   const before = { status: 'paid', refundedAmount: 0 }
   const after = { status: 'refunded', refundedAmount: 9999 }
 
-  log.audit?.(billingAudit.INVOICE_REFUND({
+  await log.audit(billingAudit.INVOICE_REFUND({
     actor: { type: 'user', id: 'usr_42', email: 'demo@evlog.dev' },
     target: { id: 'inv_889' },
     outcome: 'success',

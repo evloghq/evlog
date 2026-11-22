@@ -16,7 +16,7 @@ import {
   waitForDrainCalls,
 } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { AUDIT_PATH, EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudits } from '../helpers/frameworkMatrix'
 
 describeStandardHttpMatrix({
   name: 'fastify',
@@ -24,6 +24,12 @@ describeStandardHttpMatrix({
     const app = Fastify({ logger: false })
     await app.register(evlog, options)
     app.get('/api/users', () => ({ users: [] }))
+    for (const path of [AUDIT_PATH, EXCLUDED_AUDIT_PATH]) {
+      app.get(path, async () => {
+        await recordMatrixAudits(useLogger())
+        return { ok: true }
+      })
+    }
     return {
       async fire(req) {
         const res = await app.inject({

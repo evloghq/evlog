@@ -15,7 +15,7 @@ import { evlogFileConfigPlugins, flushEvlogFileConfigDrain, withEvlogFileConfig 
 import { flushPendingDrains } from '../shared/shutdown'
 import { resolveEvlogConfigForNitroPlugin, setActiveNitroRuntime } from '../shared/nitroConfigBridge'
 import { bindStreamingResponseLifecycle, shouldDeferEmitForResponse } from '../shared/streamResponse'
-import { setNitroRequestLoggerResolver } from '../shared/globalRegistry'
+import { setGlobalAuditPipeline, setNitroRequestLoggerResolver } from '../shared/globalRegistry'
 import type { MiddlewareLoggerOptions } from '../shared/middleware'
 import { attachNitroFork } from '../shared/nitroFork'
 import { startStreamServer, type StreamServerOptions } from '../stream'
@@ -23,23 +23,32 @@ import type { AuditableLogger } from '../audit'
 import type { RequestLifecycleContext } from '../shared/plugin'
 import type { RequestLogger, ServerEvent, TailSamplingContext, WideEvent } from '../types'
 import { elapsedMs } from '../utils'
-import { callEnrichAndDrain, getSafeHeaders, getResponseStatus } from './enrich-drain'
+import { callEnrichAndDrain, getSafeHeaders, getResponseStatus, nitroAuditPipeline, resolveWaitUntil } from './enrich-drain'
 
-function createDeferredRequestLogger(e: ServerEvent): AuditableLogger {
+function createDeferredRequestLogger(nitroApp: NitroApp, e: ServerEvent): AuditableLogger {
   const headers = getSafeHeaders(e)
   let requestIdOverride = headers['x-request-id'] || undefined
   if (!requestIdOverride && globalThis.navigator?.userAgent === 'Cloudflare-Workers') {
     requestIdOverride = headers['cf-ray'] || undefined
   }
-  return createRequestLogger({
-    method: e.method,
-    path: e.path,
-    requestId: requestIdOverride || e.context.requestId || crypto.randomUUID(),
-  }, { _deferDrain: true })
+  const requestId = requestIdOverride || e.context.requestId || crypto.randomUUID()
+  return createRequestLogger({ method: e.method, path: e.path, requestId }, {
+    _deferDrain: true,
+    _audit: () => {
+      const pipeline = nitroAuditPipeline(nitroApp, e, requestId)
+      if (resolveWaitUntil(e)) return pipeline
+      // Without `waitUntil` (Node server, AWS Lambda), `afterResponse` waits for the audits nobody awaited.
+      return {
+        ...pipeline,
+        keepAlive(delivery) {
+          (e.context._evlogAudits ??= []).push(delivery)
+        },
+      }
+    },
+  })
 }
 
 function forkOptions(nitroApp: NitroApp, e: ServerEvent): MiddlewareLoggerOptions {
-  const waitUntilCtx = e.context.cloudflare?.context ?? e.context
   return {
     method: e.method,
     path: e.path,
@@ -50,7 +59,7 @@ function forkOptions(nitroApp: NitroApp, e: ServerEvent): MiddlewareLoggerOption
     drain: async (ctx) => {
       await nitroApp.hooks.callHook('evlog:drain', ctx)
     },
-    waitUntil: typeof waitUntilCtx?.waitUntil === 'function' ? waitUntilCtx.waitUntil.bind(waitUntilCtx) : undefined,
+    waitUntil: resolveWaitUntil(e),
   }
 }
 
@@ -138,6 +147,7 @@ export default defineNitroPlugin(async (nitroApp) => {
   })
   nitroApp.hooks.hook('close', flushEvlogFileConfigDrain)
   nitroApp.hooks.hook('close', () => flushPendingDrains())
+  setGlobalAuditPipeline(nitroAuditPipeline(nitroApp))
 
   // When `evlog.stream` is set (or auto-on in dev), boot the mini stream
   // server and hook every drained event into it. The server runs on its
@@ -159,7 +169,7 @@ export default defineNitroPlugin(async (nitroApp) => {
   if (!isEnabled()) {
     nitroApp.hooks.hook('request', (event) => {
       const e = event as ServerEvent
-      e.context.log = attachNitroFork(createDeferredRequestLogger(e), () => forkOptions(nitroApp, e), false)
+      e.context.log = attachNitroFork(createDeferredRequestLogger(nitroApp, e), () => forkOptions(nitroApp, e), false)
     })
     return
   }
@@ -177,7 +187,7 @@ export default defineNitroPlugin(async (nitroApp) => {
     // Store start time for duration calculation in tail sampling
     e.context._evlogStartTime = Date.now()
 
-    const requestLog = createDeferredRequestLogger(e)
+    const requestLog = createDeferredRequestLogger(nitroApp, e)
 
     const routeService = getServiceForPath(e.path, evlogConfig?.routes)
     if (routeService) {
@@ -249,5 +259,10 @@ export default defineNitroPlugin(async (nitroApp) => {
     }
 
     await emitSuccessResponse()
+  })
+
+  nitroApp.hooks.hook('afterResponse', async (event) => {
+    const audits = (event as ServerEvent).context._evlogAudits
+    if (audits) await Promise.all(audits)
   })
 })

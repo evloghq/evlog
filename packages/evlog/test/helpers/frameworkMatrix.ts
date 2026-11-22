@@ -2,7 +2,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { BaseEvlogOptions } from '../../src/shared/middleware'
 import type { WideEvent } from '../../src/types'
 import { createPipelineSpies, findEventViaDrain, waitForDrainCalls } from './framework'
-import { defined } from './defined'
+import { defined, getDrainCallArg } from './defined'
+import { AUDIT_PATH, EXCLUDED_AUDIT_PATH, MATRIX_TOKEN } from './matrixAudits'
+
+export { AUDIT_PATH, EXCLUDED_AUDIT_PATH, recordMatrixAudits } from './matrixAudits'
 
 type MatrixRequest = { method?: string, path: string, headers?: Record<string, string> }
 type Fire = (req: MatrixRequest) => Promise<{ status: number }>
@@ -23,6 +26,8 @@ export interface FrameworkAdapter {
    *
    * The single GET route at `/api/users` returns `{ users: [] }` with status
    * 200; tests use other paths only when relevant (e.g. include/exclude).
+   * `GET` {@link AUDIT_PATH} and {@link EXCLUDED_AUDIT_PATH} run
+   * {@link recordMatrixAudits} with the request logger, then answer 200.
    */
   mount: (options: BaseEvlogOptions) => Promise<{
     fire: Fire
@@ -91,6 +96,47 @@ const checks: MatrixCheck[] = [
     },
   },
 ]
+
+interface AuditCheck {
+  name: string
+  options: BuiltAppOptions
+  path: string
+  requestId: string
+  /** Whether the route also emits its request event. */
+  requestEvent: boolean
+}
+
+const AUDIT_HEADERS = { 'user-agent': 'matrix-agent/1', 'x-forwarded-for': '203.0.113.9, 10.0.0.1' }
+
+const auditChecks: AuditCheck[] = [
+  {
+    name: 'records each log.audit() call as its own event with the request context',
+    options: {},
+    path: AUDIT_PATH,
+    requestId: 'matrix-audit',
+    requestEvent: true,
+  },
+  {
+    name: 'records the audits of a route filtered out by exclude',
+    options: { exclude: [EXCLUDED_AUDIT_PATH] },
+    path: EXCLUDED_AUDIT_PATH,
+    requestId: 'matrix-audit-excluded',
+    requestEvent: false,
+  },
+]
+
+function assertMatrixAudits(events: WideEvent[], check: AuditCheck): void {
+  const audits = events.flatMap(e => e.audit && e.requestId === check.requestId ? [e.audit] : [])
+  expect(audits.toSorted((a, b) => a.id.localeCompare(b.id)).map(a => [a.action, a.outcome, a.tenantId])).toEqual([
+    ['token.create', 'success', 'team_1'],
+    ['team.delete', 'denied', 'team_2'],
+  ])
+  for (const audit of audits) {
+    expect(audit.actor).toEqual(MATRIX_TOKEN)
+    expect(audit.context).toMatchObject({ requestId: check.requestId, userAgent: 'matrix-agent/1', ip: '203.0.113.9' })
+  }
+  expect(events.filter(e => e.path === check.path && !e.audit)).toHaveLength(check.requestEvent ? 1 : 0)
+}
 
 /**
  * Checks only the built-app matrix runs: each fixture serves `GET /api/fork`,
@@ -163,6 +209,26 @@ export function describeStandardHttpMatrix(adapter: FrameworkAdapter): void {
         }
       })
     }
+
+    for (const check of auditChecks) {
+      it(check.name, async () => {
+        const { drain } = createPipelineSpies()
+        const { fire, cleanup } = await adapter.mount({ drain, ...check.options })
+        try {
+          const { status } = await fire({ method: 'GET', path: check.path, headers: { ...AUDIT_HEADERS, 'x-request-id': check.requestId } })
+          expect(status).toBe(200)
+          // A later request's event arrives after any event the audited request emits.
+          await fire({ method: 'GET', path: '/api/users' })
+          await vi.waitFor(() => expect(findEventViaDrain(drain, e => e.path === '/api/users')).toBeDefined(), { timeout: 1000, interval: 5 })
+          if (check.requestEvent) {
+            await vi.waitFor(() => expect(findEventViaDrain(drain, e => e.path === check.path && !e.audit)).toBeDefined(), { timeout: 1000, interval: 5 })
+          }
+          assertMatrixAudits(drain.mock.calls.map(call => getDrainCallArg(call).event), check)
+        } finally {
+          await cleanup?.()
+        }
+      })
+    }
   })
 }
 
@@ -177,7 +243,7 @@ export function describeBuiltAppMatrix(adapter: BuiltAppAdapter, timeout = 180_0
     const built: { app?: Awaited<ReturnType<BuiltAppAdapter['start']>> } = {}
 
     beforeAll(async () => {
-      const options: BuiltAppOptions = Object.assign({}, ...checks.map(check => check.options))
+      const options: BuiltAppOptions = Object.assign({}, ...[...checks, ...auditChecks].map(check => check.options))
       built.app = await adapter.start({ ...options, exclude: [...options.exclude ?? [], DRAINED_PATH] })
       await built.app.drained()
     }, timeout)
@@ -196,6 +262,21 @@ export function describeBuiltAppMatrix(adapter: BuiltAppAdapter, timeout = 180_0
           return defined(events.find(check.match ?? (e => e.path === check.request.path)), `event for ${check.name}`)
         }, { timeout: 5_000, interval: 50 })
         check.assert(event)
+      })
+    }
+
+    for (const check of auditChecks) {
+      it(check.name, async () => {
+        const { fire, drained } = defined(built.app, `${adapter.name} app`)
+        const { status } = await fire({ method: 'GET', path: check.path, headers: { ...AUDIT_HEADERS, 'x-request-id': check.requestId } })
+        expect(status).toBe(200)
+        const events: WideEvent[] = []
+        await vi.waitFor(async () => {
+          events.push(...await drained())
+          // The fixture awaits both audits before it answers, so only the request event can still be on its way.
+          expect(events.some(e => e.path === check.path && !e.audit)).toBe(check.requestEvent)
+        }, { timeout: 5_000, interval: 50 })
+        assertMatrixAudits(events, check)
       })
     }
   })

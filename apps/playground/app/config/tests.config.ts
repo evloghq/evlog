@@ -237,7 +237,7 @@ export const testConfig = {
       label: 'Audit Logs',
       icon: 'i-lucide-shield-check',
       title: 'Audit Logs',
-      description: 'First-class audit trails composed on the same wide-event pipeline. Every event is force-kept (never sampled), enriched with request context (`auditEnricher`), and routed to a tamper-evident sink (`auditOnly(signed(fsDrain))` writing hash-chained NDJSON to .audit/). Trigger each scenario and inspect both the terminal wide event and the .audit/ directory.',
+      description: 'First-class audit trails composed on the same wide-event pipeline. Each `log.audit()` call is its own event, never sampled, carrying the request id, IP and user agent, and routed to a tamper-evident sink (`auditOnly(signed(fsDrain))` writing hash-chained NDJSON to .audit/) that keeps emails and IPs the other drains see masked. Trigger each scenario and inspect both the terminal wide event and the .audit/ directory.',
       layout: 'cards',
       tests: [
         {

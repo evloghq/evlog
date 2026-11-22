@@ -578,15 +578,17 @@ describe('sampling.minLevel', () => {
     expect(createRequestLogger({ path: '/kept' }).emit({ _forceKeep: true })).toBeNull()
   })
 
-  it('still emits audit events below the floor', () => {
-    initLogger({ pretty: false, sampling: { minLevel: 'warn' } })
+  it('still emits audit events below the floor', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, sampling: { minLevel: 'warn' }, drain })
 
-    const event = defined(audit({
+    await audit({
       action: 'invoice.refund',
       actor: { type: 'user', id: 'u1' },
       target: { type: 'invoice', id: 'inv_1' },
       outcome: 'success',
-    }))
+    })
+    const event = defined(findEventViaDrain(drain, e => e.audit?.action === 'invoice.refund'), 'audit event')
     expect(event.level).toBe('info')
   })
 

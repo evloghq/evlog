@@ -35,9 +35,10 @@ function startRequest<TSuccess>(
   span: Tracer.AnySpan,
   options: EvlogEffectOptions,
   statusOf: (exit: Exit.Exit<TSuccess, unknown>) => Effect.Effect<number>,
-): Unit<TSuccess> | undefined {
+): Unit<TSuccess> {
   const { logger, finish, skipped } = integration.start(input, options)
-  if (skipped) return undefined
+  // A filtered route emits nothing but still records its audits.
+  if (skipped) return { logger, finish: () => Effect.void }
   logger.set(traceFields(span))
   return {
     logger,

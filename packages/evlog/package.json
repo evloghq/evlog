@@ -140,6 +140,11 @@
       "import": "./dist/adapters/memory.mjs",
       "default": "./dist/adapters/memory.mjs"
     },
+    "./webhook": {
+      "types": "./dist/adapters/webhook.d.mts",
+      "import": "./dist/adapters/webhook.mjs",
+      "default": "./dist/adapters/webhook.mjs"
+    },
     "./enrichers": {
       "types": "./dist/enrichers.d.mts",
       "import": "./dist/enrichers.mjs",
@@ -331,6 +336,9 @@
       ],
       "memory": [
         "./dist/adapters/memory.d.mts"
+      ],
+      "webhook": [
+        "./dist/adapters/webhook.d.mts"
       ],
       "enrichers": [
         "./dist/enrichers.d.mts"

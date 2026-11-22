@@ -4,7 +4,7 @@ import { Headers, HttpTraceContext } from 'effect/http'
 import { createLogger } from '../logger'
 import type { DrainWindow } from '../logger'
 import type { BaseEvlogOptions } from '../shared/middleware'
-import { resolveMiddlewarePluginRunner, runEnrichAndDrain } from '../shared/middleware'
+import { middlewareAuditPipeline, resolveMiddlewarePluginRunner, runEnrichAndDrain } from '../shared/middleware'
 import type { TailSamplingContext } from '../types'
 import { elapsedMs } from '../utils'
 import type { EvlogLogger, Unit } from './unit'
@@ -34,7 +34,14 @@ export interface WithLoggerOptions extends Pick<BaseEvlogOptions, 'drain' | 'enr
 function startUnit(action: string, span: Tracer.AnySpan, options: WithLoggerOptions): Unit {
   const start = Date.now()
   const drainWindow: DrainWindow = { started: false }
-  const logger = createLogger({ ...options.fields, action, ...traceFields(span) }, { _deferDrain: true, _drainWindow: drainWindow })
+  const runner = resolveMiddlewarePluginRunner(options)
+  // The unit ends once the audits it did not await are delivered, unless `waitUntil` holds them.
+  const heldAudits: Array<Promise<void>> = []
+  const logger = createLogger({ ...options.fields, action, ...traceFields(span) }, {
+    _deferDrain: true,
+    _drainWindow: drainWindow,
+    _audit: () => middlewareAuditPipeline(options, undefined, runner, delivery => heldAudits.push(delivery)),
+  })
   return {
     logger,
     finish: exit => Effect.promise(async () => {
@@ -47,13 +54,13 @@ function startUnit(action: string, span: Tracer.AnySpan, options: WithLoggerOpti
       const duration = elapsedMs(start)
       const tail: TailSamplingContext = { status, duration, context, shouldKeep: false }
       await options.keep?.(tail)
-      const runner = resolveMiddlewarePluginRunner(options)
       if (runner.hasKeep) await runner.runKeep(tail)
       const event = logger.emit({
         _forceKeep: tail.shouldKeep || (options.emit === 'onError' && failed),
         _durationMs: duration,
       })
       if (event) await runEnrichAndDrain(event, options, undefined, status, runner, drainWindow)
+      await Promise.all(heldAudits)
     }),
   }
 }

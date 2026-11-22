@@ -32,6 +32,7 @@ exports[`public API surface > matches snapshot for all subpath exports 1`] = `
     "mergeEvlogConfig",
     "mockAudit",
     "parseError",
+    "relayAudit",
     "shouldKeep",
     "signed",
     "toLoggerConfig",
@@ -339,6 +340,15 @@ exports[`public API surface > matches snapshot for all subpath exports 1`] = `
     "createClientInjectPlugin",
     "createSourceLocationPlugin",
     "createStripPlugin",
+  ],
+  "./webhook": [
+    "AUDIT_WEBHOOK_TYPE",
+    "WebhookVerificationError",
+    "createWebhookDrain",
+    "generateWebhookSecret",
+    "sendAuditWebhook",
+    "signWebhook",
+    "verifyWebhook",
   ],
   "./workers": [
     "createWorkersLogger",

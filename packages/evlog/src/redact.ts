@@ -547,6 +547,19 @@ function cloneRegex(re: RegExp): RegExp {
   return new RegExp(re.source, re.flags)
 }
 
+/** Who did what is what an audit record is for, so an audit store keeps these values. */
+const IDENTITY_PATTERN_SOURCES = new Set([builtinPatterns.email, builtinPatterns.ipv4, builtinPatterns.phone].map(p => p.pattern.source))
+
+/**
+ * @internal The redaction an audit store applies: `config` without the email,
+ * IPv4 and phone maskers. Paths, `secrets`, custom patterns and the credential
+ * and card maskers still apply.
+ */
+export function withoutIdentityMaskers(config: RedactConfig): RedactConfig {
+  if (!config._maskers?.length) return config
+  return { ...config, _maskers: config._maskers.filter(([pattern]) => !IDENTITY_PATTERN_SOURCES.has(pattern.source)) }
+}
+
 /** @internal Set on wide events after initLogger redaction so middleware skips a second pass. */
 export const globallyRedacted = Symbol.for('evlog.globallyRedacted')
 

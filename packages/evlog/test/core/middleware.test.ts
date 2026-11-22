@@ -72,22 +72,38 @@ describe('createMiddlewareLogger', () => {
     expect(skipped).toBe(true)
   })
 
-  it.each(['disabled', 'excluded', 'not-included'])(
-    'accepts audit calls without emitting when logging is %s', async (mode) => {
+  it('accepts audit calls without emitting when logging is disabled', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ enabled: false, drain, silent: true })
+    const { logger, finish, skipped } = createMiddlewareLogger({ method: 'GET', path: '/health' })
+
+    expect(skipped).toBe(true)
+    await expect(logger.audit({ action: 'health.read', actor: { type: 'user', id: 'u1' } })).resolves.toBeUndefined()
+    await expect(logger.audit.deny('denied', { action: 'health.read', actor: { type: 'user', id: 'u1' } })).resolves.toBeUndefined()
+    expect(await finish({ status: 200 })).toBeNull()
+    expect(drain).not.toHaveBeenCalled()
+  })
+
+  it.each(['excluded', 'not-included'])(
+    'records audits but no request event when the route is %s', async (mode) => {
       const { drain } = createPipelineSpies()
-      initLogger({ enabled: mode !== 'disabled', drain, silent: true })
+      initLogger({ drain, silent: true })
       const { logger, finish, skipped } = createMiddlewareLogger({
-        method: 'GET', path: '/health',
-        exclude: mode === 'excluded' ? ['/health'] : undefined,
+        method: 'POST', path: '/internal/rotate', requestId: 'req_filtered',
+        headers: { 'user-agent': 'cron/1' },
+        exclude: mode === 'excluded' ? ['/internal/**'] : undefined,
         include: mode === 'not-included' ? ['/api/**'] : undefined,
       })
 
       expect(skipped).toBe(true)
-      expect(() => logger.audit({ action: 'health.read', actor: { type: 'user', id: 'u1' } })).not.toThrow()
-      expect(() => logger.audit.deny('denied', { action: 'health.read', actor: { type: 'user', id: 'u1' } })).not.toThrow()
-      expect(logger.getContext()).toEqual({})
+      await logger.audit({ action: 'key.rotate', actor: { type: 'system', id: 'cron' }, tenantId: 'team_1' })
+      await logger.audit.deny('expired', { action: 'key.rotate', actor: { type: 'system', id: 'cron' }, tenantId: 'team_2' })
       expect(await finish({ status: 200 })).toBeNull()
-      expect(drain).not.toHaveBeenCalled()
+
+      expect(drain.mock.calls.map(([ctx]) => ctx.event)).toEqual([
+        expect.objectContaining({ method: 'POST', path: '/internal/rotate', requestId: 'req_filtered', audit: expect.objectContaining({ outcome: 'success', tenantId: 'team_1', context: { requestId: 'req_filtered', userAgent: 'cron/1' } }) }),
+        expect.objectContaining({ requestId: 'req_filtered', audit: expect.objectContaining({ outcome: 'denied', reason: 'expired', tenantId: 'team_2' }) }),
+      ])
     },
   )
 

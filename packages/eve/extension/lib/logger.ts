@@ -12,7 +12,10 @@ export interface EveTurnLogger {
    * no call: the turn records it with its code, status, why, fix and link.
    */
   error: <TError extends Error>(error: TError, context?: Record<string, unknown>) => TError
-  /** Records who did what on which resource. The turn's event is then kept past sampling. */
+  /**
+   * Records who did what on which resource. Each call becomes its own audit
+   * event, tied to the turn by `requestId` and delivered when the turn ends.
+   */
   audit: ((input: AuditInput) => void) & {
     deny: (reason: string, input: Omit<AuditInput, 'outcome' | 'reason'>) => void
   }
