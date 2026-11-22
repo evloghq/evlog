@@ -134,8 +134,9 @@ async function enrichWith(enrich: BaseEvlogOptions['enrich'], runner: PluginRunn
  */
 function filteredRouteResult(options: MiddlewareLoggerOptions): MiddlewareLoggerResult {
   const skipped = skippedResult(options.waitUntil)
-  const request = { method: options.method, path: options.path, requestId: options.requestId }
-  const audit = createAuditMethod(request, () => middlewareAuditPipeline(options, request, resolveMiddlewarePluginRunner(options)))
+  const request = { method: options.method, path: options.path, requestId: options.requestId || crypto.randomUUID() }
+  const scope = { ...request, service: getServiceForPath(options.path, options.routes) }
+  const audit = createAuditMethod(scope, () => middlewareAuditPipeline(options, request, resolveMiddlewarePluginRunner(options)))
   return { ...skipped, logger: { ...skipped.logger, audit } }
 }
 

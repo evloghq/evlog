@@ -137,7 +137,7 @@ describe('evlog/express', () => {
     })
     app.get('/api/sentinel', (_req, res) => res.json({ ok: true }))
 
-    await request(app).get('/health')
+    await request(app).get('/health').expect(200)
     await request(app).get('/api/sentinel')
     await waitForDrainCalls(drain)
 
@@ -181,7 +181,7 @@ describe('evlog/express', () => {
     })
     app.get('/api/sentinel', (_req, res) => res.json({ ok: true }))
 
-    await request(app).get('/_internal/probe')
+    await request(app).get('/_internal/probe').expect(200)
     await request(app).get('/api/sentinel')
     await waitForDrainCalls(drain)
 

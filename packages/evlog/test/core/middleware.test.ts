@@ -93,6 +93,7 @@ describe('createMiddlewareLogger', () => {
         headers: { 'user-agent': 'cron/1' },
         exclude: mode === 'excluded' ? ['/internal/**'] : undefined,
         include: mode === 'not-included' ? ['/api/**'] : undefined,
+        routes: { '/internal/**': { service: 'keys' } },
       })
 
       expect(skipped).toBe(true)
@@ -101,11 +102,25 @@ describe('createMiddlewareLogger', () => {
       expect(await finish({ status: 200 })).toBeNull()
 
       expect(drain.mock.calls.map(([ctx]) => ctx.event)).toEqual([
-        expect.objectContaining({ method: 'POST', path: '/internal/rotate', requestId: 'req_filtered', audit: expect.objectContaining({ outcome: 'success', tenantId: 'team_1', context: { requestId: 'req_filtered', userAgent: 'cron/1' } }) }),
-        expect.objectContaining({ requestId: 'req_filtered', audit: expect.objectContaining({ outcome: 'denied', reason: 'expired', tenantId: 'team_2' }) }),
+        expect.objectContaining({ method: 'POST', path: '/internal/rotate', requestId: 'req_filtered', service: 'keys', audit: expect.objectContaining({ outcome: 'success', tenantId: 'team_1', context: { requestId: 'req_filtered', userAgent: 'cron/1' } }) }),
+        expect.objectContaining({ requestId: 'req_filtered', service: 'keys', audit: expect.objectContaining({ outcome: 'denied', reason: 'expired', tenantId: 'team_2' }) }),
       ])
     },
   )
+
+  it('gives the audits of a filtered request without a request id one shared id', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ drain, silent: true })
+    const { logger } = createMiddlewareLogger({ method: 'POST', path: '/internal/rotate', exclude: ['/internal/**'] })
+
+    await logger.audit({ action: 'key.rotate', actor: { type: 'system', id: 'cron' }, tenantId: 'team_1' })
+    await logger.audit({ action: 'key.rotate', actor: { type: 'system', id: 'cron' }, tenantId: 'team_2' })
+
+    const [first, second] = drain.mock.calls.map(([ctx]) => ctx.event)
+    expect(first?.requestId).toMatch(/^[\da-f]{8}-[\da-f]{4}-/)
+    expect(second?.requestId).toBe(first?.requestId)
+    expect(second?.audit?.context?.requestId).toBe(first?.requestId)
+  })
 
   it('does not skip when path matches include patterns', () => {
     const { skipped } = createMiddlewareLogger({
