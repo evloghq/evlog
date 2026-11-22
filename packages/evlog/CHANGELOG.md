@@ -1,5 +1,20 @@
 # evlog
 
+## 2.37.1
+
+### Patch Changes
+
+- [#1220](https://github.com/evloghq/evlog/pull/1220) [`bd84d8f`](https://github.com/evloghq/evlog/commit/bd84d8f652034d3991716594696907c6eadbe9eb) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `log.set()`, `createLogger()` and `log.emit()` no longer copy-walk their fields when they hold no `Error`. A cheaper check that copies nothing runs first and the full walk only starts when it finds an `Error` or nesting deeper than 16 levels. The output is unchanged.
+
+- [#1223](https://github.com/evloghq/evlog/pull/1223) [`351f4a7`](https://github.com/evloghq/evlog/commit/351f4a704f1d3f88031b0980b3d65b1e27d96601) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Request loggers created by the framework integrations no longer register each emitted event in a global `WeakMap` to track the late `log.set({ ai })` window, and `finish` only copies the context for tail sampling when a `keep` hook or plugin is set. Behavior is unchanged; building a request's wide event costs about a third less CPU.
+
+- [#1217](https://github.com/evloghq/evlog/pull/1217) [`4e7f73b`](https://github.com/evloghq/evlog/commit/4e7f73b72d4834d616bb0f5f1a27c021b29fed11) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `createDrainPipeline` costs less CPU and shorter garbage-collection pauses while its backend falls behind.
+
+  - A push into a full buffer drops the oldest event in constant time. It used to copy the whole buffer: about 5 µs per event at the default `maxBufferSize` of 1,000 and 94 µs at 20,000, against 0.2 µs and 0.4 µs now.
+  - The pipeline no longer keeps a lookup table of every held event. With the buffer full, each minor garbage collection took about twice as long as in 2.36.0; it is back to the 2.36.0 duration.
+
+  Which events are delivered or dropped is unchanged.
+
 ## 2.37.0
 
 ### Minor Changes
