@@ -314,6 +314,32 @@ describe.sequential('Nitro v3 Server with evlog', () => {
     }
   })
 
+  it.sequential('emits one event carrying the audit when an excluded route records one and fails', async () => {
+    const logs: string[] = []
+    consola.mockTypes(() => vi.fn((context) => {
+      logs.push(String(context))
+    }))
+    consola.wrapAll()
+
+    try {
+      expect((await server.fetch(new Request(new URL('/internal/probe', server.url)))).status).toBe(200)
+      const res = await server.fetch(new Request(new URL('/internal/audit-throws', server.url)))
+      expect(res.status).toBe(500)
+
+      const drains = (path: string) => [...logs.join('\n').matchAll(/\[TEST:DRAIN\] (.+)/g)]
+        .map(match => JSON.parse(match[1] as string))
+        .filter(drain => drain.requestPath === path)
+      await vi.waitFor(() => expect(drains('/internal/audit-throws')).not.toHaveLength(0))
+      // Nitro does not await error hooks: leave a late second emit time to show up.
+      await new Promise(resolve => setTimeout(resolve, 100))
+      expect(drains('/internal/audit-throws')).toEqual([expect.objectContaining({ eventLevel: 'error', status: 500, audit: 'token.revoke' })])
+      // The same route filter drops a request that records no audit.
+      expect(drains('/internal/probe')).toEqual([])
+    } finally {
+      consola.restoreAll()
+    }
+  })
+
   it('keeps a drain another plugin set with initLogger during startup', async () => {
     const res = await server.fetch(new Request(new URL('/global-drain', server.url)))
 

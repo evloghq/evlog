@@ -15,6 +15,10 @@ export default defineConfig({
   alias: {
     'evlog': resolve(evlogRoot, 'index.ts'),
   },
+  // What the evlog module inlines: the fixture loads the plugin without the module.
+  replace: {
+    __EVLOG_CONFIG__: JSON.stringify({ exclude: ['/internal/**'] }),
+  },
   builder: 'rollup',
   watchOptions: {
     ignored: ['**/*'],

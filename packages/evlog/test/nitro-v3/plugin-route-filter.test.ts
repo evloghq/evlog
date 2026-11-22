@@ -52,14 +52,6 @@ describe('nitro v3 plugin route filters', () => {
     expect(drained[0]).toMatchObject({ path: '/internal/tokens', status: 200, audit: { action: 'token.create', outcome: 'success' } })
   })
 
-  it('emits once when an excluded route that recorded an audit fails', async () => {
-    const { request, drained } = await boot()
-    await request('/internal/tokens', log => log.audit(audit), new Error('boom'))
-
-    await vi.waitFor(() => expect(drained).toHaveLength(1))
-    expect(drained[0]).toMatchObject({ path: '/internal/tokens', level: 'error', audit: { action: 'token.create' } })
-  })
-
   it('emits nothing for an excluded route without an audit', async () => {
     const { request, drained } = await boot()
     await request('/internal/health', log => log.set({ probe: true }))
