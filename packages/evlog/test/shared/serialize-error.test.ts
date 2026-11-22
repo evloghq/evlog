@@ -58,6 +58,38 @@ describe('serializeErrorsIn', () => {
     expect(result.b).toBe(shared)
   })
 
+  it('cuts a cycle in a value that holds no error', () => {
+    const value: Record<string, unknown> = { id: 'a' }
+    value.self = value
+    expect(serializeErrorsIn(value)).toEqual({ id: 'a', self: '[Circular]' })
+  })
+
+  it('scans an array that overrides its own methods', () => {
+    const items = Object.assign([new Error('boom')], { some: undefined })
+    const { items: result } = serializeErrorsIn({ items }) as { items: unknown[] }
+    expect(result[0]).toMatchObject({ message: 'boom' })
+    expect(result[0]).not.toBeInstanceOf(Error)
+  })
+
+  it('does not read inherited fields', () => {
+    const proto = {
+      get boom(): never {
+        throw new Error('inherited getter')
+      },
+    }
+    const value = Object.assign(Object.create(proto), { id: 'a' })
+    expect(serializeErrorsIn({ value })).toEqual({ value })
+  })
+
+  it('serializes an error nested deeper than a few levels', () => {
+    let value: Record<string, unknown> = { error: new Error('deep') }
+    for (let i = 0; i < 40; i++) value = { child: value }
+    let node = serializeErrorsIn(value) as Record<string, unknown>
+    for (let i = 0; i < 40; i++) node = node.child as Record<string, unknown>
+    expect(node.error).toMatchObject({ name: 'Error', message: 'deep' })
+    expect(node.error).not.toBeInstanceOf(Error)
+  })
+
   describe('EvlogError guidance', () => {
     const guided = () => createError({ code: 'PAYMENT_DECLINED', message: 'Payment failed', status: 402, why: 'Card declined', fix: 'Try another card', link: 'https://example.test', data: { retryAfter: 30 } })
 
