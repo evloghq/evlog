@@ -1,5 +1,37 @@
 # evlog
 
+## 3.0.0-beta.4
+
+### Minor Changes
+
+- [#1154](https://github.com/evloghq/evlog/pull/1154) [`26a564c`](https://github.com/evloghq/evlog/commit/26a564c8ec7367ad5cd0262fe10d1b80b623acd5) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog logs --source vercel` reads the linked Vercel project's runtime logs, where evlog prints one JSON line per event, with every view and filter. It reads through the Vercel API-key connector that `logs.vercel.connector` names in `evlog.config.ts`; with none configured it fails with `cli.LOGS_VERCEL_NO_CONNECTOR` and points at `npx evlog setup vercel`. The CLI authenticates with the project's OIDC token from your `vercel login`, so no token goes in an env var, and reads are pinned to the linked project.
+
+  `npx evlog setup vercel` sets it up once: it links the project if needed, lists the team's API-key connectors and asks which one to use, or creates one under a name you give, attaches it to the project, and writes the choice to `evlog.config.ts`. An existing config only gains the setting when it names no connector, and setup prints the lines it added. Without a terminal, pass `--connector vercel/mcp`, or `--connector vercel/evlog --create` to create it; a run with neither stops and lists the team's connectors. `--json` reports the config file and what setup did to it as `config: { file, state }`.
+
+- [#1194](https://github.com/evloghq/evlog/pull/1194) [`e343b43`](https://github.com/evloghq/evlog/commit/e343b438f1b6173bcf36f946d341874cbe36d8da) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog/toolkit` exports `redactEvent` and `resolveRedactConfig`, so an integration can redact a value with the same rules as the logger before it shortens or transforms it. Pass the result of `resolveRedactConfig(redact)` to `redactEvent`, which returns a redacted copy:
+
+  ```ts
+  import { redactEvent, resolveRedactConfig } from "evlog/toolkit";
+
+  const config = resolveRedactConfig(true);
+  const safe = config ? redactEvent({ output }, config) : { output };
+  ```
+
+### Patch Changes
+
+- [#1219](https://github.com/evloghq/evlog/pull/1219) [`9a029e9`](https://github.com/evloghq/evlog/commit/9a029e959a9c2ab2d784f5c0466061c2055343d5) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `log.set()`, `createLogger()` and `log.emit()` no longer copy-walk their fields when they hold no `Error`. A cheaper check that copies nothing runs first and the full walk only starts when it finds an `Error` or nesting deeper than 16 levels. The output is unchanged.
+
+- [#1222](https://github.com/evloghq/evlog/pull/1222) [`608239c`](https://github.com/evloghq/evlog/commit/608239c317f7fd26f571f964eeaa03025110be2f) Thanks [@HugoRCD](https://github.com/HugoRCD)! - Request loggers created by the framework integrations no longer register each emitted event in a global `WeakMap` to track the late `log.set({ gen_ai })` window, and `finish` only copies the context for tail sampling when a `keep` hook or plugin is set. Behavior is unchanged; building a request's wide event costs about a third less CPU.
+
+- [#1179](https://github.com/evloghq/evlog/pull/1179) [`e09968c`](https://github.com/evloghq/evlog/commit/e09968c963e2e2d8c81c575c1166ffb88b413aa7) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `EvlogLogsConfig` accepts `source: 'auto' | 'files' | 'vercel'`, the store `evlog logs` reads when no `--source` is passed.
+
+- [#1218](https://github.com/evloghq/evlog/pull/1218) [`04c2720`](https://github.com/evloghq/evlog/commit/04c27202dc90b0dc3cf3b0d6318bcdbb604fffe6) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `createDrainPipeline` costs less CPU and shorter garbage-collection pauses while its backend falls behind.
+
+  - A push into a full buffer drops the oldest event in constant time. It used to copy the whole buffer: about 5 µs per event at the default `maxBufferSize` of 1,000 and 94 µs at 20,000, against 0.2 µs and 0.4 µs now.
+  - The pipeline no longer keeps a lookup table of every held event. With the buffer full, each minor garbage collection took about twice as long as in 2.36.0; it is back to the 2.36.0 duration.
+
+  Which events are delivered or dropped is unchanged.
+
 ## 3.0.0-beta.3
 
 ### Major Changes
@@ -360,6 +392,7 @@
 - [#880](https://github.com/evloghq/evlog/pull/880) [`a0187db`](https://github.com/evloghq/evlog/commit/a0187db7a500e5a51bcaa98e5f32ca1fe6df42e5) Thanks [@evlogai](https://github.com/apps/evlogai)! - The Sentry drain's `issues` option reads an error's `status`, then the event's `status`, when it decides whether an event is a 4xx. It no longer reads the legacy `statusCode`, so an error that only carries `statusCode` is classified by the event's `status`. Logs and the drained wide event are unchanged.
 
 - [#860](https://github.com/evloghq/evlog/pull/860) [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21) Thanks [@evlogai](https://github.com/apps/evlogai)! - The published packages no longer ship `.map` files. They pointed to `src/`, which is not part of the package, so they only added to the install size. `evlog` drops from 330 files (about 2.0 MB unpacked) to 178 files (about 865 KB). No runtime or API change.
+
 ## 2.37.0
 
 ### Minor Changes
