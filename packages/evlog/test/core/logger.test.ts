@@ -412,6 +412,22 @@ describe('log', () => {
     expect(event.node).toEqual({ id: 'a', self: '[Circular]' })
   })
 
+  it('does not read inherited fields of a context value', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const proto = {
+      get boom(): never {
+        throw new Error('inherited getter')
+      },
+    }
+    const value = Object.assign(Object.create(proto), { id: 'a' })
+    const logger = createLogger()
+    expect(() => logger.set({ value })).not.toThrow()
+    logger.emit()
+
+    expect(defined(findEventViaDrain(drain, () => true)).value).toEqual({ id: 'a' })
+  })
+
   it('serializes an error nested deeper than a few levels of context', () => {
     const { drain } = createPipelineSpies()
     initLogger({ pretty: false, drain })
@@ -424,6 +440,7 @@ describe('log', () => {
     let node = defined(findEventViaDrain(drain, () => true)).value as Record<string, unknown>
     for (let i = 0; i < 40; i++) node = node.child as Record<string, unknown>
     expect(node.error).toMatchObject({ name: 'Error', message: 'deep' })
+    expect(node.error).not.toBeInstanceOf(Error)
   })
 
   it('uses error console method for error level', () => {
