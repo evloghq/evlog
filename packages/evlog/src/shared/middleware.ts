@@ -119,14 +119,18 @@ function skippedResult(waitUntil: MiddlewareLoggerOptions['waitUntil']): Middlew
 function filteredResult(options: MiddlewareLoggerOptions): MiddlewareLoggerResult {
   const skipped = skippedResult(options.waitUntil)
   const requestInfo = { method: options.method, path: options.path, requestId: options.requestId || crypto.randomUUID() }
+  const service = getServiceForPath(options.path, options.routes)
   const audit = ((input: AuditInput) => {
     const logger = createRequestLogger(requestInfo, { _deferDrain: true })
+    if (service) logger.set({ service })
     logger.audit(input)
     const event = logger.emit()
     if (event) {
-      runEnrichAndDrain(event, options, requestInfo).catch((err) => {
+      // Registered now: `enrich` may await before the drain reaches `waitUntil` itself.
+      const delivery = runEnrichAndDrain(event, options, requestInfo).catch((err) => {
         console.error('[evlog] audit drain failed:', err)
       })
+      options.waitUntil?.(delivery)
     }
   }) as AuditMethod
   audit.deny = (reason, input) => audit({ ...input, outcome: 'denied', reason })

@@ -92,6 +92,7 @@ describe('createMiddlewareLogger', () => {
         headers: { 'user-agent': 'test-agent/1' },
         exclude: mode === 'excluded' ? ['/internal/**'] : undefined,
         include: mode === 'not-included' ? ['/api/**'] : undefined,
+        routes: { '/internal/**': { service: 'identity' } },
         enrich,
       })
 
@@ -108,11 +109,31 @@ describe('createMiddlewareLogger', () => {
         ['token.delete', 'denied', 'Missing scope'],
       ])
       for (const event of events) {
-        expect(event).toMatchObject({ method: 'POST', path: '/internal/tokens', requestId: 'req-filtered' })
+        expect(event).toMatchObject({ method: 'POST', path: '/internal/tokens', requestId: 'req-filtered', service: 'identity' })
       }
       expect(enrich.mock.calls.map(([ctx]) => ctx.headers?.['user-agent'])).toEqual(['test-agent/1', 'test-agent/1'])
     },
   )
+
+  it('registers the audit of a filtered route with waitUntil before an async enrich settles', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ drain, silent: true })
+    const enrichGate = Promise.withResolvers<void>()
+    const waitUntil = vi.fn()
+    const { logger } = createMiddlewareLogger({
+      method: 'POST', path: '/internal/tokens', exclude: ['/internal/**'],
+      enrich: () => enrichGate.promise,
+      waitUntil,
+    })
+
+    logger.audit({ action: 'token.create', actor: { type: 'user', id: 'u1' } })
+    expect(waitUntil).toHaveBeenCalledOnce()
+    expect(drain).not.toHaveBeenCalled()
+
+    enrichGate.resolve()
+    await defined(waitUntil.mock.calls[0], 'waitUntil registration')[0]
+    expect(drain).toHaveBeenCalledOnce()
+  })
 
   it('does not skip when path matches include patterns', () => {
     const { skipped } = createMiddlewareLogger({
