@@ -1,5 +1,48 @@
 # @evlog/cli
 
+## 1.0.0-beta.4
+
+### Minor Changes
+
+- [#1191](https://github.com/evloghq/evlog/pull/1191) [`302f974`](https://github.com/evloghq/evlog/commit/302f974686f934bebd3ce86232fcf6ffa2d1fae7) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog init --dry-run` prints a diff of every file the run would create or change, against the file as it is on disk: the framework config, the middleware module, `evlog.config.ts`, `.env.example`, the `AGENTS.md` block. When the run would install packages, it also prints the `package.json` change the install command makes, with each package at the tag it installs from. An interactive dry run shows one box per file. With `--json`, the diffs are in `preview`, one `{ file, kind, by?, diff }` entry per file.
+
+- [#1190](https://github.com/evloghq/evlog/pull/1190) [`2531afe`](https://github.com/evloghq/evlog/commit/2531afe3ef563849bd9770932b5d734fc9ed7179) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog init` sets up eve agents. It detects an `eve` dependency at 1.0 or later next to `agent/`, or `agents/<name>/agent/` in an agent workspace. It installs `evlog` and `@evlog/eve` (`@beta` from a prerelease CLI), and writes `evlog.config.ts`, an `extensions/evlog.ts` mount (`export default evlog(config)`) and the `evlogTraces()` instrumentation in each agent.
+
+  - An agent inside a Next.js, Nuxt or other supported app gets the app set up beside it from the same `evlog.config.ts`, an existing one included. The agent is its own service: its mount sets `<service>-agent`, and each member of an agent workspace `<service>-<name>`, such as `ops-support`. `--framework eve` or `--framework next` picks one.
+  - Nothing the agent has is rewritten. A mount of `@evlog/eve` under any name, as a file or a directory, counts, and the report names its logs tool. A file of the same name that does something else is left alone with the lines to add.
+  - The agent's `evlog__logs` tool is on and reads `.evlog/logs` locally. An interactive run asks; `--no-agent-logs` hides it.
+  - In a linked Vercel project, an interactive run lists the team's connectors that can read runtime logs and asks which one the deployed agent reads through, or offers to create one. The choice is written to `evlog.config.ts` and attached the way `evlog setup vercel` does. `--yes` never contacts Vercel.
+  - `init` prints the `engines` line when `engines.node`, `.nvmrc` or `.node-version` allows a Node older than 24, explains why an agent on eve before 1.0 is not set up, and points a web app whose `eveRoot` names another directory at it.
+
+  `evlog setup eve` writes the instrumentation into every member of an agent workspace instead of creating a root `agent/`, which eve reads as a single-agent project. Its `--json` output is now `{ agents: [{ file, state }] }`, one entry per agent.
+
+- [#1179](https://github.com/evloghq/evlog/pull/1179) [`e09968c`](https://github.com/evloghq/evlog/commit/e09968c963e2e2d8c81c575c1166ffb88b413aa7) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog logs` says what it read and how much of it. The report opens with the store and environments (`local files · development`, or the Vercel project), and `--json` adds `origin`, `window` and `coverage`. `coverage.complete` is `false` when the read was cut short, with the reasons, so an empty result is not taken for "nothing failed".
+
+  - `evlog logs sessions` sums each AI session: first and last activity, wall-clock time next to processing time, turns by outcome (completed, recovered after a failed tool call, failed, cancelled), failed tool calls, model and tool calls, tokens with cache reads and writes, cost, the slowest turn and the latest failure. A total the events do not carry is left out, not printed as 0.
+  - `--expect production` (or `files`, `vercel`, `preview`, `development`, comma-separated) refuses the read with `LOGS_SOURCE_MISMATCH` when the store or environment is another one.
+  - `logs.source` in `evlog.config.ts` picks the default store; `--source` overrides it.
+  - `evlog setup vercel --check` reports each stage without changing anything: link, OIDC, connector, attachment, token exchange, the log read itself, and traces. A token that exchanges but cannot read logs fails at the read stage.
+  - `evlog setup eve` writes `agent/instrumentation/evlog.ts` for an eve agent, never over an existing file; `--check` only reports.
+  - `evlog doctor` reports the CLI version and whether the project pins `@evlog/cli`.
+
+- [#1154](https://github.com/evloghq/evlog/pull/1154) [`26a564c`](https://github.com/evloghq/evlog/commit/26a564c8ec7367ad5cd0262fe10d1b80b623acd5) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog logs --source vercel` reads the linked Vercel project's runtime logs, where evlog prints one JSON line per event, with every view and filter. It reads through the Vercel API-key connector that `logs.vercel.connector` names in `evlog.config.ts`; with none configured it fails with `cli.LOGS_VERCEL_NO_CONNECTOR` and points at `npx evlog setup vercel`. The CLI authenticates with the project's OIDC token from your `vercel login`, so no token goes in an env var, and reads are pinned to the linked project.
+
+  `npx evlog setup vercel` sets it up once: it links the project if needed, lists the team's API-key connectors and asks which one to use, or creates one under a name you give, attaches it to the project, and writes the choice to `evlog.config.ts`. An existing config only gains the setting when it names no connector, and setup prints the lines it added. Without a terminal, pass `--connector vercel/mcp`, or `--connector vercel/evlog --create` to create it; a run with neither stops and lists the team's connectors. `--json` reports the config file and what setup did to it as `config: { file, state }`.
+
+- [#1196](https://github.com/evloghq/evlog/pull/1196) [`56ff897`](https://github.com/evloghq/evlog/commit/56ff897654ab12a2acbd23b85d2b4ad2c2947c4b) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog map` scores eve agents. It lists the tools, schedules (TypeScript or Markdown) and channels of the agent in `agent/` or of each `agents/<name>/agent/` in a workspace, and the tools of each declared subagent, as the new `tool`, `schedule` and `channel` kinds. A mount of `@evlog/eve` in the agent's `extensions/` passes `wide-event` for every one of them, and `useLogger()` from `@evlog/eve/logger` in a tool counts for `context`, `audit` and the other logger checks. Schedules and channels are checked on `wide-event` only. A declared subagent and each workspace member need a mount of their own.
+
+### Patch Changes
+
+- [#1181](https://github.com/evloghq/evlog/pull/1181) [`e0794f7`](https://github.com/evloghq/evlog/commit/e0794f7860cd883316bb5eeda30ed41862cd290e) Thanks [@HugoRCD](https://github.com/HugoRCD)! - - `evlog setup vercel` and `--check` read every page of `vercel connect list`, so a connector past the first 50 is found instead of reported missing.
+  - `evlog logs sessions` reports the newest failure and the newest trace ids whatever order the events were read in. Each token count sums only the turns that reported it, with `turnsReporting`, and a turn that reported only a cost no longer adds zero tokens.
+  - A read without `--until` stops at now, the end of the window it reports, so an event stamped ahead of the clock is left out. `--follow` is unchanged.
+
+- [#1182](https://github.com/evloghq/evlog/pull/1182) [`6b4a41f`](https://github.com/evloghq/evlog/commit/6b4a41ff9f89e792c12768548773346b371cbba6) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `evlog setup vercel` attaches the connector to production and development only, not to preview. Before it attaches, it says that code deployed to those environments gets the authority of the key the connector stores. `--environment` picks the environments, such as `--environment production,preview,development`, and a name that is not an environment is refused before anything runs. A connector already attached keeps the environments it has.
+
+  `--source vercel` refuses a project or team id that is not a plain id, and refuses an OIDC token issued for another team, as it already did for another project.
+
+- [#1160](https://github.com/evloghq/evlog/pull/1160) [`f252449`](https://github.com/evloghq/evlog/commit/f25244958d324f348036d780b4f136ceed633fa5) Thanks [@HugoRCD](https://github.com/HugoRCD)! - A complete request id selects only the events that carry it. `evlog logs wrun_1:turn_1` and the Eve logs tool's `trace` view used to match every id starting with it, so `turn_10` to `turn_19` crowded `turn_1` out of the results. A prefix still works when no event carries the id whole.
+
 ## 1.0.0-beta.3
 
 ### Minor Changes
@@ -141,6 +184,7 @@
 - Updated dependencies [[`24ca3e3`](https://github.com/evloghq/evlog/commit/24ca3e3c1fde0e16582abc125019f8995d0a48e4), [`32ded2c`](https://github.com/evloghq/evlog/commit/32ded2cb572f8184f24a938539eff30f24a1d455), [`a0187db`](https://github.com/evloghq/evlog/commit/a0187db7a500e5a51bcaa98e5f32ca1fe6df42e5), [`0baa9e8`](https://github.com/evloghq/evlog/commit/0baa9e8d009e8216ea7d935eec7aca36983c8a21)]:
   - evlog@3.0.0-beta.0
   - @evlog/telemetry@1.0.0-beta.0
+
 ## 0.13.0
 
 ### Minor Changes
