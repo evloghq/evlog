@@ -399,6 +399,63 @@ describe('log', () => {
     expect(outer.cause).toBe(inner)
   })
 
+  it('cuts a cycle in context that holds no error', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const node: Record<string, unknown> = { id: 'a' }
+    node.self = node
+    const logger = createLogger()
+    logger.set({ node })
+    logger.emit()
+
+    const event = defined(findEventViaDrain(drain, () => true))
+    expect(event.node).toEqual({ id: 'a', self: '[Circular]' })
+  })
+
+  it('serializes an error inside an array that overrides its own methods', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const items = Object.assign([new Error('boom')], { some: undefined })
+    const logger = createLogger()
+    logger.set({ items })
+    logger.emit()
+
+    const [first] = defined(findEventViaDrain(drain, () => true)).items as unknown[]
+    expect(first).toMatchObject({ message: 'boom' })
+    expect(first).not.toBeInstanceOf(Error)
+  })
+
+  it('does not read inherited fields of a context value', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    const proto = {
+      get boom(): never {
+        throw new Error('inherited getter')
+      },
+    }
+    const value = Object.assign(Object.create(proto), { id: 'a' })
+    const logger = createLogger()
+    expect(() => logger.set({ value })).not.toThrow()
+    logger.emit()
+
+    expect(defined(findEventViaDrain(drain, () => true)).value).toEqual({ id: 'a' })
+  })
+
+  it('serializes an error nested deeper than a few levels of context', () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ pretty: false, drain })
+    let value: Record<string, unknown> = { error: new Error('deep') }
+    for (let i = 0; i < 40; i++) value = { child: value }
+    const logger = createLogger()
+    logger.set({ value })
+    logger.emit()
+
+    let node = defined(findEventViaDrain(drain, () => true)).value as Record<string, unknown>
+    for (let i = 0; i < 40; i++) node = node.child as Record<string, unknown>
+    expect(node.error).toMatchObject({ name: 'Error', message: 'deep' })
+    expect(node.error).not.toBeInstanceOf(Error)
+  })
+
   it('uses error console method for error level', () => {
     const errorSpy = vi.spyOn(console, 'error')
     log.error('db', 'Connection failed')
