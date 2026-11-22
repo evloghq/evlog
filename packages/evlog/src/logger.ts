@@ -116,23 +116,20 @@ function mergeFields(target: Record<string, unknown>, fields: Record<string, unk
   mergeInto(target, serializeErrorsIn(fields) as Record<string, unknown>, true)
 }
 
-const pendingDrainState = new WeakMap<WideEvent, { drainStarted: boolean }>()
-
 function isAiOnlyFieldUpdate(data: Record<string, unknown>): boolean {
   const keys = Object.keys(data)
   return keys.length === 1 && keys[0] === 'gen_ai'
 }
 
 /**
- * Mark a wide event as past the post-emit AI merge window so late `log.set({ gen_ai })`
- * calls warn again. Called by framework enrich/drain pipelines before drain runs.
+ * The post-emit AI merge window of a logger created with `_deferDrain`: a late
+ * `log.set({ gen_ai })` merges into the emitted event until the integration
+ * that drains it sets `started`.
  *
  * @internal Used by middleware and framework integrations.
  */
-export function markWideEventDrainStarted(event: WideEvent | null): void {
-  if (!event) return
-  const state = pendingDrainState.get(event)
-  if (state) state.drainStarted = true
+export interface DrainWindow {
+  started: boolean
 }
 
 /**
@@ -272,7 +269,7 @@ export function shouldSample(level: LogLevel): boolean {
  * Evaluate tail sampling conditions to determine if a log should be force-kept.
  * Returns true if ANY condition matches (OR logic).
  */
-export function shouldKeep(ctx: TailSamplingContext): boolean {
+export function shouldKeep(ctx: Partial<TailSamplingContext>): boolean {
   const { keep } = state.sampling
   if (!keep?.length) return false
 
@@ -755,6 +752,8 @@ interface CreateLoggerInternalOptions {
    * Used by framework middleware that runs its own enrich+drain pipeline.
    */
   _deferDrain?: boolean
+  /** Shared with the integration that drains the event; only read when `_deferDrain` is set. */
+  _drainWindow?: DrainWindow
   /**
    * @see {@link RequestLoggerOptions.waitUntil}
    */
@@ -780,6 +779,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
   if (!state.enabled) return noopLogger as unknown as AuditableLogger<T>
 
   const deferDrain = internalOptions?._deferDrain ?? false
+  const drainWindow = deferDrain ? internalOptions?._drainWindow ?? { started: false } : undefined
   const waitUntil = internalOptions?.waitUntil
   const startTime = Date.now()
   const context: Record<string, unknown> = { ...(serializeErrorsIn(initialContext) as Record<string, unknown>) }
@@ -827,11 +827,10 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
     set(data: FieldContext<T>): void {
       if (emitted) {
         const record = data as Record<string, unknown>
-        const pendingState = pendingWideEvent ? pendingDrainState.get(pendingWideEvent) : undefined
         if (
           pendingWideEvent
-          && pendingState
-          && !pendingState.drainStarted
+          && drainWindow
+          && !drainWindow.started
           && isAiOnlyFieldUpdate(record)
         ) {
           mergeInto(pendingWideEvent as Record<string, unknown>, record)
@@ -1024,11 +1023,6 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const wide = emitWideEvent(level, context, { deferDrain, ownsEvent: true, waitUntil })
       emitted = true
       pendingWideEvent = wide
-      // Only middleware that defers the drain opens the AI merge window. Without
-      // an entry, a late set() warns exactly as it does once the drain started.
-      if (wide && deferDrain) {
-        pendingDrainState.set(wide, { drainStarted: false })
-      }
       return wide
     },
 
