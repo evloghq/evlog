@@ -1,6 +1,5 @@
 import { definePlugin } from 'nitro'
-import { auditOnly } from 'evlog'
-import type { WideEvent } from '../../../../src/types'
+import { auditOnly, type WideEvent } from 'evlog'
 
 export const drained: WideEvent[] = []
 
