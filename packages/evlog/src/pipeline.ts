@@ -100,6 +100,13 @@ interface DeliveryFailure {
   rejected?: number
 }
 
+/** An event the pipeline holds, with its push sequence. */
+interface Entry<T> {
+  ctx: T
+  seq: number
+  settled: boolean
+}
+
 /**
  * Create a drain pipeline that batches events, retries on failure, and manages buffer overflow.
  *
@@ -169,7 +176,9 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     const send = typeof rawDrain === 'function'
       ? rawDrain as (batch: T[]) => void | Promise<void>
       : drain
-    const buffer: T[] = []
+    const buffer: Entry<T>[] = []
+    /** Events before this index were dropped as buffer-full. `compact()` removes them in bulk, so a drop never shifts a large array. */
+    let head = 0
     let timer: ReturnType<typeof setTimeout> | null = null
     let activeFlush: Promise<void> | null = null
     let settleWaiters: Array<() => void> = []
@@ -186,13 +195,13 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     let bufferedSince = 0
     let timerDueAt = 0
     /**
-     * Events buffered or in flight, with their push sequence. A request-end wait
-     * holds every event pushed before it that is still here, so it is the sequence
-     * it was registered at, and it resolves once every earlier event has left. Map
-     * order is insertion order, so the first entry has the lowest sequence.
+     * Every event gets a push sequence. A request-end wait holds every event pushed
+     * before it that has not settled, so it is the sequence it was registered at, and
+     * it resolves once the lowest unsettled sequence reaches it. Set order is insertion
+     * order, so the first sequence in `unsettled` is the lowest.
      */
-    const unsettled = new Map<T, number>()
     let nextSeq = 0
+    const unsettled = new Set<number>()
     /**
      * Request-end waits, in registration order, with the sends made for their
      * events and the runtime's deadline. `sending` ones also send those events now
@@ -203,14 +212,25 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     /** Whether the process-wide shutdown registry holds this pipeline. */
     let tracked = false
     /** Batches waiting to retry, so a deadline registered later can cut the wait short. */
-    const retryWaits: Set<{ batch: T[], until: number, explicit: boolean, error: Error, wake: () => void }> = new Set()
+    const retryWaits: Set<{ batch: Entry<T>[], until: number, explicit: boolean, error: Error, wake: () => void }> = new Set()
 
     function pauseRemainingMs(): number {
       return Math.max(0, pausedUntil - Date.now())
     }
 
+    function buffered(): number {
+      return buffer.length - head
+    }
+
+    /** Every buffer operation but `push()` and `buffered()` runs on a compacted buffer. */
+    function compact(): void {
+      if (head === 0) return
+      buffer.splice(0, head)
+      head = 0
+    }
+
     function isIdle(): boolean {
-      return buffer.length === 0 && !activeFlush && activeFlushCalls === 0
+      return buffered() === 0 && !activeFlush && activeFlushCalls === 0
     }
 
     function notifySettled(): void {
@@ -276,7 +296,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     }
 
     function warnIfNotFlushedAtRequestEnd(): void {
-      if (serverlessWarned || buffer.length === 0 || hasRequestFlushRun()) return
+      if (serverlessWarned || buffered() === 0 || hasRequestFlushRun()) return
       const platform = detectServerlessPlatform()
       if (!platform || Date.now() - bufferedSince < intervalMs) return
       serverlessWarned = true
@@ -288,16 +308,19 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
      * between invocations with events a request left without waitUntil. No timer is armed while a send runs.
      */
     function warnIfStaleBuffer(): void {
-      if (staleBufferWarned || buffer.length === 0 || timer === null || !hasRequestFlushRun()) return
+      if (staleBufferWarned || buffered() === 0 || timer === null || !hasRequestFlushRun()) return
       const platform = detectServerlessPlatform()
       if (!platform || Date.now() <= timerDueAt) return
       staleBufferWarned = true
-      console.warn(`[evlog/pipeline] stale-buffer: ${buffer.length} event(s) left by an earlier invocation waited longer than batch.intervalMs on ${platform}, because the runtime was frozen before their batch was sent. A request without waitUntil buffered them; pass waitUntil on every route that logs.`)
+      console.warn(`[evlog/pipeline] stale-buffer: ${buffered()} event(s) left by an earlier invocation waited longer than batch.intervalMs on ${platform}, because the runtime was frozen before their batch was sent. A request without waitUntil buffered them; pass waitUntil on every route that logs.`)
     }
 
     /** Resolves request-end waiters whose events are all delivered or dropped. */
-    function release(events: T[]): void {
-      for (const event of events) unsettled.delete(event)
+    function release(entries: Entry<T>[]): void {
+      for (const entry of entries) {
+        entry.settled = true
+        unsettled.delete(entry.seq)
+      }
       if (heldWaiters.size === 0) return
       const lowestUnsettled = unsettled.size === 0 ? nextSeq : unsettled.values().next().value!
       for (const waiter of heldWaiters) {
@@ -317,9 +340,8 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       return until
     }
 
-    function isHeld(event: T, until: number): boolean {
-      const seq = unsettled.get(event)
-      return seq !== undefined && seq < until
+    function isHeld(entry: Entry<T>, until: number): boolean {
+      return !entry.settled && entry.seq < until
     }
 
     /**
@@ -327,7 +349,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
      * past its deadline, or out of budget. Events no exhausted flush holds stay in the batch.
      * `flush()` batches are not charged to the budget: only the deadline limits them.
      */
-    function dropRequestLimited(batch: T[], delay: number, explicit: boolean, error?: Error): void {
+    function dropRequestLimited(batch: Entry<T>[], delay: number, explicit: boolean, error?: Error): void {
       const cutoff = Date.now() + delay
       const deadlineBelow = heldBelow(waiter => waiter.deadline <= cutoff)
       const deferredBelow = explicit ? Number.NEGATIVE_INFINITY : heldBelow(waiter => waiter.deadline > cutoff && waiter.sends >= requestBudget)
@@ -341,12 +363,12 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       drop(deferred, 'deferred', error)
     }
 
-    function drop(events: T[], reason: DrainDropReason, error?: Error, count = events.length): void {
-      if (events.length === 0) return
-      release(events)
+    function drop(entries: Entry<T>[], reason: DrainDropReason, error?: Error, count = entries.length): void {
+      if (entries.length === 0) return
+      release(entries)
       dropped[reason] += count
       if (onDropped) {
-        onDropped(events, error, reason)
+        onDropped(entries.map(entry => entry.ctx), error, reason)
         return
       }
       unlogged[reason] = (unlogged[reason] ?? 0) + count
@@ -358,7 +380,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
      * Resolves `'paused'` without dropping when the provider asked to wait
      * longer than `maxDelayMs`: the caller decides whether the batch waits.
      */
-    async function sendWithRetry(batch: T[], explicit = false): Promise<'done' | 'paused'> {
+    async function sendWithRetry(batch: Entry<T>[], explicit = false): Promise<'done' | 'paused'> {
       let lastAttemptError: Error | undefined
       for (let attempt = 1; ; attempt++) {
         // Another delivery may have paused the pipeline while this one waited to retry.
@@ -368,14 +390,14 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
           if (batch.length === 0) return 'done'
           if (!explicit) {
             let first = Number.POSITIVE_INFINITY
-            for (const event of batch) first = Math.min(first, unsettled.get(event) ?? first)
+            for (const entry of batch) first = Math.min(first, entry.seq)
             for (const waiter of heldWaiters) {
               if (waiter.sending && first < waiter.until) waiter.sends++
             }
           }
         }
         try {
-          await send(batch)
+          await send(batch.map(entry => entry.ctx))
           delivered += batch.length
           release(batch)
           return 'done'
@@ -431,14 +453,18 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     }
 
     function dropOverflow(): void {
-      if (buffer.length <= maxBufferSize) return
-      drop(buffer.splice(0, buffer.length - maxBufferSize), 'buffer-full')
+      if (buffered() <= maxBufferSize) return
+      compact()
+      drop(buffer.splice(0, buffered() - maxBufferSize), 'buffer-full')
     }
 
     async function drainBuffer(): Promise<void> {
-      while (buffer.length > 0 && pauseRemainingMs() === 0) {
+      while (buffered() > 0 && pauseRemainingMs() === 0) {
+        compact()
         const batch = buffer.splice(0, batchSize)
         if (await sendWithRetry(batch) === 'paused') {
+          // Pushes during the send may have dropped from the front: the batch goes back ahead of live events only.
+          compact()
           buffer.unshift(...batch)
           dropOverflow()
         }
@@ -449,9 +475,10 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     function dropHeldWhilePaused(): void {
       if (sendingWaiters === 0 || pauseRemainingMs() === 0) return
       const heldUntil = heldBelow(() => true)
+      compact()
       const kept = buffer.filter(event => !isHeld(event, heldUntil))
       const gone = buffer.filter(event => isHeld(event, heldUntil))
-      buffer.splice(0, buffer.length, ...kept)
+      buffer.splice(0, buffered(), ...kept)
       drop(gone, 'rate-limited', pauseError)
     }
 
@@ -464,9 +491,9 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       activeFlush = drainBuffer().finally(() => {
         activeFlush = null
         dropHeldWhilePaused()
-        if (buffer.length > 0 && (buffer.length >= batchSize || sendingWaiters > 0) && pauseRemainingMs() === 0) {
+        if (buffered() > 0 && (buffered() >= batchSize || sendingWaiters > 0) && pauseRemainingMs() === 0) {
           startFlush()
-        } else if (buffer.length > 0) {
+        } else if (buffered() > 0) {
           scheduleFlush()
         } else {
           notifySettled()
@@ -481,14 +508,17 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
       }
       warnIfStaleBuffer()
       warnIfNotFlushedAtRequestEnd()
-      if (buffer.length >= maxBufferSize) {
-        drop(buffer.splice(0, 1), 'buffer-full')
+      if (buffered() >= maxBufferSize) {
+        const oldest = buffer[head]!
+        buffer[head++] = undefined as unknown as Entry<T>
+        if (head >= 1024 && head * 2 >= buffer.length) compact()
+        drop([oldest], 'buffer-full')
       }
-      if (buffer.length === 0) bufferedSince = Date.now()
-      buffer.push(ctx)
-      if (!unsettled.has(ctx)) unsettled.set(ctx, nextSeq++)
+      if (buffered() === 0) bufferedSince = Date.now()
+      buffer.push({ ctx, seq: nextSeq, settled: false })
+      unsettled.add(nextSeq++)
 
-      if (buffer.length >= batchSize && pauseRemainingMs() === 0) {
+      if (buffered() >= batchSize && pauseRemainingMs() === 0) {
         clearTimer()
         startFlush()
       } else if (!activeFlush) {
@@ -501,7 +531,8 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
         await activeFlush
       }
       // Snapshot the buffer length to avoid infinite loop if push() is called during flush
-      const snapshot = buffer.length
+      compact()
+      const snapshot = buffered()
       if (snapshot === 0) return
       const toFlush = buffer.splice(0, snapshot)
       while (toFlush.length > 0) {
@@ -544,7 +575,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
         if (wait.batch.length === 0) wait.wake()
       }
       dropHeldWhilePaused()
-      if (buffer.length > 0 && pauseRemainingMs() === 0) {
+      if (buffered() > 0 && pauseRemainingMs() === 0) {
         clearTimer()
         startFlush()
       }
@@ -565,7 +596,7 @@ export function createDrainPipeline<T = unknown>(options?: DrainPipelineOptions<
     hookFn.settled = settled
     hookFn.stats = () => ({ delivered, dropped: { ...dropped } })
     Object.defineProperty(hookFn, 'pending', {
-      get: () => buffer.length,
+      get: () => buffered(),
       enumerable: true,
     })
 
