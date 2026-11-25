@@ -160,7 +160,7 @@ const result = await relayAudit({
   cursor: destination.cursor,
   read: (after, limit) => db.audit.readTeam(destination.teamId, after, limit),
   send: records => sendAuditWebhook(records, { url: destination.url, secret: destination.secret }),
-  save: next => db.auditDestinations.moveCursor(destination.id, destination.cursor, next),
+  save: (next, previous) => db.auditDestinations.moveCursor(destination.id, previous, next), // compare-and-set against previous
 })
 if (result.error) await db.auditDestinations.markFailing(destination.id, result.error)
 ```

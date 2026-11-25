@@ -465,10 +465,12 @@ export interface RelayAuditOptions<TCursor> {
   /** Deliver the records in order; throw when the destination did not accept them all. */
   send: (records: AuditFields[]) => Promise<void>
   /**
-   * Store the new position. Throw when another run already moved it (a
-   * compare-and-set that matched no row) to stop this one.
+   * Store the new position. `previous` is the position it replaces: the one this
+   * run saved last, or `cursor` on the first batch. Compare-and-set against it,
+   * and throw when the stored position no longer matches, so another run that
+   * already moved it stops this one.
    */
-  save: (cursor: TCursor) => Promise<void>
+  save: (cursor: TCursor, previous: TCursor | undefined) => Promise<void>
   /** Records per `read` and `send`. @default 100 */
   limit?: number
   /** Stops the run between batches, such as `AbortSignal.timeout(50_000)` on a serverless function. */
@@ -501,7 +503,7 @@ export interface RelayAuditResult<TCursor> {
  *   cursor: destination.cursor,
  *   read: (after, limit) => db.readTeamAudit(teamId, after, limit),
  *   send: records => sendAuditWebhook(records, { url: destination.url, secret: destination.secret }),
- *   save: next => db.moveCursor(destination.id, destination.cursor, next),
+ *   save: (next, previous) => db.moveCursor(destination.id, previous, next),
  * })
  * if (result.error) await db.markFailing(destination.id, result.error)
  * ```
@@ -516,7 +518,7 @@ export async function relayAudit<TCursor>(options: RelayAuditOptions<TCursor>): 
       if (batch.length === 0) break
       await options.send(batch.map(entry => entry.record))
       const next = batch[batch.length - 1].cursor
-      await options.save(next)
+      await options.save(next, cursor)
       cursor = next
       delivered += batch.length
       if (batch.length < limit) break

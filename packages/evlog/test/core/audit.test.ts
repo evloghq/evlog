@@ -948,9 +948,9 @@ describe('relayAudit()', () => {
       Promise.resolve(entries.filter(entry => after === undefined || entry.cursor > after).slice(0, limit)))
   }
 
-  it('sends every record in store order, batch by batch, saving the cursor after each batch', async () => {
+  it('sends every record in store order, batch by batch, saving the cursor after each batch with the one it replaces', async () => {
     const sent: string[][] = []
-    const saved: number[] = []
+    const saved: Array<[number, number | undefined]> = []
 
     const result = await relayAudit({
       cursor: undefined,
@@ -959,15 +959,15 @@ describe('relayAudit()', () => {
         sent.push(records.map(r => r.action))
         return Promise.resolve()
       },
-      save: (cursor) => {
-        saved.push(cursor)
+      save: (cursor, previous) => {
+        saved.push([cursor, previous])
         return Promise.resolve()
       },
       limit: 2,
     })
 
     expect(sent).toEqual([['step.1', 'step.2'], ['step.3', 'step.4'], ['step.5']])
-    expect(saved).toEqual([2, 4, 5])
+    expect(saved).toEqual([[2, undefined], [4, 2], [5, 4]])
     expect(result).toEqual({ cursor: 5, delivered: 5 })
   })
 
