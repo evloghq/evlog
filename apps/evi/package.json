@@ -24,7 +24,7 @@
     "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@posthog/ai": "^8.20.0",
     "@vercel/blob": "^2.9.0",
-    "@vercel/connect": "^2.9.4",
+    "@vercel/connect": "^2.9.5",
     "@vercel/oidc": "^3.8.10",
     "@vercel/otel": "^2.3.0",
     "ai": "^7.0.173",
