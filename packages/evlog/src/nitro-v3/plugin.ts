@@ -51,6 +51,11 @@ function resolveRequestId(event: HTTPEvent, ctx: Record<string, unknown>): strin
   return requestIdOverride || ctx.requestId as string | undefined || crypto.randomUUID()
 }
 
+/** Route filters are for request logs: a request that recorded an audit still emits it. */
+function shouldEmitRequest(ctx: { _evlogShouldEmit?: unknown }, log: RequestLogger): boolean {
+  return ctx._evlogShouldEmit === true || log.getContext().audit !== undefined
+}
+
 // eslint-disable-next-line max-params
 async function emitWithTailSampling(
   hooks: Hooks,
@@ -300,10 +305,10 @@ export default definePlugin(async (nitroApp) => {
   hooks.hook('response', async (res, event) => {
     const ctx = event.req.context
     // Skip if already emitted by error hook or route was filtered out
-    if (ctx?._evlogEmitted || ctx?._evlogEmitting || !ctx?._evlogShouldEmit) return
+    if (!ctx || ctx._evlogEmitted || ctx._evlogEmitting) return
 
     const log = ctx.log as RequestLogger | undefined
-    if (!log) return
+    if (!log || !shouldEmitRequest(ctx, log)) return
 
     const captured = ctx.nitro?.errors?.at(-1)?.error
     if (captured) recordError(log, captured)
@@ -337,9 +342,8 @@ export default definePlugin(async (nitroApp) => {
     const e = event as HTTPEvent
 
     const ctx = e.req.context
-    if (!ctx?._evlogShouldEmit) return
-    const log = ctx.log as RequestLogger | undefined
-    if (!log || ctx._evlogEmitted) return
+    const log = ctx?.log as RequestLogger | undefined
+    if (!ctx || !log || ctx._evlogEmitted || !shouldEmitRequest(ctx, log)) return
 
     // A delayed hook must not replace a newer error already captured for this request.
     const errors = ctx.nitro?.errors

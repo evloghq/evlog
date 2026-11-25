@@ -160,7 +160,7 @@ export function createWithEvlog(options: NextEvlogOptions) {
       )
 
       if (skipped) {
-        return await handler(...args) as Awaited<TReturn>
+        return await runWith(() => handler(...args)) as Awaited<TReturn>
       }
 
       if (request) {

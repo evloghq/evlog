@@ -3,7 +3,7 @@ import { getHeaders } from 'h3'
 import { getGlobalPluginRunner, outputWideEvent } from '../logger'
 import type { EnrichContext, ServerEvent, WideEvent } from '../types'
 import { filterSafeHeaders } from '../utils'
-import { deliverBeforeFreeze, deliverPendingDrains, detectServerlessPlatform } from '../shared/shutdown'
+import { deliverBeforeFreeze, deliverPendingDrains, detectServerlessPlatform, getVercelWaitUntil } from '../shared/shutdown'
 import { extendDeferredDrain } from './deferred-drain'
 
 export function getSafeHeaders(event: ServerEvent): Record<string, string> {
@@ -57,13 +57,13 @@ function buildHookContext(event: ServerEvent): Omit<EnrichContext, 'event'> {
   }
 }
 
-function resolveDeferredWaitUntil(event: ServerEvent): ((promise: Promise<unknown>) => void) | undefined {
-  if (detectServerlessPlatform() === undefined) return undefined
+// The Nitro v2 Vercel preset passes no `waitUntil` to the event, so the Vercel runtime's own is the fallback.
+function resolveWaitUntil(event: ServerEvent): ((promise: Promise<unknown>) => void) | undefined {
   const waitUntilCtx = event.context.cloudflare?.context ?? event.context
   if (typeof waitUntilCtx?.waitUntil === 'function') {
     return waitUntilCtx.waitUntil.bind(waitUntilCtx)
   }
-  return undefined
+  return getVercelWaitUntil()
 }
 
 /**
@@ -107,14 +107,14 @@ export async function callEnrichAndDrain(
   // deferDrain: never block the HTTP error response on Nitro Node (h3 2.13+ waitUntil
   // queues work before send). Where the runtime freezes after the response, register waitUntil so drains survive.
   if (options?.deferDrain) {
-    const waitUntil = resolveDeferredWaitUntil(event)
+    const waitUntil = detectServerlessPlatform() === undefined ? undefined : resolveWaitUntil(event)
     extendDeferredDrain(waitUntil ? drainPromise.then(deliverPendingDrains) : drainPromise, waitUntil)
     return
   }
 
-  const waitUntilCtx = event.context.cloudflare?.context ?? event.context
-  if (typeof waitUntilCtx?.waitUntil === 'function') {
-    waitUntilCtx.waitUntil(drainPromise.then(deliverPendingDrains))
+  const waitUntil = resolveWaitUntil(event)
+  if (waitUntil) {
+    waitUntil(drainPromise.then(deliverPendingDrains))
   } else {
     await drainPromise
     await deliverBeforeFreeze()

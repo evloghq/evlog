@@ -16,7 +16,7 @@ import {
   waitForDrainCalls,
 } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudit } from '../helpers/frameworkMatrix'
 
 describeStandardHttpMatrix({
   name: 'express',
@@ -24,6 +24,10 @@ describeStandardHttpMatrix({
     const app = express()
     app.use(evlog(options))
     app.get('/api/users', (_req, res) => res.json({ users: [] }))
+    app.get(EXCLUDED_AUDIT_PATH, (_req, res) => {
+      recordMatrixAudit(useLogger())
+      res.json({ ok: true })
+    })
     return Promise.resolve({
       async fire(req) {
         const method = (req.method || 'GET').toLowerCase()
@@ -107,18 +111,21 @@ describe('evlog/express', () => {
     })
   })
 
-  it('skips routes not matching include patterns', async () => {
+  it('emits nothing for routes not matching include patterns', async () => {
+    const { drain } = createPipelineSpies()
     const app = express()
-    app.use(evlog({ include: ['/api/**'] }))
-
-    let logValue: unknown = 'untouched'
-    app.get('/health', (req, res) => {
-      logValue = req.log
+    app.use(evlog({ include: ['/api/**'], drain }))
+    app.get('/health', (_req, res) => {
+      useLogger().set({ probe: true })
       res.json({ ok: true })
     })
+    app.get('/api/sentinel', (_req, res) => res.json({ ok: true }))
 
-    await request(app).get('/health')
-    expect(logValue).toBeUndefined()
+    await request(app).get('/health').expect(200)
+    await request(app).get('/api/sentinel')
+    await waitForDrainCalls(drain)
+
+    expect(drain.mock.calls.map(call => getDrainCallArg(call).event.path)).toEqual(['/api/sentinel'])
   })
 
   it('logs routes matching include patterns', async () => {
@@ -148,18 +155,21 @@ describe('evlog/express', () => {
     assertHttpEventEmitted(drain, { path: '/api/checkout', method: 'POST' })
   })
 
-  it('excludes routes matching exclude patterns', async () => {
+  it('emits nothing for routes matching exclude patterns', async () => {
+    const { drain } = createPipelineSpies()
     const app = express()
-    app.use(evlog({ exclude: ['/_internal/**'] }))
-
-    let logValue: unknown = 'untouched'
-    app.get('/_internal/probe', (req, res) => {
-      logValue = req.log
+    app.use(evlog({ exclude: ['/_internal/**'], drain }))
+    app.get('/_internal/probe', (_req, res) => {
+      useLogger().set({ probe: true })
       res.json({ ok: true })
     })
+    app.get('/api/sentinel', (_req, res) => res.json({ ok: true }))
 
-    await request(app).get('/_internal/probe')
-    expect(logValue).toBeUndefined()
+    await request(app).get('/_internal/probe').expect(200)
+    await request(app).get('/api/sentinel')
+    await waitForDrainCalls(drain)
+
+    expect(drain.mock.calls.map(call => getDrainCallArg(call).event.path)).toEqual(['/api/sentinel'])
   })
 
   describe('drain / enrich / keep', () => {

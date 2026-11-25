@@ -70,7 +70,7 @@ export function evlog(options: EvlogReactRouterOptions = {}) {
 
     if (skipped) {
       ctx.context.set(loggerContext, logger)
-      return next()
+      return runWith(next)
     }
 
     try {

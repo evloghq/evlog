@@ -216,7 +216,7 @@ export function withEvlog<TEnv = unknown, TCtx extends WorkerExecutionContext = 
       const { logger, finish, finishResponse, skipped } = integration.start({ request, ctx }, options)
 
       if (skipped) {
-        return await handler(request, env, ctx, createWorkersLogger(request, { executionCtx: ctx }))
+        return await handler(request, env, ctx, Object.assign(createWorkersLogger(request, { executionCtx: ctx }), { audit: logger.audit }))
       }
 
       try {

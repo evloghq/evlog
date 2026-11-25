@@ -13,7 +13,7 @@ import {
   waitForDrainCalls,
 } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudit } from '../helpers/frameworkMatrix'
 
 function createMockContext(): RouterContextProvider {
   return new RouterContextProvider()
@@ -34,7 +34,10 @@ describeStandardHttpMatrix({
     return Promise.resolve({
       async fire(req) {
         const context = createMockContext()
-        const next = vi.fn(() => okResponse())
+        const next = vi.fn(() => {
+          if (req.path === EXCLUDED_AUDIT_PATH) recordMatrixAudit(useLogger())
+          return okResponse()
+        })
         await middleware({
           request: createRequest(req.path, { method: req.method || 'GET', headers: req.headers }),
           context,

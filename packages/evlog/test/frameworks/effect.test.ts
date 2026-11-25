@@ -14,7 +14,7 @@ import {
   waitForDrainCalls,
 } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudit } from '../helpers/frameworkMatrix'
 
 type Routes = Layer.Layer<
   never,
@@ -28,10 +28,15 @@ function mount(routes: Routes, options: EvlogEffectOptions = {}) {
 
 const usersRoute = HttpRouter.add('GET', '/api/users', HttpServerResponse.json({ users: [] }))
 
+const matrixRoutes = Layer.merge(usersRoute, HttpRouter.add('GET', EXCLUDED_AUDIT_PATH, Effect.gen(function* () {
+  recordMatrixAudit(yield* EvlogLogger)
+  return HttpServerResponse.text('ok')
+})))
+
 describeStandardHttpMatrix({
   name: 'effect',
   mount(options) {
-    const { handler, dispose } = mount(usersRoute, options)
+    const { handler, dispose } = mount(matrixRoutes, options)
     return Promise.resolve({
       async fire(req) {
         const res = await handler(new Request(`http://localhost${req.path}`, {

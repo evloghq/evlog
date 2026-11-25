@@ -57,7 +57,8 @@ export function evlog(options: EvlogExpressOptions = {}): RequestHandler {
     const { logger, finish, skipped, runWith } = integration.start(req, options)
 
     if (skipped) {
-      next()
+      req.log = logger as ForkableLogger
+      void runWith(() => next())
       return
     }
 

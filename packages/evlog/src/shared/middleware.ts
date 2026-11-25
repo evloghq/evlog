@@ -1,5 +1,6 @@
 import type { DrainContext, EnrichContext, RedactConfig, RequestLogger, RouteConfig, TailSamplingContext, WideEvent } from '../types'
-import type { AuditableLogger, ForkableLogger } from '../audit'
+import type { AuditableLogger, AuditMethod, ForkableLogger } from '../audit'
+import type { AuditInput } from '../audit-action'
 import { createRequestLogger, getGlobalDrain, getGlobalPluginRunner, isEnabled, noopLogger, outputWideEvent, shouldKeep } from '../logger'
 import type { DrainWindow } from '../logger'
 import { isGloballyRedacted, redactEvent, resolveRedactConfig } from '../redact'
@@ -108,6 +109,32 @@ function skippedResult(waitUntil: MiddlewareLoggerOptions['waitUntil']): Middlew
     return lifetime
   }
   return { ...noopResult, logger: { ...noopLogger, fork } }
+}
+
+/**
+ * Result for a route the `include` / `exclude` filters leave out. The filters are
+ * for request logs, so `log.audit()` still records: each call emits an event of
+ * its own through the request's enrich and drain.
+ */
+function filteredResult(options: MiddlewareLoggerOptions): MiddlewareLoggerResult {
+  const skipped = skippedResult(options.waitUntil)
+  const requestInfo = { method: options.method, path: options.path, requestId: options.requestId || crypto.randomUUID() }
+  const service = getServiceForPath(options.path, options.routes)
+  const audit = ((input: AuditInput) => {
+    const logger = createRequestLogger(requestInfo, { _deferDrain: true })
+    if (service) logger.set({ service })
+    logger.audit(input)
+    const event = logger.emit()
+    if (event) {
+      // Registered now: `enrich` may await before the drain reaches `waitUntil` itself.
+      const delivery = runEnrichAndDrain(event, options, requestInfo).catch((err) => {
+        console.error('[evlog] audit drain failed:', err)
+      })
+      options.waitUntil?.(delivery)
+    }
+  }) as AuditMethod
+  audit.deny = (reason, input) => audit({ ...input, outcome: 'denied', reason })
+  return { ...skipped, logger: { ...skipped.logger, audit } }
 }
 
 // Memoizes the merged runner per local plugins array (stable across requests
@@ -239,7 +266,7 @@ export function createMiddlewareLogger(options: MiddlewareLoggerOptions): Middle
   const { method, path, requestId, include, exclude, routes, keep } = options
 
   if (!shouldLog(path, include, exclude)) {
-    return skippedResult(options.waitUntil)
+    return filteredResult(options)
   }
 
   const resolvedRequestId = requestId || crypto.randomUUID()
