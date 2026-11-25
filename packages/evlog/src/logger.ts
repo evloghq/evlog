@@ -430,17 +430,19 @@ export function defaultAuditPipeline(waitUntil: ((promise: Promise<unknown>) => 
   }
 }
 
-function auditContext(scope: Record<string, unknown>, pipeline: AuditPipeline): AuditFields['context'] {
+function auditContext(scope: Record<string, unknown>, pipeline: AuditPipeline, given: AuditInput['context']): AuditFields['context'] {
   const { headers } = pipeline
-  const context: NonNullable<AuditFields['context']> = {}
   const requestId = scope.requestId ?? pipeline.request?.requestId
-  if (typeof requestId === 'string') context.requestId = requestId
-  const traceId = typeof scope.traceId === 'string' ? scope.traceId : TRACEPARENT.exec(getHeader(headers, 'traceparent') ?? '')?.[1]
-  if (traceId) context.traceId = traceId
-  const ip = getHeader(headers, 'x-forwarded-for')?.split(',')[0]?.trim() || getHeader(headers, 'x-real-ip')
-  if (ip) context.ip = ip
-  const userAgent = getHeader(headers, 'user-agent')
-  if (userAgent) context.userAgent = userAgent
+  const context: NonNullable<AuditFields['context']> = {
+    requestId: typeof requestId === 'string' ? requestId : undefined,
+    traceId: typeof scope.traceId === 'string' ? scope.traceId : TRACEPARENT.exec(getHeader(headers, 'traceparent') ?? '')?.[1],
+    ip: getHeader(headers, 'x-forwarded-for')?.split(',')[0]?.trim() || getHeader(headers, 'x-real-ip'),
+    userAgent: getHeader(headers, 'user-agent'),
+    ...given,
+  }
+  for (const key of Object.keys(context)) {
+    if (!context[key]) delete context[key]
+  }
   return Object.keys(context).length > 0 ? context : undefined
 }
 
@@ -487,8 +489,7 @@ export function recordAudit(
   if (!state.enabled) return Promise.resolve()
   const resolved = pipeline ?? getGlobalAuditPipeline() ?? defaultAuditPipeline(waitUntil)
   const record = buildAuditFields(input)
-  const context = auditContext(scope, resolved)
-  if (context) record.context = context
+  record.context = auditContext(scope, resolved, input.context)
   const event: Record<string, unknown> = {
     timestamp: record.timestamp,
     level: record.outcome === 'success' ? 'info' : 'warn',

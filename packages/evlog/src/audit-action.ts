@@ -3,8 +3,8 @@ import type { AuditActionDefinition, AuditActor, AuditFields, AuditTarget } from
 /**
  * Input accepted by `log.audit()`, `audit()`, and `withAudit()`.
  *
- * `outcome` defaults to `'success'`. `id`, `timestamp`, `version` and `context` are filled
- * when the record is made; `signature`, `prevHash` and `hash` by `signed()`.
+ * `outcome` defaults to `'success'`. `id`, `timestamp` and `version` are filled when the
+ * record is made, `context` from the request; `signature`, `prevHash` and `hash` by `signed()`.
  */
 export interface AuditInput {
   action: string
@@ -17,6 +17,12 @@ export interface AuditInput {
   metadata?: Record<string, unknown>
   causationId?: string
   correlationId?: string
+  /**
+   * The client's address and user agent, recorded instead of those read from the request
+   * headers. evlog takes the IP from the first `X-Forwarded-For` entry, which a client can
+   * set unless a proxy in front of the app overwrites it. A key set to `undefined` records none.
+   */
+  context?: { ip?: string, userAgent?: string }
 }
 
 /** Options for {@link defineAuditAction}. Same shape as {@link AuditActionDefinition}. */

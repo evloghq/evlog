@@ -50,7 +50,7 @@ interface AuditFields {
   causationId?: string
   correlationId?: string
   version: 2                                      // AUDIT_SCHEMA_VERSION
-  context?: { requestId?, traceId?, ip?, userAgent?, ... }   // read from the request by log.audit()
+  context?: { requestId?, traceId?, ip?, userAgent?, ... }   // read from the request by log.audit(); input context: { ip, userAgent } replaces those two
   signature?: string                              // added by signed(drain, { strategy: 'hmac' })
   prevHash?: string                               // added by signed(drain, { strategy: 'hash-chain' })
   hash?: string                                   // added by signed(drain, { strategy: 'hash-chain' })
@@ -493,6 +493,7 @@ Then map each finding to the relevant step in the buildout above (e.g. P0 → St
 - **Treating audits as observability.** Don't downsample or summarise audit events downstream. evlog never samples them, but a vendor's retention or sampling rules can still drop them.
 - **Conflating `actor.id` with the session id.** `actor.id` is the stable user id (or system identity); correlate sessions via `context.requestId` / `context.traceId`.
 - **Forgetting standalone jobs.** Cron, queue workers, CLIs trigger audit-worthy actions too, use `audit()` or `withAudit()`.
+- **Trusting a forged client address.** `context.ip` is the first `X-Forwarded-For` entry, which the client sets unless a proxy in front of the app overwrites the header (Vercel does). When the app resolves the address with its own proxy rules, pass it: `log.audit({ ..., context: { ip } })`.
 - **Faking the actor type.** `actor.type: 'user'` for cron jobs gets flagged in audits. Use `'system'`, `'api'`, or `'agent'` accurately.
 - **Single global secret with no rotation.** HMAC keys must rotate; without a `keyId`, old events become unverifiable after rotation.
 - **One drain that fails takes audits down.** Drains must fail in isolation. Separate `evlog:drain` hooks and `composeDrains([...])` from `evlog/toolkit` do this; a hand-written `Promise.all` must not throw on a single rejection.

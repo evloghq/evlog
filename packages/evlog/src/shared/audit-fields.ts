@@ -86,6 +86,7 @@ export function buildAuditFields(input: AuditInput): AuditFields {
     causationId: input.causationId,
     correlationId: input.correlationId,
     version: AUDIT_SCHEMA_VERSION,
+    context: input.context,
   }
 }
 

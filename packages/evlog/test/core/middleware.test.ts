@@ -108,6 +108,23 @@ describe('createMiddlewareLogger', () => {
     },
   )
 
+  it('records the address and user agent the app passes instead of those in the request headers', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ drain, silent: true, redact: false })
+    const { logger } = createMiddlewareLogger({
+      method: 'POST', path: '/api/tokens', requestId: 'req_ip',
+      headers: { 'x-forwarded-for': '203.0.113.9', 'user-agent': 'cli/1' },
+    })
+
+    await logger.audit({ action: 'token.create', actor: { type: 'user', id: 'u1' }, context: { ip: '198.51.100.4' } })
+    await logger.audit({ action: 'token.create', actor: { type: 'user', id: 'u1' }, context: { ip: undefined, userAgent: 'cli/2' } })
+
+    expect(drain.mock.calls.map(([ctx]) => ctx.event.audit?.context)).toStrictEqual([
+      { requestId: 'req_ip', ip: '198.51.100.4', userAgent: 'cli/1' },
+      { requestId: 'req_ip', userAgent: 'cli/2' },
+    ])
+  })
+
   it('gives the audits of a filtered request without a request id one shared id', async () => {
     const { drain } = createPipelineSpies()
     initLogger({ drain, silent: true })
