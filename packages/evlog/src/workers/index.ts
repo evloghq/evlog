@@ -1,8 +1,9 @@
-import { initLogger, createRequestLogger, noopLogger } from '../logger'
+import { initLogger, createRequestLogger, defaultAuditPipeline, noopLogger } from '../logger'
 import type { AuditableLogger } from '../audit'
 import type { LoggerConfig } from '../types'
 import { forkBackgroundLogger } from '../shared/fork'
 import { defineFrameworkIntegration } from '../shared/integration'
+import { extractSafeHeaders } from '../shared/headers'
 import type { BaseEvlogOptions } from '../shared/middleware'
 
 /**
@@ -244,7 +245,7 @@ export function withEvlog<TEnv = unknown, TCtx extends WorkerExecutionContext = 
           middlewareOptions.waitUntil?.(lifetime)
           return lifetime
         }
-        return await handler(request, env, ctx, Object.assign(createWorkersLogger(request, { executionCtx: ctx }), { fork }))
+        return await handler(request, env, ctx, Object.assign(createWorkersLogger(request, { executionCtx: ctx }), { fork, audit: logger.audit }))
       }
 
       try {
@@ -293,7 +294,7 @@ export function createWorkersLogger<T extends object = Record<string, unknown>>(
     path: url.pathname,
     requestId: options.requestId ?? cfRay,
     waitUntil,
-  })
+  }, { _audit: () => ({ ...defaultAuditPipeline(waitUntil), headers: extractSafeHeaders(request.headers) }) })
 
   // Cast needed: CF-specific enrichment fields (cfRay, traceparent, etc.) aren't in user's T
   const untyped = log as unknown as AuditableLogger

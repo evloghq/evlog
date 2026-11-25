@@ -12,14 +12,11 @@ export default defineNitroPlugin((nitroApp) => {
   const main = createFsDrain()
   const axiom = createAxiomDrain()
 
-  // Audit sink: tamper-evident, append-only, only receives events that carry an
-  // `audit` field. `signed({ strategy: 'hash-chain' })` adds prevHash + hash so
-  // the sequence is verifiable. `await: true` blocks the request until the audit
-  // is flushed — you don't want to lose audits on crash.
-  const auditSink = auditOnly(
-    signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' }),
-    { await: true },
-  )
+  // Audit sink: tamper-evident, append-only, only receives the records
+  // `log.audit()` makes, with emails and IPs kept. `signed({ strategy: 'hash-chain' })`
+  // adds prevHash + hash so the sequence is verifiable. A handler that awaits
+  // `log.audit()` waits for this write before it responds.
+  const auditSink = auditOnly(signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' }))
 
   nitroApp.hooks.hook('evlog:drain', async (ctx) => {
     await Promise.all([main(ctx), axiom(ctx), auditSink(ctx)])

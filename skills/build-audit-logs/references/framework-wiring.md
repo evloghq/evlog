@@ -1,26 +1,23 @@
 # Framework Wiring
 
-The audit pipeline is the same shape in every framework: register `auditEnricher()`, wire a main drain, and add an audit-only drain. Pick the section that matches the user's stack.
+The audit pipeline is the same shape in every framework: a main drain, plus the audit store wrapped in `auditOnly()`. `log.audit()` records the request context itself. Pick the section that matches the user's stack.
 
 ## Hono
 
 ```ts
 import { Hono } from 'hono'
 import { evlog, type EvlogVariables } from 'evlog/hono'
-import { auditEnricher, auditOnly, signed } from 'evlog'
+import { auditOnly, signed } from 'evlog'
+import { composeDrains } from 'evlog/toolkit'
 import { createAxiomDrain } from 'evlog/axiom'
 import { createFsDrain } from 'evlog/fs'
 
-const main = createAxiomDrain({ dataset: 'logs' })
-const auditSink = auditOnly(
-  signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' }),
-  { await: true },
-)
-
 const app = new Hono<EvlogVariables>()
 app.use(evlog({
-  enrich: ctx => auditEnricher({ tenantId: c => c.headers?.['x-tenant-id'] })(ctx),
-  drain: async (ctx) => { await Promise.all([main(ctx), auditSink(ctx)]) },
+  drain: composeDrains([
+    createAxiomDrain({ dataset: 'logs' }),
+    auditOnly(signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' })),
+  ]),
 }))
 ```
 
@@ -29,20 +26,17 @@ app.use(evlog({
 ```ts
 import express from 'express'
 import { evlog } from 'evlog/express'
-import { auditEnricher, auditOnly, signed } from 'evlog'
+import { auditOnly, signed } from 'evlog'
+import { composeDrains } from 'evlog/toolkit'
 import { createAxiomDrain } from 'evlog/axiom'
 import { createFsDrain } from 'evlog/fs'
 
-const main = createAxiomDrain({ dataset: 'logs' })
-const auditSink = auditOnly(
-  signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' }),
-  { await: true },
-)
-
 const app = express()
 app.use(evlog({
-  enrich: auditEnricher({ tenantId: ctx => ctx.headers?.['x-tenant-id'] }),
-  drain: async (ctx) => { await Promise.all([main(ctx), auditSink(ctx)]) },
+  drain: composeDrains([
+    createAxiomDrain({ dataset: 'logs' }),
+    auditOnly(signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' })),
+  ]),
 }))
 ```
 
@@ -51,48 +45,46 @@ app.use(evlog({
 ```ts
 // lib/evlog.ts
 import { createEvlog } from 'evlog/next'
-import { auditEnricher, auditOnly, signed } from 'evlog'
+import { auditOnly, signed } from 'evlog'
+import { composeDrains } from 'evlog/toolkit'
 import { createAxiomDrain } from 'evlog/axiom'
 import { createFsDrain } from 'evlog/fs'
 
-const main = createAxiomDrain({ dataset: 'logs' })
-const auditSink = auditOnly(
-  signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' }),
-  { await: true },
-)
-
 export const { withEvlog, useLogger } = createEvlog({
   service: 'my-app',
-  enrich: auditEnricher({ tenantId: ctx => ctx.headers?.['x-tenant-id'] }),
-  drain: async (ctx) => { await Promise.all([main(ctx), auditSink(ctx)]) },
+  drain: composeDrains([
+    createAxiomDrain({ dataset: 'logs' }),
+    auditOnly(signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' })),
+  ]),
 })
 ```
 
 ## Standalone scripts / queue workers / CLIs
 
-No request → no enricher needed. `audit()` (or `withAudit()`) replaces `log.audit()`:
+No request, so `audit()` (or `withAudit()`) replaces `log.audit()`. Await it so the process does not exit before the drain has the record:
 
 ```ts
-import { initLogger, audit } from 'evlog'
-import { signed } from 'evlog'
+import { audit, auditOnly, initLogger, signed } from 'evlog'
 import { createFsDrain } from 'evlog/fs'
 
 initLogger({
   env: { service: 'billing-worker' },
-  drain: signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' }),
+  drain: auditOnly(signed(createFsDrain({ dir: '.audit/' }), { strategy: 'hash-chain' })),
 })
 
-audit({
+await audit({
   action: 'cron.cleanup',
   actor: { type: 'system', id: 'cron' },
   target: { type: 'job', id: 'cleanup-stale-sessions' },
-  outcome: 'success',
 })
 ```
 
+In a Nuxt or Nitro app, `audit()` from a task or plugin goes through the `evlog:drain` hooks, so the store registered there receives it.
+
 ## Notes that apply everywhere
 
-- Failure isolation between drains comes from `initLogger({ drain: [...] })` invoking each drain independently. If you instead use `Promise.all`, a single rejection takes the others down. Wrap in `Promise.allSettled` and log failures, or stick with the array form.
-- `await: true` on `auditOnly` makes the wrapped drain block the request until the event is flushed. Use it for the tamper-evident drain so you don't lose audits on crash; the queryable drain can stay async.
-- An audit recorded inside `log.fork()` is drained by the child event, not the request. `await log.fork(label, fn)` when that audit must be written before the handler returns. An unawaited fork still drains, and on `waitUntil` runtimes it is registered with `waitUntil` when `log.fork()` is called.
-- For multi-process deployments behind hash-chain, persist `state.{load,save}` (Redis is the common choice) so the chain survives restarts and rolling deploys.
+- `composeDrains([...])` and separate `evlog:drain` hooks run each drain independently, so one failing drain never stops the others. A hand-written `Promise.all` must not throw on a single rejection.
+- `await log.audit()` resolves once every drain has the record. Without `await`, the integration keeps the delivery alive: with `waitUntil` on Vercel, Cloudflare and Next.js (Nuxt and Nitro 2 on Vercel included), and by waiting before it finishes the request on a Node server or AWS Lambda.
+- An audit recorded inside `log.fork()` is its own event too. `await log.fork(label, fn)` also waits for the audits recorded inside it.
+- Route filters (`include`, `exclude`) apply to request logs only. `log.audit()` still records on a filtered route.
+- For multi-process deployments behind hash-chain, persist `state.{load,save}` (Redis is the common choice) so the chain survives restarts and rolling deploys, and keep one writer, since concurrent writers fork the chain.

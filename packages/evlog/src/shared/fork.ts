@@ -6,7 +6,7 @@ import type { DrainWindow } from '../logger'
 import { deliverPendingDrains } from './shutdown'
 import { extractErrorStatus } from './errors'
 import type { MiddlewareLoggerOptions } from './middleware'
-import { runEnrichAndDrain } from './middleware'
+import { middlewareAuditPipeline, resolveMiddlewarePluginRunner, runEnrichAndDrain } from './middleware'
 
 /**
  * Optional hooks for integrations that track active loggers (e.g. Elysia `activeLoggers`).
@@ -74,25 +74,19 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): Prom
   const path = String(parentCtx.path ?? middlewareOptions.path)
 
   const drainWindow: DrainWindow = { started: false }
-  const child = createRequestLogger(
-    {
-      method,
-      path,
-      requestId: crypto.randomUUID(),
-    },
-    { _deferDrain: true, _drainWindow: drainWindow },
-  )
+  const childRequestInfo = { method, path, requestId: crypto.randomUUID() }
+  // The fork's lifetime is what `waitUntil` holds, so it waits for the audits the work did not await.
+  const heldAudits: Array<Promise<void>> = []
+  const child = createRequestLogger(childRequestInfo, {
+    _deferDrain: true,
+    _drainWindow: drainWindow,
+    _audit: () => middlewareAuditPipeline(middlewareOptions, childRequestInfo, resolveMiddlewarePluginRunner(middlewareOptions), delivery => heldAudits.push(delivery)),
+  })
 
   child.set({
     operation: label,
     _parentRequestId: parentRequestId,
   })
-
-  const childRequestInfo = {
-    method,
-    path,
-    requestId: child.getContext().requestId as string,
-  }
 
   const run = () => {
     lifecycle?.onChildEnter?.(child)
@@ -122,6 +116,9 @@ export function forkBackgroundLogger(options: ForkBackgroundLoggerOptions): Prom
       })
       .catch((err: unknown) => {
         console.error('[evlog] log.fork() failed to emit the child event:', err)
+      })
+      .then(async () => {
+        await Promise.all(heldAudits)
       })
       .finally(() => {
         lifecycle?.onChildExit?.(child)

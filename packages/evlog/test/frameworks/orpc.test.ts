@@ -22,7 +22,7 @@ import {
   findEventViaDrain,
   waitForDrainCalls,
 } from '../helpers/framework'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { AUDIT_PATH, EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudits } from '../helpers/frameworkMatrix'
 
 interface ProcedureContext extends EvlogOrpcContext {
   pingTrace?: { sawLogger: boolean, fromUseLogger: boolean }
@@ -470,7 +470,15 @@ describeStandardHttpMatrix({
   mount(options) {
     vi.spyOn(console, 'info').mockImplementation(() => {})
     const base = os.$context<EvlogOrpcContext>().use(evlog())
-    const handler = withEvlog(new RPCHandler({ users: base.route({ method: 'GET' }).handler(() => ({ users: [] })) }), options)
+    const audit = base.route({ method: 'GET' }).handler(async ({ context }) => {
+      await recordMatrixAudits(context.log)
+      return { ok: true }
+    })
+    const handler = withEvlog(new RPCHandler({
+      users: base.route({ method: 'GET' }).handler(() => ({ users: [] })),
+      [AUDIT_PATH.slice('/api/'.length)]: audit,
+      [EXCLUDED_AUDIT_PATH.slice('/api/'.length)]: audit,
+    }), options)
     return Promise.resolve({
       async fire({ method, path, headers }) {
         const { response } = await handler.handle(new Request(`http://localhost${path}`, { method, headers }), { prefix: '/api' })

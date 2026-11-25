@@ -1,15 +1,17 @@
 import type { AuditableLogger, AuditInput, AuditMethod, ForkableLogger } from './audit'
-import type { DrainContext, EnvironmentContext, FieldContext, Log, LogLevel, LoggerConfig, RequestLogEntry, RequestLogger, RequestLoggerOptions, TailSamplingContext, WideEvent } from './types'
-import { buildAuditFields, consumeAuditForceKeep, finalizeAudit } from './shared/audit-fields'
-import { markGloballyRedacted, redactEvent, resolveRedactConfig } from './redact'
+import type { AuditFields, DrainContext, EnrichContext, EnvironmentContext, FieldContext, Log, LogLevel, LoggerConfig, RedactConfig, RequestLogEntry, RequestLogger, RequestLoggerOptions, TailSamplingContext, WideEvent } from './types'
+import { buildAuditFields, collectAudit, markAuditEvent } from './shared/audit-fields'
+import { markGloballyRedacted, redactEvent, resolveRedactConfig, withoutIdentityMaskers } from './redact'
 import type { PluginRunner } from './shared/plugin'
 import { createPluginRunner, getEmptyPluginRunner } from './shared/plugin'
 import { compactStackForStorage } from './shared/stack-frames'
 import type { TreeEntry } from './shared/pretty-ai'
 import { resolveDevTerminal } from './shared/dev-terminal'
-import { globalConfig } from './shared/globalRegistry'
+import type { AuditPipeline } from './shared/globalRegistry'
+import { getGlobalAuditPipeline, globalConfig } from './shared/globalRegistry'
+import { getHeader } from './shared/headers'
 import { publishWideEvent } from './shared/wideEventChannel'
-import { deliverPendingDrains } from './shared/shutdown'
+import { deliverPendingDrains, getVercelWaitUntil } from './shared/shutdown'
 import { createErrorSerializer } from './shared/serialize-error'
 import { colors, cssColors, detectEnvironment, elapsedMs, escapeControlChars, escapeFormatString, formatDuration, formatMessage, getConsoleMethod, getCssLevelColor, getLevelColor, hasMessageSpecifiers, isBrowser, isDev, isLevelEnabled, isoNow, matchesPattern } from './utils'
 
@@ -344,8 +346,6 @@ function emitWideEvent(
     }
   }
 
-  finalizeAudit(formatted)
-
   if (state.redact) {
     formatted = redactEvent(formatted, state.redact) as WideEvent
     markGloballyRedacted(formatted)
@@ -357,23 +357,9 @@ function emitWideEvent(
     outputWideEvent(formatted)
     publishWideEvent(formatted)
 
-    const drainPromises: Array<Promise<unknown>> = []
-    if (state.drain) {
-      drainPromises.push(
-        (async () => {
-          try {
-            await state.drain!({ event: formatted })
-          } catch (err) {
-            console.error('[evlog] drain failed:', err)
-          }
-        })(),
-      )
-    }
-    if (state.pluginRunner.hasDrain) {
-      drainPromises.push(state.pluginRunner.runDrain({ event: formatted }))
-    }
-    if (drainPromises.length > 0 && waitUntil) {
-      waitUntil(Promise.all(drainPromises).then(deliverPendingDrains))
+    if (state.drain || state.pluginRunner.hasDrain) {
+      const drained = drainWithPlugins(state.drain, state.pluginRunner, { event: formatted })
+      waitUntil?.(drained.then(deliverPendingDrains))
     }
   }
 
@@ -407,6 +393,130 @@ export function outputWideEvent(event: WideEvent): void {
   } else {
     writeOwnOutput(() => console[getConsoleMethod(event.level)](event))
   }
+}
+
+/** Fields of the logger an audit event copies, so it can be joined to its request. */
+const AUDIT_EVENT_FIELDS = ['service', 'requestId', 'method', 'path'] as const
+
+const TRACEPARENT = /^[\da-f]{2}-([\da-f]{32})-/i
+
+/** @internal Hand `ctx` to `drain` and to the plugin drains at once. Failures are reported, never thrown. */
+export async function drainWithPlugins(
+  drain: ((ctx: DrainContext) => void | Promise<void>) | undefined,
+  runner: PluginRunner,
+  ctx: DrainContext,
+): Promise<void> {
+  await Promise.all([
+    drain && (async () => {
+      try {
+        await drain(ctx)
+      } catch (err) {
+        console.error('[evlog] drain failed:', err)
+      }
+    })(),
+    runner.hasDrain && runner.runDrain(ctx),
+  ])
+}
+
+/** @internal Outside an integration: plugins and the `initLogger` drain, kept alive by `waitUntil` or Vercel's. */
+export function defaultAuditPipeline(waitUntil: ((promise: Promise<unknown>) => void) | undefined): AuditPipeline {
+  const runner = state.pluginRunner
+  const { drain } = state
+  const keepAlive = waitUntil ?? getVercelWaitUntil()
+  return {
+    enrich: runner.hasEnrich ? ctx => runner.runEnrich(ctx) : undefined,
+    drain: ctx => drainWithPlugins(drain, runner, ctx),
+    keepAlive: keepAlive && (delivery => keepAlive(delivery.then(deliverPendingDrains))),
+  }
+}
+
+function auditContext(scope: Record<string, unknown>, pipeline: AuditPipeline, given: AuditInput['context']): AuditFields['context'] {
+  const { headers } = pipeline
+  const requestId = scope.requestId ?? pipeline.request?.requestId
+  const context: NonNullable<AuditFields['context']> = {
+    requestId: typeof requestId === 'string' ? requestId : undefined,
+    traceId: typeof scope.traceId === 'string' ? scope.traceId : TRACEPARENT.exec(getHeader(headers, 'traceparent') ?? '')?.[1],
+    ip: getHeader(headers, 'x-forwarded-for')?.split(',')[0]?.trim() || getHeader(headers, 'x-real-ip'),
+    userAgent: getHeader(headers, 'user-agent'),
+    ...given,
+  }
+  for (const key of Object.keys(context)) {
+    if (!context[key]) delete context[key]
+  }
+  return Object.keys(context).length > 0 ? context : undefined
+}
+
+async function deliverAudit(event: WideEvent, pipeline: AuditPipeline): Promise<void> {
+  const { request, headers } = pipeline
+  try {
+    if (pipeline.enrich) {
+      try {
+        await pipeline.enrich({ event, request, headers })
+      } catch (err) {
+        console.error('[evlog] enrich failed:', err)
+      }
+    }
+    // Enrichers run first, so what they add is masked for every other drain too.
+    let delivered = event
+    let stored = event.audit as AuditFields
+    const redact = state.redact ?? pipeline.redact
+    if (redact) {
+      delivered = redactEvent(event, redact) as WideEvent
+      markGloballyRedacted(delivered)
+      stored = (redactEvent(event, withoutIdentityMaskers(redact)) as WideEvent).audit as AuditFields
+    }
+    markAuditEvent(delivered, stored)
+    outputWideEvent(delivered)
+    publishWideEvent(delivered)
+    await pipeline.drain({ event: delivered, request, headers })
+  } catch (err) {
+    console.error('[evlog] audit delivery failed:', err)
+  }
+}
+
+/**
+ * @internal Make one audit record and deliver it as its own event through
+ * `pipeline`, or the app-wide one outside an integration. Fields of `scope`
+ * (the logger's context) tie it to its request. Resolves once every drain has
+ * settled, never rejects, and keeps the runtime alive when nobody awaits it.
+ */
+export function recordAudit(
+  input: AuditInput,
+  scope: Record<string, unknown>,
+  pipeline?: AuditPipeline,
+  waitUntil?: (promise: Promise<unknown>) => void,
+): Promise<void> {
+  if (!state.enabled) return Promise.resolve()
+  const resolved = pipeline ?? getGlobalAuditPipeline() ?? defaultAuditPipeline(waitUntil)
+  const record = buildAuditFields(input)
+  record.context = auditContext(scope, resolved, input.context)
+  const event: Record<string, unknown> = {
+    timestamp: record.timestamp,
+    level: record.outcome === 'success' ? 'info' : 'warn',
+    ...state.env,
+  }
+  for (const key of AUDIT_EVENT_FIELDS) {
+    if (scope[key] !== undefined) event[key] = scope[key]
+  }
+  event.audit = record
+  collectAudit(record, event as WideEvent)
+  const delivery = deliverAudit(event as WideEvent, resolved)
+  resolved.keepAlive?.(delivery)
+  return delivery
+}
+
+/**
+ * @internal The `audit` method of a logger whose context is `scope`. `pipeline`
+ * is built on each call, so a request that records nothing pays nothing.
+ */
+export function createAuditMethod(
+  scope: Record<string, unknown>,
+  pipeline?: () => AuditPipeline,
+  waitUntil?: (promise: Promise<unknown>) => void,
+): AuditMethod {
+  const audit = ((input: AuditInput) => recordAudit(input, scope, pipeline?.(), waitUntil)) as AuditMethod
+  audit.deny = (reason, input) => audit({ ...input, outcome: 'denied', reason })
+  return audit
 }
 
 function emitTaggedLog(level: LogLevel, tag: string, message: string): void {
@@ -713,7 +823,7 @@ export { _log as log }
  */
 export default _log
 
-const noopAudit = Object.assign(() => {}, { deny: () => {} }) as AuditMethod
+const noopAudit = Object.assign(() => Promise.resolve(), { deny: () => Promise.resolve() }) as AuditMethod
 /**
  * @internal Accepts every call and emits nothing; reused wherever logging must not fail the caller.
  * `fork` still runs `fn`, because the work belongs to the caller, not to the log. With no wide
@@ -754,6 +864,8 @@ interface CreateLoggerInternalOptions {
   _deferDrain?: boolean
   /** Shared with the integration that drains the event; only read when `_deferDrain` is set. */
   _drainWindow?: DrainWindow
+  /** Where `log.audit()` delivers. Defaults to the app-wide pipeline. */
+  _audit?: () => AuditPipeline
   /**
    * @see {@link RequestLoggerOptions.waitUntil}
    */
@@ -804,26 +916,9 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
     })
   }
 
-  const auditMethod = function audit(input: AuditInput): void {
-    if (emitted) {
-      warnPostEmit('log.audit()', `Audit dropped: action=${input.action}.`)
-      return
-    }
-    const fields = buildAuditFields(input)
-    if (!isPlainRecord(context.audit)) {
-      context.audit = fields as unknown as Record<string, unknown>
-    } else {
-      mergeInto(writableChild(context, 'audit'), fields as unknown as Record<string, unknown>)
-    }
-    context._auditForceKeep = true
-  } as AuditMethod<T>
-
-  auditMethod.deny = function deny(reason: string, input: Omit<AuditInput, 'outcome' | 'reason'>): void {
-    auditMethod({ ...input, outcome: 'denied', reason })
-  }
-
   return {
-    audit: auditMethod,
+    // An audit is its own event, so it does not depend on this logger having emitted or not.
+    audit: createAuditMethod(context, internalOptions?._audit, waitUntil),
     set(data: FieldContext<T>): void {
       if (emitted) {
         const record = data as Record<string, unknown>
@@ -972,10 +1067,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
       const durationMs = overrides?._durationMs ?? elapsedMs(startTime)
       const level: LogLevel = manualLevel ?? (hasFatal ? 'fatal' : hasError ? 'error' : hasWarn ? 'warn' : 'info')
 
-      // Audit records are compliance evidence and stay force-kept, so read the
-      // flag before discard decides whether the event is dropped.
-      const auditForceKeep = consumeAuditForceKeep(context)
-      if (discarded && !auditForceKeep && !hasError && !hasFatal && manualLevel !== 'error' && manualLevel !== 'fatal') {
+      if (discarded && !hasError && !hasFatal && manualLevel !== 'error' && manualLevel !== 'fatal') {
         emitted = true
         pendingWideEvent = null
         return null
@@ -983,7 +1075,7 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
 
       // error and fatal are checked by level, not through the floor, so an untyped floor ('WARN', 'fatal') cannot drop them.
       const floor = state.sampling.minLevel
-      if (!auditForceKeep && level !== 'error' && level !== 'fatal' && floor && !isLevelEnabled(level, floor)) {
+      if (level !== 'error' && level !== 'fatal' && floor && !isLevelEnabled(level, floor)) {
         emitted = true
         pendingWideEvent = null
         return null
@@ -991,8 +1083,6 @@ export function createLogger<T extends object = Record<string, unknown>>(initial
 
       let forceKeep = false
       if (discarded || overrides?._forceKeep) {
-        forceKeep = true
-      } else if (auditForceKeep) {
         forceKeep = true
       } else if (state.sampling.keep?.length) {
         const status = (overrides as Record<string, unknown> | undefined)?.status ?? context.status

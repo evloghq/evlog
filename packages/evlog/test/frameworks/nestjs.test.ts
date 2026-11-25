@@ -17,7 +17,7 @@ import {
   waitForDrainCalls,
 } from '../helpers/framework'
 import { defined, getDrainCallArg } from '../helpers/defined'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { AUDIT_PATH, EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudits } from '../helpers/frameworkMatrix'
 
 type MiddlewareProxyStub = {
   forRoutes: (...routes: unknown[]) => MiddlewareConsumer
@@ -63,6 +63,10 @@ describeStandardHttpMatrix({
     const app = express()
     app.use(getMiddleware(options))
     app.get('/api/users', (_req, res) => res.json({ users: [] }))
+    app.get([AUDIT_PATH, EXCLUDED_AUDIT_PATH], async (_req, res) => {
+      await recordMatrixAudits(useLogger())
+      res.json({ ok: true })
+    })
     return Promise.resolve({
       async fire(req) {
         const method = (req.method || 'GET').toLowerCase()
@@ -195,18 +199,21 @@ describe('evlog/nestjs', () => {
       })
     })
 
-    it('skips routes not matching include patterns', async () => {
+    it('emits nothing for routes not matching include patterns', async () => {
+      const { drain } = createPipelineSpies()
       const app = express()
-      app.use(getMiddleware({ include: ['/api/**'] }))
-
-      let logValue: unknown = 'untouched'
-      app.get('/health', (req, res) => {
-        logValue = req.log
+      app.use(getMiddleware({ include: ['/api/**'], drain }))
+      app.get('/health', (_req, res) => {
+        useLogger().set({ probe: true })
         res.json({ ok: true })
       })
+      app.get('/api/sentinel', (_req, res) => res.json({ ok: true }))
 
-      await request(app).get('/health')
-      expect(logValue).toBeUndefined()
+      await request(app).get('/health').expect(200)
+      await request(app).get('/api/sentinel')
+      await waitForDrainCalls(drain)
+
+      expect(drain.mock.calls.map(call => getDrainCallArg(call).event.path)).toEqual(['/api/sentinel'])
     })
 
     it('logs routes matching include patterns', async () => {
@@ -236,18 +243,21 @@ describe('evlog/nestjs', () => {
       assertHttpEventEmitted(drain, { path: '/api/checkout', method: 'POST' })
     })
 
-    it('excludes routes matching exclude patterns', async () => {
+    it('emits nothing for routes matching exclude patterns', async () => {
+      const { drain } = createPipelineSpies()
       const app = express()
-      app.use(getMiddleware({ exclude: ['/_internal/**'] }))
-
-      let logValue: unknown = 'untouched'
-      app.get('/_internal/probe', (req, res) => {
-        logValue = req.log
+      app.use(getMiddleware({ exclude: ['/_internal/**'], drain }))
+      app.get('/_internal/probe', (_req, res) => {
+        useLogger().set({ probe: true })
         res.json({ ok: true })
       })
+      app.get('/api/sentinel', (_req, res) => res.json({ ok: true }))
 
-      await request(app).get('/_internal/probe')
-      expect(logValue).toBeUndefined()
+      await request(app).get('/_internal/probe').expect(200)
+      await request(app).get('/api/sentinel')
+      await waitForDrainCalls(drain)
+
+      expect(drain.mock.calls.map(call => getDrainCallArg(call).event.path)).toEqual(['/api/sentinel'])
     })
   })
 

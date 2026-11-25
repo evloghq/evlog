@@ -142,10 +142,10 @@ jobs:
         if: ${{ !cancelled() && matrix.node-version == '24' }}
         run: pnpm --filter evlog run size:budget >> "$GITHUB_STEP_SUMMARY"
 
-      # The fs drain needs no network and no secret, so its round-trip e2e runs
-      # on every pull request rather than only in e2e.yml.
-      - name: Test fs drain end to end
-        run: pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts
+      # The fs and webhook drains need no third-party service and no secret, so
+      # their round-trip e2e runs on every pull request rather than only in e2e.yml.
+      - name: Test fs and webhook drains end to end
+        run: pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts test/e2e/webhook.e2e.ts
 
   test-cli:
     name: Test @evlog/cli (${{ matrix.node-version }})

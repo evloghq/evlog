@@ -72,24 +72,72 @@ describe('createMiddlewareLogger', () => {
     expect(skipped).toBe(true)
   })
 
-  it.each(['disabled', 'excluded', 'not-included'])(
-    'accepts audit calls without emitting when logging is %s', async (mode) => {
+  it('accepts audit calls without emitting when logging is disabled', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ enabled: false, drain, silent: true })
+    const { logger, finish, skipped } = createMiddlewareLogger({ method: 'GET', path: '/health' })
+
+    expect(skipped).toBe(true)
+    await expect(logger.audit({ action: 'health.read', actor: { type: 'user', id: 'u1' } })).resolves.toBeUndefined()
+    await expect(logger.audit.deny('denied', { action: 'health.read', actor: { type: 'user', id: 'u1' } })).resolves.toBeUndefined()
+    expect(await finish({ status: 200 })).toBeNull()
+    expect(drain).not.toHaveBeenCalled()
+  })
+
+  it.each(['excluded', 'not-included'])(
+    'records audits but no request event when the route is %s', async (mode) => {
       const { drain } = createPipelineSpies()
-      initLogger({ enabled: mode !== 'disabled', drain, silent: true })
+      initLogger({ drain, silent: true })
       const { logger, finish, skipped } = createMiddlewareLogger({
-        method: 'GET', path: '/health',
-        exclude: mode === 'excluded' ? ['/health'] : undefined,
+        method: 'POST', path: '/internal/rotate', requestId: 'req_filtered',
+        headers: { 'user-agent': 'cron/1' },
+        exclude: mode === 'excluded' ? ['/internal/**'] : undefined,
         include: mode === 'not-included' ? ['/api/**'] : undefined,
+        routes: { '/internal/**': { service: 'keys' } },
       })
 
       expect(skipped).toBe(true)
-      expect(() => logger.audit({ action: 'health.read', actor: { type: 'user', id: 'u1' } })).not.toThrow()
-      expect(() => logger.audit.deny('denied', { action: 'health.read', actor: { type: 'user', id: 'u1' } })).not.toThrow()
-      expect(logger.getContext()).toEqual({})
+      await logger.audit({ action: 'key.rotate', actor: { type: 'system', id: 'cron' }, tenantId: 'team_1' })
+      await logger.audit.deny('expired', { action: 'key.rotate', actor: { type: 'system', id: 'cron' }, tenantId: 'team_2' })
       expect(await finish({ status: 200 })).toBeNull()
-      expect(drain).not.toHaveBeenCalled()
+
+      expect(drain.mock.calls.map(([ctx]) => ctx.event)).toEqual([
+        expect.objectContaining({ method: 'POST', path: '/internal/rotate', requestId: 'req_filtered', service: 'keys', audit: expect.objectContaining({ outcome: 'success', tenantId: 'team_1', context: { requestId: 'req_filtered', userAgent: 'cron/1' } }) }),
+        expect.objectContaining({ requestId: 'req_filtered', service: 'keys', audit: expect.objectContaining({ outcome: 'denied', reason: 'expired', tenantId: 'team_2' }) }),
+      ])
     },
   )
+
+  it('records the address and user agent the app passes instead of those in the request headers', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ drain, silent: true, redact: false })
+    const { logger } = createMiddlewareLogger({
+      method: 'POST', path: '/api/tokens', requestId: 'req_ip',
+      headers: { 'x-forwarded-for': '203.0.113.9', 'user-agent': 'cli/1' },
+    })
+
+    await logger.audit({ action: 'token.create', actor: { type: 'user', id: 'u1' }, context: { ip: '198.51.100.4' } })
+    await logger.audit({ action: 'token.create', actor: { type: 'user', id: 'u1' }, context: { ip: undefined, userAgent: 'cli/2' } })
+
+    expect(drain.mock.calls.map(([ctx]) => ctx.event.audit?.context)).toStrictEqual([
+      { requestId: 'req_ip', ip: '198.51.100.4', userAgent: 'cli/1' },
+      { requestId: 'req_ip', userAgent: 'cli/2' },
+    ])
+  })
+
+  it('gives the audits of a filtered request without a request id one shared id', async () => {
+    const { drain } = createPipelineSpies()
+    initLogger({ drain, silent: true })
+    const { logger } = createMiddlewareLogger({ method: 'POST', path: '/internal/rotate', exclude: ['/internal/**'] })
+
+    await logger.audit({ action: 'key.rotate', actor: { type: 'system', id: 'cron' }, tenantId: 'team_1' })
+    await logger.audit({ action: 'key.rotate', actor: { type: 'system', id: 'cron' }, tenantId: 'team_2' })
+
+    const [first, second] = drain.mock.calls.map(([ctx]) => ctx.event)
+    expect(first?.requestId).toMatch(/^[\da-f]{8}-[\da-f]{4}-/)
+    expect(second?.requestId).toBe(first?.requestId)
+    expect(second?.audit?.context?.requestId).toBe(first?.requestId)
+  })
 
   it('does not skip when path matches include patterns', () => {
     const { skipped } = createMiddlewareLogger({

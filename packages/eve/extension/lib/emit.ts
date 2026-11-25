@@ -87,7 +87,11 @@ export async function emitTurn(turnId: string, slot: Pick<TurnSlot, 'calls' | 'c
     path: `/agents/${ctx.agent.name}/turns`,
     requestId: id,
   })
-  if (skipped) return
+  if (skipped) {
+    // Route filters apply to the turn's event; its audits are still recorded.
+    await Promise.all(slot.calls.map(call => call.op === 'audit' && logger.audit(call.input)))
+    return
+  }
   // initLogger is skipped when a host app such as Next initialised evlog first,
   // so the mount's service reaches its turns here.
   if (extension.config.service && logger.getContext().service === undefined) logger.set({ service: extension.config.service })
@@ -110,7 +114,7 @@ export async function emitTurn(turnId: string, slot: Pick<TurnSlot, 'calls' | 'c
   const reported = new Set<string>()
   for (const call of slot.calls) {
     if (call.op === 'set') logger.set(call.fields)
-    else if (call.op === 'audit') logger.audit(call.input)
+    else if (call.op === 'audit') void logger.audit(call.input)
     else if (call.op === 'error') {
       errors += 1
       reported.add(call.error.message)

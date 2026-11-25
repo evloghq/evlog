@@ -6,6 +6,8 @@ import { createDatadogDrain, sendBatchToDatadog } from '../../src/adapters/datad
 import { createOTLPDrain, sendBatchToOTLP } from '../../src/adapters/otlp'
 import { createSazabiDrain, sendBatchToSazabi } from '../../src/adapters/sazabi'
 import { createSentryDrain, sendBatchToSentry } from '../../src/adapters/sentry'
+import { createWebhookDrain, sendAuditWebhook } from '../../src/adapters/webhook'
+import { buildAuditFields } from '../../src/shared/audit-fields'
 
 const event: WideEvent = {
   timestamp: '2024-01-01T12:00:00.000Z',
@@ -18,6 +20,10 @@ const event: WideEvent = {
 }
 
 const DSN = 'https://abc123@o1.ingest.sentry.io/42'
+
+const record = buildAuditFields({ action: 'invoice.refund', actor: { type: 'user', id: 'usr_1' } })
+const auditEvent: WideEvent = { ...event, audit: record }
+const WEBHOOK = { url: 'https://hooks.example.com/audit', secret: 'whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw' }
 
 /**
  * Each adapter builds its request once and uses it from both the drain path
@@ -32,6 +38,8 @@ interface ParityCase {
   send: () => Promise<void>
   /** Mask fields that differ per call by design (timestamps, generated ids). */
   normalize?: (body: string) => string
+  /** The event the drain receives, when the adapter needs more than the request event. */
+  event?: WideEvent
 }
 
 const ADAPTERS: ParityCase[] = [
@@ -66,6 +74,13 @@ const ADAPTERS: ParityCase[] = [
     send: () => sendBatchToSazabi([event], { endpoint: 'https://key.us-west-2.intake.sazabi.com' }),
   },
   {
+    name: 'webhook',
+    label: 'Webhook',
+    drain: () => createWebhookDrain(WEBHOOK),
+    send: () => sendAuditWebhook([record], WEBHOOK),
+    event: auditEvent,
+  },
+  {
     name: 'sentry',
     label: 'Sentry',
     drain: () => createSentryDrain({ dsn: DSN }),
@@ -84,16 +99,20 @@ describe('adapter encode parity', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
+    // The webhook signature covers the send time in seconds, so both paths must sign at the same instant.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-01T12:00:00.000Z'))
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.useRealTimers()
   })
 
   it.each(ADAPTERS)('$name: drain and sendBatch issue the same request', async (adapter) => {
-    await adapter.drain()({ event })
+    await adapter.drain()({ event: adapter.event ?? event })
     await adapter.send()
 
     expect(fetchSpy).toHaveBeenCalledTimes(2)
@@ -113,7 +132,7 @@ describe('adapter encode parity', () => {
     await expect(adapter.send()).rejects.toThrow(`${adapter.label} API error: 400 Bad Request`)
 
     // The drain path swallows the error but logs it — same label.
-    await adapter.drain()({ event })
+    await adapter.drain()({ event: adapter.event ?? event })
     const logged = errorSpy.mock.calls.flat().map(String).join(' ')
     expect(logged).toContain(`${adapter.label} API error: 400 Bad Request`)
   })

@@ -9,6 +9,7 @@ your users do.
 | File | Adapter | Mode |
 |---|---|---|
 | `fs.e2e.ts` | File system | **Round-trip** through `initLogger()` into real files, read back with `readFsLogs()` / `tailFsLogs()`, rotation and `maxFiles` included. No credentials, runs on every PR |
+| `webhook.e2e.ts` | Webhook | **Round-trip** from `log.audit()` through an audit store and `relayAudit` to a local HTTP server that checks each message with `verifyWebhook`: per-tenant routing, resume after a refused message, secret rotation. No credentials, runs on every PR |
 | `otlp.e2e.ts` | OTLP | **Round-trip** via the sandbox OpenTelemetry Collector's file export: OTLP/JSON, gzip protobuf, compact records, semantic conventions, headers |
 | `hyperdx.e2e.ts` | HyperDX | **Round-trip** via the sandbox collector (record and `authorization` header), plus a cloud smoke when `HYPERDX_API_KEY` is set. The cloud intake answers 200 even for an invalid key |
 | `datadog.e2e.ts` | Datadog | Smoke (write-only intake), with the gzip body Datadog accepted decoded: `httpStatusCode`, `dd.trace_id`, the 1000-entry split. Local only, see below |
@@ -67,7 +68,7 @@ The collector writes every request it accepts to `test/e2e/.otel/logs.jsonl`
 as root so it can write to the bind mount, which leaves `.otel/` owned by root;
 remove it with `sudo rm -rf packages/evlog/test/e2e/.otel` if you need to.
 
-The fs suite needs nothing at all: `pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts`.
+The fs and webhook suites need nothing at all: `pnpm --filter evlog exec vitest run --config vitest.e2e.config.ts test/e2e/fs.e2e.ts test/e2e/webhook.e2e.ts`.
 
 Tokens are read from the workspace `.env` (already gitignored). Suites whose
 required env vars are missing are skipped with a visible "skipped: missing X"
@@ -85,7 +86,7 @@ are smoke-only.
 - PR labelled `e2e` (only on same-repo PRs — never forks, for secret safety)
 - manual dispatch
 
-`fs.e2e.ts` also runs on every PR, in the `Test` job of `.github/workflows/ci.yml`.
+`fs.e2e.ts` and `webhook.e2e.ts` also run on every PR, in the `Test` job of `.github/workflows/ci.yml`.
 
 ## GitHub secrets
 

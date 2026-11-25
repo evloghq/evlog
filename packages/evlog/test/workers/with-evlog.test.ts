@@ -8,7 +8,7 @@ import {
   waitForDrainCalls,
 } from '../helpers/framework'
 import { defined } from '../helpers/defined'
-import { describeStandardHttpMatrix } from '../helpers/frameworkMatrix'
+import { AUDIT_PATH, EXCLUDED_AUDIT_PATH, describeStandardHttpMatrix, recordMatrixAudits } from '../helpers/frameworkMatrix'
 import { createDeferredStream } from '../helpers/stream'
 
 function fireWorker(
@@ -26,7 +26,11 @@ function fireWorker(
 describeStandardHttpMatrix({
   name: 'workers',
   mount(options) {
-    const worker = withEvlog(() => new Response(JSON.stringify({ users: [] }), { status: 200 }), options)
+    const worker = withEvlog(async (request, _env, _ctx, log) => {
+      const { pathname } = new URL(request.url)
+      if (pathname === AUDIT_PATH || pathname === EXCLUDED_AUDIT_PATH) await recordMatrixAudits(log)
+      return new Response(JSON.stringify({ users: [] }), { status: 200 })
+    }, options)
     return Promise.resolve({
       async fire(req) {
         const res = await fireWorker(worker, req)

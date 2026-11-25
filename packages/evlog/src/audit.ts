@@ -1,25 +1,24 @@
-import type { AuditActor, AuditFields, AuditPatchOp, AuditTarget, DrainContext, EnrichContext, FieldContext, RedactConfig, RequestLogger, WideEvent } from './types'
-import { createLogger } from './logger'
+import type { AuditActor, AuditFields, AuditPatchOp, AuditTarget, DrainContext, EnrichContext, RedactConfig, RequestLogger, WideEvent } from './types'
+import { recordAudit } from './logger'
 import { compileRedactPathMatchers, escapePointerSegment, isFieldRecord, redactValueByPaths } from './redact'
-import { getHeader as getSharedHeader } from './shared/headers'
-import { buildAuditFields, setAuditTestCollector, stableStringify } from './shared/audit-fields'
+import { getAuditRecord, setAuditTestCollector, stableStringify } from './shared/audit-fields'
 import type { AuditInput } from './audit-action'
 
 export { defineAuditAction, type AuditInput, type DefineAuditActionOptions, type DefinedAuditAction } from './audit-action'
-export { AUDIT_SCHEMA_VERSION, buildAuditFields, consumeAuditForceKeep, finalizeAudit } from './shared/audit-fields'
+export { AUDIT_SCHEMA_VERSION, buildAuditFields } from './shared/audit-fields'
 
 /**
  * Add audit semantics to an existing {@link RequestLogger}.
  *
  * Mutates the logger in place by adding an `audit` method (with a `.deny()`
- * sub-method). Strictly equivalent to calling `log.set({ audit: ... })` plus
- * `_forceKeep` on emit. Idempotent: calling twice on the same logger only
- * attaches the methods once.
+ * sub-method) that records through the app-wide pipeline, like {@link audit},
+ * with the logger's `requestId`, `method` and `path`. Idempotent: calling twice
+ * on the same logger only attaches the methods once.
  *
  * @example
  * ```ts
  * const log = withAuditMethods(createLogger())
- * log.audit({
+ * await log.audit({
  *   action: 'invoice.refund',
  *   actor: { type: 'user', id: user.id },
  *   target: { type: 'invoice', id: 'inv_889' },
@@ -30,28 +29,16 @@ export function withAuditMethods<T extends object = Record<string, unknown>>(log
   const target = logger as AuditableLogger<T>
   if ((target as { audit?: AuditMethod<T> }).audit) return target
 
-  const audit = function audit(input: AuditInput): void {
-    const fields = buildAuditFields(input)
-    target.set({ audit: fields } as unknown as FieldContext<T>)
-    markForceKeep(target)
+  const audit = function audit(input: AuditInput): Promise<void> {
+    return recordAudit(input, target.getContext())
   } as AuditMethod<T>
 
-  audit.deny = function deny(reason: string, input: Omit<AuditInput, 'outcome' | 'reason'>): void {
-    audit({ ...input, outcome: 'denied', reason })
+  audit.deny = function deny(reason: string, input: Omit<AuditInput, 'outcome' | 'reason'>): Promise<void> {
+    return audit({ ...input, outcome: 'denied', reason })
   }
 
   target.audit = audit
   return target
-}
-
-/**
- * @internal Mark a logger so its next `emit()` is force-kept past tail sampling.
- * Implemented by stamping a hidden flag on the accumulated context which
- * `emit()` reads via `_forceKeep`.
- */
-function markForceKeep<T extends object>(logger: RequestLogger<T>): void {
-  const ctx = logger.getContext() as Record<string, unknown>
-  ctx._auditForceKeep = true
 }
 
 /**
@@ -65,40 +52,50 @@ export type AuditableLogger<T extends object = Record<string, unknown>> = Reques
  */
 export type ForkableLogger<T extends object = Record<string, unknown>> = AuditableLogger<T> & Required<Pick<RequestLogger<T>, 'fork'>>
 
-/** Method shape attached to {@link AuditableLogger}. */
+/**
+ * Method shape attached to {@link AuditableLogger}.
+ *
+ * Each call records one audit and emits it right away as its own event, with
+ * the request's `requestId`, `traceId`, IP and user agent, through the
+ * integration's enrichers and drains. Call it as often as the request needs.
+ * Sampling, `discard()` and route filters do not apply to it.
+ *
+ * The promise resolves once every drain has handled the event, so awaiting it
+ * stores the record before the response. It never rejects: a failing drain is
+ * reported on the console. Without `await`, evlog keeps the runtime alive with
+ * `waitUntil` (Vercel, Cloudflare) until the drains finish.
+ */
 export interface AuditMethod<T extends object = Record<string, unknown>> {
-  (input: AuditInput): void
+  (input: AuditInput): Promise<void>
   /**
    * Record an AuthZ-denied action. Forces `outcome: 'denied'` and requires
    * a human-readable `reason`. Most teams forget to log denials — they are
    * exactly what auditors and security teams ask for.
    */
-  deny: (reason: string, input: Omit<AuditInput, 'outcome' | 'reason'>) => void
+  deny: (reason: string, input: Omit<AuditInput, 'outcome' | 'reason'>) => Promise<void>
 }
 
 /**
- * Standalone audit emitter for non-request contexts (jobs, scripts, CLIs).
+ * Record an audit outside a request (jobs, scripts, CLIs, Nitro tasks).
  *
- * Creates a one-shot logger, sets the audit fields, and emits immediately.
- * The event is force-kept past tail sampling. Returns the emitted wide event,
- * or `null` if logging is globally disabled.
+ * Emits one event through the app-wide pipeline: plugins and the `initLogger`
+ * drain, or the `evlog:enrich` and `evlog:drain` hooks in a Nitro or Nuxt app.
+ * Resolves once every drain has handled it and never rejects. Does nothing when
+ * logging is disabled.
  *
  * @example
  * ```ts
  * import { audit } from 'evlog'
  *
- * audit({
+ * await audit({
  *   action: 'cron.cleanup',
  *   actor: { type: 'system', id: 'cron' },
  *   target: { type: 'job', id: 'cleanup-stale-sessions' },
- *   outcome: 'success',
  * })
  * ```
  */
-export function audit(input: AuditInput): WideEvent | null {
-  const fields = buildAuditFields(input)
-  const logger = createLogger({ audit: fields })
-  return logger.emit({ _forceKeep: true } as FieldContext<Record<string, unknown>> & { _forceKeep?: boolean })
+export function audit(input: AuditInput): Promise<void> {
+  return recordAudit(input, {})
 }
 
 /**
@@ -131,29 +128,24 @@ export function withAudit<TInput, TOutput>(
 ): (input: TInput, ctx: WithAuditContext) => Promise<TOutput> {
   return async (input, ctx) => {
     const target = typeof options.target === 'function' ? options.target(input) : options.target
+    const { actor, tenantId, causationId, correlationId } = ctx
     try {
       const result = await fn(input, ctx)
-      audit({
-        action: options.action,
-        actor: ctx.actor,
-        target,
-        outcome: 'success',
-        causationId: ctx.causationId,
-        correlationId: ctx.correlationId,
-      })
+      await audit({ action: options.action, actor, target, tenantId, outcome: 'success', causationId, correlationId })
       return result
     } catch (err) {
       const error = err as Error & { status?: number; statusCode?: number }
       const status = error.status ?? error.statusCode
       const denied = err instanceof AuditDeniedError || status === 403
-      audit({
+      await audit({
         action: options.action,
-        actor: ctx.actor,
+        actor,
         target,
+        tenantId,
         outcome: denied ? 'denied' : 'failure',
         reason: error.message,
-        causationId: ctx.causationId,
-        correlationId: ctx.correlationId,
+        causationId,
+        correlationId,
       })
       throw err
     }
@@ -182,10 +174,11 @@ export interface WithAuditOptions<TInput> {
 
 /**
  * Runtime context required by a {@link withAudit}-wrapped function.
- * The actor is always required; correlation IDs are optional.
+ * The actor is always required; the tenant and correlation IDs are optional.
  */
 export interface WithAuditContext {
   actor: AuditActor
+  tenantId?: string
   causationId?: string
   correlationId?: string
 }
@@ -310,8 +303,8 @@ export interface AuditDiffOptions {
  * - `toIncludeAuditOf(matcher)` — returns `true` if at least one captured event matches.
  * - `assertAudit(matcher)` — returns the matched event or throws with a readable summary.
  *
- * Captures audits on emit from `log.audit()`, standalone `audit()`, and
- * `log.set({ audit })` — including auto-filled `idempotencyKey`.
+ * Captures every record `log.audit()` and `audit()` make, with its `id`, as
+ * soon as the call is made.
  *
  * @example
  * ```ts
@@ -363,6 +356,7 @@ export interface MockAudit {
 export interface AuditMatcher {
   action?: string | RegExp
   outcome?: AuditFields['outcome']
+  tenantId?: string
   actor?: Partial<AuditActor>
   target?: Partial<AuditTarget>
 }
@@ -376,6 +370,7 @@ function matchesAudit(event: AuditFields, matcher: AuditMatcher): boolean {
     }
   }
   if (matcher.outcome !== undefined && event.outcome !== matcher.outcome) return false
+  if (matcher.tenantId !== undefined && event.tenantId !== matcher.tenantId) return false
   if (matcher.actor) {
     for (const [k, v] of Object.entries(matcher.actor)) {
       if ((event.actor as unknown as Record<string, unknown>)[k] !== v) return false
@@ -390,130 +385,147 @@ function matchesAudit(event: AuditFields, matcher: AuditMatcher): boolean {
   return true
 }
 
-/** Shape of the optional better-auth bridge for the audit enricher. */
-export interface AuditEnricherBetterAuthBridge {
-  /** Read the current authenticated session for this request, if any. */
-  getSession: (ctx: EnrichContext) => Promise<AuditActor | null | undefined> | AuditActor | null | undefined
-}
-
 /** Options for {@link auditEnricher}. */
 export interface AuditEnricherOptions {
   /**
-   * Resolve the tenant id for the current request. The result is stored at
-   * `event.audit.context.tenantId`. Multi-tenant SaaS gets isolation by default.
+   * Resolve the tenant of the current request. Fills `event.audit.tenantId`
+   * when the call that recorded the audit did not pass one.
    */
   tenantId?: (ctx: EnrichContext) => string | undefined
-  /**
-   * Bridge to populate `event.audit.actor` from the authenticated session.
-   * Only used when the application has not already filled `actor`.
-   */
-  bridge?: AuditEnricherBetterAuthBridge
-  /** When true, overwrite existing context fields. @default false */
-  overwrite?: boolean
 }
 
 /**
- * Enrich audit-bearing wide events with request, runtime, and tenant context.
- *
- * Runs only when `event.audit` is present — every other event passes through
- * untouched. Populates:
- * - `event.audit.context.requestId` from `ctx.request.requestId`
- * - `event.audit.context.traceId`   from `event.traceId`
- * - `event.audit.context.ip`        from `x-forwarded-for` / `x-real-ip`
- * - `event.audit.context.userAgent` from `user-agent`
- * - `event.audit.context.tenantId`  from `options.tenantId(ctx)`
- *
- * Optionally fills `event.audit.actor` from the better-auth bridge when the
- * caller did not provide one. Anything else (custom actor strategies,
- * extra context) belongs in a custom enricher — replace this one entirely.
+ * Fill `event.audit.tenantId` from the request, for apps where every audit of a
+ * request belongs to the same tenant. Events without an audit pass through.
+ * Request context (`requestId`, `traceId`, IP, user agent) is recorded by
+ * `log.audit()` itself and needs no enricher.
  */
-export function auditEnricher(options: AuditEnricherOptions = {}): (ctx: EnrichContext) => void | Promise<void> {
-  return async (ctx) => {
-    const event = ctx.event as WideEvent & { audit?: AuditFields }
-    const a = event.audit
-    if (!a) return
-
-    const context = { ...(a.context ?? {}) }
-
-    function setIfMissing(key: string, value: string | undefined): void {
-      if (value === undefined) return
-      if (options.overwrite || context[key] === undefined) context[key] = value
-    }
-
-    setIfMissing('requestId', ctx.request?.requestId)
-    setIfMissing('traceId', typeof event.traceId === 'string' ? event.traceId : undefined)
-    setIfMissing('ip', getHeader(ctx.headers, 'x-forwarded-for')?.split(',')[0]?.trim() ?? getHeader(ctx.headers, 'x-real-ip'))
-    setIfMissing('userAgent', getHeader(ctx.headers, 'user-agent'))
-
-    if (options.tenantId) {
-      const tid = options.tenantId(ctx)
-      if (tid !== undefined) setIfMissing('tenantId', tid)
-    }
-
-    let { actor } = a
-    if (!actor && options.bridge) {
-      const fromBridge = await options.bridge.getSession(ctx)
-      if (fromBridge) actor = fromBridge
-    }
-
-    event.audit = { ...a, context, actor: actor ?? a.actor }
+export function auditEnricher(options: AuditEnricherOptions = {}): (ctx: EnrichContext) => void {
+  return (ctx) => {
+    const record = ctx.event.audit
+    if (!record || record.tenantId !== undefined || !options.tenantId) return
+    const tenantId = options.tenantId(ctx)
+    if (tenantId !== undefined) record.tenantId = tenantId
   }
-}
-
-// Re-imported here to avoid changing the long list of named imports at the top
-// of this file; identical semantics to `getHeader` exported from `evlog/toolkit`.
-function getHeader(headers: Record<string, string> | undefined, name: string): string | undefined {
-  return getSharedHeader(headers, name)
-}
-
-/** Options accepted by {@link auditOnly}. */
-export interface AuditOnlyOptions {
-  /**
-   * When true, the wrapper awaits the wrapped drain, so the drain step that
-   * carries the event finishes only once the write has landed. Use for
-   * crash-safe audit storage. With `waitUntil` set, that step runs after the
-   * response and the runtime is kept alive until it finishes. An audit recorded
-   * inside `log.fork()` lands before the response only when the fork is awaited.
-   * @default false
-   */
-  await?: boolean
 }
 
 /** Drain function signature accepted by all wrappers. Matches `LoggerConfig['drain']`. */
 export type DrainFn = (ctx: DrainContext) => void | Promise<void>
 
 /**
- * Wrap any drain so it only receives events that carry an `audit` field.
+ * Wrap a drain so it becomes an audit store: it receives only the events
+ * `log.audit()` and `audit()` emitted in this process, one per record, and
+ * the caller's `await` waits for it.
  *
- * Use to route audit events to dedicated storage (separate Axiom dataset,
- * append-only Postgres table, FS journal) without affecting your main drain.
- *
- * Per-sink failure isolation comes from `initLogger({ drain: [...] })`: each
- * drain in the array is invoked independently, so a crashed Axiom call never
- * blocks the FS audit drain.
+ * The record it receives keeps the identities an audit exists to record:
+ * redaction still applies `paths`, `secrets`, custom `patterns` and the
+ * credential and card maskers, but not the `email`, `ipv4` and `phone` maskers.
+ * Every other drain receives the fully masked event. Events rebuilt from JSON,
+ * such as client events or replays, are not audit records and are skipped.
  *
  * @example
  * ```ts
  * import { initLogger, auditOnly } from 'evlog'
+ * import { composeDrains } from 'evlog/toolkit'
  * import { createAxiomDrain } from 'evlog/axiom'
  * import { createFsDrain } from 'evlog/fs'
  *
  * initLogger({
- *   drain: [
+ *   drain: composeDrains([
  *     createAxiomDrain({ dataset: 'logs' }),
- *     auditOnly(createFsDrain({ dir: '.audit' }), { await: true }),
- *   ],
+ *     auditOnly(createFsDrain({ dir: '.audit' })),
+ *   ]),
  * })
  * ```
  */
-export function auditOnly(drain: DrainFn, options: AuditOnlyOptions = {}): DrainFn {
+export function auditOnly(drain: DrainFn): DrainFn {
   return async (ctx) => {
-    if (!ctx.event.audit) return
-    if (options.await) {
-      await drain(ctx)
-      return
+    const record = getAuditRecord(ctx.event)
+    if (!record) return
+    await drain({ ...ctx, event: { ...ctx.event, audit: record } })
+  }
+}
+
+/** One stored audit record and its position in the app's store. */
+export interface RelayAuditEntry<TCursor> {
+  cursor: TCursor
+  record: AuditFields
+}
+
+/** Options for {@link relayAudit}. */
+export interface RelayAuditOptions<TCursor> {
+  /** The position of the last record the destination accepted; `undefined` to start from the oldest. */
+  cursor: TCursor | undefined
+  /**
+   * Up to `limit` records stored after `after`, oldest first. Return only
+   * records whose position is final: with a database sequence, leave out rows
+   * written in the last few seconds, since concurrent inserts commit out of order.
+   */
+  read: (after: TCursor | undefined, limit: number) => Promise<RelayAuditEntry<TCursor>[]>
+  /** Deliver the records in order; throw when the destination did not accept them all. */
+  send: (records: AuditFields[]) => Promise<void>
+  /**
+   * Store the new position. `previous` is the position it replaces: the one this
+   * run saved last, or `cursor` on the first batch. Compare-and-set against it,
+   * and throw when the stored position no longer matches, so another run that
+   * already moved it stops this one.
+   */
+  save: (cursor: TCursor, previous: TCursor | undefined) => Promise<void>
+  /** Records per `read` and `send`. @default 100 */
+  limit?: number
+  /** Stops the run between batches, such as `AbortSignal.timeout(50_000)` on a serverless function. */
+  signal?: AbortSignal
+}
+
+/** What {@link relayAudit} did. `error` is set when it stopped at a failure. */
+export interface RelayAuditResult<TCursor> {
+  cursor: TCursor | undefined
+  delivered: number
+  error?: unknown
+}
+
+/**
+ * Forward stored audit records to a destination, such as a tenant's webhook,
+ * in the order they were stored. Reads a batch after `cursor`, sends it, saves
+ * the new cursor, and repeats until the store has nothing newer, `signal`
+ * aborts, or a step fails. Never throws: a failure is returned in `error` with
+ * the cursor still on the last delivered batch, so the next run resends from
+ * there. Delivery is at least once; receivers dedupe on `record.id`.
+ *
+ * The app owns scheduling, leases and backoff between runs.
+ *
+ * @example
+ * ```ts
+ * import { relayAudit } from 'evlog'
+ * import { sendAuditWebhook } from 'evlog/webhook'
+ *
+ * const result = await relayAudit({
+ *   cursor: destination.cursor,
+ *   read: (after, limit) => db.readTeamAudit(teamId, after, limit),
+ *   send: records => sendAuditWebhook(records, { url: destination.url, secret: destination.secret }),
+ *   save: (next, previous) => db.moveCursor(destination.id, previous, next),
+ * })
+ * if (result.error) await db.markFailing(destination.id, result.error)
+ * ```
+ */
+export async function relayAudit<TCursor>(options: RelayAuditOptions<TCursor>): Promise<RelayAuditResult<TCursor>> {
+  const limit = options.limit ?? 100
+  let { cursor } = options
+  let delivered = 0
+  try {
+    while (!options.signal?.aborted) {
+      const batch = await options.read(cursor, limit)
+      if (batch.length === 0) break
+      await options.send(batch.map(entry => entry.record))
+      const next = batch[batch.length - 1].cursor
+      await options.save(next, cursor)
+      cursor = next
+      delivered += batch.length
+      if (batch.length < limit) break
     }
-    drain(ctx)
+    return { cursor, delivered }
+  } catch (error) {
+    return { cursor, delivered, error }
   }
 }
 
@@ -549,10 +561,7 @@ export type SignedOptions =
  * import { createFsDrain } from 'evlog/fs'
  *
  * initLogger({
- *   drain: auditOnly(
- *     signed(createFsDrain({ dir: '.audit' }), { strategy: 'hash-chain' }),
- *     { await: true },
- *   ),
+ *   drain: auditOnly(signed(createFsDrain({ dir: '.audit' }), { strategy: 'hash-chain' })),
  * })
  * ```
  */

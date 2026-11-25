@@ -1,7 +1,7 @@
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const log = useLogger(event)
 
-  log.audit?.deny('Insufficient permissions to refund this invoice', {
+  await log.audit.deny('Insufficient permissions to refund this invoice', {
     action: 'invoice.refund',
     actor: { type: 'user', id: 'usr_intruder' },
     target: { type: 'invoice', id: 'inv_889' },

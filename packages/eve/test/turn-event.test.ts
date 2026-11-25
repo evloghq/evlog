@@ -21,7 +21,7 @@ interface TurnEvent {
   eve: { sessionId: string, turnId: string, outcome: string, failedCalls?: number, caller?: { principalType: string } }
   order: { id: string }
   customer: { email: string }
-  audit?: { action: string, target: { id: string } }
+  audit?: { id: string, action: string, target: { id: string }, context?: { requestId?: string } }
   error?: { name: string, message: string, code: string, status: number, why: string, fix: string, stack: string }
   gen_ai: {
     operation: { name: string }
@@ -42,6 +42,7 @@ interface OtlpTrace {
 describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
   const logs = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
   let events: TurnEvent[] = []
+  let audits: TurnEvent[] = []
 
   const noOidc = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
   const refused = mkdtempSync(join(tmpdir(), 'evlog-eve-'))
@@ -72,8 +73,10 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
       evaluate(noConnector, ['--tag', 'vercel'], { EVLOG_FIXTURE_SOURCE: 'auto', VERCEL: '1', VERCEL_OIDC_TOKEN: OIDC }).catch(() => {}),
       evaluate(hosted, ['refund-ok'], { EVLOG_FIXTURE_HOST_SERVICE: 'web' }),
     ])
-    hostedEvents = read(hosted)
-    events = read(logs)
+    hostedEvents = read(hosted).filter(event => !event.audit)
+    const all = read(logs)
+    events = all.filter(event => !event.audit)
+    audits = all.filter(event => event.audit)
     readsWithoutOidc = read(noOidc)
     readsRefused = read(refused)
     readsWithoutConnector = read(noConnector)
@@ -131,8 +134,16 @@ describe.skipIf(nodeMajor < 24)('@evlog/eve turn event', () => {
     expect(event.error).toBeUndefined()
   })
 
-  it('records an audit entry a tool adds', () => {
-    expect(byOrder('9001').audit).toMatchObject({ action: 'refund.issued', target: { id: '9001' } })
+  it('records each audit a tool adds as its own event, tied to its turn', () => {
+    const turn = byOrder('9001')
+    expect(turn.audit).toBeUndefined()
+    const refunds = audits.filter(event => event.audit?.target.id === '9001')
+    expect(refunds).toHaveLength(1)
+    expect(refunds[0]).toMatchObject({
+      service: 'refund-agent',
+      requestId: turn.requestId,
+      audit: { action: 'refund.issued', target: { id: '9001' }, context: { requestId: turn.requestId } },
+    })
   })
 
   it('redacts the fields a tool adds, in development too', () => {

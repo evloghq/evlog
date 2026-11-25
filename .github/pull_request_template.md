@@ -66,6 +66,7 @@ scope.
 - tanstack-start (TanStack Start integration)
 - telemetry (`@evlog/telemetry` package)
 - vite (Vite plugin)
+- webhook (Webhook drain adapter)
 - workers (Cloudflare Workers adapter)
 -->
 

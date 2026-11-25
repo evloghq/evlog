@@ -1,4 +1,4 @@
-import type { DrainContext, EnvironmentContext, LogLevel, RedactConfig, SamplingConfig } from '../types'
+import type { DrainContext, EnrichContext, EnvironmentContext, LogLevel, RedactConfig, SamplingConfig } from '../types'
 import { isDev } from '../utils'
 import type { AsyncLocalStorageLike } from './asyncStorageScope'
 import type { ResolvedPrettyError } from './dev-terminal'
@@ -54,6 +54,21 @@ export interface EvlogGlobalConfig {
   pluginRunner: PluginRunner
 }
 
+/**
+ * @internal Where an integration delivers an audit record: the enrichers and
+ * drains its request events go through, the request the record was made in,
+ * and how to keep the runtime alive for a delivery nobody awaited.
+ */
+export interface AuditPipeline {
+  enrich?: (ctx: EnrichContext) => Promise<void>
+  drain: (ctx: DrainContext) => Promise<void>
+  request?: EnrichContext['request']
+  headers?: Record<string, string>
+  /** Used when `initLogger` sets no `redact`, as the integration does for its request events. */
+  redact?: RedactConfig
+  keepAlive?: (delivery: Promise<void>) => void
+}
+
 interface EvlogRegistry {
   config: EvlogGlobalConfig
   /** Request-scoped `AsyncLocalStorage` instances, keyed by integration id. */
@@ -65,6 +80,8 @@ interface EvlogRegistry {
   warnedDeprecations?: Set<string>
   /** Set by the Nitro plugins: returns the request logger of the request Nitro's async context holds. */
   nitroRequestLogger?: () => unknown
+  /** Set by the Nitro plugins: delivers `audit()` records outside a request through the app's hooks. */
+  auditPipeline?: AuditPipeline
 }
 
 type RegistryHost = typeof globalThis & {
@@ -149,6 +166,16 @@ export function resolveNitroRequestLogger(): unknown {
   return getRegistry().nitroRequestLogger?.()
 }
 
+/** Route audit records made outside a request through an app's own enrich and drain hooks. */
+export function setGlobalAuditPipeline(pipeline: AuditPipeline | undefined): void {
+  getRegistry().auditPipeline = pipeline
+}
+
+/** The pipeline a Nitro plugin registered for audit records made outside a request. */
+export function getGlobalAuditPipeline(): AuditPipeline | undefined {
+  return getRegistry().auditPipeline
+}
+
 /**
  * Record that a deprecation warning is about to be shown. Returns `false` when
  * this process already showed it, so duplicated evlog copies warn once.
@@ -170,6 +197,7 @@ export function resetGlobalRegistry(): void {
   const host = globalThis as RegistryHost
   Object.assign(globalConfig, createConfig())
   host[REGISTRY_KEY]?.storages.clear()
+  if (host[REGISTRY_KEY]) host[REGISTRY_KEY].auditPipeline = undefined
   host[REGISTRY_KEY]?.warnedDeprecations?.clear()
   host[MAJORS_KEY]?.clear()
 }

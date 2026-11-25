@@ -121,7 +121,7 @@ export function withEvlog<THandler extends OrpcFetchHandlerLike>(
     } as Parameters<THandler['handle']>[1]
 
     if (skipped) {
-      return handler.handle(request, finalOptions)
+      return runWith(() => handler.handle(request, finalOptions))
     }
 
     try {

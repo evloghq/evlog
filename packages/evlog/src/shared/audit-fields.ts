@@ -5,7 +5,7 @@ import type { AuditInput } from '../audit-action'
  * Current version of the audit envelope. Bumped when `AuditFields` evolves
  * in a backward-incompatible way so downstream pipelines can branch on it.
  */
-export const AUDIT_SCHEMA_VERSION = 1
+export const AUDIT_SCHEMA_VERSION = 2
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -15,9 +15,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * @internal Stable JSON stringification with deterministic key order.
- * Used by `idempotencyKey` and `hash-chain` so the same logical event always
- * produces the same digest, regardless of how object keys were added.
+ * @internal Stable JSON stringification with deterministic key order, so the
+ * `hash-chain` and `hmac` digests of one record do not depend on key order.
  */
 export function stableStringify(value: unknown, ancestors = new WeakSet<object>()): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
@@ -32,76 +31,72 @@ export function stableStringify(value: unknown, ancestors = new WeakSet<object>(
   return out
 }
 
+let lastMs = 0
+let sequence = 0
+
 /**
- * @internal Sync, isomorphic 32-bit FNV-1a. Used to derive the idempotency
- * key without pulling `node:crypto` into the static import graph (which would
- * break browser / Cloudflare Workers bundles that import `evlog` for types
- * or shared utilities). Idempotency keys are dedup tokens, not security
- * primitives — collision resistance at 128 bits is more than sufficient.
+ * @internal RFC 9562 UUIDv7. The 12 bits after the version hold a counter that
+ * starts at a random value below 2048 each millisecond, so ids made in one
+ * process sort in creation order even within the same millisecond.
  */
-function fnv1a32(input: string, seed: number): number {
-  let h = seed >>> 0
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i) & 0xff
-    h = Math.imul(h, 0x01000193) >>> 0
+export function uuidv7(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  let ms = Date.now()
+  if (ms > lastMs) {
+    lastMs = ms
+    sequence = ((bytes[6] & 0x07) << 8) | bytes[7]
+  } else {
+    ms = lastMs
+    sequence++
+    if (sequence > 0xfff) {
+      ms = ++lastMs
+      sequence = ((bytes[6] & 0x07) << 8) | bytes[7]
+    }
   }
-  return h >>> 0
+  for (let i = 5; i >= 0; i--) {
+    bytes[i] = ms % 256
+    ms = Math.floor(ms / 256)
+  }
+  bytes[6] = 0x70 | (sequence >> 8)
+  bytes[7] = sequence & 0xff
+  bytes[8] = 0x80 | (bytes[8] & 0x3f)
+  let hex = ''
+  for (const byte of bytes) hex += byte.toString(16).padStart(2, '0')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 /**
- * @internal Compute the deterministic idempotency key for an audit event.
- * Includes `action`, `actor.{type,id}`, `target.{type,id}`, `outcome`, and
- * `timestamp` rounded to the second so retries within the same second collapse.
- *
- * Uses four interleaved FNV-1a 32-bit hashes (128-bit output, 32 hex chars)
- * so the implementation stays sync and isomorphic across Node, browsers,
- * Bun, Deno, and Cloudflare Workers.
- */
-function computeIdempotencyKey(audit: AuditFields, timestamp: string): string {
-  const seconds = timestamp.slice(0, 19)
-  const payload = stableStringify({
-    action: audit.action,
-    actor: { type: audit.actor.type, id: audit.actor.id },
-    target: audit.target ? { type: audit.target.type, id: audit.target.id } : undefined,
-    outcome: audit.outcome,
-    timestamp: seconds,
-  })
-  const a = fnv1a32(payload, 0x811c9dc5).toString(16).padStart(8, '0')
-  const b = fnv1a32(payload, 0xdeadbeef).toString(16).padStart(8, '0')
-  const c = fnv1a32(payload, 0x1f83d9ab).toString(16).padStart(8, '0')
-  const d = fnv1a32(payload, 0x5be0cd19).toString(16).padStart(8, '0')
-  return a + b + c + d
-}
-
-/**
- * Build a normalised {@link AuditFields} from caller input. Defaults:
- * - `outcome` → `'success'`
- * - `version` → {@link AUDIT_SCHEMA_VERSION}
- *
- * `idempotencyKey` is filled at emit time with the event timestamp so retries
- * stay deterministic.
+ * Build an {@link AuditFields} record from caller input, with a fresh `id` and
+ * `timestamp`, `outcome` defaulting to `'success'` and `version` set to
+ * {@link AUDIT_SCHEMA_VERSION}. `log.audit()` and `audit()` call it for you; use
+ * it directly to write a record to your own store without emitting an event.
  */
 export function buildAuditFields(input: AuditInput): AuditFields {
   return {
+    id: uuidv7(),
+    timestamp: new Date().toISOString(),
     action: input.action,
     actor: input.actor,
     target: input.target,
+    tenantId: input.tenantId,
     outcome: input.outcome ?? 'success',
     reason: input.reason,
     changes: input.changes,
+    metadata: input.metadata,
     causationId: input.causationId,
     correlationId: input.correlationId,
-    version: input.version ?? AUDIT_SCHEMA_VERSION,
+    version: AUDIT_SCHEMA_VERSION,
+    context: input.context,
   }
 }
 
+type AuditCollector = (event: AuditFields, wide: WideEvent | null) => void
+
 /**
  * @internal Test-collector hook installed by `mockAudit`. When set, every
- * audit event flowing through `log.audit()` / `audit()` is also pushed to it.
+ * record made by `log.audit()` / `audit()` is also pushed to it.
  */
 let _testCollector: AuditCollector | null = null
-
-type AuditCollector = (event: AuditFields, wide: WideEvent | null) => void
 
 /** @internal Install the `mockAudit` collector; returns the one it replaced. */
 export function setAuditTestCollector(collector: AuditCollector | null): AuditCollector | null {
@@ -110,45 +105,27 @@ export function setAuditTestCollector(collector: AuditCollector | null): AuditCo
   return previous
 }
 
-/** @internal Emit-time decoration: assign timestamp-based idempotency key. */
-function decorateAudit(audit: AuditFields, timestamp: string): AuditFields {
-  if (audit.idempotencyKey) return audit
-  return { ...audit, idempotencyKey: computeIdempotencyKey(audit, timestamp) }
+/** @internal Report a record to the `mockAudit` collector, if one is installed. */
+export function collectAudit(record: AuditFields, event: WideEvent): void {
+  _testCollector?.(record, event)
 }
 
 /**
- * @internal Hook used by `RequestLogger.emit()` to detect audit-driven
- * force-keep flags on the accumulated context. Returns whether the event was
- * marked by `log.audit()` and clears the flag.
+ * Marks an event `log.audit()` or `audit()` emitted, holding the record as an
+ * audit store keeps it. Non-enumerable, so spreads, JSON and drains that
+ * serialize the event never carry it.
  */
-export function consumeAuditForceKeep(context: Record<string, unknown>): boolean {
-  if (context._auditForceKeep) {
-    delete context._auditForceKeep
-    return true
-  }
-  if (context.audit) return true
-  return false
-}
+const AUDIT_RECORD = Symbol.for('evlog.auditRecord')
 
-/** @internal True when `audit` has the minimum fields required before emit decoration. */
-function isCompleteAuditFields(a: unknown): a is AuditFields {
-  if (!a || typeof a !== 'object') return false
-  const audit = a as AuditFields
-  return typeof audit.action === 'string'
-    && typeof audit.actor?.type === 'string'
-    && typeof audit.actor?.id === 'string'
+/** @internal Attach the record an audit store receives to the emitted event. */
+export function markAuditEvent(event: WideEvent, record: AuditFields): void {
+  Object.defineProperty(event, AUDIT_RECORD, { value: record, enumerable: false, configurable: true })
 }
 
 /**
- * @internal Decorate the audit field on an event right before drain — fills
- * in the deterministic idempotency key. Called by the logger pipeline so
- * it works for both `log.audit()` and direct `log.set({ audit })` paths.
- * Skips partial/legacy shapes that omit required actor fields.
+ * @internal The record an audit store receives, or `undefined` when `event` was
+ * not emitted by `log.audit()` or `audit()` in this process.
  */
-export function finalizeAudit(event: WideEvent): void {
-  const a = event.audit as AuditFields | undefined
-  if (!isCompleteAuditFields(a)) return
-  const decorated = decorateAudit(a, String(event.timestamp))
-  event.audit = decorated
-  _testCollector?.(decorated, event)
+export function getAuditRecord(event: WideEvent): AuditFields | undefined {
+  return (event as WideEvent & { [AUDIT_RECORD]?: AuditFields })[AUDIT_RECORD]
 }

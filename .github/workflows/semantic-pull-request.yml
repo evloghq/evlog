@@ -75,6 +75,7 @@ jobs:
             tanstack-start
             telemetry
             vite
+            webhook
             workers
           types: |
             breaking

@@ -269,14 +269,14 @@ function keyOf(event: WideEvent): string | undefined {
   if (typeof own === 'string') return own
   const audit = field(event, 'audit')
   if (typeof audit !== 'object' || audit === null) return undefined
-  const key = (audit as Record<string, unknown>).idempotencyKey
-  return typeof key === 'string' ? key : undefined
+  const { id } = audit as Record<string, unknown>
+  return typeof id === 'string' ? id : undefined
 }
 
 /**
  * Whether an event is new to this run. A drain can write an event twice when
  * the step that emitted it is retried; both copies carry the same
- * `idempotencyKey` (or `audit.idempotencyKey`). Events without one are always new.
+ * `idempotencyKey` (or `audit.id`). Events without one are always new.
  */
 export function createDedupe(): (event: WideEvent) => boolean {
   const seen = new Set<string>()

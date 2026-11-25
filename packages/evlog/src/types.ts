@@ -313,8 +313,9 @@ export interface SamplingConfig {
   /**
    * Severity floor for wide events (`createLogger().emit()`, framework middleware).
    * Events below it are dropped before `keep` and `rates` are checked, so a `keep`
-   * rule or callback cannot bring them back. `error`, `fatal` and audit events are
-   * never dropped by this floor (error events still go through `rates`).
+   * rule or callback cannot bring them back. `error` and `fatal` events are never
+   * dropped by this floor (they still go through `rates`). Audit events are not
+   * sampled at all.
    * Independent of the top-level `minLevel`, which governs the global `log` API.
    *
    * @example
@@ -555,6 +556,11 @@ export interface AuditActor {
   tools?: string[]
   reason?: string
   promptId?: string
+  /**
+   * The principal the actor acted for: the user who owns an API token, the user
+   * an agent works for, or the user an admin impersonates (`actor` is the admin).
+   */
+  onBehalfOf?: Omit<AuditActor, 'onBehalfOf'>
 }
 
 /**
@@ -585,50 +591,53 @@ export interface AuditChanges {
 }
 
 /**
- * Reserved audit fields on the wide event.
+ * One audit record, carried at `event.audit` by the event `log.audit()` or
+ * `audit()` emits. Every call emits its own event, so one record is one action.
+ * Downstream filters on `audit IS NOT NULL`.
  *
- * Set via `log.audit({ ... })`, `log.set({ audit: { ... } })`, or the
- * standalone `audit({ ... })` helper. Downstream filters on `audit IS NOT NULL`.
- *
+ * - `id` — a UUIDv7, unique per record and ordered by creation time within a
+ *   process. Drains, relays and webhook receivers dedupe on it: a retried
+ *   delivery carries the same `id`, a repeated action gets a new one.
  * - `outcome` — `'success' | 'failure' | 'denied'`. `'denied'` records an
  *   AuthZ-denied action (often forgotten but exactly what auditors want).
  * - `changes.before/after` — the diff for mutating actions. Use
  *   {@link auditDiff} to produce a redact-aware compact JSON Patch.
  * - `causationId` / `correlationId` — chain related actions (admin action →
- *   system reactions). Set by callers, propagated by `auditEnricher` when
- *   available on the request.
+ *   system reactions). Set by callers.
  * - `signature` / `prevHash` — populated by the {@link signed} drain wrapper.
  *   Never set by application code.
- * - `idempotencyKey` — derived deterministically by `log.audit()` so retries
- *   across drains are safe.
- * - `context` — request/runtime context auto-populated by {@link auditEnricher}
- *   (`requestId`, `traceId`, `ip`, `userAgent`, `tenantId`).
+ * - `context` — taken from the request the record was made in.
  */
 export interface AuditFields {
+  /** UUIDv7 assigned when the record is made. */
+  id: string
+  /** When the record was made, ISO 8601. */
+  timestamp: string
   /** Action name. Convention: `'<resource>.<verb>'`, e.g. `'invoice.refund'`. */
   action: string
   actor: AuditActor
   target?: AuditTarget
+  /** The tenant (organization, team, workspace) the action belongs to. */
+  tenantId?: string
   outcome: 'success' | 'failure' | 'denied'
   /** Human-readable explanation, especially required for `outcome: 'denied'`. */
   reason?: string
   /** Before/after snapshots and optional patch from {@link auditDiff}. */
   changes?: AuditChanges
+  /** Free-form detail about the action, such as the name of the created resource. */
+  metadata?: Record<string, unknown>
   /** ID of the action that caused this one. */
   causationId?: string
   /** ID shared by every action in the same logical operation. */
   correlationId?: string
-  /** Schema version of the audit envelope. Defaults to `1` when omitted by the caller. */
-  version?: number
-  /** Set by `log.audit()` as a stable hash for safe retries across drains. */
-  idempotencyKey?: string
-  /** Request/runtime context — populated by `auditEnricher`. */
+  /** Version of the audit envelope, {@link AUDIT_SCHEMA_VERSION}. */
+  version: number
+  /** The request the record was made in. Absent outside a request. */
   context?: {
     requestId?: string
     traceId?: string
     ip?: string
     userAgent?: string
-    tenantId?: string
     [key: string]: unknown
   }
   /** HMAC signature of the event when wrapped with `signed({ strategy: 'hmac' })`. */
@@ -776,8 +785,8 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    * Takes precedence over `sampling.keep` and head sampling. A logger that calls
    * `error()` or `fatal()` after `discard()`, or sets a manual `error` / `fatal`
    * level, emits normally and bypasses head sampling, because a failure must not
-   * be dropped silently. An {@link audit} record also survives `discard()`, since
-   * it is retention evidence rather than background noise.
+   * be dropped silently. Records made with `log.audit()` are their own events and
+   * are not affected.
    *
    * No-ops with a console warning after the wide event has been emitted.
    */
@@ -871,8 +880,9 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
   fork?: (label: string, fn: () => void | Promise<void>) => Promise<void>
 
   /**
-   * Record an audit event on this wide event. Strictly equivalent to
-   * `log.set({ audit: { ... } })` plus tail-sample force-keep.
+   * Record an audit as its own event, tied to this logger's request. Call it once
+   * per action; the returned promise resolves once every drain has handled it and
+   * never rejects. See {@link import('./audit').AuditMethod}.
    *
    * Use `log.audit.deny(reason, fields)` for AuthZ-denied actions — most teams
    * forget to log denials but they are exactly what auditors and security teams
@@ -886,11 +896,11 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
    *
    * @example
    * ```ts
-   * log.audit({
+   * await log.audit({
    *   action: 'invoice.refund',
    *   actor: { type: 'user', id: user.id, email: user.email },
    *   target: { type: 'invoice', id: 'inv_889' },
-   *   outcome: 'success',
+   *   tenantId: org.id,
    *   reason: 'Customer requested refund',
    * })
    * ```
@@ -900,8 +910,8 @@ export interface RequestLogger<T extends object = Record<string, unknown>> {
 
 /** @internal Forward-declaration to avoid a circular import with `audit.ts`. */
 export interface AuditLoggerMethod {
-  (input: import('./audit').AuditInput): void
-  deny: (reason: string, input: Omit<import('./audit').AuditInput, 'outcome' | 'reason'>) => void
+  (input: import('./audit').AuditInput): Promise<void>
+  deny: (reason: string, input: Omit<import('./audit').AuditInput, 'outcome' | 'reason'>) => Promise<void>
 }
 
 /**
@@ -1124,6 +1134,8 @@ export interface H3EventContext {
   _evlogEmitting?: boolean
   /** Internal: whether the route matched shouldLog filtering (emit-time guard) */
   _evlogShouldEmit?: boolean
+  /** Internal: audit deliveries `afterResponse` waits for when the runtime has no `waitUntil` */
+  _evlogAudits?: Array<Promise<void>>
   [key: string]: unknown
 }
 

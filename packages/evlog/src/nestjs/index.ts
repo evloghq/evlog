@@ -78,7 +78,8 @@ function createEvlogMiddleware(getOptions: () => EvlogNestJSOptions) {
     const { logger, finish, skipped, runWith } = integration.start(req, getOptions())
 
     if (skipped) {
-      next()
+      req.log = logger as ForkableLogger
+      void runWith(() => next())
       return
     }
 
