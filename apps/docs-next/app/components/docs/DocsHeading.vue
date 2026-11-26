@@ -41,8 +41,26 @@ const parts = computed(() => {
 const body = (given: { nodes: Child[] }) => given.nodes
 body.props = ['nodes']
 
+// A step is ahead of the reader, being read, or read: its mark is a ring that closes, then fills.
 const reading = useDocsReading()
-const active = computed(() => Boolean(props.id) && reading.value === props.id)
+const sections = inject<Ref<string[]>>('docs-sections', ref([]))
+const state = computed(() => {
+  const at = sections.value.indexOf(reading.value ?? '')
+  const own = sections.value.indexOf(props.id ?? '')
+  if (at < 0 || own < 0 || own > at) return 'ahead'
+  return own === at ? 'reading' : 'read'
+})
+
+// Lit for a moment after a jump from the table of contents or a link, so the reader sees where they landed.
+const arrived = useDocsArrived()
+const landed = computed(() => Boolean(props.id) && arrived.value === props.id)
+
+const hang = computed(() => {
+  if (parts.value.step) return undefined
+  const [first] = parts.value.body
+  const text = typeof first === 'string' ? first : first?.type === Text ? String(first.children) : ''
+  return opticalHang(text) ? `-${opticalHang(text)}em` : undefined
+})
 
 const { copy, copied } = useClipboard({ copiedDuring: 1400 })
 
@@ -55,21 +73,36 @@ function copyLink() {
   <component
     :is="`h${props.level}`"
     :id="props.id"
-    class="group/h scroll-mt-24 text-highlighted text-balance [&_code]:text-[0.88em]"
+    class="group/h scroll-mt-28 text-highlighted text-balance [&_code]:text-[0.88em]"
     :class="[classes[props.level], parts.step ? 'flex items-baseline gap-3' : '']"
+    :style="{ marginLeft: hang }"
   >
     <span
       v-if="parts.step"
-      class="grid size-6 shrink-0 translate-y-[-1px] place-items-center rounded-full font-mono text-[12px] font-medium tracking-normal ring-1 ring-inset transition-[background-color,color,box-shadow] duration-300 ease-(--d-ease)"
-      :class="active ? 'bg-(--ui-text-highlighted) text-(--ui-bg) ring-(--ui-text-highlighted)' : 'bg-(--d-raised-strong) text-muted ring-(--d-line-strong)'"
+      class="d-stepmark grid size-6 shrink-0 translate-y-[-1px] place-items-center rounded-full font-mono text-[12px] font-medium tracking-normal"
+      :data-state="state"
     >{{ parts.step }}</span>
     <a v-if="props.id" :href="`#${props.id}`" class="relative" @click="copyLink">
       <span
         v-if="!parts.step"
         aria-hidden="true"
-        class="absolute top-0 -left-[0.95em] hidden font-normal text-dimmed opacity-0 transition-[opacity,transform] duration-200 ease-(--d-ease) group-hover/h:translate-x-0 group-hover/h:opacity-100 sm:inline"
-        :class="copied ? 'translate-x-0 text-highlighted opacity-100' : 'translate-x-1'"
-      >#</span>
+        class="absolute top-0 -left-[0.95em] hidden w-[0.62em] items-center *:[grid-area:1/1] font-normal text-dimmed opacity-0 transition-[opacity,transform,color] duration-200 ease-(--d-ease) group-hover/h:translate-x-0 group-hover/h:opacity-100 sm:grid"
+        :class="copied || landed ? 'translate-x-0 text-highlighted opacity-100' : 'translate-x-1'"
+      >
+        <span class="d-xfade" :data-on="!copied">#</span>
+        <svg viewBox="0 0 12 12" class="d-xfade size-[0.6em] self-center" :data-on="copied" fill="none">
+          <path
+            d="M2.5 6.4 4.9 8.7 9.5 3.6"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            pathLength="1"
+            class="d-check"
+            :data-on="copied"
+          />
+        </svg>
+      </span>
       <component :is="body" :nodes="parts.body" />
       <span
         class="d-xfade pointer-events-none absolute top-1/2 left-full ml-3 -translate-y-1/2 text-[12.5px] font-normal tracking-normal whitespace-nowrap text-dimmed"

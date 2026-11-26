@@ -183,6 +183,87 @@
   }
 }
 
+/*
+ * The page title docks into the top bar: as the h1 slides under the bar, its name rises into the
+ * breadcrumb in step with the scroll, and goes back the same way. Without scroll timelines, or with
+ * reduced motion, it cross-fades once the title is gone.
+ */
+@supports (timeline-scope: --t) and (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) and (min-width: 1024px) {
+    .d-dock-scope {
+      timeline-scope: --docs-title;
+    }
+
+    .d-dock-title {
+      view-timeline: --docs-title block;
+      view-timeline-inset: 56px 0px;
+    }
+
+    .d-dock-scope .d-dock.d-xfade {
+      visibility: visible;
+      filter: none;
+      transition: none;
+      animation: d-dock linear both;
+      animation-timeline: --docs-title;
+      animation-range: exit 0% exit 100%;
+    }
+
+    @keyframes d-dock {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
+}
+
+/*
+ * A step's number. Ahead of the reader it is a hollow ring; while its section is read the ring closes
+ * with the scroll (`--read`, set by the scroll spy); once read it is filled.
+ */
+.d-stepmark {
+  position: relative;
+  color: var(--ui-text-dimmed);
+  box-shadow: inset 0 0 0 1px var(--d-line-strong);
+  transition: background-color 300ms var(--d-ease), color 300ms var(--d-ease), box-shadow 300ms var(--d-ease);
+}
+
+.d-stepmark[data-state='reading'] {
+  background: var(--d-raised-strong);
+  color: var(--ui-text-highlighted);
+}
+
+.d-stepmark[data-state='read'] {
+  background: var(--ui-text-highlighted);
+  color: var(--ui-bg);
+  box-shadow: inset 0 0 0 1px var(--ui-text-highlighted);
+}
+
+.d-stepmark[data-state='reading']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--ui-text-highlighted) calc(var(--read, 0) * 1turn), transparent 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1.5px));
+}
+
+/* The check that answers a copy, drawn in one stroke. */
+.d-check {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.d-check[data-on='true'] {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 260ms var(--d-ease) 80ms;
+}
+
 /* A page arrives with a short rise once the reader has navigated, never on first load. */
 .d-page-in {
   animation: d-page-in 280ms var(--d-ease) both;
@@ -306,6 +387,23 @@
   }
 
   .d-rail > li:where(:has(> a:hover))::before {
+    border-color: var(--rail-hover);
+  }
+}
+
+/* A tree of rows that are not links (the page header's fields) lights the same way. */
+@media (hover: hover) {
+  .d-rail[data-rows] > li:where(:has(~ li:hover))::after {
+    --rail-top: var(--rail-hover);
+    --rail-low: var(--rail-hover);
+    z-index: 2;
+  }
+
+  .d-rail[data-rows] > li:where(:hover)::after {
+    --rail-top: var(--rail-hover);
+  }
+
+  .d-rail[data-rows] > li:where(:hover)::before {
     border-color: var(--rail-hover);
   }
 }

@@ -37,6 +37,7 @@ function go(event: MouseEvent, id: string) {
   const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   target.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' })
   history.replaceState(history.state, '', `#${id}`)
+  markArrived(id)
 }
 </script>
 

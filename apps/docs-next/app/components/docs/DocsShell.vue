@@ -2,12 +2,9 @@
 const route = useRoute()
 const content = useDocsContent()
 const menuOpen = ref(false)
-// Set by the first navigation, so a page fades in when the reader moves and never on first load.
-const navigated = useState('docs-navigated', () => false)
 
 watch(() => route.path, () => {
   menuOpen.value = false
-  navigated.value = true
 })
 </script>
 
@@ -29,6 +26,7 @@ watch(() => route.path, () => {
       >
         {{ menuOpen ? 'Close' : 'Menu' }}
       </button>
+      <span aria-hidden="true" class="docs-progress" />
     </header>
 
     <div class="flex w-full">

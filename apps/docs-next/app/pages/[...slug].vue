@@ -108,9 +108,11 @@ if (!page.value) {
 }
 
 const selfPath = computed(() => prefixLink(content.value.path, content.value.routeBase))
+// A page's `::product-facts` is drawn by the header, not where it sits in the body.
+const split = computed(() => takeFacts(page.value?.nodes ?? []))
 const tree = computed(() => {
   const p = page.value
-  return p ? { ...p, nodes: prefixTreeLinks(p.nodes, content.value.routeBase) } : p
+  return p ? { ...p, nodes: prefixTreeLinks(split.value.nodes, content.value.routeBase) } : p
 })
 const fm = computed<Record<string, any>>(() => page.value?.data ?? {})
 const surround = computed(() => findSurroundLinks(navigation?.value, selfPath.value))
@@ -122,7 +124,12 @@ const toc = computed<TocLink[]>(() =>
 const publishEvent = usePublishEvent()
 watchEffect(() => publishEvent(page.value))
 
-useDocsScrollSpy(() => toc.value.map(link => link.id))
+const sections = computed(() => toc.value.map(link => link.id))
+useDocsScrollSpy(sections)
+provide('docs-sections', sections)
+
+const reading = useDocsReading()
+const section = computed(() => toc.value.find(link => link.id === reading.value))
 
 const { github } = useAppConfig()
 const { current } = useDocsVersions()
@@ -156,7 +163,8 @@ const place = computed(() => {
 const pageFramework = computed(() => Object.entries(frameworkPages)
   .find(([, path]) => prefixLink(path, content.value.routeBase) === selfPath.value)?.[0])
 
-const navigated = useState('docs-navigated', () => false)
+// Read once, so the page being left does not replay its entrance while the next one loads.
+const arrived = useDocsNavigated().value
 
 // The top bar names the page only once its title has scrolled under the bar.
 const title = useTemplateRef<HTMLElement>('title')
@@ -178,7 +186,7 @@ useHead({ link: [{ rel: 'canonical', href: canonicalUrl }] })
 </script>
 
 <template>
-  <div v-if="page">
+  <div v-if="page" class="d-dock-scope">
     <!-- Meets the sidebar's logo row, so one hairline runs across the whole window. -->
     <div class="sticky top-0 z-20 hidden h-14 items-center justify-between gap-4 border-b border-(--d-line) bg-default/90 px-8 backdrop-blur-md lg:flex">
       <nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-2 text-[13px]">
@@ -190,9 +198,18 @@ useHead({ link: [{ rel: 'canonical', href: canonicalUrl }] })
           {{ place.label }}
         </NuxtLink>
         <span v-else class="text-dimmed">{{ place?.label }}</span>
-        <span class="d-xfade flex min-w-0 items-center gap-2" :data-on="titleGone" :aria-hidden="!titleGone">
+        <span class="d-xfade d-dock flex min-w-0 items-center gap-2" :data-on="titleGone" :aria-hidden="!titleGone">
           <span aria-hidden="true" class="text-(--d-line-strong)">/</span>
           <span class="truncate text-default">{{ fm.title }}</span>
+        </span>
+        <!-- The path grows with the reader: the section they are in follows the page. -->
+        <span class="d-xfade flex min-w-0 shrink-[99] items-center gap-2" :data-on="titleGone && Boolean(section)" aria-hidden="true">
+          <span class="text-(--d-line-strong)">/</span>
+          <span class="d-stack min-w-0">
+            <Transition name="d-swap">
+              <span :key="section?.id" class="min-w-0 truncate text-muted">{{ section?.text }}</span>
+            </Transition>
+          </span>
         </span>
       </nav>
 
@@ -212,13 +229,27 @@ useHead({ link: [{ rel: 'canonical', href: canonicalUrl }] })
     </div>
 
     <div class="mx-auto flex w-full max-w-[74rem] justify-center gap-14 px-5 sm:px-8 xl:justify-between">
-      <article class="w-full max-w-[44rem] min-w-0 pt-10 pb-32 text-[15px]/[1.7] text-muted lg:pt-14" :class="navigated ? 'd-page-in' : ''">
-        <h1 ref="title" class="text-[32px]/[1.15] font-semibold tracking-[-0.025em] text-balance text-highlighted">
+      <article class="w-full max-w-[44rem] min-w-0 pt-10 pb-32 text-[15px]/[1.7] text-muted lg:pt-14" :class="arrived ? 'd-page-in' : ''">
+        <!-- Below lg the top bar is gone, so the page says where it sits itself. -->
+        <p v-if="place" class="mb-3 text-[13px] text-dimmed lg:hidden">
+          <NuxtLink v-if="place.to" :to="place.to">
+            {{ place.label }}
+          </NuxtLink>
+          <template v-else>
+            {{ place.label }}
+          </template>
+        </p>
+        <h1
+          ref="title"
+          class="d-dock-title text-[30px]/[1.15] font-[560] tracking-[-0.03em] text-balance text-highlighted sm:text-[34px]/[40px]"
+          :style="{ marginLeft: `-${opticalHang(fm.title ?? '')}em` }"
+        >
           {{ fm.title }}
         </h1>
-        <p v-if="fm.description" class="mt-3.5 mb-8 text-[17px]/[1.6] text-pretty text-muted">
+        <p v-if="fm.description" class="mt-3.5 max-w-[38rem] text-[17px]/[27px] text-pretty text-default">
           {{ fm.description }}
         </p>
+        <DocsPageEvent :path="selfPath" :facts="split.facts" />
         <DocsFrameworkHint v-if="pageFramework && content.mode !== 'version'" :framework="pageFramework" />
 
         <MarkdownDocument

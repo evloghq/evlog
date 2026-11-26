@@ -33,7 +33,7 @@ async function run() {
             stroke-linecap="round"
             stroke-linejoin="round"
             pathLength="1"
-            class="d-copy-check"
+            class="d-check"
             :data-on="copied"
           />
         </svg>
@@ -52,16 +52,6 @@ async function run() {
   opacity: 0;
   filter: blur(2px);
   transform: translateY(3px);
-}
-
-.d-copy-check {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-}
-
-.d-copy-check[data-on='true'] {
-  stroke-dashoffset: 0;
-  transition: stroke-dashoffset 260ms var(--d-ease) 80ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
