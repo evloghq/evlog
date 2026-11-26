@@ -28,7 +28,7 @@
     "@vercel/oidc": "^3.8.10",
     "@vercel/otel": "^2.3.0",
     "ai": "^7.0.173",
-    "eve": "1.1.0",
+    "eve": "1.5.0",
     "evlog": "workspace:*",
     "zod": "^4.6.7"
   },
