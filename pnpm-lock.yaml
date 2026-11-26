@@ -149,8 +149,8 @@ importers:
   apps/evi:
     dependencies:
       '@agent-browser/eve':
-        specifier: 0.43.0
-        version: 0.43.0(eve@1.1.0)
+        specifier: 0.45.0
+        version: 0.45.0(eve@1.1.0)
       '@github-tools/eve-extension':
         specifier: 0.15.0
         version: 0.15.0(9e69e69772950c4620535f20502cd9d6)
@@ -1247,14 +1247,14 @@ packages:
       bcrypt:
         optional: true
 
-  '@agent-browser/eve@0.43.0':
-    resolution: {integrity: sha512-BgtOD/JmrgKLt4HO0UVL3BIRweph+fkQrDgmAFI8y3hCGh+wJtcswSijtV72L72wnfB++Ko0W6fNupnKYJwwMQ==}
+  '@agent-browser/eve@0.45.0':
+    resolution: {integrity: sha512-N3jXIyo7udV4dKAt24Tp8jjDkXi3hTtk+EaZkyJiKOumjYmdfIWVgfoCXePWRVQG2IS9+4ooV0PY0vfPGYM30Q==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       eve: '>=0.84.0'
 
-  '@agent-browser/sandbox@0.43.0':
-    resolution: {integrity: sha512-je4YRrWUpNh7sPljcWltT/iAw+yzZLIgIS14YYRj014SiorSS+Xu07JkUnEt8+hrB913fgLIXgHEpW4zhcU41g==}
+  '@agent-browser/sandbox@0.45.0':
+    resolution: {integrity: sha512-Fiq4CKyCpVTmR7WTJQhl9eT8CheTLirhJK54owyl8XghUSV53EzG8B1AvOvNjnp5JoAb7LVb2pkIBnxX9mZAMw==}
     peerDependencies:
       '@vercel/sandbox': '>=1.0.0'
     peerDependenciesMeta:
@@ -16352,15 +16352,15 @@ snapshots:
       '@phc/format': 1.0.0
       '@poppinss/utils': 6.10.1
 
-  '@agent-browser/eve@0.43.0(eve@1.1.0)':
+  '@agent-browser/eve@0.45.0(eve@1.1.0)':
     dependencies:
-      '@agent-browser/sandbox': 0.43.0
+      '@agent-browser/sandbox': 0.45.0
       eve: 1.1.0(@nuxt/kit@4.6.4(@nuxt/schema@4.6.4)(confbox@0.3.1)(dotenv@17.4.2)(giget@3.3.0)(jiti@2.7.0)(magic-string@1.4.5)(mlly@1.8.2)(oxc-parser@0.158.0)(rolldown@1.3.2)(unplugin@3.7.0(esbuild@0.28.2)(rolldown@1.3.2)(rollup@4.68.0)(vite@8.3.8(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))))(@nuxt/schema@4.6.4)(@opentelemetry/api@1.10.0)(ai@7.0.173(zod@4.6.7))(next@16.4.6(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(babel-plugin-macros@3.1.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)(svelte@5.57.3(@typescript-eslint/types@8.59.1))(vite@8.3.8(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.45(typescript@7.0.2))
       zod: 4.6.7
     transitivePeerDependencies:
       - '@vercel/sandbox'
 
-  '@agent-browser/sandbox@0.43.0': {}
+  '@agent-browser/sandbox@0.45.0': {}
 
   '@ai-sdk/gateway@4.0.146(zod@4.6.7)':
     dependencies:
