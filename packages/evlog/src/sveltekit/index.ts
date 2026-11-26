@@ -1,3 +1,4 @@
+import { isHttpError, isRedirect } from '@sveltejs/kit'
 import type { RequestLogger } from '../types'
 import { registerDiskPrettyErrorSnippetReader } from '../shared/register-disk-snippet'
 import { defineFrameworkIntegration } from '../shared/integration'
@@ -187,6 +188,9 @@ export function evlog(options: EvlogSvelteKitOptions = {}): SvelteKitHandle {
 
         return finishResponse(response)
       } catch (error) {
+        // redirect() and error() are control flow Kit turns into the response, not application errors
+        if (isRedirect(error) || isHttpError(error)) throw error
+
         await finish({ error: error instanceof Error ? error : new Error(String(error)) })
 
         // Return structured JSON for EvlogError (like NextJS withEvlog / Nuxt errorHandler)

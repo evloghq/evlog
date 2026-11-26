@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from 'vitest'
+import { error, redirect } from '@sveltejs/kit'
 import { initLogger } from '../../src/logger'
 import type { RequestLogger } from '../../src/types'
 import { evlog, evlogHandleError, createEvlogHooks, useLogger } from '../../src/sveltekit/index'
@@ -168,6 +169,18 @@ describe('evlog/sveltekit', () => {
     })
 
     await expect(handle({ event, resolve })).rejects.toThrow('Unexpected crash')
+  })
+
+  it.each([
+    ['a redirect', () => redirect(303, '/login'), { status: 303, location: '/login' }],
+    ['an http error', () => error(403, 'Admin access required'), { status: 403, body: { message: 'Admin access required' } }],
+  ])('rethrows %s thrown by a later hook without logging it', async (_, throwFromResolve, thrown) => {
+    const { drain } = createPipelineSpies()
+    const handle = evlog({ drain })
+    const resolve = vi.fn(throwFromResolve)
+
+    await expect(handle({ event: createMockEvent('GET', '/admin'), resolve })).rejects.toMatchObject(thrown)
+    expect(drain).not.toHaveBeenCalled()
   })
 
   it('intercepts 500 response when handleError logged an EvlogError', async () => {
