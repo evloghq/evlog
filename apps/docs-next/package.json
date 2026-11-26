@@ -8,7 +8,9 @@
     "build": "nuxt build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "capture": "node scripts/capture-events.ts"
   },
   "dependencies": {
     "@number-flow/vue": "^0.5.2",
@@ -22,6 +24,9 @@
   },
   "devDependencies": {
     "@iconify-json/logos": "^1.2.17",
-    "eslint": "^9.39.5"
+    "eslint": "^9.39.5",
+    "evlog": "workspace:*",
+    "hono": "^4.13.12",
+    "vitest": "^4.1.12"
   }
 }

@@ -1,16 +1,34 @@
 <script setup lang="ts">
-const props = defineProps<{
-  /** Sections to list; defaults to the current page's. */
-  links?: { id: string, text: string }[]
-  /** Draw the sidebar's tree (`.d-rail`) instead of the side column's single line. */
-  rail?: boolean
-}>()
+import type { TocLink } from '~/composables/useDocsPage'
 
-const current = useState<{ id: string, text: string }[]>('docs-toc', () => [])
+const props = defineProps<{ links: TocLink[] }>()
+
 const reading = useDocsReading()
+const index = computed(() => props.links.findIndex(link => link.id === reading.value))
 
-const toc = computed(() => props.links ?? current.value)
-const index = computed(() => toc.value.findIndex(link => link.id === reading.value))
+// One bright segment on the hairline, moving to the section being read.
+const list = useTemplateRef<HTMLElement>('list')
+const segment = reactive({ y: 0, h: 0, travels: false })
+
+function place() {
+  const row = list.value?.querySelectorAll<HTMLElement>('li')[index.value]
+  if (!row) return
+  segment.y = row.offsetTop + 5
+  segment.h = row.offsetHeight - 10
+}
+
+watch(index, (now, before) => {
+  // Appearing is not travelling: the segment fades in where the reader is.
+  if (before < 0) segment.travels = false
+  nextTick(() => {
+    place()
+    requestAnimationFrame(() => {
+      segment.travels = true
+    })
+  })
+})
+
+onMounted(place)
 
 function go(event: MouseEvent, id: string) {
   const target = document.getElementById(id)
@@ -23,41 +41,25 @@ function go(event: MouseEvent, id: string) {
 </script>
 
 <template>
-  <ul v-if="rail" class="d-rail">
-    <li
-      v-for="(link, i) in toc"
-      :key="link.id"
-      :data-lit="reading === link.id || undefined"
-      :data-path="i < index || undefined"
-    >
-      <a
-        :href="`#${link.id}`"
-        class="-ml-2 block rounded-[6px] py-1 pr-2 pl-2 text-[13px]/5 transition-colors duration-150"
-        :class="reading === link.id ? 'text-highlighted' : 'text-dimmed hover:text-highlighted'"
-        :aria-current="reading === link.id ? 'location' : undefined"
-        @click="go($event, link.id)"
-      >
-        {{ link.text }}
-      </a>
-    </li>
-  </ul>
-
-  <ul v-else class="relative before:absolute before:inset-y-0 before:left-[3px] before:w-px before:bg-(--d-line-strong)">
-    <li v-for="(link, i) in toc" :key="link.id" class="relative">
-      <span
-        aria-hidden="true"
-        class="absolute inset-y-1 left-[3px] w-px bg-(--ui-text-highlighted) transition-opacity duration-200"
-        :class="reading === link.id ? 'opacity-100' : 'opacity-0'"
-      />
-      <a
-        :href="`#${link.id}`"
-        class="block py-[5px] pl-5 text-[13px]/[1.45] transition-colors duration-200"
-        :class="reading === link.id ? 'text-highlighted' : i < index ? 'text-muted hover:text-highlighted' : 'text-dimmed hover:text-highlighted'"
-        :aria-current="reading === link.id ? 'location' : undefined"
-        @click="go($event, link.id)"
-      >
-        {{ link.text }}
-      </a>
-    </li>
-  </ul>
+  <div ref="list" class="relative border-l border-(--d-line) text-[13px]/[1.45]">
+    <span
+      aria-hidden="true"
+      class="absolute top-0 -left-px w-px bg-(--ui-text-highlighted)"
+      :class="[index < 0 ? 'opacity-0' : 'opacity-100', segment.travels ? 'transition-[transform,height,opacity] duration-[320ms] ease-(--d-ease) motion-reduce:transition-none' : 'transition-opacity duration-200']"
+      :style="{ transform: `translateY(${segment.y}px)`, height: `${segment.h}px` }"
+    />
+    <ul>
+      <li v-for="(link, i) in links" :key="link.id">
+        <a
+          :href="`#${link.id}`"
+          class="block py-[5px] pl-4 transition-colors duration-150"
+          :class="reading === link.id ? 'text-highlighted' : i < index ? 'text-muted hover:text-highlighted' : 'text-dimmed hover:text-highlighted'"
+          :aria-current="reading === link.id ? 'location' : undefined"
+          @click="go($event, link.id)"
+        >
+          {{ link.text }}
+        </a>
+      </li>
+    </ul>
+  </div>
 </template>

@@ -1,4 +1,3 @@
-import { unrefElement } from '@vueuse/core'
 import type { TimedEvent } from '~/composables/useTimedSequence'
 
 export interface UseFigureOptions {
@@ -11,17 +10,19 @@ export interface UseFigureOptions {
 
 /**
  * Plays a docs figure once, the first time it is mostly in view, then holds its last frame.
- * Bind `root` to the figure and wire `replay` to its Replay button.
+ * Bind `root` to the `DocsFigure`, pass it `playing` and `duration` for its progress line, and wire `replay`.
  */
 export function useFigure(opts: UseFigureOptions) {
-  const root = ref()
+  const root = ref<{ frame: HTMLElement | null }>()
   const finished = ref(false)
   const still = ref(false)
+  const playing = ref(false)
 
   const steps = [...opts.steps].sort((a, b) => a.at - b.at)
   const end = (steps.at(-1)?.at ?? 0) + 400
   steps.push({ at: end, run: () => {
     finished.value = true
+    playing.value = false
   } })
 
   const sequence = useTimedSequence({
@@ -42,10 +43,11 @@ export function useFigure(opts: UseFigureOptions) {
       finished.value = true
       return
     }
-    const el = unrefElement(root)
+    const el = root.value?.frame
     if (!el) return
     observer = new IntersectionObserver(([entry]) => {
       if (entry?.isIntersecting) {
+        playing.value = true
         sequence.start()
         observer?.disconnect()
       }
@@ -55,5 +57,10 @@ export function useFigure(opts: UseFigureOptions) {
 
   onBeforeUnmount(() => observer?.disconnect())
 
-  return { root, finished, still, replay: sequence.restart }
+  function replay() {
+    playing.value = true
+    sequence.restart()
+  }
+
+  return { root, finished, still, playing, duration: end, replay }
 }

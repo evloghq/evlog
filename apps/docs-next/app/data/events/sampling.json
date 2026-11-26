@@ -1,0 +1,54 @@
+{
+  "scenario": "sampling",
+  "via": "evlog/hono",
+  "evlog": "3.0.0-beta.4",
+  "steps": [
+    {
+      "id": "unsampled",
+      "label": "No sampling",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/users \u001b[32m200\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m└─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/users",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "status": 200,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    },
+    {
+      "id": "rates",
+      "label": "rates: { info: 10 }",
+      "pretty": [],
+      "event": null,
+      "dropped": "Nothing printed. This request is one of the nine in ten that head sampling drops."
+    },
+    {
+      "id": "keep",
+      "label": "keep: [{ path }]",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/payments/charge \u001b[32m200\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m└─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/payments/charge",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "status": 200,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    }
+  ]
+}

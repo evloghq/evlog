@@ -117,7 +117,7 @@ const selected = computed({
 </script>
 
 <template>
-  <div ref="root" class="framework-tabs my-7 overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised)" data-section="framework-tabs">
+  <div ref="root" class="framework-tabs d-block my-7 overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised)" data-section="framework-tabs">
     <div class="flex h-10 items-center gap-2 border-b border-(--d-line) pr-1.5 pl-4">
       <template v-for="(tab, index) in items" :key="tab.key">
         <span
@@ -147,7 +147,7 @@ const selected = computed({
         aria-label="Framework"
         class="ml-auto"
         :content="{ align: 'end', sideOffset: 6 }"
-        :ui="{ base: 'h-7 px-2 text-[12.5px]/5 md:text-[12.5px]/5 font-normal shrink-0 rounded-[8px] text-muted hover:text-highlighted hover:bg-(--d-raised-strong) transition-[color,background-color,transform] duration-150 active:scale-[0.97]', trailingIcon: 'size-3.5 text-dimmed', content: 'min-w-52 rounded-[10px] bg-(--ui-bg) ring-(--d-line-strong)', viewport: 'framework-picker-viewport', item: 'rounded-[6px] text-[13px]', itemLeadingIcon: 'text-default' }"
+        :ui="{ base: 'h-7 ps-2 pe-7 text-[12.5px]/5 md:text-[12.5px]/5 font-normal shrink-0 rounded-[8px] text-muted hover:text-highlighted hover:bg-(--d-raised-strong) transition-[color,background-color,transform] duration-150 active:scale-[0.97]', trailingIcon: 'size-3.5 text-dimmed', content: 'min-w-52 rounded-[10px] bg-(--ui-bg) ring-(--d-line-strong)', viewport: 'framework-picker-viewport', item: 'rounded-[6px] text-[13px]', itemLeadingIcon: 'text-default' }"
       >
         <span
           v-for="(tab, index) in items"

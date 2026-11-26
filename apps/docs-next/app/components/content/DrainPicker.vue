@@ -52,11 +52,13 @@ const config = computed(() => [
   `  drain: ${drain.value.factory}(),`,
   '})',
 ].join('\n'))
+
+const env = computed(() => drain.value.env.map(([key, value]) => `${key}=${value}`).join('\n'))
 </script>
 
 <template>
-  <figure class="not-prose my-9">
-    <div class="grid overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised) md:grid-cols-[12.5rem_minmax(0,1fr)]">
+  <figure class="not-prose my-10">
+    <div class="d-block grid overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised) md:grid-cols-[12.5rem_minmax(0,1fr)]">
       <div
         ref="list"
         role="radiogroup"
@@ -92,8 +94,9 @@ const config = computed(() => [
       </div>
 
       <div class="flex min-w-0 flex-col">
-        <div class="flex h-10 items-center border-b border-(--d-line) px-4 font-mono text-[12.5px] text-muted">
+        <div class="flex h-10 items-center border-b border-(--d-line) pr-1.5 pl-4 font-mono text-[12.5px] text-muted">
           evlog.config.ts
+          <DocsCopyButton class="ml-auto font-sans" :source="() => config" />
         </div>
         <pre class="overflow-x-auto px-4 py-4 font-mono text-[13px]/[1.75] text-default"><code><span style="color: #ff518d">import</span> { defineEvlog } <span style="color: #ff518d">from</span> <span style="color: #00ca52">'evlog'</span>
 <span style="color: #ff518d">import</span> { <span :key="`f-${selected}`" :class="chosen && 'd-flash'">{{ drain.factory }}</span> } <span style="color: #ff518d">from</span> <span :key="`e-${selected}`" style="color: #00ca52" :class="chosen && 'd-flash'">'{{ drain.entry }}'</span>
@@ -103,8 +106,9 @@ const config = computed(() => [
   drain: <span :key="`c-${selected}`" style="color: #c472fb" :class="chosen && 'd-flash'">{{ drain.factory }}</span>(),
 })</code></pre>
 
-        <div class="flex h-10 items-center border-y border-(--d-line) px-4 font-mono text-[12.5px] text-muted">
+        <div class="flex h-10 items-center border-y border-(--d-line) pr-1.5 pl-4 font-mono text-[12.5px] text-muted">
           .env
+          <DocsCopyButton v-if="drain.env.length" class="ml-auto font-sans" :source="() => env" />
         </div>
         <pre class="min-h-[5.5rem] overflow-x-auto px-4 py-4 font-mono text-[13px]/[1.75]"><code v-if="drain.env.length" :key="`env-${selected}`" :class="chosen && 'd-tab-in'"><template v-for="[key, value] in drain.env" :key><span class="text-highlighted">{{ key }}</span><span class="text-dimmed">=</span><span class="text-muted">{{ value }}</span>
 </template></code><code v-else :key="`none-${selected}`" class="font-sans text-[13px] text-dimmed" :class="chosen && 'd-tab-in'">Nothing to set. It works without credentials.</code></pre>
@@ -121,7 +125,7 @@ const config = computed(() => [
         </div>
       </div>
     </div>
-    <figcaption class="mt-3 px-1 text-[13px]/5 text-dimmed">
+    <figcaption class="mt-3 text-[13px]/5 text-pretty text-dimmed">
       Pick a destination. The config is one import and one line, and the credentials are read from the environment.
     </figcaption>
   </figure>

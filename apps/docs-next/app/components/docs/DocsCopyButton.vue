@@ -24,7 +24,7 @@ async function run() {
   >
     <span class="d-stack items-center" aria-hidden="true">
       <span class="d-copy-label" :data-on="!copied">{{ props.label }}</span>
-      <span class="d-copy-label inline-flex items-center gap-1.5 text-highlighted" :data-on="copied">
+      <span class="d-copy-label inline-flex items-center text-highlighted" :data-on="copied">
         <svg viewBox="0 0 12 12" class="size-3" fill="none">
           <path
             d="M2.5 6.4 4.9 8.7 9.5 3.6"
@@ -37,7 +37,6 @@ async function run() {
             :data-on="copied"
           />
         </svg>
-        Copied
       </span>
     </span>
   </button>
@@ -45,7 +44,7 @@ async function run() {
 
 <style scoped>
 .d-copy-label {
-  justify-self: end;
+  justify-self: center;
   transition: opacity 200ms var(--d-ease), filter 200ms var(--d-ease), transform 200ms var(--d-ease);
 }
 

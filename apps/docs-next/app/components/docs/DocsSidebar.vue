@@ -1,10 +1,10 @@
 <script setup lang="ts">
+import { useResizeObserver } from '@vueuse/core'
 import type { SidebarBlock, SidebarItem } from '~/composables/useDocsSidebar'
 
 const route = useRoute()
 const content = useDocsContent()
 const blocks = useDocsSidebar()
-const tocs = useState<Record<string, { id: string, text: string }[]>>('docs-tocs', () => ({}))
 
 const nav = useTemplateRef<HTMLElement>('nav')
 
@@ -33,10 +33,6 @@ function frameworkItem(item: SidebarItem) {
   return isWithin(item) ? undefined : frameworkOf.value.get(item.path)
 }
 
-function tocOf(item: SidebarItem) {
-  return item.children.length ? undefined : tocs.value[item.path]
-}
-
 function holdsCurrent(block: SidebarBlock) {
   return block.items.some(isWithin)
 }
@@ -57,7 +53,56 @@ function toggle(block: SidebarBlock) {
     : [...folded.value, block.label]
 }
 
+// One highlight sits behind the current page and slides to the next one. Until it is placed, the
+// current link draws its own, so the server's page already shows where the reader is.
+const marker = reactive({ x: 0, y: 0, w: 0, h: 0, placed: false, travels: false })
+
+function place() {
+  const el = nav.value
+  const current = el?.querySelector<HTMLElement>('[aria-current="page"]')
+  if (!el || !current) {
+    marker.placed = false
+    return
+  }
+  const from = el.getBoundingClientRect()
+  const to = current.getBoundingClientRect()
+  marker.x = to.left - from.left
+  marker.y = to.top - from.top
+  marker.w = to.width
+  marker.h = to.height
+  marker.placed = true
+}
+
+// A fainter highlight follows the pointer from entry to entry, so the list answers before a click.
+const hover = reactive({ x: 0, y: 0, w: 0, h: 0, on: false, travels: false })
+
+function onOver(event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return
+  const el = nav.value
+  const link = (event.target as HTMLElement).closest<HTMLElement>('a')
+  if (!el || !link || link.getAttribute('aria-current') === 'page') {
+    hover.on = false
+    return
+  }
+  const from = el.getBoundingClientRect()
+  const to = link.getBoundingClientRect()
+  // Appearing is not travelling: it fades in under the pointer.
+  if (!hover.on) hover.travels = false
+  Object.assign(hover, { x: to.left - from.left, y: to.top - from.top, w: to.width, h: to.height, on: true })
+  requestAnimationFrame(() => {
+    hover.travels = true
+  })
+}
+
+watch(() => route.path, () => nextTick(place), { flush: 'post' })
+// Folding groups and sections move the entries below them; the marker follows.
+useResizeObserver(nav, place)
+
 onMounted(() => {
+  place()
+  requestAnimationFrame(() => {
+    marker.travels = true
+  })
   const scroller = nav.value?.closest<HTMLElement>('.d-scroll')
   const current = nav.value?.querySelector<HTMLElement>('[aria-current="page"]')
   if (scroller && current && current.offsetTop > scroller.clientHeight * 0.7) {
@@ -67,12 +112,32 @@ onMounted(() => {
 </script>
 
 <template>
-  <nav ref="nav" aria-label="Documentation" class="flex flex-col gap-6 text-[14px]" :data-folding="folding || undefined">
+  <nav
+    ref="nav"
+    aria-label="Documentation"
+    class="relative isolate flex flex-col gap-6 text-[14px]"
+    :data-folding="folding || undefined"
+    @pointerover="onOver"
+    @pointerleave="hover.on = false"
+  >
+    <span
+      aria-hidden="true"
+      class="pointer-events-none absolute top-0 left-0 -z-10 rounded-(--d-r-md) bg-(--d-raised)"
+      :class="[hover.on ? 'opacity-100' : 'opacity-0', hover.travels ? 'transition-[transform,width,height,opacity] duration-200 ease-(--d-ease) motion-reduce:transition-none' : 'transition-opacity duration-150']"
+      :style="{ transform: `translate(${hover.x}px, ${hover.y}px)`, width: `${hover.w}px`, height: `${hover.h}px` }"
+    />
+    <span
+      aria-hidden="true"
+      class="pointer-events-none absolute top-0 left-0 -z-10 rounded-(--d-r-md) bg-(--d-raised-strong)"
+      :class="[marker.placed ? 'opacity-100' : 'opacity-0', marker.travels ? 'transition-[transform,width,height,opacity] duration-[300ms] ease-(--d-ease) motion-reduce:transition-none' : '']"
+      :style="{ transform: `translate(${marker.x}px, ${marker.y}px)`, width: `${marker.w}px`, height: `${marker.h}px` }"
+    />
+
     <div v-for="(block, index) in blocks" :key="block.label ?? index">
       <button
         v-if="block.label"
         type="button"
-        class="group/label -ml-1 mb-1 flex items-center gap-1.5 rounded-(--d-r-sm) px-1 py-0.5 text-[12.5px] text-dimmed transition-colors duration-150 hover:text-muted disabled:cursor-default disabled:hover:text-dimmed"
+        class="group/label mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-dimmed transition-colors duration-150 hover:text-muted disabled:cursor-default disabled:hover:text-dimmed"
         :aria-expanded="isOpen(block)"
         :disabled="holdsCurrent(block)"
         @click="toggle(block)"
@@ -91,19 +156,23 @@ onMounted(() => {
 
       <div class="d-collapse -mx-4" :data-open="isOpen(block)" :inert="!isOpen(block)">
         <div class="px-4">
-          <ul class="flex flex-col">
-            <li v-for="item in block.items" :key="item.path" class="relative" :data-lit="isCurrent(item) || undefined" :data-fw-item="frameworkItem(item)">
+          <ul class="flex flex-col gap-px">
+            <li v-for="item in block.items" :key="item.path" :data-fw-item="frameworkItem(item)">
               <NuxtLink
                 :to="item.path"
                 :aria-current="isCurrent(item) ? 'page' : undefined"
-                class="-mx-2 block rounded-[6px] px-2 py-[5px] transition-colors duration-150"
-                :class="isCurrent(item) ? 'bg-(--d-raised-strong) text-highlighted' : isWithin(item) ? 'text-highlighted' : 'text-muted hover:text-highlighted'"
+                class="-mx-2.5 block rounded-(--d-r-md) px-2.5 py-[5px] transition-colors duration-150"
+                :class="[
+                  isCurrent(item) || (item.children.length && isWithin(item)) ? 'text-highlighted' : 'text-muted hover:text-highlighted',
+                  isCurrent(item) && !marker.placed ? 'bg-(--d-raised-strong)' : '',
+                ]"
               >
                 {{ item.title }}
               </NuxtLink>
 
               <div v-if="item.children.length" class="d-fold" :data-open="isWithin(item)" :inert="!isWithin(item)">
                 <div>
+                  <!-- The tree evlog prints its events with: the way to the current page is lit. -->
                   <ul class="d-rail">
                     <li
                       v-for="(child, i) in item.children"
@@ -114,25 +183,16 @@ onMounted(() => {
                       <NuxtLink
                         :to="child.path"
                         :aria-current="isCurrent(child) ? 'page' : undefined"
-                        class="-ml-2 block rounded-[6px] py-1 pr-2 pl-2 text-[13.5px]/5 transition-colors duration-150"
-                        :class="isCurrent(child) ? 'bg-(--d-raised-strong) text-highlighted' : 'text-muted hover:text-highlighted'"
+                        class="-mr-2.5 -ml-2 block rounded-(--d-r-md) py-1 pr-2.5 pl-2 text-[13.5px]/5 transition-colors duration-150"
+                        :class="[
+                          isCurrent(child) ? 'text-highlighted' : 'text-muted hover:text-highlighted',
+                          isCurrent(child) && !marker.placed ? 'bg-(--d-raised-strong)' : '',
+                        ]"
                       >
                         {{ child.title }}
                       </NuxtLink>
-
-                      <div v-if="tocOf(child)?.length" class="d-fold xl:hidden" :data-open="isCurrent(child)" :inert="!isCurrent(child)">
-                        <div>
-                          <DocsToc rail :links="tocOf(child)" />
-                        </div>
-                      </div>
                     </li>
                   </ul>
-                </div>
-              </div>
-
-              <div v-else-if="tocOf(item)?.length" class="d-fold xl:hidden" :data-open="isCurrent(item)" :inert="!isCurrent(item)">
-                <div>
-                  <DocsToc rail :links="tocOf(item)" />
                 </div>
               </div>
             </li>

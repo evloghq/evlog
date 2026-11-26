@@ -3,22 +3,15 @@ import { useResizeObserver } from '@vueuse/core'
 
 type PartId = 'events' | 'errors' | 'drains' | 'audit' | 'signals' | 'map' | 'skills' | 'telemetry'
 
-interface Line {
-  /** Tree prefix, as evlog's pretty printer draws it. */
-  tree: string
-  key?: string
-  value: string
-  parts: PartId[]
-}
+// The checkout request of the quick start, as evlog printed it after its last step.
+const { steps: captured } = eventScenarios.checkout!
+const lines = prettyLines(captured, captured.length - 1).map(line => ({ ...line, parts: partsOf(line.field) }))
 
-const lines: Line[] = [
-  { tree: '', value: 'POST /api/checkout 402 in 234ms', parts: ['events', 'drains', 'signals'] },
-  { tree: '├─', key: 'user', value: 'id=usr_123 plan=pro', parts: ['events', 'drains'] },
-  { tree: '├─', key: 'cart', value: 'items=3 total=9999', parts: ['events', 'drains'] },
-  { tree: '└─', key: 'error', value: 'Payment failed', parts: ['errors', 'drains', 'signals'] },
-  { tree: '    ', key: 'why', value: 'Card declined by issuer', parts: ['errors', 'drains'] },
-  { tree: '    ', key: 'fix', value: 'Try a different payment method', parts: ['errors', 'drains'] },
-]
+function partsOf(field: string): PartId[] {
+  if (field === 'head') return ['events', 'drains', 'signals']
+  if (field === 'error') return ['errors', 'drains', 'signals']
+  return ['events', 'drains']
+}
 
 interface Part {
   id: PartId
@@ -78,7 +71,7 @@ onMounted(() => {
   })
 })
 
-function lit(line: Line) {
+function lit(line: { parts: PartId[] }) {
   return line.parts.includes(active.value) || !lines.some(l => l.parts.includes(active.value))
 }
 </script>
@@ -90,11 +83,15 @@ function lit(line: Line) {
       aria-label="A wide event as evlog prints it"
     ><span
       v-for="(line, i) in lines"
-      :key="i"
-      class="d-step block transition-[opacity,color] duration-200"
+      :key="line.key"
+      class="d-step block whitespace-pre transition-[opacity,color] duration-200"
       :data-on="still || shown > i"
       :style="{ opacity: shown > i || still ? (lit(line) ? 1 : 0.28) : undefined }"
-    ><template v-if="i === 0"><span class="text-dimmed">10:23:45.612 </span><span class="text-(--d-warn)">ERROR</span><span class="text-dimmed"> [shop] </span><span class="text-highlighted">POST /api/checkout </span><span class="text-(--d-warn)">402</span><span class="text-dimmed"> in </span><span class="text-highlighted">234ms</span></template><template v-else><span class="text-dimmed">  {{ line.tree }} </span><span class="text-muted">{{ line.key }}:</span> <span class="text-default">{{ line.value }}</span></template></span></pre>
+    ><span
+      v-for="(span, j) in line.spans"
+      :key="j"
+      :class="[eventToneClass[span.tone], span.bold ? 'font-medium' : '']"
+    >{{ span.text }}</span>{{ line.spans.length ? '' : ' ' }}</span></pre>
 
     <div class="border-t border-(--d-line) px-5 pt-4 pb-5 sm:px-6">
       <div ref="list" role="tablist" aria-label="Parts of evlog" class="relative -ml-2 flex flex-wrap gap-1">

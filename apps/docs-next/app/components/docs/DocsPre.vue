@@ -46,7 +46,7 @@ const header = computed(() => !grouped && !props.hideHeader && (Boolean(props.fi
 <template>
   <div
     class="group/pre relative"
-    :class="grouped ? '' : 'my-7 overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised)'"
+    :class="grouped ? '' : 'd-block my-7 overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised)'"
   >
     <div v-if="header" class="flex h-10 items-center justify-between gap-3 border-b border-(--d-line) pr-1.5" :class="commands ? 'pl-1.5' : 'pl-4'">
       <DocsPmSwitch v-if="commands" />
@@ -56,7 +56,7 @@ const header = computed(() => !grouped && !props.hideHeader && (Boolean(props.fi
 
     <pre
       ref="base"
-      class="overflow-x-auto px-4 py-4 font-mono text-[13px]/[1.75] text-default [&_.line]:block [&_.line.highlight]:-mx-4 [&_.line.highlight]:bg-(--d-raised-strong) [&_.line.highlight]:px-4"
+      class="d-scroll-x px-4 py-4 font-mono text-[13px]/[1.75] text-default [&_.line]:block [&_.line.highlight]:-mx-4 [&_.line.highlight]:bg-(--d-raised-strong) [&_.line.highlight]:px-4"
       :class="props.class"
       v-bind="$attrs"
     ><code v-if="commands"><span v-for="(line, i) in commands" :key="i" class="line"><span style="color: #c472fb; --shiki-dark: #c472fb">{{ line.bin }}</span> <template v-if="line.verb"><span style="color: #ff518d; --shiki-dark: #ff518d">{{ line.verb }}</span> </template>{{ line.rest }}</span></code><slot v-else /></pre>

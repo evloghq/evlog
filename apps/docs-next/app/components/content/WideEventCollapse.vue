@@ -36,7 +36,7 @@ const LINE = 200
 const FOLD_AT = 200 + lines.length * LINE + 700
 const FOLD = 380
 
-const { root, finished, still, replay } = useFigure({
+const { root, finished, still, playing, duration, replay } = useFigure({
   steps: [
     ...lines.map((_, i) => ({ at: 200 + i * LINE, run: () => {
       shown.value = i + 1
@@ -63,6 +63,8 @@ function fieldShown(key: string) {
     caption="The same request as six log lines and as one wide event. Each line becomes a field; the event is written once, when the response is sent."
     :finished
     :still
+    :playing
+    :duration
     @replay="replay"
   >
     <div class="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">

@@ -50,7 +50,7 @@ const frameworkOf = (item: unknown) => (item as { framework: Framework }).framew
     class="w-full"
     :content="{ align: 'start', sideOffset: 6 }"
     :ui="{
-      base: 'group/fw flex h-9 w-full items-center gap-2.5 rounded-none px-[7px] text-left text-[13.5px] transition-colors duration-150 hover:bg-(--d-raised-strong) data-[state=open]:bg-(--d-raised-strong)',
+      base: 'group/fw flex h-9 w-full items-center gap-2.5 rounded-none px-[9px] text-left text-[13.5px] transition-colors duration-150 hover:bg-(--d-raised-strong) data-[state=open]:bg-(--d-raised-strong)',
       trailing: 'hidden',
       content: 'w-[max(var(--reka-combobox-trigger-width),17rem)] max-h-[min(28rem,var(--reka-combobox-content-available-height,28rem))] rounded-[10px] bg-(--ui-bg) ring-(--d-line-strong)',
       input: 'border-b border-(--d-line) [&_input]:h-10 [&_input]:text-[13px] [&_[data-slot=leadingIcon]]:size-3.5',

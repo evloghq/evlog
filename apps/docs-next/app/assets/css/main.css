@@ -113,32 +113,92 @@
 
 /*
  * Docs tokens. Lines and surfaces are opaque, so a joint or a crossing never draws brighter.
- * Blue only means kept, emitted or current; amber only means an error.
- * Radius steps by size: 4px inline, 8px controls and rows, 12px blocks.
+ * Blue only means current or added. Radius steps by size: 4px inline, 6px controls and rows, 10px blocks.
  * Set on the root too, so menus portalled out of the shell read the same tokens.
  */
 :root:has(.docs-shell),
 .docs-shell {
   --ui-bg: #09090b;
-  --ui-text-dimmed: #6b6b74;
+  --ui-text-dimmed: #7c7c86;
   --ui-text-muted: #a3a3ad;
   --ui-text-default: #d4d4d9;
-  --ui-text-highlighted: #f0f0f2;
+  --ui-text-highlighted: #f4f4f5;
 
-  --d-line: #1c1c20;
-  --d-line-strong: #2a2a30;
+  --d-line: #1d1d21;
+  --d-line-strong: #2c2c32;
   --d-raised: #0e0e11;
-  --d-raised-strong: #17171b;
+  --d-raised-strong: #18181c;
   --d-signal: #2853ff;
   --d-signal-text: #8fa3ff;
   --d-warn: #e8a54b;
 
+  /* What evlog prints to a terminal, in the code theme's colours. */
+  --d-out-key: #50a8ff;
+  --d-out-ok: #00ca52;
+  --d-out-warn: #f5a623;
+  --d-out-error: #ff5e63;
+
   --d-r-sm: 4px;
-  --d-r-md: 8px;
-  --d-r-lg: 12px;
+  --d-r-md: 6px;
+  --d-r-lg: 10px;
 
   --d-ease: cubic-bezier(0.23, 1, 0.32, 1);
   --d-ease-move: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* A code block: a lit top edge, and a border that answers the pointer. */
+.d-block {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
+  transition: border-color 200ms ease;
+}
+
+@media (hover: hover) {
+  .d-block:hover {
+    border-color: var(--d-line-strong);
+  }
+}
+
+/* How far down the page the reader is, drawn on the top bar's own hairline. */
+.docs-progress {
+  display: none;
+}
+
+@supports (animation-timeline: scroll()) {
+  .docs-progress {
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    display: block;
+    height: 1px;
+    background: var(--ui-text-muted);
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: docs-progress linear both;
+    animation-timeline: scroll(root);
+  }
+
+  @keyframes docs-progress {
+    to { transform: scaleX(1); }
+  }
+}
+
+/* A page arrives with a short rise once the reader has navigated, never on first load. */
+.d-page-in {
+  animation: d-page-in 280ms var(--d-ease) both;
+}
+
+@keyframes d-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .d-page-in {
+    animation: none;
+  }
 }
 
 .docs-shell :focus {
@@ -265,6 +325,28 @@
   border-color: var(--rail-path);
 }
 
+/*
+ * A table is ruled, not boxed: one hairline under every row, the last one closing it. The two lines
+ * around the row under the pointer brighten, as a code block's border does. Borders are collapsed,
+ * so a row's top line belongs to the row above it.
+ */
+.d-table tr {
+  border-bottom: 1px solid var(--d-line);
+  transition: border-color 150ms ease;
+}
+
+@media (hover: hover) {
+  .d-table tbody tr:hover,
+  .d-table tbody tr:has(+ tr:hover),
+  .d-table thead:has(+ tbody > tr:first-child:hover) tr {
+    border-bottom-color: var(--d-line-strong);
+  }
+
+  .d-table tbody tr:hover td:not(:first-child) {
+    color: var(--ui-text-default);
+  }
+}
+
 /* A collapsible block that animates its real height. */
 .d-collapse {
   display: grid;
@@ -363,6 +445,39 @@
     6% { --d-fade-top: 32px; }
     94% { --d-fade-bottom: 40px; }
     100% { --d-fade-top: 32px; --d-fade-bottom: 0px; }
+  }
+}
+
+/* Code that runs past its window fades at the edge that has more, following the scroll position. */
+@property --d-fade-left {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --d-fade-right {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+.d-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent, #000 var(--d-fade-left), #000 calc(100% - var(--d-fade-right)), transparent);
+}
+
+@supports (animation-timeline: scroll()) {
+  .d-scroll-x {
+    animation: d-scroll-x-fade linear both;
+    animation-timeline: scroll(self inline);
+  }
+
+  @keyframes d-scroll-x-fade {
+    0% { --d-fade-left: 0px; --d-fade-right: 48px; }
+    8% { --d-fade-left: 32px; }
+    92% { --d-fade-right: 48px; }
+    100% { --d-fade-left: 32px; --d-fade-right: 0px; }
   }
 }
 

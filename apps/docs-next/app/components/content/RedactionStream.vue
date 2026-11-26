@@ -1,30 +1,12 @@
 <script setup lang="ts">
-interface Field {
-  key: string
-  raw: string
-  masked?: string
-  /** The built-in that matched: a value pattern, or `secrets` for a key ending in password, secret or token. */
-  rule?: string
-}
-
-const fields: Field[] = [
-  { key: 'user.id', raw: '42' },
-  { key: 'user.email', raw: 'alice@example.com', masked: 'a***@***.com', rule: 'email' },
-  { key: 'user.phone', raw: '+33 6 12 34 56 78', masked: '+33 ****5678', rule: 'phone' },
-  { key: 'user.ip', raw: '192.168.1.42', masked: '***.***.***.42', rule: 'ipv4' },
-  { key: 'payment.card', raw: '4111111111111111', masked: '****1111', rule: 'creditCard' },
-  { key: 'headers.authorization', raw: 'Bearer sk_live_abc123def', masked: 'Bearer ***', rule: 'bearer' },
-  { key: 'db.url', raw: 'postgres://app:hunter2@db:5432', masked: 'postgres://app:***@db:5432', rule: 'urlPassword' },
-  { key: 'account.password', raw: 'hunter2-correct-horse', masked: '[REDACTED]', rule: 'secrets' },
-  { key: 'cart.total', raw: '9999' },
-]
+const fields = redactionFields
 
 const ROW_HEIGHT = 36
 const ROW = 300
 
 const scanned = ref(0)
 
-const { root, finished, still, replay } = useFigure({
+const { root, finished, still, playing, duration, replay } = useFigure({
   steps: fields.map((_, i) => ({ at: 300 + i * ROW, run: () => {
     scanned.value = i + 1
   } })),
@@ -45,12 +27,14 @@ const scanning = computed(() => scanned.value > 0 && scanned.value < fields.leng
     caption="The event as a drain receives it in production. Values keep enough shape to debug; a key that names a secret loses its value entirely."
     :finished
     :still
+    :playing
+    :duration
     @replay="replay"
   >
     <div class="relative overflow-x-auto px-5 py-4 sm:px-6">
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute inset-x-3 top-4 h-px rounded-full bg-(--d-signal) shadow-[0_0_12px_1px_color-mix(in_srgb,var(--d-signal)_70%,transparent)] transition-[transform,opacity] ease-(--d-ease-move)"
+        class="pointer-events-none absolute inset-x-0 top-4 h-px bg-(--d-signal) transition-[transform,opacity] ease-(--d-ease-move)"
         :style="{
           transform: `translateY(${scanned * ROW_HEIGHT}px)`,
           opacity: scanning ? 1 : 0,

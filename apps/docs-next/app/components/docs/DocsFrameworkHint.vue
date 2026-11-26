@@ -11,13 +11,13 @@ const label = computed(() => frameworks.find(f => f.id === props.framework)?.lab
      before-paint `data-fw-*` CSS, and nothing shows once this framework is the choice. -->
 <template>
   <div class="text-[13.5px]">
-    <p data-fw-none class="mb-8 flex items-center justify-between gap-4 rounded-(--d-r-md) py-2 pr-2 pl-3.5 ring-1 ring-(--d-line) ring-inset">
+    <p data-fw-none class="mb-8 flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span class="text-dimmed">Show every example in these docs for {{ label }}</span>
-      <button type="button" class="shrink-0 rounded-[6px] bg-(--d-raised-strong) px-2.5 py-1 text-default transition-[color,transform] duration-150 hover:text-highlighted active:scale-[0.97]" @click="choose(framework)">
+      <button type="button" class="shrink-0 text-highlighted underline decoration-(--d-line-strong) decoration-1 underline-offset-[5px] transition-[text-decoration-color] duration-150 hover:decoration-(--d-signal-text)" @click="choose(framework)">
         Use {{ label }}
       </button>
     </p>
-    <p :data-fw-other="framework" class="mb-8 flex items-center justify-between gap-4 rounded-(--d-r-md) py-2 pr-2 pl-3.5 ring-1 ring-(--d-line) ring-inset">
+    <p :data-fw-other="framework" class="mb-8 flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span class="text-dimmed">
         The rest of the docs show
         <template v-for="f in frameworks" :key="f.id">
@@ -25,7 +25,7 @@ const label = computed(() => frameworks.find(f => f.id === props.framework)?.lab
         </template>
         examples
       </span>
-      <button type="button" class="shrink-0 rounded-[6px] bg-(--d-raised-strong) px-2.5 py-1 text-default transition-[color,transform] duration-150 hover:text-highlighted active:scale-[0.97]" @click="choose(framework)">
+      <button type="button" class="shrink-0 text-highlighted underline decoration-(--d-line-strong) decoration-1 underline-offset-[5px] transition-[text-decoration-color] duration-150 hover:decoration-(--d-signal-text)" @click="choose(framework)">
         Switch to {{ label }}
       </button>
     </p>

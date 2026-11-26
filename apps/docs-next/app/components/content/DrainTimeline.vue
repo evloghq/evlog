@@ -33,7 +33,7 @@ const FRAME = 32
 
 const t = ref(0)
 
-const { root, finished, still, replay } = useFigure({
+const { root, finished, still, playing, duration, replay } = useFigure({
   steps: Array.from({ length: Math.ceil((SPAN * SCALE) / FRAME) + 1 }, (_, i) => ({
     at: 200 + i * FRAME,
     run: () => {
@@ -72,6 +72,8 @@ const responded = computed(() => t.value >= 234)
     caption="One request and its drain on the same clock. The response leaves at 234ms. The drain sends after it, gets a 503, waits 200ms and delivers on the second attempt."
     :finished
     :still
+    :playing
+    :duration
     @replay="replay"
   >
     <div class="overflow-x-auto px-5 pt-5 pb-5 sm:px-6">

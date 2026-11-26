@@ -1,0 +1,58 @@
+{
+  "scenario": "sync",
+  "via": "evlog",
+  "evlog": "3.0.0-beta.4",
+  "steps": [
+    {
+      "id": "logger",
+      "label": "createLogger()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mjobId:\u001b[0m sync-001",
+        "  \u001b[2m└─\u001b[0m \u001b[36mqueue:\u001b[0m emails"
+      ],
+      "event": {
+        "jobId": "sync-001",
+        "queue": "emails",
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    },
+    {
+      "id": "context",
+      "label": "log.set()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mjobId:\u001b[0m sync-001",
+        "  \u001b[2m├─\u001b[0m \u001b[36mqueue:\u001b[0m emails",
+        "  \u001b[2m├─\u001b[0m \u001b[36muser:\u001b[0m id=usr_123",
+        "  \u001b[2m├─\u001b[0m \u001b[36msource:\u001b[0m postgres",
+        "  \u001b[2m├─\u001b[0m \u001b[36mtarget:\u001b[0m s3",
+        "  \u001b[2m└─\u001b[0m \u001b[36mrecords:\u001b[0m found=1250 synced=1250"
+      ],
+      "event": {
+        "jobId": "sync-001",
+        "queue": "emails",
+        "user": {
+          "id": "usr_123"
+        },
+        "source": "postgres",
+        "target": "s3",
+        "records": {
+          "found": 1250,
+          "synced": 1250
+        },
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    }
+  ]
+}

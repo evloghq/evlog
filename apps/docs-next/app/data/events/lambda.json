@@ -1,0 +1,28 @@
+{
+  "scenario": "lambda",
+  "via": "evlog",
+  "evlog": "3.0.0-beta.4",
+  "steps": [
+    {
+      "id": "record",
+      "label": "log.emit()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mmessageId:\u001b[0m msg_7f3a",
+        "  \u001b[2m└─\u001b[0m \u001b[36mqueue:\u001b[0m name=arn:aws:sqs:eu-west-1:123456789012:emails"
+      ],
+      "event": {
+        "messageId": "msg_7f3a",
+        "queue": {
+          "name": "arn:aws:sqs:eu-west-1:123456789012:emails"
+        },
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    }
+  ]
+}

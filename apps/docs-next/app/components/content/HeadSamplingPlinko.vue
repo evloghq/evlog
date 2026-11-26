@@ -29,7 +29,7 @@ const evaluated = ref(0)
 
 const CELL = 28
 
-const { root, finished, still, replay } = useFigure({
+const { root, finished, still, playing, duration, replay } = useFigure({
   steps: Array.from({ length: COUNT }, (_, i) => ({ at: 200 + i * CELL, run: () => {
     evaluated.value = i + 1
   } })),
@@ -57,6 +57,8 @@ function cellClass(row: number, i: number) {
     caption="Forty events per level, sampled with the rates above. Blue cells are kept. error is not listed in rates, so every error is kept."
     :finished
     :still
+    :playing
+    :duration
     @replay="replay"
   >
     <div class="flex flex-col gap-5 p-5 sm:p-6">

@@ -30,7 +30,7 @@ const decided = ref(0)
 
 const ROW = 560
 
-const { root, finished, still, replay } = useFigure({
+const { root, finished, still, playing, duration, replay } = useFigure({
   steps: requests.flatMap((_, i) => [
     { at: 200 + i * ROW, run: () => {
       shown.value = i + 1
@@ -66,6 +66,8 @@ function lit(row: Request, i: number, rule: Request['rule']) {
     caption="keep is checked once the request is done. A request that meets a condition is kept whatever its level's rate; the others go through head sampling."
     :finished
     :still
+    :playing
+    :duration
     @replay="replay"
   >
     <div class="overflow-x-auto">

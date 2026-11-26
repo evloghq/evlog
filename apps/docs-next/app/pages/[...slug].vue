@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useIntersectionObserver } from '@vueuse/core'
 import { joinURL } from 'ufo'
 import type { NavigationItem } from 'comark-content'
 import {
@@ -114,10 +115,12 @@ const tree = computed(() => {
 const fm = computed<Record<string, any>>(() => page.value?.data ?? {})
 const surround = computed(() => findSurroundLinks(navigation?.value, selfPath.value))
 
-// The sidebar lists the current page's sections under its entry.
-const toc = useState<TocLink[]>('docs-toc', () => [])
-const publishToc = usePublishToc()
-watchEffect(() => publishToc(page.value))
+// Read from this page's own data, so the list never shows the next page's sections while it loads.
+const toc = computed<TocLink[]>(() =>
+  ((page.value?.meta as { toc?: { links?: TocLink[] } } | undefined)?.toc?.links ?? []).map(({ id, text }) => ({ id, text })))
+
+const publishEvent = usePublishEvent()
+watchEffect(() => publishEvent(page.value))
 
 useDocsScrollSpy(() => toc.value.map(link => link.id))
 
@@ -153,6 +156,14 @@ const place = computed(() => {
 const pageFramework = computed(() => Object.entries(frameworkPages)
   .find(([, path]) => prefixLink(path, content.value.routeBase) === selfPath.value)?.[0])
 
+const navigated = useState('docs-navigated', () => false)
+
+// The top bar names the page only once its title has scrolled under the bar.
+const title = useTemplateRef<HTMLElement>('title')
+const titleGone = ref(false)
+useIntersectionObserver(title, ([entry]) => {
+  titleGone.value = Boolean(entry) && !entry!.isIntersecting && entry!.boundingClientRect.top < 56
+}, { rootMargin: '-56px 0px 0px 0px' })
 const copyPage = () => $fetch<string>(`${rawPrefix}${selfPath.value}.md`, { responseType: 'text' })
 
 useRobotsRule(computed(() => (published.value ? 'index, follow' : 'noindex, nofollow')))
@@ -167,63 +178,108 @@ useHead({ link: [{ rel: 'canonical', href: canonicalUrl }] })
 </script>
 
 <template>
-  <article v-if="page" class="mx-auto max-w-[41rem] text-[15px]/[1.7] text-muted">
-    <div class="mb-5 flex h-7 items-center justify-between gap-4 text-[13px]">
-      <NuxtLink
-        v-if="place?.to"
-        :to="place.to"
-        class="text-dimmed transition-colors duration-150 hover:text-default"
-      >
-        {{ place.label }}
-      </NuxtLink>
-      <span v-else class="text-dimmed">{{ place?.label }}</span>
-
-      <DocsCopyButton v-if="content.mode === 'prod'" label="Copy page" :source="copyPage" class="-mr-2" />
-    </div>
-
-    <h1 class="text-[32px]/[1.15] font-medium tracking-[-0.025em] text-balance text-highlighted">
-      {{ fm.title }}
-    </h1>
-    <p v-if="fm.description" class="mt-4 mb-6 text-[17px]/[1.6] text-pretty text-default">
-      {{ fm.description }}
-    </p>
-    <DocsFrameworkHint v-if="pageFramework && content.mode !== 'version'" :framework="pageFramework" />
-
-    <MarkdownDocument
-      v-if="tree"
-      :value="tree"
-      :components
-    />
-
-    <footer class="mt-24 text-[14px]">
-      <nav aria-label="Pages" class="grid grid-cols-2 gap-3">
+  <div v-if="page">
+    <!-- Meets the sidebar's logo row, so one hairline runs across the whole window. -->
+    <div class="sticky top-0 z-20 hidden h-14 items-center justify-between gap-4 border-b border-(--d-line) bg-default/90 px-8 backdrop-blur-md lg:flex">
+      <nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-2 text-[13px]">
         <NuxtLink
-          v-if="surround[0]"
-          :to="surround[0].path"
-          class="group/prev rounded-(--d-r-lg) border border-(--d-line) px-4 py-3.5 transition-[background-color,border-color,transform] duration-150 hover:border-(--d-line-strong) hover:bg-(--d-raised) active:scale-[0.99]"
+          v-if="place?.to"
+          :to="place.to"
+          class="text-dimmed transition-colors duration-150 hover:text-highlighted"
         >
-          <span class="block text-[13px] text-dimmed">Previous</span>
-          <span class="inline-block text-highlighted transition-transform duration-200 ease-(--d-ease) group-hover/prev:-translate-x-0.5">{{ surround[0].title }}</span>
+          {{ place.label }}
         </NuxtLink>
-        <span v-else />
-        <NuxtLink
-          v-if="surround[1]"
-          :to="surround[1].path"
-          class="group/next rounded-(--d-r-lg) border border-(--d-line) px-4 py-3.5 text-right transition-[background-color,border-color,transform] duration-150 hover:border-(--d-line-strong) hover:bg-(--d-raised) active:scale-[0.99]"
-        >
-          <span class="block text-[13px] text-dimmed">Next</span>
-          <span class="inline-block text-highlighted transition-transform duration-200 ease-(--d-ease) group-hover/next:translate-x-0.5">{{ surround[1].title }}</span>
-        </NuxtLink>
+        <span v-else class="text-dimmed">{{ place?.label }}</span>
+        <span class="d-xfade flex min-w-0 items-center gap-2" :data-on="titleGone" :aria-hidden="!titleGone">
+          <span aria-hidden="true" class="text-(--d-line-strong)">/</span>
+          <span class="truncate text-default">{{ fm.title }}</span>
+        </span>
       </nav>
 
-      <div class="mt-8 flex gap-5 px-1 text-[13px] text-dimmed">
-        <NuxtLink v-if="editUrl" :to="editUrl" target="_blank" class="transition-colors hover:text-highlighted">
-          Edit on GitHub
-        </NuxtLink>
-        <NuxtLink v-if="content.mode === 'prod'" :to="`${rawPrefix}${selfPath}.md`" external target="_blank" class="transition-colors hover:text-highlighted">
-          Markdown
+      <div class="-mr-2 flex items-center gap-1 text-[12.5px]">
+        <DocsCopyButton v-if="content.mode === 'prod'" label="Copy page" :source="copyPage" />
+        <NuxtLink
+          v-if="editUrl"
+          :to="editUrl"
+          target="_blank"
+          class="inline-flex h-7 items-center rounded-(--d-r-md) px-2 text-dimmed transition-colors duration-150 hover:bg-(--d-raised-strong) hover:text-highlighted"
+        >
+          Edit
         </NuxtLink>
       </div>
-    </footer>
-  </article>
+
+      <span aria-hidden="true" class="docs-progress" />
+    </div>
+
+    <div class="mx-auto flex w-full max-w-[74rem] justify-center gap-14 px-5 sm:px-8 xl:justify-between">
+      <article class="w-full max-w-[44rem] min-w-0 pt-10 pb-32 text-[15px]/[1.7] text-muted lg:pt-14" :class="navigated ? 'd-page-in' : ''">
+        <h1 ref="title" class="text-[32px]/[1.15] font-semibold tracking-[-0.025em] text-balance text-highlighted">
+          {{ fm.title }}
+        </h1>
+        <p v-if="fm.description" class="mt-3.5 mb-8 text-[17px]/[1.6] text-pretty text-muted">
+          {{ fm.description }}
+        </p>
+        <DocsFrameworkHint v-if="pageFramework && content.mode !== 'version'" :framework="pageFramework" />
+
+        <MarkdownDocument
+          v-if="tree"
+          :value="tree"
+          :components
+        />
+
+        <footer class="mt-20">
+          <nav aria-label="Pages" class="grid grid-cols-2 gap-3">
+            <NuxtLink
+              v-if="surround[0]"
+              :to="surround[0].path"
+              class="group/prev rounded-(--d-r-lg) border border-(--d-line) px-4 pt-3 pb-3.5 transition-colors duration-200 hover:border-(--d-line-strong) hover:bg-(--d-raised)"
+            >
+              <span class="block text-[12.5px] text-dimmed">Previous</span>
+              <span class="mt-0.5 flex items-center gap-1.5 text-[14.5px] font-medium text-highlighted">
+                <svg viewBox="0 0 12 12" class="size-3 text-dimmed transition-transform duration-300 ease-(--d-ease) group-hover/prev:-translate-x-0.5" fill="none" aria-hidden="true">
+                  <path d="M7.5 2.5 4 6l3.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                {{ surround[0].title }}
+              </span>
+            </NuxtLink>
+            <span v-else />
+            <NuxtLink
+              v-if="surround[1]"
+              :to="surround[1].path"
+              class="group/next rounded-(--d-r-lg) border border-(--d-line) px-4 pt-3 pb-3.5 text-right transition-colors duration-200 hover:border-(--d-line-strong) hover:bg-(--d-raised)"
+            >
+              <span class="block text-[12.5px] text-dimmed">Next</span>
+              <span class="mt-0.5 flex items-center justify-end gap-1.5 text-[14.5px] font-medium text-highlighted">
+                {{ surround[1].title }}
+                <svg viewBox="0 0 12 12" class="size-3 text-dimmed transition-transform duration-300 ease-(--d-ease) group-hover/next:translate-x-0.5" fill="none" aria-hidden="true">
+                  <path d="M4.5 2.5 8 6 4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+            </NuxtLink>
+          </nav>
+
+          <NuxtLink
+            v-if="content.mode === 'prod'"
+            :to="`${rawPrefix}${selfPath}.md`"
+            external
+            target="_blank"
+            class="mt-6 inline-block text-[13px] text-dimmed transition-colors hover:text-highlighted"
+          >
+            View as Markdown
+          </NuxtLink>
+        </footer>
+      </article>
+
+      <aside aria-label="On this page" class="sticky top-14 hidden h-[calc(100svh-3.5rem)] w-[13.5rem] shrink-0 flex-col pt-14 xl:flex">
+        <template v-if="toc.length">
+          <p class="mb-3 text-[12px] font-medium text-dimmed">
+            On this page
+          </p>
+          <div class="d-scroll -ml-2 min-h-0 flex-1 pb-10 pl-2">
+            <DocsToc :links="toc" />
+          </div>
+        </template>
+      </aside>
+    </div>
+  </div>
 </template>

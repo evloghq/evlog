@@ -6,7 +6,7 @@ const { open } = useContentSearch()
 <template>
   <button
     type="button"
-    class="group/search flex h-9 w-full items-center gap-2.5 px-[7px] text-[13.5px] text-dimmed transition-colors duration-150 hover:bg-(--d-raised-strong) hover:text-muted"
+    class="group/search flex h-9 w-full items-center gap-2.5 px-[9px] text-[13.5px] text-dimmed transition-colors duration-150 hover:bg-(--d-raised-strong) hover:text-muted"
     @click="open = true"
   >
     <span class="grid size-4 shrink-0 place-items-center">

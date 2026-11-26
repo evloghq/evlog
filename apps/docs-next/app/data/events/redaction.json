@@ -1,0 +1,100 @@
+{
+  "scenario": "redaction",
+  "via": "evlog/hono",
+  "evlog": "3.0.0-beta.4",
+  "steps": [
+    {
+      "id": "development",
+      "label": "In development",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/users \u001b[32m200\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "  \u001b[2m├─\u001b[0m \u001b[36muser:\u001b[0m email=alice@example.com phone=+33 6 12 34 56 78",
+        "  \u001b[2m├─\u001b[0m \u001b[36mcard:\u001b[0m number=4111111111111111",
+        "  \u001b[2m└─\u001b[0m \u001b[36msession_token:\u001b[0m sess_8f2c1d9e4b7a"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/users",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "user": {
+          "email": "alice@example.com",
+          "phone": "+33 6 12 34 56 78"
+        },
+        "card": {
+          "number": "4111111111111111"
+        },
+        "session_token": "sess_8f2c1d9e4b7a",
+        "status": 200,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    },
+    {
+      "id": "on",
+      "label": "redact: true",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/users \u001b[32m200\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "  \u001b[2m├─\u001b[0m \u001b[36muser:\u001b[0m email=a***@***.com phone=+33******78",
+        "  \u001b[2m├─\u001b[0m \u001b[36mcard:\u001b[0m number=****1111",
+        "  \u001b[2m└─\u001b[0m \u001b[36msession_token:\u001b[0m [REDACTED]"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/users",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "user": {
+          "email": "a***@***.com",
+          "phone": "+33******78"
+        },
+        "card": {
+          "number": "****1111"
+        },
+        "session_token": "[REDACTED]",
+        "status": 200,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    },
+    {
+      "id": "narrowed",
+      "label": "redact: { builtins }",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/users \u001b[32m200\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "  \u001b[2m├─\u001b[0m \u001b[36muser:\u001b[0m email=a***@***.com phone=+33 6 12 34 56 78",
+        "  \u001b[2m├─\u001b[0m \u001b[36mcard:\u001b[0m number=****1111",
+        "  \u001b[2m└─\u001b[0m \u001b[36msession_token:\u001b[0m [REDACTED]"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/users",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "user": {
+          "email": "a***@***.com",
+          "phone": "+33 6 12 34 56 78"
+        },
+        "card": {
+          "number": "****1111"
+        },
+        "session_token": "[REDACTED]",
+        "status": 200,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    }
+  ]
+}

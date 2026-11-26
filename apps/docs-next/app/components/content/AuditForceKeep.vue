@@ -24,7 +24,7 @@ const decided = ref(0)
 
 const ROW = 380
 
-const { root, finished, still, replay } = useFigure({
+const { root, finished, still, playing, duration, replay } = useFigure({
   steps: rows.flatMap((_, i) => [
     { at: 200 + i * ROW, run: () => {
       shown.value = i + 1
@@ -57,6 +57,8 @@ const othersKept = computed(() => rows.slice(0, decided.value).filter(row => !ro
     caption="Eight requests sampled at 10%. The three that called log.audit() are kept every time; the others take their chance."
     :finished
     :still
+    :playing
+    :duration
     @replay="replay"
   >
     <ul class="flex flex-col px-5 pt-4 sm:px-6">

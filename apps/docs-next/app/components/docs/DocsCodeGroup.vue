@@ -73,7 +73,7 @@ const source = () => {
 </script>
 
 <template>
-  <div class="my-7 overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised)">
+  <div class="d-block my-7 overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised)">
     <div class="flex h-10 items-center justify-between gap-2 border-b border-(--d-line) pr-1.5 pl-1.5">
       <div
         ref="list"
