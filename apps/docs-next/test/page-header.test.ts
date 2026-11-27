@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { drawTime, formatTook, opticalHang, pathSegments, takeFacts } from '../app/utils/pageHeader'
+import { createRequestClock, drawTime, formatTook, opticalHang, pathSegments, takeFacts } from '../app/utils/pageHeader'
 
 const contentDir = resolve(import.meta.dirname, '../content')
 
@@ -43,6 +43,29 @@ describe('the page header', () => {
     expect(drawTime(12)).toBe(160)
     expect(drawTime(283.4)).toBe(283)
     expect(drawTime(4000)).toBe(600)
+  })
+
+  it('times a navigation from its start to the page it asked for', () => {
+    const clock = createRequestClock()
+    clock.start('/events', 100)
+    expect(clock.navigating).toBe(true)
+    expect(clock.finish('/events', 400)).toEqual({ path: '/events', ms: 300 })
+    expect(clock.navigating).toBe(false)
+    expect(clock.finish('/events', 900)).toBeUndefined()
+  })
+
+  it('still times a navigation when the page being left finishes rendering after it started', () => {
+    const clock = createRequestClock()
+    clock.start('/events', 100)
+    expect(clock.finish('/start/quick-start', 150)).toBeUndefined()
+    expect(clock.finish('/events', 400)).toEqual({ path: '/events', ms: 300 })
+  })
+
+  it('times the page a redirected navigation lands on', () => {
+    const clock = createRequestClock()
+    clock.start('/integrations', 100)
+    clock.start('/integrations/overview', 120)
+    expect(clock.finish('/integrations/overview', 320)).toEqual({ path: '/integrations/overview', ms: 200 })
   })
 
   it('pulls a title that starts on a stem further left than one that starts on a diagonal', () => {
