@@ -7,7 +7,9 @@ Compact current state of the `repo-health-sweep` schedule. **Hard cap: 150 lines
 - Rejected findings live in `repo-health-sweep-rejected.jsonl`, one JSON object per line. Search it with `rg` for the paths and areas about to be reviewed. Never read it in full.
 - If a rewrite would pass the cap, drop the oldest reviewed rows into the archive section instead of trimming the open questions.
 
-Last rewritten by: the run of 2026-11-24, revision `915b23b` (archive/2026-11.md, Run 2026-11-24, status recovered, 0 PR-ready). Previous rewrite: the run of 2026-11-20, revision `85369bb` (archive/2026-11.md, Run 2026-11-20, status degraded).
+Last rewritten by: the run of 2026-11-27, revision `881db85` (archive/2026-11.md, Run 2026-11-27, status degraded, 0 PR-ready). Previous rewrite: the run of 2026-11-24, revision `915b23b` (archive/2026-11.md, Run 2026-11-24, status recovered, 0 PR-ready).
+
+Report of the 2026-11-27 run: https://linear.app/hrcd/document/repo-health-sweep-2026-11-27-revision-881db85-39f7d5f97bce
 
 Report of the 2026-11-24 run: https://linear.app/hrcd/document/repo-health-sweep-2026-11-24-revision-915b23b-4940ea37f33c
 
@@ -32,9 +34,9 @@ Rev = revision of the review (short sha). Archive = where the detail is. Ref num
 | `packages/evlog/test/nitro/` | 2026-11-17 | `907dc23` | tests-10 (#1091) merged on 2026-11-17. tests-5, tests-6, tests-7, tests-11 held for mutation proof. tests-1 blocked on Q3. tests-2, tests-8, tests-9 proposals. tests-3, tests-4 rejected | 2026-11 Run 2026-11-17 |
 | `packages/evlog/test/nuxt/` + `src/nuxt/module.ts` | 2026-11-24 | `915b23b` | tests-1, tests-4, tests-5, tests-6, tests-7 rejected. tests-2, tests-3, tests-8, tests-9 questions, blocked by the 2026-10-02 rejections (check the archive first). Earlier review 2026-10-02 clean | 2026-11 Run 2026-11-24 |
 | `packages/evlog/test/fixtures/nuxt-ts/` | 2026-11-24 | `915b23b` | tests-10 (remove the fixture `tsconfig.json`, its only `include` names a missing file) confirmed at confidence 0.3, held. Only reader is `test/nuxt/auto-import-types.test.ts` | 2026-11 Run 2026-11-24 |
-| `packages/evlog/src/nitro-v3/` | 2026-10-09 | `54dcc50` | #795, #796 shipped. One clarify candidate held, text lost | 2026-10 #6 |
+| `packages/evlog/src/nitro-v3/` | 2026-11-27 | `881db85` | Run ids are per run. code-1 (dedupe), code-2 and code-3 (removes) confirmed; code-8 (clarify) confirmed at 0.3. All held: the run is degraded. code-1, code-2, code-8 reproduced on main. This run's code-4 and code-5 (JSDoc clarify) and code-7, code-9 rejected; code-6 question. #795, #796 shipped earlier | 2026-11 Run 2026-11-27 |
 | `packages/evlog/test/nitro-v3/` | 2026-10-06 | `88d2c9f` | Clean except the tests-1 question | 2026-10 #5 |
-| `packages/evlog/src/ai/index.ts` + `test/ai/ai.test.ts` | 2026-10-09 | `a34dffd` | #800, #801 shipped. code-3 to code-6 not applied | 2026-10 #7 |
+| `packages/evlog/src/ai/index.ts` + `test/ai/ai.test.ts` | 2026-11-27 | `881db85` | tests-4, tests-5, tests-12, tests-13 confirmed (clarify test names), held. tests-1, tests-2, tests-6 to tests-11 rejected (distinct read surfaces or boundaries). tests-3 question. #800, #801 shipped earlier. 2026-10 code-3 to code-6 still not applied | 2026-11 Run 2026-11-27 |
 | `packages/cli/src/commands/` vs `packages/evlog/src/index.ts`, `package.json` | 2026-11-20 | `85369bb` | architecture-1 (env precedence) and architecture-2 (`--until` ranges) proposals, both need a decision. Reviewer incomplete, PR #647 not checked | 2026-11 Run 2026-11-20 |
 
 ### Architecture (Eve wiring under `apps/evi/agent/` vs `agent/lib/`)
@@ -45,7 +47,8 @@ Rev = revision of the review (short sha). Archive = where the detail is. Ref num
 | `apps/evi/agent/lib/` (`gateway.ts`) | 2026-11-24 | `915b23b` | architecture-4, architecture-5 confirmed at 0.3, held. architecture-5 changes an exported type | 2026-11 Run 2026-11-24 |
 | `apps/evi/agent/lib/github/` | 2026-11-24 | `915b23b` | architecture-6 (`shellQuote` owner in `workspace.ts`) confirmed at 0.5, held. Byte-identical copies in `signed-push.ts` and `content/scan.ts` | 2026-11 Run 2026-11-24 |
 | `apps/evi/agent/` wiring, `tools/` (earlier) | 2026-10-02 | `7f4a26f` | #761 shipped. 3 proposals, text lost | 2026-10 #4 |
-| `channels/`, `schedules/` | 2026-10-02 | `7f4a26f` | No finding recorded | 2026-10 #4 |
+| `channels/`, `schedules/` | 2026-11-27 | `881db85` | architecture-3 (`schedules/tasks.ts:27-28`) confirmed at 0.3, held. architecture-2 proposal (iMessage principal in two modules, maintainer decision). Held for rerun: the `channels/slack.ts` maintainer gate, which needs eve types. Reviewer incomplete. Earlier 2026-10-02 review: no finding | 2026-11 Run 2026-11-27 |
+| `apps/evi/agent/lib/slack.ts` | 2026-11-27 | `881db85` | architecture-1 (test-only `resetSlackMemberCache` with no caller) confirmed at 0.85, reproduced on main | 2026-11 Run 2026-11-27 |
 | `connections/` | 2026-10-06 | `88d2c9f` | Invariant held | 2026-10 #5 |
 | `extensions/` (`browser.ts`, `github.ts`, `git/`) | 2026-11-17 | `907dc23` | architecture-1, -3, -4 proposals. architecture-1 depends on eve types the reviewer could not read | 2026-11 Run 2026-11-17 |
 | `hooks/evlog.ts` vs `lib/` | 2026-10-09 | `a34dffd` | Proposals, one safety-relevant | 2026-10 #7 |
@@ -60,6 +63,7 @@ Rev = revision of the review (short sha). Archive = where the detail is. Ref num
 | `skills/review-logging-patterns/SKILL.md` + PR #731, #729 | 2026-09-25 | `ab63002` | Reviewed | 2026-09 #2 |
 | `skills/content-pass/SKILL.md` + PR #783 | 2026-10-06 | `88d2c9f` | Incomplete, diff was elided. EVL-506 filed | 2026-10 #5 |
 | `skills/content-pass/SKILL.md` + PR #790 | 2026-10-09 | `54dcc50` | communication-1 proposal, text lost | 2026-10 #6 |
+| `skills/content-pass/SKILL.md` + PR #1230, #1232 bodies | 2026-11-27 | `881db85` | communication-1, -2, -5, -10 confirmed (clarify, dedupe), held. communication-3 proposal: the report template has no ELI5 and conflicts with the `createPullRequest` gate. communication-14 to -18 questions on the PR bodies. communication-4, -6 questions. communication-7, -8, -9, -11, -12, -13 rejected | 2026-11 Run 2026-11-27 |
 | `apps/evi/agent/instructions.md` + PR bodies | 2026-11-17 | `907dc23` | communication-2, -5, -11, -12 rejected. communication-8, -9, -13, -14 proposals. ELI5 whitespace finding not made. Raw bodies of #1047 and #1048 not checked | 2026-11 Run 2026-11-17 |
 
 ## Open questions and blockers
@@ -79,11 +83,16 @@ Rev = revision of the review (short sha). Archive = where the detail is. Ref num
 13. **#976 closed without merge** (checked 2026-11-17). The Adapter to Drain rename is a maintainer-rejected proposal: do not propose it again.
 14. **Lost material, never reconstruct**: the texts of the 2026-10-09 held clarify candidate, tests-3 (2026-10), architecture-1 and architecture-2 (2026-10), communication-1, the proposals of 2026-10-02, and every test, architecture and communication candidate of 2026-11-13. Re-derive from the sources with a fresh reviewer pass.
 15. **Full results**: the full simplification result JSON stays in the sandbox only. The archive section and the Linear reports carry the findings, reviewer limitations and counts.
+16. **Photon principal (architecture-2, 2026-11-27)**: the maintainer's iMessage principal is spelled in `channels/photon.ts` and `lib/trust.ts`, and the phone presence test is written twice. Moving it needs a maintainer decision on where the principal set lives. A proposal, not a batch. Linear: EVL-834.
+17. **Content-pass report shape (communication-3, 2026-11-27)**: the content-pass report template has its own sections and no ELI5, but the PR body rule allows one shape only and `createPullRequest` refuses a body without the ELI5. A live conflict. A maintainer decides which shape a content-pass PR follows. Linear: EVL-835.
+18. **Degraded architecture reviewer (2026-11-27)**: `node_modules` and the eve source are not installed in the checkout, so the eve types were unread. Held: the `channels/slack.ts` maintainer gate (admitMaintainer and onAnswers, a dedupe candidate). Needs a rerun with dependencies installed.
+19. **nitro-v3 type evidence (2026-11-27)**: `node_modules` is absent, so the h3 and nitro declared types were not read. code-1 and code-2 rest on indirect evidence from `plugin.ts` and the errorHandler test. Run `pnpm install` before the next nitro-v3 batch.
+20. **Questions with no decision (2026-11-27)**: code-6 (the Record branch of `getNitroV3RequestHeader`, which its only caller cannot reach), tests-3 (a conditional assertion that can pass with no assertion), communication-4 (one-line or two-line report), communication-6 (the Checks line omitted for markdown-only changes), communication-14 to -18 (PR bodies #1230 and #1232).
 
 ## Next cohorts
 
-1. **Code**: `packages/evlog/src/shared/` code-3, code-5, code-6 as one dedupe batch after question 7 is closed (typecheck and tests on a branch from `915b23b`). Then `packages/evlog/src/runtime/` held candidates after a complete rerun. `packages/evlog/src/next/` code-10 and code-8 re-check. `ai/index.ts` code-3 to code-6 once the typecheck gap closes.
-2. **Test**: `packages/evlog/test/fixtures/nuxt-ts/` tests-10 needs a decision on `tsc -p` behavior before a removal. `packages/evlog/test/nuxt/` tests-2, tests-3, tests-8, tests-9 after a check of the 2026-10-02 archive entry. `packages/evlog/test/vite/` held candidates after a complete rerun. `packages/evlog/test/nitro/` tests-5, tests-6, tests-7, tests-11 need mutation proof.
-3. **Architecture**: `apps/evi/agent/lib/github/` architecture-6 and `apps/evi/agent/tools/` architecture-2 once their tests are run on a branch. `apps/evi/agent/lib/gateway.ts` architecture-4 alone, architecture-5 after an exported-type decision. `packages/cli` against `packages/evlog` exports, with #647 checked. `hooks/evlog.ts` and `lib/` after question 2.
-4. **Communication**: `skills/contributing/SKILL.md` communication-5 as a decision; `skills/before-after/SKILL.md` communication-1 and -2; then the outbound gate in question 11. `instructions.md` raw bodies of #1047 and #1048 against the gate.
-5. **Next run**: per the schedule (twice weekly). Start from questions 1, 7 and 12, then the held candidates above.
+1. **Code**: `packages/evlog/src/nitro-v3/` code-1, code-2, code-3, code-8 after `pnpm install` gives the h3 and nitro types (questions 18 and 19). Then `packages/evlog/src/shared/` code-3, code-5, code-6 (question 7). `packages/evlog/src/runtime/` held candidates after a complete rerun. `packages/evlog/src/next/` code-10 and code-8 re-check.
+2. **Test**: `packages/evlog/test/ai/ai.test.ts` tests-4, tests-5, tests-12, tests-13 as one clarify batch, after the source behavior is traced again on a checkout with dependencies installed. `packages/evlog/test/nuxt/` tests-2, tests-3, tests-8, tests-9 after the 2026-10-02 check. `packages/evlog/test/fixtures/nuxt-ts/` tests-10 (question on `tsc -p` behavior). `packages/evlog/test/vite/` held candidates after a complete rerun. `packages/evlog/test/nitro/` tests-5, tests-6, tests-7, tests-11 need mutation proof.
+3. **Architecture**: `apps/evi/agent/lib/slack.ts` architecture-1 (test-only export removal) is the mechanical candidate. Next, the `channels/slack.ts` gate dedupe once the eve types are read (question 18). `channels/photon.ts` architecture-2 after question 16. `schedules/tasks.ts` architecture-3 once the write gates are named. `apps/evi/agent/lib/github/` architecture-6 and `tools/` architecture-2 from 2026-11-24. `packages/cli` against `packages/evlog` exports, with #647 checked.
+4. **Communication**: `skills/content-pass/SKILL.md` communication-1, -2, -5, -10 once question 17 is decided. `skills/contributing/SKILL.md` communication-5 as a decision. `skills/before-after/SKILL.md` communication-1 and -2. Then the outbound gate in question 11.
+5. **Batches held**: the 2026-11-27 run produced 8 batches and 14 pull-request candidates, none PR-ready because the run is degraded. The next run starts from questions 1, 7 and 16 to 18, then the held candidates above.
