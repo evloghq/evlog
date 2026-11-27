@@ -23,11 +23,6 @@ export default defineAppConfig({
       { icon: 'i-simple-icons-npm', to: 'https://www.npmjs.com/package/evlog', target: '_blank', 'aria-label': 'npm' },
     ],
   },
-  docs: {
-    ogImage: {
-      accent: '#2853ff',
-    },
-  },
   ui: {
     colors: {
       primary: 'blue',

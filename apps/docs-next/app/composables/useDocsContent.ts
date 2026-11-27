@@ -1,15 +1,24 @@
 import { createContentClient } from 'comark-content/client'
-import { useDocsContent as usePreviewContent } from 'comark-docs/app/composables/useDocsContent'
-import type { ActiveContent, ContentMode } from 'comark-docs/app/types/content'
+import type { ContentClient } from 'comark-content/client'
+import { withLeadingSlash } from 'ufo'
 
-export interface DocsActiveContent extends Omit<ActiveContent, 'mode'> {
-  /** `version` is a mounted version (`/v2`); the other modes are the layer's. */
-  mode: ContentMode | 'version'
+export interface DocsActiveContent {
+  /** `prod` is this app's own content; `version` a mounted older release (`/v2`). */
+  mode: 'prod' | 'version'
+  /** The branch a mounted version follows; `undefined` in prod. */
+  ref?: string
+  /** Vue Router prefix of the content (`/v2`, or `''` in prod). */
+  routeBase: string
+  /** Prefix of the content's data endpoints. */
+  apiBase: string
+  /** The path within the content (with leading slash). */
+  path: string
+  client: ContentClient<string>
 }
 
-const clients = new Map<string, ActiveContent['client']>()
+const clients = new Map<string, ContentClient<string>>()
 
-function versionClient(basePath: string) {
+function clientFor(basePath: string): ContentClient<string> {
   let client = clients.get(basePath)
   if (!client) {
     client = createContentClient({ basePath, fetch: $fetch })
@@ -18,27 +27,25 @@ function versionClient(basePath: string) {
   return client
 }
 
+/** This app's own content, which the landing reads whatever version the route is in. */
+export const prodContent = clientFor('/api/content')
+
 /**
- * The layer's active content, with mounted versions on top. A mounted version has no route of its
- * own: `/v2/<path>` matches the docs catch-all, which the layer reads as a page of the app's content.
+ * The content behind the current route. A mounted version has no route of its own: `/v2/<path>`
+ * matches the docs catch-all, and is read from that version's endpoints.
  */
 export function useDocsContent(): ComputedRef<DocsActiveContent> {
-  const active = usePreviewContent()
+  const route = useRoute()
   const versions = configuredVersions()
 
   return computed<DocsActiveContent>(() => {
-    const mounted = active.value.mode === 'prod' ? splitVersionPath(active.value.path, versions) : undefined
-    if (!mounted) return active.value
+    const { slug } = route.params
+    const path = withLeadingSlash(Array.isArray(slug) ? slug.join('/') : (slug as string | undefined))
+    const mounted = splitVersionPath(path, versions)
+    if (!mounted) return { mode: 'prod', routeBase: '', apiBase: '/api/content', path, client: prodContent }
 
     const routeBase = `/${mounted.version.id}`
     const apiBase = `/api/content${routeBase}`
-    return {
-      mode: 'version',
-      ref: mounted.version.branch,
-      routeBase,
-      apiBase,
-      path: mounted.path,
-      client: versionClient(apiBase),
-    }
+    return { mode: 'version', ref: mounted.version.branch, routeBase, apiBase, path: mounted.path, client: clientFor(apiBase) }
   })
 }

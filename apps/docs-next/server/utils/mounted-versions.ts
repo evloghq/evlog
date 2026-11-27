@@ -1,7 +1,7 @@
 import type { CacheDriver, ContentSource } from 'comark-content'
 import forge from 'comark-content/sources/forge'
-import { createRuntimeContentInstance } from 'comark-docs/utils/factory.ts'
-import highlighter from '#comark-docs/highlighter'
+import { createRuntimeContentInstance } from '../../utils/factory'
+import highlighter from '#docs/highlighter'
 
 interface MountedVersion {
   id: string
@@ -20,7 +20,7 @@ function mountedVersion(id: string): MountedVersion {
 }
 
 /**
- * The layer's source for another content directory: the local repository in development, GitHub in
+ * The source for another content directory: the local repository in development, GitHub in
  * production. No build snapshot, which only holds the app's own content.
  */
 function versionSource(version: MountedVersion): ContentSource {
@@ -38,7 +38,7 @@ function versionSource(version: MountedVersion): ContentSource {
   })
 }
 
-// Every instance the layer builds is named `default` and keys its cache by commit only. A commit can be
+// Every content instance is named `default` and keys its cache by commit only. A commit can be
 // the head of two content directories, so a version keeps its entries under its own prefix.
 function scopedDriver(driver: CacheDriver, scope: string): CacheDriver {
   const scoped = (key: string) => `${scope}:${key}`
@@ -72,7 +72,7 @@ function versionBase(version: MountedVersion): DocsContent {
 /** The commit a mounted version is served at, following its branch. */
 export function resolveVersionSha(id: string): Promise<string> {
   const version = mountedVersion(id)
-  // Development has no GitHub pipeline: the branch resolves in the local repository, as for `/tree/:branch`.
+  // Development has no GitHub pipeline: the branch resolves in the local repository.
   return import.meta.dev ? resolveGitRef(version.branch) : resolveContentSha(version.branch, version.contentDir)
 }
 

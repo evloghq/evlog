@@ -48,9 +48,8 @@ describe('mounted versions', () => {
     expect(currentVersion(versions, '/v2')).toBe(v2)
   })
 
-  it('names the app\'s own version as current everywhere else, previews included', () => {
+  it('names the app\'s own version as current everywhere else', () => {
     expect(currentVersion(versions, '')).toBe(v3)
-    expect(currentVersion(versions, '/tree/main')).toBe(v3)
   })
 
   it('links each version inside the app and checks the current one', () => {

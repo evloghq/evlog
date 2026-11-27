@@ -1,7 +1,6 @@
 import type { SearchOptions, SearchResult } from 'comark-content'
 
-// The layer's `useSearch`, copied to add the `version` target: the layer hydrates every pinned commit from
-// `/api/content/blob/<sha>`, which reads the app's own content directory, not a mounted version's.
+// The app's own content hydrates from `/api/content/blob/<sha>`; a mounted version from its own API base.
 
 type SearchStatus = 'idle' | 'loading' | 'ready' | 'error'
 

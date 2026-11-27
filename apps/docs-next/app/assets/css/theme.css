@@ -1,0 +1,167 @@
+@theme {
+  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+  --text-color-accented: var(--ui-text-accented);
+}
+
+:root {
+  --ui-container: 91.5rem;
+
+  /* Code surfaces and syntax accents from the live Geist design system. */
+  --geist-background-100: #fff;
+  --geist-background-200: #fafafa;
+  --geist-blue-300: #e0efff;
+  --geist-blue-900: #0064e2;
+
+  --ui-primary: var(--ui-color-neutral-900);
+
+  --ui-text-dimmed: var(--ui-color-neutral-500);
+  --ui-text-muted: var(--ui-color-neutral-600);
+  --ui-text-toned: var(--ui-color-neutral-700);
+  --ui-text: var(--ui-color-neutral-800);
+  /* This is a custom variable for the prose body text */
+  --ui-text-accented: var(--ui-color-neutral-900);
+  --ui-text-highlighted: var(--ui-color-neutral-950);
+  --ui-text-inverted: var(--ui-color-neutral-50);
+
+  --ui-bg: var(--ui-color-neutral-50);
+  --ui-bg-muted: var(--ui-color-neutral-100);
+  --ui-bg-elevated: var(--ui-color-neutral-200);
+  --ui-bg-accented: var(--ui-color-neutral-300);
+  --ui-bg-inverted: var(--ui-color-neutral-950);
+
+  --ui-border: var(--ui-color-neutral-200);
+  --ui-border-muted: var(--ui-color-neutral-200);
+  --ui-border-accented: var(--ui-color-neutral-300);
+  --ui-border-inverted: var(--ui-color-neutral-950);
+}
+
+.dark {
+  --geist-background-100: #000;
+  --geist-background-200: #000;
+  --geist-blue-300: #002f62;
+  --geist-blue-900: #50a8ff;
+
+  --ui-primary: var(--ui-color-neutral-100);
+
+  --ui-text-dimmed: var(--ui-color-neutral-500);
+  --ui-text-muted: var(--ui-color-neutral-400);
+  --ui-text-toned: var(--ui-color-neutral-300);
+  --ui-text: var(--ui-color-neutral-200);
+  /* This is a custom variable for the prose body text */
+  --ui-text-accented: var(--ui-color-neutral-200);
+  --ui-text-highlighted: var(--ui-color-neutral-50);
+  --ui-text-inverted: var(--ui-color-neutral-950);
+
+  --ui-bg: black;
+  --ui-bg-muted: var(--ui-color-neutral-900);
+  --ui-bg-elevated: var(--ui-color-neutral-800);
+  --ui-bg-accented: var(--ui-color-neutral-800);
+  --ui-bg-inverted: var(--ui-color-neutral-50);
+
+  --ui-border: var(--ui-color-neutral-900);
+  --ui-border-muted: var(--ui-color-neutral-800);
+  --ui-border-accented: var(--ui-color-neutral-800);
+  --ui-border-inverted: var(--ui-color-neutral-50);
+}
+
+html.dark .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+@keyframes caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.15em;
+  vertical-align: text-bottom;
+  background-color: var(--ui-primary);
+  animation: caret-blink 1s step-end infinite;
+}
+
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ui-color-primary-700);
+  background: var(--ui-color-primary-50);
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--ui-color-primary-200);
+}
+
+.dark .section-label {
+  color: var(--ui-color-primary-400);
+  background: color-mix(in oklch, var(--ui-color-primary-900) 15%, transparent);
+  border-color: color-mix(in oklch, var(--ui-color-primary-600) 30%, transparent);
+}
+
+.section-label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--ui-primary);
+}
+
+.syntax-hash {
+  color: var(--ui-color-primary-600);
+}
+.syntax-asterisk {
+  color: var(--color-amber-600);
+}
+.syntax-colon {
+  color: var(--ui-color-primary-600);
+}
+.syntax-bracket {
+  color: var(--ui-color-neutral-400);
+}
+.syntax-text {
+  color: var(--ui-color-neutral-700);
+}
+.dark .syntax-hash {
+  color: var(--ui-color-primary-400);
+}
+.dark .syntax-asterisk {
+  color: var(--color-amber-400);
+}
+.dark .syntax-colon {
+  color: var(--ui-color-primary-500);
+}
+.dark .syntax-bracket {
+  color: var(--ui-color-neutral-500);
+}
+.dark .syntax-text {
+  color: var(--ui-color-neutral-200);
+}
+
+.shiki span.line.highlight {
+  display: inline-block;
+  width: calc(100% + 2rem);
+  margin: 0 -1rem;
+  padding: 0 1rem;
+}
+
+.mermaid {
+  @apply rounded overflow-hidden border border-muted bg-white dark:bg-muted;
+}

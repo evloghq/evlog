@@ -1,3 +1,10 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@source "../../../content";
+
+@import "./theme.css";
+
 @theme static {
   --color-blue-400: #2853ff;
   --color-blue-500: #2853ff;

@@ -1,7 +1,7 @@
 import type { ElementNode, Node as ComarkNode } from 'comark'
 import { defineComarkPlugin } from 'comark'
 import { rangiCodeBlocks } from 'comark/plugins/rangi'
-import { geistTheme } from 'comark-docs/utils/geist.ts'
+import { geistTheme } from './utils/geist'
 
 // Rangi rules: [pattern, token type, sub-rules or a language to tokenize the match with].
 // Token types index rangi's TOKENS list.

@@ -1,5 +1,5 @@
 import type { NavigationItem } from 'comark-content'
-import { segmentOf } from 'comark-docs/app/utils/navigation'
+import { segmentOf } from './navigation'
 import type { SidebarGroup, SidebarItem } from '~/composables/useDocsSidebar'
 
 /**

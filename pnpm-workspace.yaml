@@ -84,6 +84,7 @@ minimumReleaseAgeExclude:
   - nuxt-schema-org
   - nuxt-site-config
   - nuxt-site-config-kit
+  - site-config-stack
   # Vercel
   - '@vercel/*'
   - '@ai-sdk/*'

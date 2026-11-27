@@ -8,9 +8,27 @@ const versions = [
 const mounted = versions.filter(version => version.branch).map(version => `/${version.id}`)
 
 export default defineNuxtConfig({
-  extends: ['comark-docs'],
+  modules: [
+    // First: it seeds `site`, `mcp` and `agentDiscovery` from git and the package before the modules below read them.
+    './modules/config',
+    '@nuxt/ui',
+    '@comark/vue',
+    '@nuxtjs/robots',
+    '@nuxtjs/sitemap',
+    'nuxt-seo-utils',
+    'nuxt-schema-org',
+    '@nuxtjs/mcp-toolkit',
+    'nuxt-llms',
+    'nuxt-agent-discovery',
+    // Search runs in a worker: its functions are auto-imported from `app/workers/`.
+    'nuxt-workers',
+    'motion-v/nuxt',
+  ],
 
-  modules: ['motion-v/nuxt'],
+  css: ['~/assets/css/main.css'],
+
+  // Content is read by the content instance, not by Nuxt.
+  ignore: ['content/**'],
 
   compatibilityDate: '2026-10-01',
 
@@ -21,9 +39,7 @@ export default defineNuxtConfig({
     { path: '~/components', global: true },
   ],
 
-  comarkDocs: {
-    highlighter: './highlighter.ts',
-  },
+  ui: { content: true, prose: true },
 
   colorMode: {
     preference: 'dark',
@@ -50,6 +66,8 @@ export default defineNuxtConfig({
   },
 
   llms: {
+    // Built from the content navigation at request time (modules/config/runtime/server/plugins/llms.ts).
+    prerender: false,
     domain: 'https://www.evlog.dev',
     title: 'evlog',
     description: 'A TypeScript logger for wide events and structured errors. One event per request, job, or script run, sent to the backend you already have.',
@@ -59,7 +77,10 @@ export default defineNuxtConfig({
     name: 'evlog MCP',
   },
 
+  // Markdown for agents: content negotiation on every page, `/raw/**`, the `llms.txt` bridge, `sitemap.md`,
+  // the api-catalog, the MCP server card and Agent Skills.
   agentDiscovery: {
+    source: './server/utils/agent-source.ts',
     skills: {
       // The published skills live at the repo root so a bare `npx skills add evloghq/evlog` finds them.
       dir: '../../skills',
@@ -73,22 +94,38 @@ export default defineNuxtConfig({
     },
   },
 
-  // A mounted version is an older release: served like the layer's branch previews, out of every index.
+  // A mounted version is an older release: out of every index.
   routeRules: Object.fromEntries(mounted.flatMap(base => [
     [base, { robots: 'noindex, nofollow' }],
     [`${base}/**`, { robots: 'noindex, nofollow' }],
   ])),
 
   sitemap: {
+    // Content is the source of truth: the app sources would only add the landing.
+    excludeAppSources: true,
+    sources: ['/api/__sitemap__/urls'],
     exclude: mounted.flatMap(base => [base, `${base}/**`]),
   },
 
   $production: {
-    // The TTL the layer gives `/tree/**`: a mounted version follows its branch the same way.
+    // A mounted version follows its branch, so its pages are regenerated every five minutes.
     routeRules: Object.fromEntries(mounted.map(base => [`${base}/**`, { isr: 300 }])),
   },
 
+  nitro: {
+    externals: { inline: ['comark/'] },
+    // MCP tool handlers reach the request through `useEvent()`.
+    experimental: { asyncContext: true },
+  },
+
+  experimental: {
+    payloadExtraction: 'client',
+  },
+
   icon: {
+    provider: 'server',
+    fallbackToApi: 'client-only',
+    serverBundle: { collections: ['lucide', 'simple-icons', 'logos', 'vscode-icons'] },
     customCollections: [
       {
         prefix: 'custom',
@@ -98,17 +135,15 @@ export default defineNuxtConfig({
   },
 
   vite: {
-    // The layer is linked from a sibling checkout with its own node_modules. Without this, its files
-    // resolve a second Vue, Nuxt and Nuxt UI, and the page never hydrates.
-    resolve: {
-      dedupe: ['vue', 'vue-router', 'nuxt', '@nuxt/ui', 'reka-ui', '@vueuse/core', '@unhead/vue'],
-    },
+    // The search worker is an ES module.
+    worker: { format: 'es' },
     optimizeDeps: {
       include: ['shaders/vue'],
       // The workspace lockfile resolves @tiptap/vue-3 3.22 against @tiptap/core 3.32, which no longer
       // exports what it imports, and one failed dependency stalls every optimized one. Nothing here
       // renders Nuxt UI's editor, so its packages stay out of the optimizer.
-      exclude: ['@tiptap/vue-3', '@tiptap/core', '@tiptap/pm', '@tiptap/starter-kit', '@tiptap/markdown', '@tiptap/suggestion'],
+      // Pre-bundling would break the wasm and worker files sqlite loads relative to its module URL.
+      exclude: ['@sqlite.org/sqlite-wasm', '@tiptap/vue-3', '@tiptap/core', '@tiptap/pm', '@tiptap/starter-kit', '@tiptap/markdown', '@tiptap/suggestion'],
     },
   },
 })
