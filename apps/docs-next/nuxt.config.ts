@@ -21,6 +21,10 @@ export default defineNuxtConfig({
     { path: '~/components', global: true },
   ],
 
+  comarkDocs: {
+    highlighter: './highlighter.ts',
+  },
+
   colorMode: {
     preference: 'dark',
   },

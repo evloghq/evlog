@@ -182,6 +182,23 @@
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
 }
 
+/* A diff line spans the block's padding. `!important` beats the layer's dark-mode reset of span backgrounds. */
+.shiki .line.diff-add,
+.shiki .line.diff-del {
+  display: inline-block;
+  min-width: calc(100% + 2rem);
+  margin-inline: -1rem;
+  padding-inline: 1rem;
+}
+
+.shiki .line.diff-add {
+  background-color: color-mix(in oklab, var(--d-out-ok) 9%, transparent) !important;
+}
+
+.shiki .line.diff-del {
+  background-color: color-mix(in oklab, var(--d-out-error) 9%, transparent) !important;
+}
+
 /* How far down the page the reader is, drawn on the top bar's own hairline. */
 .docs-progress {
   display: none;
