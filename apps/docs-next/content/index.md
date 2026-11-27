@@ -127,7 +127,7 @@ A modern TypeScript logger built for everything you ship. Simple logs, wide even
 
   :::features-feature-ai-sdk
   ---
-  link: /integrations/ai-sdk
+  link: /extend/ai-sdk
   link-label: AI SDK integration
   ---
   #headline

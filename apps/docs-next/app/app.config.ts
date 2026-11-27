@@ -13,7 +13,7 @@ export default defineAppConfig({
       steps: ['integrations', 'events', 'errors', 'events/sampling', 'events/redaction', 'events/enrichers', 'drains'],
       catalogs: ['integrations', 'drains'],
     },
-    { sections: ['audit', 'map', 'signals', 'skills', 'telemetry'] },
+    { sections: ['audit', 'map', 'signals', 'skills', 'telemetry', 'extend'] },
     { sections: ['cli', 'reference', 'compare'], catalogs: ['cli', 'reference', 'compare'] },
   ],
   footer: {

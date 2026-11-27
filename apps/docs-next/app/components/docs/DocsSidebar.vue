@@ -45,6 +45,12 @@ function moveTo(link: HTMLElement) {
   Object.assign(marker, { x: to.left - from.left, y: to.top - from.top, w: to.width, h: to.height, placed: true })
 }
 
+// Read from the route, not `aria-current`: the router marks the link a moment after the sidebar has
+// already opened the new page's list.
+function currentLink() {
+  return [...nav.value?.querySelectorAll<HTMLElement>('a[href]') ?? []].find(link => link.getAttribute('href') === route.path && link.getClientRects().length)
+}
+
 // The event's path is drawn from where its rows are, so the line meets every stop and elbow exactly.
 const path = ref<Trail>()
 
@@ -53,24 +59,32 @@ function centre(link: Element, frame: DOMRect) {
   return Math.round(box.top + box.height / 2 - frame.top) + 0.5
 }
 
+// A nested page counts while its row is visible: hidden by the framework choice, or clipped by its list
+// opening or closing, it has no elbow yet.
+function shown(link: Element) {
+  if (!link.getClientRects().length) return false
+  const box = link.getBoundingClientRect()
+  return box.top + box.height / 2 < link.closest('ul')!.getBoundingClientRect().bottom
+}
+
 function drawPath() {
   const list = nav.value?.querySelector<HTMLElement>('.d-steps')
   if (!list) return (path.value = undefined)
   const frame = list.getBoundingClientRect()
   path.value = trail([...list.children].map(row => ({
     y: centre(row.querySelector(':scope > a')!, frame),
-    current: row.querySelector(':scope > a')!.getAttribute('aria-current') === 'page',
-    children: [...row.querySelectorAll(':scope > ul > li > a')].filter(link => link.getClientRects().length).map(link => ({
+    current: row.querySelector(':scope > a')!.getAttribute('href') === route.path,
+    children: [...row.querySelectorAll(':scope > ul > li > a')].filter(link => shown(link)).map(link => ({
       y: centre(link, frame),
       end: Math.round(link.getBoundingClientRect().left - frame.left),
-      current: link.getAttribute('aria-current') === 'page',
+      current: link.getAttribute('href') === route.path,
     })),
   })))
 }
 
 function place() {
   drawPath()
-  const current = nav.value?.querySelector<HTMLElement>('[aria-current="page"]')
+  const current = currentLink()
   if (current) moveTo(current)
   else marker.placed = false
 }
@@ -89,10 +103,57 @@ function onClick(event: MouseEvent) {
   moveTo(link)
 }
 
+// A step's nested pages open and close by height. While they do, the rows below move every frame, so
+// the highlight and the path are placed every frame instead of sliding on their own.
+let following = 0
+function follow(ms: number) {
+  const until = performance.now() + ms
+  const run = following === 0
+  following = Math.max(following, until)
+  if (!run) return
+  marker.travels = false
+  const frame = () => {
+    if (!pending.value) place()
+    if (performance.now() < following) requestAnimationFrame(frame)
+    else following = 0
+  }
+  requestAnimationFrame(frame)
+}
+
+const reduced = import.meta.client ? window.matchMedia('(prefers-reduced-motion: reduce)') : undefined
+const FOLD = 240
+
+function fold(el: Element, opening: boolean, done: () => void) {
+  const list = el as HTMLElement
+  if (reduced?.matches) return done()
+  const full = { height: `${opening ? list.scrollHeight : list.offsetHeight}px`, paddingTop: '', paddingBottom: '' }
+  const shut = { height: '0px', paddingTop: '0px', paddingBottom: '0px' }
+  Object.assign(list.style, opening ? shut : full, { overflow: 'hidden' })
+  void list.offsetHeight
+  const ease = `${FOLD}ms var(--d-ease)`
+  Object.assign(list.style, { transition: `height ${ease}, padding ${ease}` }, opening ? full : shut)
+  follow(FOLD + 40)
+  const end = (event: TransitionEvent) => {
+    if (event.target !== list || event.propertyName !== 'height') return
+    list.removeEventListener('transitionend', end)
+    Object.assign(list.style, { height: '', paddingTop: '', paddingBottom: '', overflow: '', transition: '' })
+    done()
+  }
+  list.addEventListener('transitionend', end)
+}
+
+function open(el: Element, done: () => void) {
+  fold(el, true, done)
+}
+
+function close(el: Element, done: () => void) {
+  fold(el, false, done)
+}
+
 // The sidebar is longer than the screen: a page reached from search or a link shows its entry.
 function reveal() {
   const scroller = nav.value?.closest<HTMLElement>('.d-scroll')
-  const current = nav.value?.querySelector<HTMLElement>('[aria-current="page"]')
+  const current = currentLink()
   if (scroller && current) scroller.scrollTop += revealDistance(scroller.getBoundingClientRect(), current.getBoundingClientRect())
 }
 
@@ -147,8 +208,8 @@ function lit(item: SidebarItem) {
     <div v-for="(block, index) in blocks" :key="block.label ?? index" :class="block.steps ? 'relative' : ''">
       <svg v-if="block.steps && path" class="d-trail" aria-hidden="true">
         <path :d="path.line" />
-        <path v-if="path.lit" class="d-trail-lit" :d="path.lit" />
-        <template v-for="stop in path.stops" :key="stop.y">
+        <path v-if="path.lit" :key="route.path" class="d-trail-lit" :d="path.lit" pathLength="1" />
+        <template v-for="(stop, i) in path.stops" :key="i">
           <circle v-if="stop.state === 'here'" class="d-trail-halo" cx="6.5" :cy="stop.y" r="8" />
           <circle :class="`d-trail-stop is-${stop.state}`" cx="6.5" :cy="stop.y" r="4.5" />
           <path :class="`d-trail-fill is-${stop.state}`" :d="stop.fill" />
@@ -176,27 +237,29 @@ function lit(item: SidebarItem) {
           </NuxtLink>
 
           <!-- The tree evlog prints its events with: the way to the current page is lit. -->
-          <ul v-if="listed(item).length" class="d-rail" :data-fw-list="listed(item).every(frameworkItem) || undefined">
-            <li
-              v-for="(child, i) in listed(item)"
-              :key="child.path"
-              :data-fw-item="frameworkItem(child)"
-              :data-lit="isCurrent(child) || undefined"
-              :data-path="i < listed(item).findIndex(isCurrent) || undefined"
-            >
-              <NuxtLink
-                :to="child.path"
-                :aria-current="isCurrent(child) ? 'page' : undefined"
-                class="-mr-2.5 -ml-2 block rounded-(--d-r-md) py-[3px] pr-2.5 pl-2 text-[13px]/5"
-                :class="[
-                  lit(child) ? 'text-highlighted' : 'text-muted hover:text-highlighted',
-                  isCurrent(child) && !marker.placed ? 'bg-(--d-raised-strong)' : '',
-                ]"
+          <Transition :css="false" @enter="open" @leave="close">
+            <ul v-if="listed(item).length" class="d-rail" :data-fw-list="listed(item).every(frameworkItem) || undefined">
+              <li
+                v-for="(child, i) in listed(item)"
+                :key="child.path"
+                :data-fw-item="frameworkItem(child)"
+                :data-lit="isCurrent(child) || undefined"
+                :data-path="i < listed(item).findIndex(isCurrent) || undefined"
               >
-                {{ child.title }}
-              </NuxtLink>
-            </li>
-          </ul>
+                <NuxtLink
+                  :to="child.path"
+                  :aria-current="isCurrent(child) ? 'page' : undefined"
+                  class="-mr-2.5 -ml-2 block rounded-(--d-r-md) py-[3px] pr-2.5 pl-2 text-[13px]/5"
+                  :class="[
+                    lit(child) ? 'text-highlighted' : 'text-muted hover:text-highlighted',
+                    isCurrent(child) && !marker.placed ? 'bg-(--d-raised-strong)' : '',
+                  ]"
+                >
+                  {{ child.title }}
+                </NuxtLink>
+              </li>
+            </ul>
+          </Transition>
         </li>
       </ul>
     </div>

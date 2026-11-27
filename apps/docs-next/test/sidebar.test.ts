@@ -28,7 +28,7 @@ describe('the sidebar', () => {
   })
 
   // The reader's framework keeps its row under Integrations on every page.
-  const integrations = entry('/integrations', true, ['/integrations/nuxt', '/integrations/hono', '/integrations/ai-sdk'])
+  const integrations = entry('/integrations', true, ['/integrations/nuxt', '/integrations/hono', '/extend/ai-sdk'])
   const chosen = (child: SidebarItem) => child.path === '/integrations/hono'
 
   it('lists a pinned page of a catalogue wherever the reader is', () => {
@@ -106,13 +106,15 @@ describe('the sidebar', () => {
     expect(revealDistance({ top: 100, bottom: 700 }, { top: 90, bottom: 118 })).toBe(-210)
   })
 
-  // The sidebar does not list a catalogue's pages, so its overview page is the way to each of them.
+  // The sidebar does not list a catalogue's pages, so its overview page is the way to each of them. The
+  // Extend overview is the map of every extension point, so it links each of its pages too.
   it.each([
     ['4.drains', '/drains', 14],
     ['10.integrations', '/integrations', 17],
     ['12.cli', '/cli', 6],
     ['13.compare', '/compare', 6],
-    ['11.reference', '/reference', 6],
+    ['11.reference', '/reference', 5],
+    ['14.extend', '/extend', 8],
   ])('%s: the overview links every page of the catalogue', (dir, base, atLeast) => {
     const files = readdirSync(resolve(contentDir, dir)).filter(file => file.endsWith('.md'))
     const overview = readFileSync(resolve(contentDir, dir, files.find(file => /^\d+\.index\.md$/.test(file))!), 'utf8')

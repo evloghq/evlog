@@ -355,7 +355,8 @@
   --rail-mid: 14px;
   --rail-path: #a1a1aa;
   --rail-base: #4a4a52;
-  margin: 2px 0 4px 3px;
+  margin-left: 3px;
+  padding: 2px 0 4px;
 }
 
 .d-rail > li {
@@ -427,6 +428,27 @@
 
 .d-trail-lit {
   stroke: #a1a1aa;
+  stroke-dasharray: 1;
+  animation: d-trail-draw 260ms var(--d-ease) both;
+}
+
+/* The way to a nested page draws from its step's stop once the page is read. */
+@keyframes d-trail-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+.d-trail-stop,
+.d-trail-fill,
+.d-trail-halo {
+  transition: fill 200ms ease, stroke 200ms ease, fill-opacity 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .d-trail-lit {
+    animation: none;
+  }
 }
 
 .d-trail-stop {
