@@ -373,6 +373,7 @@ describe('pretty error logger integration', () => {
     mkdirSync(join(dir, 'server', 'api'), { recursive: true })
     writeFileSync(file, ['if (!charge.ok) {', '  throw declined()', '}'].join('\n'), 'utf8')
     registerPrettyErrorSnippetReader(readCodeSnippetFromDisk)
+    for (const name of ['COMMIT_SHA', 'GITHUB_SHA', 'VERCEL_GIT_COMMIT_SHA', 'CF_PAGES_COMMIT_SHA', 'VERCEL_REGION', 'AWS_REGION', 'FLY_REGION', 'CF_REGION']) vi.stubEnv(name, undefined)
     initLogger({ pretty: true, env: { service: 'my-app' }, dev: { prettyError: { snippet: true, compact: true } } })
     const printed: string[] = []
     vi.mocked(console.log).mockImplementation((text: string) => {
@@ -412,6 +413,7 @@ describe('pretty error logger integration', () => {
       ])
     } finally {
       registerPrettyErrorSnippetReader(null)
+      vi.unstubAllEnvs()
     }
   })
 })
