@@ -173,9 +173,6 @@ const place = computed(() => {
 const pageFramework = computed(() => Object.entries(frameworkPages)
   .find(([, path]) => prefixLink(path, content.value.routeBase) === selfPath.value)?.[0])
 
-// Read once, so the page being left does not replay its entrance while the next one loads.
-const arrived = useDocsNavigated().value
-
 // The top bar names the page only once its title has scrolled under the bar.
 const title = useTemplateRef<HTMLElement>('title')
 const titleGone = ref(false)
@@ -239,7 +236,7 @@ useHead({ link: [{ rel: 'canonical', href: canonicalUrl }] })
     </div>
 
     <div class="mx-auto flex w-full max-w-[74rem] justify-center gap-14 px-5 sm:px-8 xl:justify-between">
-      <article class="w-full max-w-[44rem] min-w-0 pt-10 pb-32 text-[15px]/[1.7] text-muted lg:pt-14" :class="arrived ? 'd-page-in' : ''">
+      <article class="w-full max-w-[44rem] min-w-0 pt-10 pb-32 text-[15px]/[1.7] text-muted lg:pt-14">
         <!-- Below lg the top bar is gone, so the page says where it sits itself. -->
         <p v-if="place" class="mb-3 text-[13px] text-dimmed lg:hidden">
           <NuxtLink v-if="place.to" :to="place.to">

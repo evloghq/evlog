@@ -288,24 +288,6 @@
   transition: stroke-dashoffset 260ms var(--d-ease) 80ms;
 }
 
-/* A page arrives with a short rise once the reader has navigated, never on first load. */
-.d-page-in {
-  animation: d-page-in 280ms var(--d-ease) both;
-}
-
-@keyframes d-page-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .d-page-in {
-    animation: none;
-  }
-}
-
 .docs-shell :focus {
   outline: none;
 }

@@ -1,225 +1,149 @@
 <script setup lang="ts">
-import type { TimedEvent, UseTimedSequenceOptions } from '~/composables/useTimedSequence'
+type Status = 'pass' | 'fail' | 'na' | 'disabled'
 
-type Cell = 'pending' | 'pass' | 'fail' | 'na' | 'disabled'
-
-interface RuleCol {
+interface Rule {
+  /** Column in `evlog map --all`. */
   id: string
-  kind: 'requirement' | 'opportunity'
-  /** Initial verdict once the scan lands (step >= 1). */
-  initial: Exclude<Cell, 'pending'>
-  /** Verdict after fixes (step >= 2), before any disable. */
-  fixed?: Exclude<Cell, 'pending'>
-  /** Step at which this cell becomes disabled n/a. */
-  disableAt?: number
+  /** Requirements only: what a failure costs. */
+  weight?: number
+  /** Status per step: the scan, the fix, the disable comment. */
+  states: [Status, Status, Status]
 }
 
-/**
- * One handler through the rule engine: requirements move the score,
- * opportunities never do, and a disable comment turns a fail into ○ n/a.
- */
-const rules: RuleCol[] = [
-  { id: 'log', kind: 'requirement', initial: 'fail', fixed: 'pass' },
-  { id: 'ctx', kind: 'requirement', initial: 'fail', fixed: 'pass' },
-  { id: 'audit', kind: 'requirement', initial: 'fail', fixed: 'fail', disableAt: 4 },
-  { id: 'err', kind: 'requirement', initial: 'na' },
-  { id: 'catch', kind: 'requirement', initial: 'na' },
-  { id: 'fetch', kind: 'requirement', initial: 'na' },
-  { id: 'catalog', kind: 'opportunity', initial: 'na' },
-  { id: 'audit+', kind: 'opportunity', initial: 'fail', fixed: 'fail' },
-  { id: 'ai', kind: 'opportunity', initial: 'na' },
-  { id: 'identity', kind: 'opportunity', initial: 'na' },
+const requirements: Rule[] = [
+  { id: 'log', weight: 40, states: ['fail', 'pass', 'pass'] },
+  { id: 'ctx', weight: 15, states: ['fail', 'pass', 'pass'] },
+  { id: 'err', weight: 20, states: ['na', 'na', 'na'] },
+  { id: 'audit', weight: 25, states: ['fail', 'fail', 'disabled'] },
+  { id: 'catch', weight: 15, states: ['na', 'na', 'na'] },
+  { id: 'fetch', weight: 20, states: ['na', 'na', 'na'] },
 ]
 
-const requirements = rules.filter(r => r.kind === 'requirement')
-const opportunities = rules.filter(r => r.kind === 'opportunity')
+const opportunities: Rule[] = [
+  { id: 'error-catalog', states: ['na', 'na', 'na'] },
+  { id: 'audit-coverage', states: ['fail', 'fail', 'fail'] },
+  { id: 'ai-logging', states: ['na', 'na', 'na'] },
+  { id: 'auth-identity', states: ['na', 'na', 'na'] },
+]
 
-const step = ref(0)
-const prefersReducedMotion = ref(false)
-const wrapperRef = ref<HTMLElement>()
+const steps = [
+  { label: 'Three requirements fail', code: '100 − 40 − 15 − 25 = 20' },
+  { label: 'useLogger and log.set added', code: '100 − 25 = 75' },
+  { label: 'audit disabled by a comment', code: '// evlog-map-disable-next-line audit' },
+]
 
-function resetState() {
-  step.value = 0
-}
+const step = ref(-1)
 
-const STEP_AT = [600, 2200, 4000, 5200]
-const TAIL_HOLD = 3800
-
-const events: TimedEvent[] = STEP_AT.map((at, i) => ({
-  at,
-  run: () => {
-    step.value = i + 1
+const { root, finished, still, playing, duration, replay } = useFigure({
+  steps: steps.map((_, i) => ({ at: 400 + i * 1500, run: () => {
+    step.value = i
+  } })),
+  reset: () => {
+    step.value = -1
   },
-}))
-
-const totalDuration = (STEP_AT.at(-1) ?? 0) + TAIL_HOLD
-
-const sequenceOpts: UseTimedSequenceOptions = {
-  events,
-  totalDuration,
-  loop: true,
-  reducedMotion: false,
-  onReset: resetState,
-}
-
-const { start, toggle, restart, paused, started } = useTimedSequence(sequenceOpts)
-
-let observer: IntersectionObserver | undefined
-
-onMounted(() => {
-  prefersReducedMotion.value = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  sequenceOpts.reducedMotion = prefersReducedMotion.value
-
-  if (!wrapperRef.value) {
-    start()
-    return
-  }
-  observer = new IntersectionObserver(
-    ([entry]) => {
-      if (entry?.isIntersecting) {
-        start()
-        observer?.disconnect()
-      }
-    },
-    { threshold: 0.25 },
-  )
-  observer.observe(wrapperRef.value)
+  settle: () => {
+    step.value = steps.length - 1
+  },
 })
 
-onBeforeUnmount(() => {
-  observer?.disconnect()
-})
-
-function cellFor(rule: RuleCol): Cell {
-  if (step.value < 1) return 'pending'
-  if (rule.disableAt !== undefined && step.value >= rule.disableAt) return 'disabled'
-  if (step.value >= 2 && rule.fixed) return rule.fixed
-  return rule.initial
+function status(rule: Rule): Status | undefined {
+  return step.value < 0 ? undefined : rule.states[step.value]
 }
 
-function glyph(cell: Cell): string {
-  switch (cell) {
-    case 'pass': return '✓'
-    case 'fail': return '✗'
-    case 'na': return '·'
-    case 'disabled': return '○'
-    default: return ' '
-  }
+const score = computed(() => step.value < 0 ? 100 : 100 - requirements.reduce((lost, rule) => status(rule) === 'fail' ? lost + rule.weight! : lost, 0))
+
+const glyphs: Record<Status, { text: string, tone: string }> = {
+  pass: { text: '✓', tone: 'text-(--d-out-ok)' },
+  fail: { text: '✗', tone: 'text-(--d-out-error)' },
+  na: { text: '·', tone: 'text-dimmed' },
+  disabled: { text: '○', tone: 'text-muted' },
 }
-
-function cellClass(cell: Cell): string {
-  switch (cell) {
-    case 'pass': return 'text-emerald-500'
-    case 'fail': return 'text-rose-400'
-    case 'disabled': return 'text-amber-400'
-    case 'na': return 'text-dimmed/60'
-    default: return 'text-dimmed/30'
-  }
-}
-
-const statusLabel = computed(() => {
-  if (step.value >= 4) return 'disable → n/a · score ignores it'
-  if (step.value >= 3) return 'evlog-map-disable-next-line audit'
-  if (step.value >= 2) return 'useLogger + log.set landed'
-  if (step.value >= 1) return 'requirements cost score · opportunities never'
-  return 'waiting for scan'
-})
-
-const failingReqs = computed(() =>
-  requirements.filter((r) => {
-    const c = cellFor(r)
-    return c === 'fail'
-  }).length,
-)
 </script>
 
 <template>
-  <div class="not-prose my-8" data-section="map-rules-matrix">
-    <div ref="wrapperRef" class="w-full min-h-[248px] overflow-hidden border border-muted bg-default">
-      <div class="flex items-center gap-2 border-b border-muted px-3 py-2">
-        <UIcon name="i-lucide-list-checks" class="size-3 text-primary shrink-0" />
-        <span class="font-mono text-[11px] text-dimmed truncate">evlog map — rules</span>
-        <span class="text-dimmed text-[10px]">·</span>
-        <span class="font-mono text-[9px] text-muted truncate">api/checkout.post.ts</span>
-        <div class="ml-auto flex items-center gap-0.5">
-          <button
-            type="button"
-            class="size-5 inline-flex items-center justify-center text-dimmed hover:text-default focus:text-default focus:outline-none transition-colors"
-            :aria-label="paused ? 'Play animation' : 'Pause animation'"
-            :disabled="!started"
-            @click="toggle"
-          >
-            <UIcon :name="paused ? 'i-lucide-play' : 'i-lucide-pause'" class="size-3" />
-          </button>
-          <button
-            type="button"
-            class="size-5 inline-flex items-center justify-center text-dimmed hover:text-default focus:text-default focus:outline-none transition-colors"
-            aria-label="Restart animation"
-            :disabled="!started"
-            @click="restart"
-          >
-            <UIcon name="i-lucide-rotate-ccw" class="size-3" />
-          </button>
-        </div>
-      </div>
-
-      <div class="px-3 py-2.5 space-y-2.5">
-        <div>
-          <div class="flex items-baseline justify-between mb-1">
-            <span class="font-mono text-[9px] uppercase tracking-widest text-dimmed">Requirements</span>
-            <span
-              class="font-mono text-[9px] tabular-nums transition-colors duration-300"
-              :class="failingReqs === 0 ? 'text-emerald-500' : 'text-rose-400'"
-            >{{ failingReqs }} failing</span>
-          </div>
-          <div class="grid grid-cols-6 gap-1">
-            <div
-              v-for="rule in requirements"
-              :key="rule.id"
-              class="h-[44px] flex flex-col items-center justify-center gap-0.5 border border-muted/40 bg-muted/10"
-            >
-              <span
-                class="font-mono text-[12px] leading-none transition-colors duration-300"
-                :class="cellClass(cellFor(rule))"
-              >{{ glyph(cellFor(rule)) }}</span>
-              <span class="font-mono text-[9px] text-dimmed">{{ rule.id }}</span>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <div class="flex items-baseline justify-between mb-1">
-            <span class="font-mono text-[9px] uppercase tracking-widest text-dimmed">Opportunities</span>
-            <span class="font-mono text-[9px] text-dimmed">never move the score</span>
-          </div>
-          <div class="grid grid-cols-4 gap-1">
-            <div
-              v-for="rule in opportunities"
-              :key="rule.id"
-              class="h-[44px] flex flex-col items-center justify-center gap-0.5 border border-muted/40 bg-muted/5"
-            >
-              <span
-                class="font-mono text-[12px] leading-none transition-colors duration-300"
-                :class="cellClass(cellFor(rule))"
-              >{{ glyph(cellFor(rule)) }}</span>
-              <span class="font-mono text-[9px] text-dimmed">{{ rule.id }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="border-t border-muted/50 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[9px] text-dimmed">
-        <span
-          class="transition-opacity duration-300 truncate"
-          :class="step >= 1 ? 'opacity-100' : 'opacity-40'"
-        >{{ statusLabel }}</span>
-        <span
-          class="ml-auto tabular-nums transition-opacity duration-500 whitespace-nowrap"
-          :class="step >= 4 ? 'opacity-100 text-amber-400' : 'opacity-0'"
+  <DocsFigure
+    ref="root"
+    caption="One handler through the ten rules. A failing requirement costs its weight, an opportunity never does, and a disabled check turns into n/a."
+    :finished
+    :still
+    :playing
+    :duration
+    @replay="replay"
+  >
+    <div class="px-5 pt-5 sm:px-6">
+      <p class="flex items-baseline justify-between gap-4 text-[13px] text-dimmed">
+        <span>Requirements</span>
+        <span>Cost their weight</span>
+      </p>
+      <ul class="mt-3 grid grid-cols-3 gap-px overflow-hidden rounded-(--d-r-md) border border-(--d-line) bg-(--d-line) sm:grid-cols-6">
+        <li
+          v-for="rule in requirements"
+          :key="rule.id"
+          class="flex h-[68px] flex-col items-center justify-center gap-1 bg-(--d-raised) font-mono text-[12px]/4"
         >
-          ○ = disabled (still visible)
-        </span>
+          <span class="d-stack text-[13px]">
+            <span
+              v-for="(glyph, name) in glyphs"
+              :key="name"
+              class="d-xfade"
+              :class="glyph.tone"
+              :data-on="status(rule) === name"
+            >{{ glyph.text }}</span>
+          </span>
+          <span class="text-default">{{ rule.id }}</span>
+          <span class="text-dimmed tabular-nums">{{ rule.weight }}</span>
+        </li>
+      </ul>
+
+      <p class="mt-5 flex items-baseline justify-between gap-4 text-[13px] text-dimmed">
+        <span>Opportunities</span>
+        <span>Never move the score</span>
+      </p>
+      <ul class="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-(--d-r-md) border border-(--d-line) bg-(--d-line) sm:grid-cols-4">
+        <li
+          v-for="rule in opportunities"
+          :key="rule.id"
+          class="flex h-11 items-center gap-2.5 bg-(--d-raised) px-3 font-mono text-[12px]/4"
+        >
+          <span class="d-stack w-[1ch] shrink-0 text-[13px]">
+            <span
+              v-for="(glyph, name) in glyphs"
+              :key="name"
+              class="d-xfade"
+              :class="glyph.tone"
+              :data-on="status(rule) === name"
+            >{{ glyph.text }}</span>
+          </span>
+          <span class="truncate text-default">{{ rule.id }}</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="mt-5 border-t border-(--d-line) px-5 py-4 sm:px-6">
+      <div class="flex items-center justify-between gap-4">
+        <div class="d-stack min-w-0 text-[13px] text-default">
+          <span class="d-xfade truncate text-dimmed" :data-on="step < 0">Scanning server/api/checkout.post.ts</span>
+          <span
+            v-for="(s, i) in steps"
+            :key="s.label"
+            class="d-xfade truncate"
+            :data-on="step === i"
+          >{{ s.label }}</span>
+        </div>
+        <p class="flex shrink-0 items-baseline gap-1.5">
+          <span class="w-[3ch] text-right font-mono text-[22px]/none text-highlighted tabular-nums">{{ step < 0 ? '–' : score }}</span>
+          <span class="text-[13px] text-dimmed">/ 100</span>
+        </p>
+      </div>
+      <div class="d-stack mt-1 font-mono text-[12px]/5 text-muted">
+        <span class="d-xfade truncate" :data-on="step < 0">&nbsp;</span>
+        <span
+          v-for="(s, i) in steps"
+          :key="s.code"
+          class="d-xfade truncate"
+          :data-on="step === i"
+        >{{ s.code }}</span>
       </div>
     </div>
-  </div>
+  </DocsFigure>
 </template>
