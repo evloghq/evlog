@@ -1,5 +1,5 @@
 import { exec as execCallback, execFileSync } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -63,6 +63,61 @@ globalThis.fetch = async (url, init = {}) => {
 }
 `
 
+// GitHub's Git database API as `gh api` reaches it, answered from the same bare repository.
+// Every uploaded blob is logged, and a ref move to the commit headlined FAKE_GITHUB_LOSE lands but fails.
+const FAKE_GH = `
+import { execFileSync } from 'node:child_process'
+import { appendFileSync, readFileSync } from 'node:fs'
+const repo = process.env.FAKE_GITHUB_REPO
+const git = (args, options = {}) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', ...options }).trim()
+const [command, path, ...rest] = process.argv.slice(2)
+if (command !== 'api') process.exit(2)
+const option = name => rest.includes(name) ? rest[rest.indexOf(name) + 1] : undefined
+const fields = {}
+rest.forEach((value, index) => {
+  if (value !== '-f' && value !== '-F') return
+  const [key, ...parts] = rest[index + 1].split('=')
+  fields[key] = parts.join('=')
+})
+const input = option('--input') ? JSON.parse(readFileSync(option('--input'), 'utf8')) : fields
+// Open pull requests from the pushed branch target FAKE_GITHUB_PULL_BASE; FAKE_GITHUB_PROTECTED lists protected branches.
+if (path.includes('/pulls?')) {
+  const base = process.env.FAKE_GITHUB_PULL_BASE
+  process.stdout.write(base ? base + '\\n' : '')
+  process.exit(0)
+}
+const branch = /\\/branches\\/(.+)$/.exec(path)
+if (branch) {
+  process.stdout.write(String(process.env.FAKE_GITHUB_PROTECTED.split(',').includes(branch[1])) + '\\n')
+  process.exit(0)
+}
+const route = /^repos\\/[^/]+\\/[^/]+\\/git\\/(.+)$/.exec(path)[1]
+const env = { ...process.env, GIT_INDEX_FILE: repo + '/api-index', GIT_WORK_TREE: repo }
+let reply
+if (route === 'blobs') {
+  reply = { sha: git(['hash-object', '-w', '--stdin'], { input: Buffer.from(input.content, 'base64') }) }
+  appendFileSync(repo + '/uploads.log', reply.sha + '\\n')
+} else if (route === 'trees') {
+  git(['read-tree', input.base_tree], { env })
+  for (const entry of input.tree) {
+    if (entry.sha === null) git(['update-index', '--force-remove', entry.path], { env })
+    else git(['update-index', '--add', '--cacheinfo', entry.mode + ',' + entry.sha + ',' + entry.path], { env })
+  }
+  reply = { sha: git(['write-tree'], { env }) }
+} else if (route === 'commits') {
+  const identity = { GIT_AUTHOR_NAME: 'evlogai[bot]', GIT_AUTHOR_EMAIL: 'bot@example.com', GIT_COMMITTER_NAME: 'GitHub', GIT_COMMITTER_EMAIL: 'noreply@github.com' }
+  reply = { sha: git(['commit-tree', input.tree, ...input.parents.flatMap(parent => ['-p', parent]), '-m', input.message], { env: { ...process.env, ...identity } }) }
+} else {
+  const name = 'refs/' + route.slice('refs/'.length)
+  try { git(['merge-base', '--is-ancestor', git(['rev-parse', name]), fields.sha], { stdio: 'pipe' }) }
+  catch { process.stderr.write('Update is not a fast forward (HTTP 422)\\n'); process.exit(1) }
+  git(['update-ref', name, fields.sha])
+  if (git(['log', '-1', '--format=%s', fields.sha]) === process.env.FAKE_GITHUB_LOSE) process.exit(1)
+  reply = { object: { sha: fields.sha } }
+}
+process.stdout.write(option('--jq').slice(1).split('.').reduce((value, key) => value[key], reply) + '\\n')
+`
+
 function git(dir: string, ...args: string[]): string {
   return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', env: { ...process.env, ...IDENTITY } }).trim()
 }
@@ -120,10 +175,14 @@ async function setup() {
   git(work, 'checkout', '-qb', 'feat')
 
   const bin = join(root, 'bin')
-  await write(root, { 'fake-github.mjs': FAKE_GITHUB, 'gh-signed-commit.cjs': GH_SIGNED_COMMIT_SOURCE })
-  await write(bin, { 'gh-signed-commit': `#!/bin/sh\nexec node --import ${join(root, 'fake-github.mjs')} ${join(root, 'gh-signed-commit.cjs')} "$@"\n` })
+  await write(root, { 'fake-github.mjs': FAKE_GITHUB, 'fake-gh.mjs': FAKE_GH, 'gh-signed-commit.cjs': GH_SIGNED_COMMIT_SOURCE })
+  await write(bin, {
+    'gh-signed-commit': `#!/bin/sh\nexec node --import ${join(root, 'fake-github.mjs')} ${join(root, 'gh-signed-commit.cjs')} "$@"\n`,
+    'gh': `#!/bin/sh\nexec node ${join(root, 'fake-gh.mjs')} "$@"\n`,
+  })
   await chmod(join(bin, 'gh-signed-commit'), 0o755)
-  const env = { ...process.env, ...IDENTITY, PATH: `${bin}:${process.env.PATH}`, GH_TOKEN: 'placeholder', FAKE_GITHUB_REPO: github, FAKE_GITHUB_REFUSE: '', FAKE_GITHUB_INTERLOPE: '', FAKE_GITHUB_INTERLOPE_AT: '', FAKE_GITHUB_LOSE: '' }
+  await chmod(join(bin, 'gh'), 0o755)
+  const env = { ...process.env, ...IDENTITY, PATH: `${bin}:${process.env.PATH}`, GH_TOKEN: 'placeholder', FAKE_GITHUB_REPO: github, FAKE_GITHUB_REFUSE: '', FAKE_GITHUB_INTERLOPE: '', FAKE_GITHUB_INTERLOPE_AT: '', FAKE_GITHUB_LOSE: '', FAKE_GITHUB_PULL_BASE: '', FAKE_GITHUB_PROTECTED: 'main' }
   let broken: RegExp | null = null
   const gh: GitHubCommand = ({ command, workingDirectory }) => run(`cd ${workingDirectory} && ${command}`, env, broken)
   const sandbox = { run: ({ command }: { command: string }) => run(command, process.env, broken) } as Parameters<typeof pushSignedBranch>[0]
@@ -148,6 +207,11 @@ async function setup() {
     /** Every command matching `pattern` exits 1, in the sandbox and through the GitHub lease alike. */
     breakCommand: (pattern: RegExp | null) => {
       broken = pattern
+    },
+    /** An open pull request from `feat` targets `base`, which GitHub reports as protected or not. */
+    pullRequestInto: (base: string, isProtected: boolean) => {
+      env.FAKE_GITHUB_PULL_BASE = base
+      env.FAKE_GITHUB_PROTECTED = isProtected ? `main,${base}` : 'main'
     },
     /** GitHub takes the commit with this headline but its reply never arrives. */
     lose: (headline: string) => {
@@ -249,6 +313,92 @@ describe('pushSignedBranch', () => {
 
     await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_PUSH_REFUSED' })
     expect(git(github, 'rev-parse', 'feat')).toBe(theirs)
+  })
+
+  it('publishes a merge of the default branch with both parents, uploading only what it resolves', async () => {
+    const { seed, work, github, push } = await setup()
+    await commit(work, 'feat: edit readme', { 'README.md': 'Widgets, feat.\n', 'a.txt': 'a\n' })
+    const first = await push()
+    // main changes the same line, and an executable the branch could not carry itself.
+    await commit(seed, 'main: edit readme', { 'README.md': 'Widgets, main.\n', 'main.txt': 'main\n', 'run.sh': '#!/bin/sh\necho main\n' })
+    git(seed, 'push', '-q', 'origin', 'main')
+    const main = git(github, 'rev-parse', 'main')
+    git(work, 'fetch', '-q', 'origin')
+    expect(() => git(work, 'merge', '-q', 'origin/main')).toThrow()
+    await write(work, { 'README.md': 'Widgets, both.\n' })
+    git(work, 'add', 'README.md')
+    git(work, 'commit', '-q', '--no-edit')
+    await commit(work, 'docs: after the merge', { 'b.txt': 'b\n' })
+    const tree = git(work, 'rev-parse', 'feat^{tree}')
+
+    const result = await push()
+
+    expect(result).toEqual({ sha: git(github, 'rev-parse', 'feat'), commits: 2 })
+    expect(git(github, 'rev-parse', 'feat~1^1')).toBe(first.sha)
+    expect(git(github, 'rev-parse', 'feat~1^2')).toBe(main)
+    expect(git(github, 'rev-parse', 'feat^{tree}')).toBe(tree)
+    expect(git(github, 'ls-tree', 'feat', 'run.sh').split(' ')[0]).toBe('100755')
+    expect((await readFile(join(github, 'uploads.log'), 'utf8')).trim().split('\n')).toEqual([git(github, 'rev-parse', 'feat:README.md')])
+    expect(git(work, 'rev-parse', 'feat')).toBe(result.sha)
+    expect(git(work, 'worktree', 'list').split('\n')).toHaveLength(1)
+  })
+
+  it('refuses a merge of a branch that is on GitHub but not the default branch', async () => {
+    const { seed, work, github, push } = await setup()
+    git(seed, 'checkout', '-qb', 'other')
+    await commit(seed, 'unreviewed', { 'other.txt': 'other\n' })
+    git(seed, 'push', '-q', 'origin', 'other')
+    await commit(work, 'first', { 'a.txt': 'a\n' })
+    git(work, 'fetch', '-q', 'origin')
+    git(work, 'merge', '-q', '--no-edit', 'origin/other')
+
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_PUSH_REFUSED', message: expect.stringContaining('on neither the default branch') })
+    expect(git(github, 'branch', '--list', 'feat')).toBe('')
+  })
+
+  it('publishes a merge of the pull request\'s protected base branch, and refuses an unprotected one', async () => {
+    const { seed, work, github, push, pullRequestInto } = await setup()
+    git(seed, 'checkout', '-qb', 'v3')
+    await commit(seed, 'on v3', { 'v3.txt': 'v3\n' })
+    git(seed, 'push', '-q', 'origin', 'v3')
+    await commit(work, 'first', { 'a.txt': 'a\n' })
+    git(work, 'fetch', '-q', 'origin')
+    git(work, 'merge', '-q', '--no-edit', 'origin/v3')
+    const head = git(work, 'rev-parse', 'feat')
+
+    pullRequestInto('v3', false)
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_PUSH_REFUSED', message: expect.stringContaining('protected base branch') })
+    expect(git(github, 'branch', '--list', 'feat')).toBe('')
+    expect(git(work, 'rev-parse', 'feat')).toBe(head)
+
+    pullRequestInto('v3', true)
+    const result = await push()
+
+    expect(git(github, 'rev-parse', 'feat^2')).toBe(git(github, 'rev-parse', 'v3'))
+    expect(git(github, 'rev-parse', 'feat^{tree}')).toBe(git(work, 'rev-parse', `${head}^{tree}`))
+    expect(git(work, 'rev-parse', 'feat')).toBe(result.sha)
+  })
+
+  it('takes over a merge whose ref move landed but whose reply was lost', async () => {
+    const { seed, work, github, push, lose } = await setup()
+    await commit(seed, 'main moves', { 'main.txt': 'main\n' })
+    git(seed, 'push', '-q', 'origin', 'main')
+    await commit(work, 'first', { 'a.txt': 'a\n' })
+    git(work, 'fetch', '-q', 'origin')
+    git(work, 'merge', '-q', '--no-edit', 'origin/main')
+    const head = git(work, 'rev-parse', 'feat')
+    lose('Merge remote-tracking branch \'origin/main\' into feat')
+
+    await expect(push()).rejects.toMatchObject({ code: 'evi.GIT_COMMAND_FAILED', message: expect.stringContaining('reply was lost') })
+    expect(git(github, 'rev-parse', 'feat^2')).toBe(git(github, 'rev-parse', 'main'))
+    expect(git(work, 'rev-parse', 'feat')).toBe(head)
+
+    lose('')
+    const retry = await push()
+
+    expect(retry).toEqual({ sha: git(github, 'rev-parse', 'feat'), commits: 0 })
+    expect(git(work, 'rev-parse', 'feat')).toBe(retry.sha)
+    expect(git(work, 'rev-parse', 'feat^{tree}')).toBe(git(github, 'rev-parse', 'feat^{tree}'))
   })
 
   it('resumes after GitHub takes only part of the branch, once GitHub can be read again', async () => {

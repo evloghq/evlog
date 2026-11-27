@@ -143,6 +143,31 @@ clones and fetches for the same sessions; its `authorize`
 (`agent/lib/github/gh.ts`) refuses `git push`, so no unsigned commit leaves the
 sandbox.
 
+### What `git__push` may do to a branch
+
+`git__push` sorts actions by what they do to the repository, not by the request
+that triggered them, so no prompt has to name a case for it to be allowed:
+
+| Effect | Example | Policy |
+|---|---|---|
+| Adds commits to a feature branch | a fix, a merge of the base branch to clear a conflict | Allowed, no approval |
+| Rewrites a feature branch | a rebase and a force-push | Not available: `git__push` only fast-forwards |
+| Touches `main`, tags, releases or settings | | Never, enforced in code |
+
+A merge is the one commit a signed replay cannot carry, so `publishMerge` in
+`agent/lib/github/signed-push.ts` builds it through the Git database API instead.
+GitHub signs a commit an App creates there without a custom author. The second
+parent has to be on GitHub already, on the default branch or on the base branch
+of an open pull request from the pushed branch, so the merge brings in reviewed
+code and nothing from another branch or a fork. The base only counts when
+GitHub reports it as protected: a pull request can name any branch as its base,
+so the base alone proves nothing. The only blobs it
+uploads are the files neither parent has: the conflict resolutions, which must
+be regular files like any other commit's. The ref moves with `force: false`. That
+adds no authority, because these sessions can already write any file to a
+feature branch, and the pull request diff against `main` still shows every line
+the merge resolved.
+
 Release writes are not on the list at all: `AGENTS.md` forbids an agent from
 creating one, so the tool set stops at reading them.
 
