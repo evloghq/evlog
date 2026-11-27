@@ -1,0 +1,30 @@
+{
+  "scenario": "standalone",
+  "via": "evlog",
+  "evlog": "3.0.0-beta.4",
+  "steps": [
+    {
+      "id": "run",
+      "label": "log.emit()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mjob:\u001b[0m sync",
+        "  \u001b[2m├─\u001b[0m \u001b[36msource:\u001b[0m postgres",
+        "  \u001b[2m├─\u001b[0m \u001b[36mtarget:\u001b[0m s3",
+        "  \u001b[2m└─\u001b[0m \u001b[36mrecords:\u001b[0m 1250"
+      ],
+      "event": {
+        "job": "sync",
+        "source": "postgres",
+        "target": "s3",
+        "records": 1250,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    }
+  ]
+}

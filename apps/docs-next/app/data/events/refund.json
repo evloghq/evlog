@@ -1,0 +1,88 @@
+{
+  "scenario": "refund",
+  "via": "evlog/hono",
+  "evlog": "3.0.0-beta.4",
+  "steps": [
+    {
+      "id": "allowed",
+      "label": "log.audit()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/invoices/refund \u001b[32m200\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "  \u001b[2m└─\u001b[0m \u001b[36maudit:\u001b[0m action=invoice.refund actor={\"type\":\"user\",\"id\":\"usr_123\",\"email\":\"alice@example.com\"} target={\"type\":\"invoice\",\"id\":\"inv_1842\"} outcome=success reason=Customer requested refund version=1 idempotencyKey=3b6cd1b451136d09d81c88a0fe7b00ac"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/invoices/refund",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "audit": {
+          "action": "invoice.refund",
+          "actor": {
+            "type": "user",
+            "id": "usr_123",
+            "email": "alice@example.com"
+          },
+          "target": {
+            "type": "invoice",
+            "id": "inv_1842"
+          },
+          "outcome": "success",
+          "reason": "Customer requested refund",
+          "version": 1,
+          "idempotencyKey": "3b6cd1b451136d09d81c88a0fe7b00ac"
+        },
+        "status": 200,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    },
+    {
+      "id": "denied",
+      "label": "log.audit.deny()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[31mERROR\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/invoices/refund \u001b[31m403\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36merror:\u001b[0m \u001b[31m\u001b[1mForbidden\u001b[0m",
+        "  \u001b[2m│\u001b[0m     \u001b[2mat audit/refund.ts:25\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "  \u001b[2m└─\u001b[0m \u001b[36maudit:\u001b[0m action=invoice.refund actor={\"type\":\"user\",\"id\":\"usr_456\"} target={\"type\":\"invoice\",\"id\":\"inv_1842\"} outcome=denied reason=Insufficient permissions version=1 idempotencyKey=9a5ceae90234a0ced41369e0e9b04b9c"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/invoices/refund",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "audit": {
+          "action": "invoice.refund",
+          "actor": {
+            "type": "user",
+            "id": "usr_456"
+          },
+          "target": {
+            "type": "invoice",
+            "id": "inv_1842"
+          },
+          "outcome": "denied",
+          "reason": "Insufficient permissions",
+          "version": 1,
+          "idempotencyKey": "9a5ceae90234a0ced41369e0e9b04b9c"
+        },
+        "error": {
+          "name": "EvlogError",
+          "message": "Forbidden",
+          "stack": "EvlogError: Forbidden\nat audit/refund.ts:25:11",
+          "status": 403
+        },
+        "status": 403,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "error",
+        "service": "my-app",
+        "environment": "development"
+      }
+    }
+  ]
+}

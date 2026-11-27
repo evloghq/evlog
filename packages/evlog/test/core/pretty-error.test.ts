@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -263,7 +263,7 @@ describe('buildErrorEntries', () => {
       const entries = buildErrorEntries({ message: 'x', stack: `Error: x\n    at handler (${file}:10:5)` }, { snippet: true, cwd: '/Users/dev/project' })
 
       expect(reader).toHaveBeenCalledWith(file, 10, expect.any(Number))
-      expect(entries[0]?.children).toContain('\x1B[2m   at handler (server/api/te\\u0007st.get.ts:10)\x1B[0m')
+      expect(entries[0]?.children).toContain('  \x1B[2mat handler (server/api/te\\u0007st.get.ts:10)\x1B[0m')
     } finally {
       registerPrettyErrorSnippetReader(null)
     }
@@ -304,10 +304,11 @@ at async file:///Users/dev/project/node_modules/h3/dist/index.mjs:2017:19`
       fix: longFix,
     }, { snippet: false, stackDepth: 0, compact: false })
 
-    const children = entries[0]?.children ?? []
+    const children = (entries[0]?.children ?? []).map(line => line.replace(/\x1B\[[0-9;]*m/g, ''))
     const fixIndex = children.findIndex(line => line.includes('Fix:'))
     expect(fixIndex).toBeGreaterThanOrEqual(0)
-    expect(children[fixIndex + 1]).toMatch(/^\s{5}\S/)
+    expect(children[fixIndex]).toMatch(/^ {2}Fix: Please/)
+    expect(children[fixIndex + 1]).toMatch(/^ {7}\S/)
   })
 })
 
@@ -364,6 +365,56 @@ describe('pretty error logger integration', () => {
 
     expect(console.log).toHaveBeenCalled()
     expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('prints the lines under error in one column, the snippet numbers included, with no empty tree line', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'evlog-pretty-error-'))
+    const file = join(dir, 'server', 'api', 'checkout.post.ts')
+    mkdirSync(join(dir, 'server', 'api'), { recursive: true })
+    writeFileSync(file, ['if (!charge.ok) {', '  throw declined()', '}'].join('\n'), 'utf8')
+    registerPrettyErrorSnippetReader(readCodeSnippetFromDisk)
+    for (const name of ['COMMIT_SHA', 'GITHUB_SHA', 'VERCEL_GIT_COMMIT_SHA', 'CF_PAGES_COMMIT_SHA', 'VERCEL_REGION', 'AWS_REGION', 'FLY_REGION', 'CF_REGION']) vi.stubEnv(name, undefined)
+    initLogger({ pretty: true, env: { service: 'my-app' }, dev: { prettyError: { snippet: true, compact: true } } })
+    const printed: string[] = []
+    vi.mocked(console.log).mockImplementation((text: string) => {
+      printed.push(...text.replace(/\x1B\[[0-9;]*m/g, '').split('\n'))
+    })
+
+    try {
+      const error = createError({
+        message: 'Payment failed',
+        status: 402,
+        code: 'billing.declined',
+        why: 'Card declined by issuer',
+        fix: 'Try a different payment method',
+        link: 'https://docs.example.com/payments/declined',
+      })
+      error.stack = `Error: Payment failed
+    at handler (${file}:2:9)
+    at run (${join(dir, 'server', 'run.ts')}:8:3)`
+      const logger = createRequestLogger({ method: 'POST', path: '/api/checkout' })
+      logger.set({ cart: { items: 3 } })
+      logger.error(error)
+      logger.emit({ status: 402 })
+
+      expect(printed.slice(1)).toEqual([
+        '  ├─ error: Payment failed',
+        '  │     at handler (server/api/checkout.post.ts:2)',
+        '  │     1 ┃ if (!charge.ok) {',
+        '  │   ❯ 2 ┃   throw declined()',
+        '  │     3 ┃ }',
+        '  │     Code: billing.declined',
+        '  │     Why: Card declined by issuer',
+        '  │     Fix: Try a different payment method',
+        '  │     More: https://docs.example.com/payments/declined',
+        '  │     stack',
+        '  │       at run (server/run.ts:8)',
+        '  └─ cart: items=3',
+      ])
+    } finally {
+      registerPrettyErrorSnippetReader(null)
+      vi.unstubAllEnvs()
+    }
   })
 })
 

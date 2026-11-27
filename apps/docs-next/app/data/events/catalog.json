@@ -1,0 +1,65 @@
+{
+  "scenario": "catalog",
+  "via": "evlog/hono",
+  "evlog": "3.0.0-beta.4",
+  "steps": [
+    {
+      "id": "inline",
+      "label": "createError()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[31mERROR\u001b[0m \u001b[36m[my-app]\u001b[0m GET /api/users/usr_404 \u001b[31m404\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36merror:\u001b[0m \u001b[31m\u001b[1mUser not found\u001b[0m",
+        "  \u001b[2m│\u001b[0m     \u001b[2mat catalogs/inline.ts:15\u001b[0m",
+        "  \u001b[2m└─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90"
+      ],
+      "event": {
+        "method": "GET",
+        "path": "/api/users/usr_404",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "error": {
+          "name": "EvlogError",
+          "message": "User not found",
+          "stack": "EvlogError: User not found\nat catalogs/inline.ts:15:11",
+          "status": 404
+        },
+        "status": 404,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "error",
+        "service": "my-app",
+        "environment": "development"
+      }
+    },
+    {
+      "id": "catalog",
+      "label": "errors.USER_NOT_FOUND()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[31mERROR\u001b[0m \u001b[36m[my-app]\u001b[0m GET /api/users/usr_404 \u001b[31m404\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36merror:\u001b[0m \u001b[31m\u001b[1mUser not found\u001b[0m",
+        "  \u001b[2m│\u001b[0m     \u001b[2mat catalogs/route.ts:15\u001b[0m",
+        "  \u001b[2m│\u001b[0m     \u001b[2mCode:\u001b[0m app.USER_NOT_FOUND",
+        "  \u001b[2m└─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90"
+      ],
+      "event": {
+        "method": "GET",
+        "path": "/api/users/usr_404",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "error": {
+          "name": "EvlogError",
+          "message": "User not found",
+          "stack": "EvlogError: User not found\nat catalogs/route.ts:15:18",
+          "code": "app.USER_NOT_FOUND",
+          "status": 404
+        },
+        "status": 404,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "error",
+        "service": "my-app",
+        "environment": "development"
+      }
+    }
+  ]
+}

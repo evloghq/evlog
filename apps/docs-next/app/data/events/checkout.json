@@ -1,0 +1,97 @@
+{
+  "scenario": "checkout",
+  "via": "evlog/hono",
+  "evlog": "3.0.0-beta.4",
+  "steps": [
+    {
+      "id": "request",
+      "label": "The integration alone",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/checkout \u001b[32m200\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m└─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/checkout",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "status": 200,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    },
+    {
+      "id": "context",
+      "label": "log.set()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[36mINFO\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/checkout \u001b[32m200\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "  \u001b[2m├─\u001b[0m \u001b[36muser:\u001b[0m id=usr_123",
+        "  \u001b[2m└─\u001b[0m \u001b[36mcart:\u001b[0m items=3 total=9999"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/checkout",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "user": {
+          "id": "usr_123"
+        },
+        "cart": {
+          "items": 3,
+          "total": 9999
+        },
+        "status": 200,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "info",
+        "service": "my-app",
+        "environment": "development"
+      }
+    },
+    {
+      "id": "error",
+      "label": "createError()",
+      "pretty": [
+        "\u001b[2m10:23:45.612\u001b[0m \u001b[31mERROR\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/checkout \u001b[31m402\u001b[0m \u001b[2min 234ms\u001b[0m",
+        "  \u001b[2m├─\u001b[0m \u001b[36merror:\u001b[0m \u001b[31m\u001b[1mPayment failed\u001b[0m",
+        "  \u001b[2m│\u001b[0m     \u001b[2mat checkout/error.ts:21\u001b[0m",
+        "  \u001b[2m│\u001b[0m     \u001b[33mWhy:\u001b[0m Card declined by issuer",
+        "  \u001b[2m│\u001b[0m     \u001b[36mFix:\u001b[0m Try a different payment method",
+        "  \u001b[2m├─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "  \u001b[2m├─\u001b[0m \u001b[36muser:\u001b[0m id=usr_123",
+        "  \u001b[2m└─\u001b[0m \u001b[36mcart:\u001b[0m items=3 total=9999"
+      ],
+      "event": {
+        "method": "POST",
+        "path": "/api/checkout",
+        "requestId": "4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
+        "user": {
+          "id": "usr_123"
+        },
+        "cart": {
+          "items": 3,
+          "total": 9999
+        },
+        "error": {
+          "name": "EvlogError",
+          "message": "Payment failed",
+          "stack": "EvlogError: Payment failed\nat checkout/error.ts:21:11",
+          "status": 402,
+          "why": "Card declined by issuer",
+          "fix": "Try a different payment method"
+        },
+        "status": 402,
+        "durationMs": 234,
+        "duration": "234ms",
+        "timestamp": "2027-01-18T10:23:45.612Z",
+        "level": "error",
+        "service": "my-app",
+        "environment": "development"
+      }
+    }
+  ]
+}
