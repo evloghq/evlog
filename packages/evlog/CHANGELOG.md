@@ -1,5 +1,13 @@
 # evlog
 
+## 2.37.2
+
+### Patch Changes
+
+- [#1224](https://github.com/evloghq/evlog/pull/1224) [`a4380ca`](https://github.com/evloghq/evlog/commit/a4380ca42211de6aa14916c0422b9d70fdab2001) Thanks [@HugoRCD](https://github.com/HugoRCD)! - `log.audit()` and `log.audit.deny()` on a route left out by `include` or `exclude` now reach your drains. The filters only skip the request event: with the framework middleware each audit call drains as its own event with the request's method, path and `requestId`, and on Nuxt and Nitro the request event is emitted because it carries an audit. Before, these audits were dropped, and on most frameworks `useLogger()` threw on a filtered route.
+
+- [#1224](https://github.com/evloghq/evlog/pull/1224) [`a4380ca`](https://github.com/evloghq/evlog/commit/a4380ca42211de6aa14916c0422b9d70fdab2001) Thanks [@HugoRCD](https://github.com/HugoRCD)! - On Vercel, Nuxt and Nitro 2 apps now keep the function alive with Vercel's `waitUntil` while request events drain after the response. The Nitro 2 Vercel preset passes no `waitUntil` of its own, so a drain could be cut off when the function froze.
+
 ## 2.37.1
 
 ### Patch Changes
