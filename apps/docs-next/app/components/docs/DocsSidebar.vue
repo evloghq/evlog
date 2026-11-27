@@ -149,8 +149,9 @@ function lit(item: SidebarItem) {
         <path :d="path.line" />
         <path v-if="path.lit" class="d-trail-lit" :d="path.lit" />
         <template v-for="stop in path.stops" :key="stop.y">
-          <circle v-if="stop.state === 'here'" class="d-trail-halo" cx="6.5" :cy="stop.y" r="7" />
-          <circle :class="`d-trail-stop is-${stop.state}`" cx="6.5" :cy="stop.y" r="3.5" />
+          <circle v-if="stop.state === 'here'" class="d-trail-halo" cx="6.5" :cy="stop.y" r="8" />
+          <circle :class="`d-trail-stop is-${stop.state}`" cx="6.5" :cy="stop.y" r="4.5" />
+          <path :class="`d-trail-fill is-${stop.state}`" :d="stop.fill" />
         </template>
       </svg>
       <p v-if="block.label" :id="`docs-nav-${index}`" class="mb-2 text-[12px]/4 font-medium text-dimmed">

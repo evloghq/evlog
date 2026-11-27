@@ -127,7 +127,7 @@ export interface TrailRow {
 export interface Trail {
   line: string
   lit?: string
-  stops: { y: number, state: 'here' | 'on' | 'off' }[]
+  stops: { y: number, state: 'here' | 'on' | 'off', fill: string }[]
 }
 
 const SPINE = 6.5
@@ -135,6 +135,19 @@ const BEND = 6
 
 function branch(y: number, end: number) {
   return `V${y - BEND}A${BEND} ${BEND} 0 0 0 ${SPINE + BEND} ${y}H${end}`
+}
+
+const WEDGE = 2.5
+
+// A stop fills clockwise from twelve o'clock by how far along the path its step is, so the last one is
+// a full disc.
+function wedge(y: number, share: number) {
+  const round = (n: number) => Math.round(n * 100) / 100
+  if (share >= 1) return `M${SPINE} ${y - WEDGE}A${WEDGE} ${WEDGE} 0 1 1 ${SPINE} ${y + WEDGE}A${WEDGE} ${WEDGE} 0 1 1 ${SPINE} ${y - WEDGE}Z`
+  const angle = share * 2 * Math.PI
+  const x = round(SPINE + WEDGE * Math.sin(angle))
+  const end = round(y - WEDGE * Math.cos(angle))
+  return `M${SPINE} ${y}V${y - WEDGE}A${WEDGE} ${WEDGE} 0 ${share > 0.5 ? 1 : 0} 1 ${x} ${end}Z`
 }
 
 // The event's path as one drawing: a spine through a stop per step, and an elbow off it to each nested
@@ -150,7 +163,11 @@ export function trail(rows: TrailRow[]): Trail {
   return {
     line,
     lit: parent && child ? `M${SPINE} ${parent.y}${branch(child.y, child.end)}` : undefined,
-    stops: rows.map(row => ({ y: row.y, state: row.current ? 'here' : row === parent ? 'on' : 'off' })),
+    stops: rows.map((row, index) => ({
+      y: row.y,
+      state: row.current ? 'here' : row === parent ? 'on' : 'off',
+      fill: wedge(row.y, (index + 1) / rows.length),
+    })),
   }
 }
 

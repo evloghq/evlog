@@ -411,8 +411,8 @@
   border-color: var(--rail-path);
 }
 
-/* The event's path is one SVG laid over its rows (see DocsSidebar): a spine with a stop per step, and the
-   nested pages hang off it instead of a rail of their own. */
+/* The event's path is one SVG laid over its rows (see DocsSidebar): a spine with a stop per step that
+   fills as the steps go on, and the nested pages hang off it instead of a rail of their own. */
 .d-trail {
   position: absolute;
   inset: 0;
@@ -439,6 +439,18 @@
 
 .d-trail-stop.is-here {
   stroke: var(--ui-text-highlighted);
+}
+
+.d-trail-fill {
+  stroke: none;
+  fill: #71717a;
+}
+
+.d-trail-fill.is-on {
+  fill: #a1a1aa;
+}
+
+.d-trail-fill.is-here {
   fill: var(--ui-text-highlighted);
 }
 

@@ -143,6 +143,13 @@ describe('the event\'s path', () => {
     expect(path.stops.map(stop => stop.state)).toEqual(['off', 'on', 'off'])
   })
 
+  it('fills each stop further than the one before, to a full disc at the last step', () => {
+    const [first, second, last] = trail(rows()).stops.map(stop => stop.fill)
+    expect(first).toBe('M6.5 14.5V12A2.5 2.5 0 0 1 8.67 15.75Z')
+    expect(second).toBe('M6.5 42.5V40A2.5 2.5 0 1 1 4.33 43.75Z')
+    expect(last).toBe('M6.5 120A2.5 2.5 0 1 1 6.5 125A2.5 2.5 0 1 1 6.5 120Z')
+  })
+
   it('lights no line when the page being read is a step', () => {
     const path = trail(rows('events'))
     expect(path.lit).toBeUndefined()
