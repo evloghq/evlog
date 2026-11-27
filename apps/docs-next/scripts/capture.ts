@@ -49,7 +49,7 @@ const foreign = ['/scripts/play.ts', 'node:internal', '/node_modules/', '/packag
 function ownFrames(stack: string) {
   const lines = stack.split('\n').filter(line => !foreign.some(marker => line.includes(marker)))
   const heading = lines.findIndex(line => /\u001B\[90mstack\u001B\[0m$/.test(line))
-  if (heading > 0 && !/\u001B\[90m\s+at /.test(lines[heading + 1] ?? '')) lines.splice(heading - 1, 2)
+  if (heading > 0 && !/\u001B\[90m\s+at /.test(lines[heading + 1] ?? '')) lines.splice(heading, 1)
   return lines.join('\n')
 }
 

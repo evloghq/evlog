@@ -38,12 +38,10 @@
       "pretty": [
         "\u001b[2m10:23:45.612\u001b[0m \u001b[31mERROR\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/checkout \u001b[31m402\u001b[0m \u001b[2min 234ms\u001b[0m",
         "  \u001b[2m├─\u001b[0m \u001b[36merror:\u001b[0m \u001b[31m\u001b[1mPayment failed\u001b[0m",
-        "  \u001b[2m│\u001b[0m",
-        "  \u001b[2m│\u001b[0m\u001b[2m   at errors/declined.ts:19\u001b[0m",
-        "  \u001b[2m│\u001b[0m",
-        "  \u001b[2m│\u001b[0m\u001b[33mWhy:\u001b[0m Card declined by issuer",
-        "  \u001b[2m│\u001b[0m\u001b[36mFix:\u001b[0m Try a different payment method",
-        "  \u001b[2m│\u001b[0m\u001b[2mMore:\u001b[0m https://docs.example.com/payments/declined",
+        "  \u001b[2m│\u001b[0m     \u001b[2mat errors/declined.ts:19\u001b[0m",
+        "  \u001b[2m│\u001b[0m     \u001b[33mWhy:\u001b[0m Card declined by issuer",
+        "  \u001b[2m│\u001b[0m     \u001b[36mFix:\u001b[0m Try a different payment method",
+        "  \u001b[2m│\u001b[0m     \u001b[2mMore:\u001b[0m https://docs.example.com/payments/declined",
         "  \u001b[2m├─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
         "  \u001b[2m├─\u001b[0m \u001b[36muser:\u001b[0m id=usr_123",
         "  \u001b[2m└─\u001b[0m \u001b[36mcart:\u001b[0m items=3 total=9999"

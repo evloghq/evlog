@@ -46,8 +46,7 @@
       "pretty": [
         "\u001b[2m10:23:45.612\u001b[0m \u001b[31mERROR\u001b[0m \u001b[36m[my-app]\u001b[0m POST /api/invoices/refund \u001b[31m403\u001b[0m \u001b[2min 234ms\u001b[0m",
         "  \u001b[2m├─\u001b[0m \u001b[36merror:\u001b[0m \u001b[31m\u001b[1mForbidden\u001b[0m",
-        "  \u001b[2m│\u001b[0m",
-        "  \u001b[2m│\u001b[0m\u001b[2m   at audit/refund.ts:25\u001b[0m",
+        "  \u001b[2m│\u001b[0m     \u001b[2mat audit/refund.ts:25\u001b[0m",
         "  \u001b[2m├─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90",
         "  \u001b[2m└─\u001b[0m \u001b[36maudit:\u001b[0m action=invoice.refund actor={\"type\":\"user\",\"id\":\"usr_456\"} target={\"type\":\"invoice\",\"id\":\"inv_1842\"} outcome=denied reason=Insufficient permissions version=1 idempotencyKey=9a5ceae90234a0ced41369e0e9b04b9c"
       ],

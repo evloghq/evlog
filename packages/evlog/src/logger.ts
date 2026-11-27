@@ -635,10 +635,6 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
       for (let j = 0; j < children.length; j++) {
         const child = children[j]
         if (child === undefined) continue
-        if (child === prettyFormatters?.error.PRETTY_ERROR_TREE_SPACER) {
-          writeLine(`  ${colors.dim}${connector}${colors.reset}`)
-          continue
-        }
         const isLastChild = j === children.length - 1
         const childPrefix = isLastChild ? '└─' : '├─'
         if (child === '') {
@@ -647,10 +643,8 @@ function prettyPrintWideEvent(event: Record<string, unknown>): void {
         }
         if (browser) {
           writeLine(`  %c${connector}  ${childPrefix}%c ${escapeFormatString(child)}`, cssColors.dim, cssColors.reset)
-        } else if (child.startsWith(' ') || child.startsWith('\x1B')) {
-          writeLine(`  ${colors.dim}${connector}${colors.reset}${child}`)
         } else {
-          writeLine(`  ${colors.dim}${connector}  ${childPrefix}${colors.reset} ${child}`)
+          writeLine(`  ${colors.dim}${connector}${colors.reset}   ${child}`)
         }
       }
     }

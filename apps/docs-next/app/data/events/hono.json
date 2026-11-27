@@ -54,11 +54,9 @@
       "pretty": [
         "\u001b[2m10:23:45.612\u001b[0m \u001b[31mERROR\u001b[0m \u001b[36m[my-api]\u001b[0m GET /users/usr_404 \u001b[31m404\u001b[0m \u001b[2min 234ms\u001b[0m",
         "  \u001b[2m├─\u001b[0m \u001b[36merror:\u001b[0m \u001b[31m\u001b[1mUser not found\u001b[0m",
-        "  \u001b[2m│\u001b[0m",
-        "  \u001b[2m│\u001b[0m\u001b[2m   at hono/error.ts:30\u001b[0m",
-        "  \u001b[2m│\u001b[0m",
-        "  \u001b[2m│\u001b[0m\u001b[33mWhy:\u001b[0m No user has the id usr_404",
-        "  \u001b[2m│\u001b[0m\u001b[36mFix:\u001b[0m Check the id in the URL",
+        "  \u001b[2m│\u001b[0m     \u001b[2mat hono/error.ts:30\u001b[0m",
+        "  \u001b[2m│\u001b[0m     \u001b[33mWhy:\u001b[0m No user has the id usr_404",
+        "  \u001b[2m│\u001b[0m     \u001b[36mFix:\u001b[0m Check the id in the URL",
         "  \u001b[2m└─\u001b[0m \u001b[36mrequestId:\u001b[0m 4a8ff3a8-1c2e-4f6b-9d0a-7e5b3c1f2a90"
       ],
       "event": {

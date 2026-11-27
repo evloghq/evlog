@@ -3,14 +3,6 @@ import type { ResolvedPrettyError } from './dev-terminal'
 import type { CodeSnippetLine, StackFrame } from './stack-frames'
 import { decodeFileUrl, isInternalErrorFrame, parseStackFrames, readCodeSnippet } from './stack-frames'
 
-
-/** Tree-only breathing line (connector without content). */
-export const PRETTY_ERROR_TREE_SPACER = '__EVLOG_TREE_SPACER__'
-
-function pushTreeSpacer(children: string[]) {
-  children.push(PRETTY_ERROR_TREE_SPACER)
-}
-
 /** Pretty-print tree node for error sections. */
 export interface PrettyErrorTreeEntry {
   key: string
@@ -134,7 +126,7 @@ export function pickPrimaryFrame(frames: StackFrame[]): StackFrame | undefined {
 function formatSnippetLines(snippet: CodeSnippetLine[]): string[] {
   const width = String(snippet[snippet.length - 1]?.line ?? 0).length
   return snippet.map(({ line, content, isErrorLine }) => {
-    const marker = isErrorLine ? `${colors.red}❯${colors.reset}` : `${colors.dim} ${colors.reset}`
+    const marker = isErrorLine ? `${colors.red}❯${colors.reset}` : ' '
     const numColor = isErrorLine ? colors.red : colors.gray
     const trimmed = content.length > 120 ? `${content.slice(0, 117)}…` : content
     return `${marker} ${numColor}${String(line).padStart(width, ' ')}${colors.reset} ${colors.dim}┃${colors.reset} ${colors.dim}${trimmed}${colors.reset}`
@@ -211,40 +203,34 @@ export function buildErrorEntries(
   const frames = guidanceOnly ? [] : parseStackFrames(normalized.stack)
   const primary = guidanceOnly ? undefined : pickPrimaryFrame(frames)
 
+  // A snippet line opens with a two-column marker; in the terminal every other line is indented by
+  // the same two columns, so text starts under the line numbers.
+  const indent = isBrowser() ? '' : '  '
+  const text = (line: string) => `${indent}${line}`
+
   if (!guidanceOnly && primary?.file && primary.line) {
-    pushTreeSpacer(children)
-    if (showFrames) {
-      const snippet = readCodeSnippet(primary.file, primary.line, snippetContextLines)
-      children.push(`${colors.dim}   ${printable(formatFrameLocation(primary, cwd))}${colors.reset}`)
-      if (snippet) {
-        children.push(...formatSnippetLines(snippet))
-      }
-    } else {
-      children.push(`${colors.dim}   ${printable(formatFrameLocation(primary, cwd))}${colors.reset}`)
+    children.push(text(`${colors.dim}${printable(formatFrameLocation(primary, cwd))}${colors.reset}`))
+    const snippet = showFrames ? readCodeSnippet(primary.file, primary.line, snippetContextLines) : null
+    if (snippet) {
+      children.push(...formatSnippetLines(snippet))
     }
   }
 
   if (normalized.code) {
-    children.push(`${colors.dim}Code:${colors.reset} ${printable(normalized.code)}`)
+    children.push(text(`${colors.dim}Code:${colors.reset} ${printable(normalized.code)}`))
   }
-
-  const hasGuidance = Boolean(normalized.why || normalized.fix || normalized.link)
-  if (hasGuidance) {
-    pushTreeSpacer(children)
-  }
-
   if (normalized.why) {
-    children.push(...formatGuidanceLine('Why', printable(normalized.why), colors.yellow))
+    children.push(...formatGuidanceLine('Why', printable(normalized.why), colors.yellow).map(text))
   }
   if (normalized.fix) {
-    children.push(...formatGuidanceLine('Fix', printable(normalized.fix), colors.cyan))
+    children.push(...formatGuidanceLine('Fix', printable(normalized.fix), colors.cyan).map(text))
   }
   if (normalized.link) {
-    children.push(`${colors.dim}More:${colors.reset} ${printable(normalized.link)}`)
+    children.push(text(`${colors.dim}More:${colors.reset} ${printable(normalized.link)}`))
   }
 
   if (normalized.cause && normalized.cause !== normalized.message) {
-    children.push(`${colors.dim}Caused by:${colors.reset} ${printable(normalized.cause)}`)
+    children.push(text(`${colors.dim}Caused by:${colors.reset} ${printable(normalized.cause)}`))
   }
 
   const hiddenCount = guidanceOnly ? 0 : frames.filter(f => !f.isApp || isInternalErrorFrame(f)).length
@@ -253,14 +239,13 @@ export function buildErrorEntries(
     : []
 
   if (!guidanceOnly && (hiddenCount > 0 || tailFrames.length > 0)) {
-    pushTreeSpacer(children)
     if (hiddenCount > 0) {
-      children.push(`${colors.gray}stack (${hiddenCount} frame${hiddenCount === 1 ? '' : 's'} hidden in node_modules)${colors.reset}`)
+      children.push(text(`${colors.gray}stack (${hiddenCount} frame${hiddenCount === 1 ? '' : 's'} hidden in node_modules)${colors.reset}`))
     } else {
-      children.push(`${colors.gray}stack${colors.reset}`)
+      children.push(text(`${colors.gray}stack${colors.reset}`))
     }
     for (const frame of tailFrames) {
-      children.push(`${colors.gray}  ${printable(formatCollapsedFrame(frame, cwd))}${colors.reset}`)
+      children.push(text(`${colors.gray}  ${printable(formatCollapsedFrame(frame, cwd))}${colors.reset}`))
     }
   }
 
