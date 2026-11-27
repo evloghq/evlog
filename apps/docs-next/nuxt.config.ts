@@ -1,3 +1,12 @@
+// v3 is this app's own content, served at `/`. A version with a `branch` and a `contentDir` is mounted
+// at `/<id>` and read from that directory of the repository at that branch. Each mounted version also
+// has its data endpoints under `server/api/content/<id>/`.
+const versions = [
+  { id: 'v3', label: 'v3', badge: 'beta', home: '/start/introduction' },
+  { id: 'v2', label: 'v2', branch: 'main', contentDir: 'apps/docs/content' },
+]
+const mounted = versions.filter(version => version.branch).map(version => `/${version.id}`)
+
 export default defineNuxtConfig({
   extends: ['comark-docs'],
 
@@ -16,13 +25,12 @@ export default defineNuxtConfig({
     preference: 'dark',
   },
 
+  // Geist is resolved from the `--font-*` theme variables, which gives each family a fallback with
+  // matching metrics. Only the Latin upright file is declared, so it can be preloaded.
   fonts: {
-    defaults: {
-      weights: ['100 900'],
-    },
     families: [
-      { name: 'Geist', weights: ['100 900'], global: true },
-      { name: 'Geist Mono', weights: ['100 900'], global: true },
+      { name: 'Geist', weights: ['100 900'], styles: ['normal'], subsets: ['latin'], preload: true },
+      { name: 'Geist Mono', weights: ['100 900'], styles: ['normal'], subsets: ['latin'], preload: true },
       {
         name: 'Geist Pixel Line',
         src: '/fonts/GeistPixel-Line.woff2',
@@ -52,6 +60,28 @@ export default defineNuxtConfig({
       // The published skills live at the repo root so a bare `npx skills add evloghq/evlog` finds them.
       dir: '../../skills',
     },
+    excludePrefixes: { extend: mounted.map(base => `${base}/`) },
+  },
+
+  runtimeConfig: {
+    public: {
+      docsVersions: versions,
+    },
+  },
+
+  // A mounted version is an older release: served like the layer's branch previews, out of every index.
+  routeRules: Object.fromEntries(mounted.flatMap(base => [
+    [base, { robots: 'noindex, nofollow' }],
+    [`${base}/**`, { robots: 'noindex, nofollow' }],
+  ])),
+
+  sitemap: {
+    exclude: mounted.flatMap(base => [base, `${base}/**`]),
+  },
+
+  $production: {
+    // The TTL the layer gives `/tree/**`: a mounted version follows its branch the same way.
+    routeRules: Object.fromEntries(mounted.map(base => [`${base}/**`, { isr: 300 }])),
   },
 
   icon: {

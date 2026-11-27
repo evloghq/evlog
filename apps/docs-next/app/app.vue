@@ -23,10 +23,15 @@ provide('sha', sha)
 
 const locale = extendLocale(en, { messages: { commandPalette: { placeholder: 'Search the docs' } } })
 
-const isLanding = computed(() => route.name === 'index' || route.name === 'landing-version')
+const isLanding = computed(() => route.name === 'index')
 
 useHead({
   htmlAttrs: { lang: 'en' },
+  // The browser's own bars, and the canvas before the stylesheet loads, take the page's background.
+  meta: [
+    { name: 'theme-color', content: '#09090b' },
+    { name: 'color-scheme', content: 'dark' },
+  ],
   link: [{ rel: 'icon', href: '/favicon.ico' }],
 })
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useResizeObserver } from '@vueuse/core'
 import type { VNode } from 'vue'
 import { frameworks, resolveFramework } from '~/utils/frameworks'
 import type { Framework } from '~/utils/frameworks'
@@ -68,9 +69,9 @@ useHead({ style: [{ key: 'framework-tabs', innerHTML: css }] })
 
 provide(DOCS_CODE_GROUP, true)
 
-const root = useTemplateRef<HTMLElement>('root')
+const body = useTemplateRef<HTMLElement>('body')
 // Every tab is in the DOM; the visible one is the one CSS did not hide.
-const copySource = () => [...(root.value?.querySelectorAll<HTMLElement>(':scope > [data-tab]') ?? [])]
+const copySource = () => [...(body.value?.querySelectorAll<HTMLElement>(':scope > [data-tab]') ?? [])]
   .find(el => el.offsetParent !== null)
   ?.querySelector('pre')
   ?.textContent ?? ''
@@ -84,6 +85,12 @@ const local = ref<number>()
 watch(choice, () => {
   local.value = undefined
 })
+// Frameworks need different amounts of code; the block changes height in one movement instead of jumping.
+const height = ref<number>()
+useResizeObserver(body, ([entry]) => {
+  height.value = entry?.target.getBoundingClientRect().height
+})
+
 function view(index: number, display: string) {
   if (local.value === undefined) return
   return { display: local.value === index ? display : 'none' }
@@ -117,7 +124,7 @@ const selected = computed({
 </script>
 
 <template>
-  <div ref="root" class="framework-tabs d-block my-7 overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised)" data-section="framework-tabs">
+  <div class="framework-tabs d-block my-7 overflow-hidden rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised)" data-section="framework-tabs">
     <div class="flex h-10 items-center gap-2 border-b border-(--d-line) pr-1.5 pl-4">
       <template v-for="(tab, index) in items" :key="tab.key">
         <span
@@ -147,7 +154,7 @@ const selected = computed({
         aria-label="Framework"
         class="ml-auto"
         :content="{ align: 'end', sideOffset: 6 }"
-        :ui="{ base: 'h-7 ps-2 pe-7 text-[12.5px]/5 md:text-[12.5px]/5 font-normal shrink-0 rounded-[8px] text-muted hover:text-highlighted hover:bg-(--d-raised-strong) transition-[color,background-color,transform] duration-150 active:scale-[0.97]', trailingIcon: 'size-3.5 text-dimmed', content: 'min-w-52 rounded-[10px] bg-(--ui-bg) ring-(--d-line-strong)', viewport: 'framework-picker-viewport', item: 'rounded-[6px] text-[13px]', itemLeadingIcon: 'text-default' }"
+        :ui="{ base: 'h-7 ps-2 pe-7 text-[12.5px]/5 md:text-[12.5px]/5 font-normal shrink-0 rounded-[8px] text-muted hover:text-highlighted hover:bg-(--d-raised-strong) transition-[color,background-color,transform] duration-150 active:scale-[0.97]', trailingIcon: 'size-3.5 text-dimmed', content: 'min-w-52 rounded-[10px] bg-(--ui-bg) ring-(--d-line-strong)', viewport: 'd-scroll', item: 'rounded-[6px] text-[13px]', itemLeadingIcon: 'text-default' }"
       >
         <span
           v-for="(tab, index) in items"
@@ -163,49 +170,18 @@ const selected = computed({
       <DocsCopyButton :source="copySource" />
     </div>
 
-    <div
-      v-for="(tab, index) in items"
-      :key="tab.key"
-      :data-tab="tab.key"
-      :data-first="index === 0 || undefined"
-      :style="view(index, 'block')"
-    >
-      <component :is="tab.component" hide-header tabindex="-1" />
+    <div class="d-resize" :style="{ height: height ? `${height}px` : undefined }">
+      <div ref="body">
+        <div
+          v-for="(tab, index) in items"
+          :key="tab.key"
+          :data-tab="tab.key"
+          :data-first="index === 0 || undefined"
+          :style="view(index, 'block')"
+        >
+          <component :is="tab.component" hide-header tabindex="-1" />
+        </div>
+      </div>
     </div>
   </div>
 </template>
-
-<style>
-/* The menu renders in a portal, so this cannot be scoped. The fades follow the
-   scroll position: none at the top edge until the list has scrolled, none at
-   the bottom once it reaches the end. */
-@property --fade-top {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --fade-bottom {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-
-.framework-picker-viewport {
-  mask-image: linear-gradient(to bottom, transparent, black var(--fade-top), black calc(100% - var(--fade-bottom)), transparent);
-}
-
-@supports (animation-timeline: scroll()) {
-  .framework-picker-viewport {
-    animation: framework-picker-fade linear both;
-    animation-timeline: scroll(self);
-  }
-
-  @keyframes framework-picker-fade {
-    0% { --fade-top: 0px; --fade-bottom: 20px; }
-    10% { --fade-top: 20px; }
-    90% { --fade-bottom: 20px; }
-    100% { --fade-top: 20px; --fade-bottom: 0px; }
-  }
-}
-</style>

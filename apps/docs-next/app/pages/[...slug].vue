@@ -98,8 +98,12 @@ const content = useDocsContent()
 
 const { data: page } = await useDocsPage()
 if (!page.value) {
-  // A directory without an index page redirects to its first page.
-  const firstLeaf = findFirstLeaf(navigation?.value, prefixLink(content.value.path, content.value.routeBase))
+  // A directory without an index page redirects to its first page. So does a version without a landing,
+  // read from its own navigation: right after a version switch, the shared one is still the other's.
+  const start = content.value.path === '/' ? firstPage(await content.value.client.navigation()) : undefined
+  const firstLeaf = start
+    ? prefixLink(start, content.value.routeBase)
+    : findFirstLeaf(navigation?.value, prefixLink(content.value.path, content.value.routeBase))
   if (firstLeaf) {
     await navigateTo(firstLeaf, { redirectCode: 302 })
   } else {
@@ -115,7 +119,10 @@ const tree = computed(() => {
   return p ? { ...p, nodes: prefixTreeLinks(split.value.nodes, content.value.routeBase) } : p
 })
 const fm = computed<Record<string, any>>(() => page.value?.data ?? {})
-const surround = computed(() => findSurroundLinks(navigation?.value, selfPath.value))
+const blocks = useDocsSidebar()
+// The configured sidebar sets the reading order; a version it was not written for (v2) keeps its files' order.
+const surround = computed(() => (blocks.value.some(block => block.steps) && surroundOf(blocks.value, selfPath.value))
+  || findSurroundLinks(navigation?.value, selfPath.value))
 
 // Read from this page's own data, so the list never shows the next page's sections while it loads.
 const toc = computed<TocLink[]>(() =>
@@ -142,19 +149,22 @@ const editUrl = computed(() => {
 })
 
 const site = useSiteConfig()
-const published = computed(() => ['prod', 'version'].includes(content.value.mode))
 const canonicalUrl = computed(() =>
   joinURL(site.url, content.value.mode === 'version' ? selfPath.value : content.value.path)
 )
 const rawPrefix = useRuntimeConfig().public.agentDiscovery?.rawPrefix || '/raw'
 
-// Where the page sits: its parent page when it has one, otherwise its sidebar group.
-const blocks = useDocsSidebar()
+// Where the page sits: its parent page when it has one, otherwise the group or section the sidebar
+// lists it in. A product's own page sits nowhere but the list.
 const place = computed(() => {
   for (const block of blocks.value) {
     for (const item of block.items) {
-      if (item.children.some(child => child.path === selfPath.value)) return { label: item.title, to: item.path }
-      if (item.path === selfPath.value) return { label: block.label ?? 'Get started' }
+      if (flattenPages(item.children).some(child => child.path === selfPath.value)) return { label: item.title, to: item.path }
+      if (item.path === selfPath.value && item.parent) return { label: item.parent.title, to: item.parent.path }
+      if (item.path === selfPath.value) {
+        const label = block.label ?? block.section
+        return label ? { label } : undefined
+      }
     }
   }
   return undefined
@@ -174,7 +184,7 @@ useIntersectionObserver(title, ([entry]) => {
 }, { rootMargin: '-56px 0px 0px 0px' })
 const copyPage = () => $fetch<string>(`${rawPrefix}${selfPath.value}.md`, { responseType: 'text' })
 
-useRobotsRule(computed(() => (published.value ? 'index, follow' : 'noindex, nofollow')))
+useRobotsRule(computed(() => (content.value.mode === 'prod' ? 'index, follow' : 'noindex, nofollow')))
 useSeoMeta({
   title: () => fm.value.seo?.title || fm.value.title,
   description: () => fm.value.seo?.description || fm.value.description,
@@ -197,9 +207,9 @@ useHead({ link: [{ rel: 'canonical', href: canonicalUrl }] })
         >
           {{ place.label }}
         </NuxtLink>
-        <span v-else class="text-dimmed">{{ place?.label }}</span>
+        <span v-else-if="place" class="text-dimmed">{{ place.label }}</span>
         <span class="d-xfade d-dock flex min-w-0 items-center gap-2" :data-on="titleGone" :aria-hidden="!titleGone">
-          <span aria-hidden="true" class="text-(--d-line-strong)">/</span>
+          <span v-if="place" aria-hidden="true" class="text-(--d-line-strong)">/</span>
           <span class="truncate text-default">{{ fm.title }}</span>
         </span>
         <!-- The path grows with the reader: the section they are in follows the page. -->

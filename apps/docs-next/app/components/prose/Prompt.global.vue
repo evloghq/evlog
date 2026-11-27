@@ -1,13 +1,7 @@
 <script setup lang="ts">
-// Local override of @nuxt/ui's ProsePrompt: identical rendering, plus a
-// `prompt_used` analytics event on each action. Which integration prompt gets
-// copied into which agent is the closest signal to "which integration do
-// people adopt", and the upstream component emits nothing.
-import { useClipboard } from '@vueuse/core'
-import { useLocale } from '@nuxt/ui/composables/useLocale'
+// Used by the v2 pages. Each action sends a `prompt_used` analytics event: which integration prompt
+// goes to which agent is the closest signal to which integration people adopt.
 import { getSlotChildrenText } from '@nuxt/ui/utils'
-import { tv } from '@nuxt/ui/utils/tv'
-import theme from '#build/ui/prose/prompt'
 
 type PromptAction = 'copy' | 'cursor' | 'windsurf' | 'claude'
 
@@ -15,24 +9,19 @@ interface PromptSlots {
   default?: () => unknown
 }
 
-defineOptions({ inheritAttrs: false })
-
 const props = defineProps<{
   description?: string
   icon?: string
   actions?: PromptAction[]
-  class?: unknown
-  ui?: Partial<Record<'root' | 'icon' | 'content' | 'description' | 'actions', string>>
 }>()
 
 const slots = defineSlots<PromptSlots>()
 
-const { t } = useLocale()
-const { copy, copied } = useClipboard()
-const appConfig = useAppConfig()
-
-const classes = computed(() => tv({ extend: theme, ...(appConfig.ui?.prose?.prompt || {}) })())
-const actions = computed<PromptAction[]>(() => [...new Set<PromptAction>(['copy', ...(props.actions ?? [])])])
+const openers = computed(() => ([
+  { action: 'cursor', name: 'Cursor', icon: 'i-simple-icons-cursor' },
+  { action: 'windsurf', name: 'Windsurf', icon: 'i-simple-icons-windsurf' },
+  { action: 'claude', name: 'Claude', icon: 'i-simple-icons-claude' },
+] as const).filter(opener => props.actions?.includes(opener.action)))
 
 function getPromptText(): string {
   const children = slots.default?.()
@@ -40,8 +29,8 @@ function getPromptText(): string {
 }
 
 function copyPrompt() {
-  copy(getPromptText())
   trackEvent('prompt_used', { action: 'copy' })
+  return getPromptText()
 }
 
 function openIn(action: Exclude<PromptAction, 'copy'>) {
@@ -57,53 +46,24 @@ function openIn(action: Exclude<PromptAction, 'copy'>) {
 </script>
 
 <template>
-  <div :class="classes.root({ class: [props.ui?.root, props.class] })" v-bind="$attrs">
-    <UIcon v-if="props.icon" :name="props.icon" :class="classes.icon({ class: props.ui?.icon })" />
+  <div class="my-7 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-(--d-r-lg) border border-(--d-line) bg-(--d-raised) py-1.5 pr-1.5 pl-4">
+    <p v-if="props.description" class="flex min-w-0 flex-1 items-center gap-2.5 py-1 text-[14px]/5 text-highlighted">
+      <UIcon v-if="props.icon" :name="props.icon" class="size-4 shrink-0 text-dimmed" />
+      {{ props.description }}
+    </p>
 
-    <div :class="classes.content({ class: props.ui?.content })">
-      <p v-if="props.description" :class="classes.description({ class: props.ui?.description })">
-        {{ props.description }}
-      </p>
-    </div>
-
-    <div :class="classes.actions({ class: props.ui?.actions })">
-      <UButton
-        v-if="actions.includes('copy')"
-        :icon="copied ? appConfig.ui.icons.copyCheck : appConfig.ui.icons.copy"
-        size="sm"
-        :label="t('prose.prompt.copy')"
-        @click="copyPrompt"
-      />
-
-      <UButton
-        v-if="actions.includes('cursor')"
-        icon="i-simple-icons-cursor"
-        color="neutral"
-        variant="outline"
-        size="sm"
-        :label="t('prose.prompt.openIn', { name: 'Cursor' })"
-        @click="openIn('cursor')"
-      />
-
-      <UButton
-        v-if="actions.includes('windsurf')"
-        icon="i-simple-icons-windsurf"
-        color="neutral"
-        variant="outline"
-        size="sm"
-        :label="t('prose.prompt.openIn', { name: 'Windsurf' })"
-        @click="openIn('windsurf')"
-      />
-
-      <UButton
-        v-if="actions.includes('claude')"
-        icon="i-simple-icons-claude"
-        color="neutral"
-        variant="outline"
-        size="sm"
-        :label="t('prose.prompt.openIn', { name: 'Claude' })"
-        @click="openIn('claude')"
-      />
+    <div class="flex flex-wrap items-center gap-1">
+      <button
+        v-for="opener in openers"
+        :key="opener.action"
+        type="button"
+        class="inline-flex h-7 items-center gap-1.5 rounded-(--d-r-md) px-2 text-[12.5px] text-dimmed transition-[color,background-color,transform] duration-150 hover:bg-(--d-raised-strong) hover:text-highlighted active:scale-[0.96]"
+        @click="openIn(opener.action)"
+      >
+        <UIcon :name="opener.icon" class="size-3.5" />
+        Open in {{ opener.name }}
+      </button>
+      <DocsCopyButton :source="copyPrompt" label="Copy prompt" />
     </div>
   </div>
 </template>

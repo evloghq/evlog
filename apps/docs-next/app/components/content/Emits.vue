@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useResizeObserver } from '@vueuse/core'
+import type { EventView } from '~/composables/useEventRail'
 
 const props = defineProps<{
   /** Step of the page's scenario that this code brings the event to. */
@@ -13,7 +14,8 @@ const name = computed(() => props.scenario ?? page.value)
 const data = computed(() => (name.value ? eventScenarios[name.value] : undefined))
 const index = computed(() => data.value?.steps.findIndex(step => step.id === props.step) ?? -1)
 const current = computed(() => data.value?.steps[index.value])
-const { view } = useEventView()
+// Each output keeps its own view: a choice shared across the page would resize every other output.
+const view = ref<EventView>('pretty')
 
 const status = computed(() => {
   const event = current.value?.event
@@ -107,7 +109,7 @@ onBeforeUnmount(() => {
           <span class="transition-opacity duration-150" :class="running ? 'opacity-0' : ''">{{ status.label }}</span>
           <span v-if="running" class="emits-wait" aria-hidden="true"><i /><i /><i /></span>
         </span></span>
-        <DocsEventViewSwitch class="ml-auto" />
+        <DocsEventViewSwitch v-model="view" class="ml-auto" />
         <button
           v-if="current.event"
           type="button"
@@ -122,7 +124,7 @@ onBeforeUnmount(() => {
         </button>
       </figcaption>
 
-      <div class="emits-screen" :style="{ height: height ? `${height}px` : undefined }">
+      <div class="emits-screen d-resize" :style="{ height: height ? `${height}px` : undefined }">
         <div ref="screen">
           <DocsEvent :scenario="name!" :step="index" :view />
         </div>
@@ -212,16 +214,7 @@ onBeforeUnmount(() => {
   40% { opacity: 1; }
 }
 
-.emits-screen {
-  overflow: hidden;
-  transition: height 280ms var(--d-ease);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .emits-screen {
-    transition: none;
-  }
-
   .emits-wait > i {
     animation: none;
   }

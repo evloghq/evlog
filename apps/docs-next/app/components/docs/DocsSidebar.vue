@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useResizeObserver } from '@vueuse/core'
-import type { SidebarItem } from '~/composables/useDocsSidebar'
+import { holds, trail, type SidebarItem, type Trail } from '~/composables/useDocsSidebar'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,21 +14,22 @@ function isCurrent(item: SidebarItem) {
 }
 
 function isWithin(item: SidebarItem) {
-  return route.path === item.path || route.path.startsWith(`${item.path}/`)
+  return holds(item, route.path)
 }
 
-function listed(item: SidebarItem) {
-  return isWithin(item) ? listedChildren(item, route.path) : []
-}
-
-// A framework's page is listed for the reader who chose that framework; the page being read always
-// stays. The global `data-fw-item` CSS decides before first paint.
+// Under Integrations, a framework's page is listed for the reader who chose that framework, wherever
+// they are. Every framework's row is rendered and the global `data-fw-item` CSS shows the chosen one
+// before first paint; the page being read is always shown.
 const frameworkOf = computed(() => new Map(
   Object.entries(frameworkPages).map(([id, page]) => [prefixLink(page, content.value.routeBase), id]),
 ))
 
-function frameworkItem(item: SidebarItem) {
-  return isWithin(item) ? undefined : frameworkOf.value.get(item.path)
+function listed(item: SidebarItem) {
+  return flattenPages(listedChildren(item, route.path, child => frameworkOf.value.has(child.path)))
+}
+
+function frameworkItem(child: SidebarItem) {
+  return isCurrent(child) ? undefined : frameworkOf.value.get(child.path)
 }
 
 // One highlight sits behind the current page. Until it is placed, the current link draws its own, so
@@ -44,7 +45,31 @@ function moveTo(link: HTMLElement) {
   Object.assign(marker, { x: to.left - from.left, y: to.top - from.top, w: to.width, h: to.height, placed: true })
 }
 
+// The event's path is drawn from where its rows are, so the line meets every stop and elbow exactly.
+const path = ref<Trail>()
+
+function centre(link: Element, frame: DOMRect) {
+  const box = link.getBoundingClientRect()
+  return Math.round(box.top + box.height / 2 - frame.top) + 0.5
+}
+
+function drawPath() {
+  const list = nav.value?.querySelector<HTMLElement>('.d-steps')
+  if (!list) return (path.value = undefined)
+  const frame = list.getBoundingClientRect()
+  path.value = trail([...list.children].map(row => ({
+    y: centre(row.querySelector(':scope > a')!, frame),
+    current: row.querySelector(':scope > a')!.getAttribute('aria-current') === 'page',
+    children: [...row.querySelectorAll(':scope > ul > li > a')].filter(link => link.getClientRects().length).map(link => ({
+      y: centre(link, frame),
+      end: Math.round(link.getBoundingClientRect().left - frame.left),
+      current: link.getAttribute('aria-current') === 'page',
+    })),
+  })))
+}
+
 function place() {
+  drawPath()
   const current = nav.value?.querySelector<HTMLElement>('[aria-current="page"]')
   if (current) moveTo(current)
   else marker.placed = false
@@ -64,9 +89,19 @@ function onClick(event: MouseEvent) {
   moveTo(link)
 }
 
+// The sidebar is longer than the screen: a page reached from search or a link shows its entry.
+function reveal() {
+  const scroller = nav.value?.closest<HTMLElement>('.d-scroll')
+  const current = nav.value?.querySelector<HTMLElement>('[aria-current="page"]')
+  if (scroller && current) scroller.scrollTop += revealDistance(scroller.getBoundingClientRect(), current.getBoundingClientRect())
+}
+
 watch(() => route.path, () => {
   pending.value = undefined
-  nextTick(place)
+  nextTick(() => {
+    place()
+    reveal()
+  })
 }, { flush: 'post' })
 
 // A navigation that does not happen leaves the marker on the entry that was clicked: put it back.
@@ -87,11 +122,7 @@ useResizeObserver(nav, () => {
 
 onMounted(() => {
   place()
-  const scroller = nav.value?.closest<HTMLElement>('.d-scroll')
-  const current = nav.value?.querySelector<HTMLElement>('[aria-current="page"]')
-  if (scroller && current && current.offsetTop > scroller.clientHeight * 0.7) {
-    scroller.scrollTop = current.offsetTop - scroller.clientHeight / 3
-  }
+  reveal()
 })
 
 function lit(item: SidebarItem) {
@@ -113,13 +144,24 @@ function lit(item: SidebarItem) {
       :style="{ transform: `translate(${marker.x}px, ${marker.y}px)`, width: `${marker.w}px`, height: `${marker.h}px` }"
     />
 
-    <div v-for="(block, index) in blocks" :key="block.label ?? index">
+    <div v-for="(block, index) in blocks" :key="block.label ?? index" :class="block.steps ? 'relative' : ''">
+      <svg v-if="block.steps && path" class="d-trail" aria-hidden="true">
+        <path :d="path.line" />
+        <path v-if="path.lit" class="d-trail-lit" :d="path.lit" />
+        <template v-for="stop in path.stops" :key="stop.y">
+          <circle v-if="stop.state === 'here'" class="d-trail-halo" cx="6.5" :cy="stop.y" r="7" />
+          <circle :class="`d-trail-stop is-${stop.state}`" cx="6.5" :cy="stop.y" r="3.5" />
+        </template>
+      </svg>
       <p v-if="block.label" :id="`docs-nav-${index}`" class="mb-2 text-[12px]/4 font-medium text-dimmed">
         {{ block.label }}
       </p>
 
-      <ul :aria-labelledby="block.label ? `docs-nav-${index}` : undefined">
-        <li v-for="item in block.items" :key="item.path" :data-fw-item="frameworkItem(item)">
+      <ul :aria-labelledby="block.label ? `docs-nav-${index}` : undefined" :class="block.steps ? 'd-steps' : ''">
+        <li
+          v-for="item in block.items"
+          :key="item.path"
+        >
           <NuxtLink
             :to="item.path"
             :aria-current="isCurrent(item) ? 'page' : undefined"
@@ -133,10 +175,11 @@ function lit(item: SidebarItem) {
           </NuxtLink>
 
           <!-- The tree evlog prints its events with: the way to the current page is lit. -->
-          <ul v-if="listed(item).length" class="d-rail">
+          <ul v-if="listed(item).length" class="d-rail" :data-fw-list="listed(item).every(frameworkItem) || undefined">
             <li
               v-for="(child, i) in listed(item)"
               :key="child.path"
+              :data-fw-item="frameworkItem(child)"
               :data-lit="isCurrent(child) || undefined"
               :data-path="i < listed(item).findIndex(isCurrent) || undefined"
             >

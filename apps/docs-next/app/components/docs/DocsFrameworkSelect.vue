@@ -50,6 +50,7 @@ const frameworkOf = (item: unknown) => (item as { framework: Framework }).framew
       trailing: 'hidden',
       content: 'w-(--reka-combobox-trigger-width) max-h-[min(28rem,var(--reka-combobox-content-available-height,28rem))] rounded-(--d-r-lg) bg-(--ui-bg) ring-(--d-line-strong)',
       input: 'border-b border-(--d-line) [&_input]:h-10 [&_input]:text-[13px] [&_[data-slot=leadingIcon]]:size-3.5',
+      viewport: 'd-scroll',
       group: 'p-1',
       label: 'px-2 pt-2 pb-1 text-[12px] font-normal text-dimmed',
       item: 'h-8 items-center gap-2.5 rounded-(--d-r-md) px-2 text-[13px] text-muted before:inset-0 before:rounded-(--d-r-md) data-highlighted:not-data-disabled:before:bg-(--d-raised-strong)',

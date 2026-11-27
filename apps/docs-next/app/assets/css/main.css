@@ -26,6 +26,37 @@
   html, body {
     @apply bg-default text-default;
   }
+
+  /* The page never pans sideways. `clip` keeps `position: sticky` working and still lets a
+     sideways trackpad swipe navigate back and forward. */
+  html, body {
+    overflow-x: clip;
+  }
+
+  /* No rubber-band bounce on devices with only a mouse or trackpad, so the top bar and the sidebar
+     stay put at the page's edges. Any touchscreen keeps it, and pull-to-refresh with it. */
+  @media (pointer: fine) and (not (any-pointer: coarse)) {
+    html {
+      overscroll-behavior-y: none;
+    }
+  }
+
+  /* The canvas, the scrollbars and form controls follow the page's colour mode, not the system's. */
+  .dark {
+    color-scheme: dark;
+  }
+
+  /* A tap acts at once: no wait for a second tap that would zoom. */
+  a, button, summary, label, input, select, textarea, [role='button'], [role='option'], [role='menuitem'] {
+    touch-action: manipulation;
+  }
+
+  /* iOS zooms the page when a field with text under 16px takes focus. */
+  @media (pointer: coarse) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+  }
 }
 
 .section-label {
@@ -345,7 +376,9 @@
   background: linear-gradient(to bottom, var(--rail-top) var(--rail-turn), var(--rail-low) var(--rail-turn));
 }
 
-.d-rail > li:last-child::after {
+/* A list that holds only the frameworks' rows shows one of them, which ends the rail wherever it sits. */
+.d-rail > li:last-child::after,
+.d-rail[data-fw-list] > li::after {
   bottom: auto;
   height: var(--rail-turn);
 }
@@ -378,9 +411,73 @@
   border-color: var(--rail-path);
 }
 
+/* The event's path is one SVG laid over its rows (see DocsSidebar): a spine with a stop per step, and the
+   nested pages hang off it instead of a rail of their own. */
+.d-trail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  fill: none;
+  stroke: #34343b;
+  stroke-width: 1;
+}
+
+.d-trail-lit {
+  stroke: #a1a1aa;
+}
+
+.d-trail-stop {
+  fill: var(--ui-bg);
+}
+
+.d-trail-stop.is-on {
+  stroke: #a1a1aa;
+}
+
+.d-trail-stop.is-here {
+  stroke: var(--ui-text-highlighted);
+  fill: var(--ui-text-highlighted);
+}
+
+.d-trail-halo {
+  stroke: none;
+  fill: var(--ui-text-highlighted);
+  fill-opacity: 0.1;
+}
+
+.d-steps > li > a {
+  padding-left: 32px;
+}
+
+.d-steps .d-rail {
+  margin-left: 0;
+}
+
+.d-steps .d-rail > li {
+  padding-left: 36px;
+}
+
+.d-steps .d-rail > li::before,
+.d-steps .d-rail > li::after {
+  content: none;
+}
+
 /* A table is ruled, not boxed: one hairline under every row, the last one closing it. */
 .d-table tr {
   border-bottom: 1px solid var(--d-line);
+}
+
+.d-table code[data-phrase] {
+  white-space: normal;
+  box-decoration-break: clone;
+}
+
+/* A code phrase that wraps ends its line a pixel past the text, which made the table scroll sideways. */
+.d-table :is(th, td):last-child {
+  padding-right: 2px;
 }
 
 /* Scroll areas fade at the edge that has more content, following the scroll position. */
@@ -453,11 +550,13 @@
     animation-timeline: scroll(self inline);
   }
 
+  /* As for `.d-scroll`: only code or a table that really scrolls keeps the sideways swipe to itself,
+     so reaching its end does not go back a page. */
   @keyframes d-scroll-x-fade {
-    0% { --d-fade-left: 0px; --d-fade-right: 48px; }
+    0% { --d-fade-left: 0px; --d-fade-right: 48px; overscroll-behavior-x: contain; }
     8% { --d-fade-left: 32px; }
     92% { --d-fade-right: 48px; }
-    100% { --d-fade-left: 32px; --d-fade-right: 0px; }
+    100% { --d-fade-left: 32px; --d-fade-right: 0px; overscroll-behavior-x: contain; }
   }
 }
 
@@ -468,6 +567,18 @@
 
 .d-stack > * {
   grid-area: 1 / 1;
+}
+
+/* A box whose content changes length: it holds the height set on it and moves to the next one. */
+.d-resize {
+  overflow: hidden;
+  transition: height 280ms var(--d-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .d-resize {
+    transition: none;
+  }
 }
 
 .d-xfade {

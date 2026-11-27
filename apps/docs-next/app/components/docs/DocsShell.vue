@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useMediaQuery } from '@vueuse/core'
+
 const route = useRoute()
 const content = useDocsContent()
 const menuOpen = ref(false)
@@ -6,18 +8,33 @@ const menuOpen = ref(false)
 watch(() => route.path, () => {
   menuOpen.value = false
 })
+
+// Below `lg` the open menu covers the page, so the page behind it takes no focus and no scroll.
+const narrow = useMediaQuery('(max-width: 1023px)')
+const covering = computed(() => menuOpen.value && narrow.value)
+const toggle = useTemplateRef<HTMLElement>('toggle')
+
+function dismiss() {
+  if (!covering.value) return
+  menuOpen.value = false
+  toggle.value?.focus()
+}
 </script>
 
 <template>
-  <div class="docs-shell min-h-svh bg-default text-default">
-    <header class="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-(--d-line) bg-default/85 px-5 backdrop-blur-md lg:hidden">
-      <div class="flex items-center gap-2">
-        <NuxtLink :to="prefixLink('/', content.routeBase)" aria-label="evlog home">
+  <div class="docs-shell min-h-svh bg-default text-default" :data-covered="covering || undefined" @keydown.esc="dismiss">
+    <header
+      class="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-(--d-line) px-5 lg:hidden"
+      :class="covering ? 'bg-default' : 'bg-default/85 backdrop-blur-md'"
+    >
+      <div class="flex items-center gap-3">
+        <NuxtLink :to="prefixLink('/', content.routeBase)" aria-label="evlog home" class="rounded-(--d-r-sm)">
           <DocsLogo />
         </NuxtLink>
         <DocsVersionSelect />
       </div>
       <button
+        ref="toggle"
         type="button"
         class="rounded-(--d-r-md) px-2.5 py-1 text-[14px] text-muted transition-[color,background-color,transform] duration-150 hover:bg-(--d-raised-strong) hover:text-highlighted active:scale-[0.97]"
         :aria-expanded="menuOpen"
@@ -30,7 +47,7 @@ watch(() => route.path, () => {
     </header>
 
     <div class="flex w-full">
-      <main class="min-w-0 flex-1 overflow-x-clip lg:order-2">
+      <main class="min-w-0 flex-1 overflow-x-clip lg:order-2" :inert="covering">
         <slot />
       </main>
 
@@ -40,7 +57,7 @@ watch(() => route.path, () => {
         :data-open="menuOpen"
       >
         <!-- As tall as the page's top bar, so one hairline runs across the whole window. -->
-        <div class="hidden h-14 shrink-0 items-center gap-2 border-b border-(--d-line) px-6 lg:flex">
+        <div class="hidden h-14 shrink-0 items-center justify-between border-b border-(--d-line) px-6 lg:flex">
           <NuxtLink :to="prefixLink('/', content.routeBase)" aria-label="evlog home" class="rounded-(--d-r-sm)">
             <DocsLogo />
           </NuxtLink>
@@ -78,6 +95,10 @@ watch(() => route.path, () => {
   .docs-menu[data-open='true'] {
     transition-delay: 0s;
   }
+}
+
+:global(html:has(.docs-shell[data-covered])) {
+  overflow: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {

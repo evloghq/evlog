@@ -2,14 +2,19 @@ export default defineAppConfig({
   seo: {
     siteName: 'evlog',
   },
-  // Docs sidebar. A group with one section lists that section's pages; a group with several lists one
-  // entry per section, with its pages nested under it. A catalogue section nests only the page being read.
+  // Docs sidebar: how to start, the path one event takes in the order evlog runs it, what is built on
+  // events, then what you look up. A group with one section lists that section's pages; a group with
+  // several lists one entry per section, with its pages nested under it while they are read. A catalogue
+  // section nests only the page being read: its own page links the rest.
   sidebar: [
     { sections: ['start'] },
-    { label: 'Core', sections: ['events', 'errors', 'drains', 'audit'], catalogs: ['drains'] },
-    { label: 'Tools', sections: ['map', 'signals', 'skills', 'telemetry'] },
-    { label: 'Integrations', sections: ['integrations'] },
-    { label: 'Reference', sections: ['reference'] },
+    {
+      sections: ['integrations', 'events', 'errors', 'drains'],
+      steps: ['integrations', 'events', 'errors', 'events/sampling', 'events/redaction', 'events/enrichers', 'drains'],
+      catalogs: ['integrations', 'drains'],
+    },
+    { sections: ['audit', 'map', 'signals', 'skills', 'telemetry'] },
+    { sections: ['cli', 'reference', 'compare'], catalogs: ['cli', 'reference', 'compare'] },
   ],
   footer: {
     owner: 'Hugo Richard',

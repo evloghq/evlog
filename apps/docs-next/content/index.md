@@ -541,7 +541,7 @@ Before you install
 #body
   ::accordion{type="single"}
     ::accordion-item{label="I already use pino. What actually changes?"}
-    evlog supplies a context accumulator and integrations that finish the request event. `log.set()` adds fields during the operation, and the emitted event carries its outcome and error together. Pino can also emit a completed object once, with accumulation managed by your application. `createError()` adds `why` and `fix`, and a [catalog](/errors/catalogs) gives recurring failures a stable code. Call signatures, serializers, and output configuration need an explicit migration. See [the comparison for your stack](/v2/reference/vs-other-loggers).
+    evlog supplies a context accumulator and integrations that finish the request event. `log.set()` adds fields during the operation, and the emitted event carries its outcome and error together. Pino can also emit a completed object once, with accumulation managed by your application. `createError()` adds `why` and `fix`, and a [catalog](/errors/catalogs) gives recurring failures a stable code. Call signatures, serializers, and output configuration need an explicit migration. See [the comparison for your stack](/compare).
     ::
     ::accordion-item{label="My app is already in production. Is it too late?"}
     No, and you do not have to guess where to start. `evlog map` reads your source and scores every entry point on the context it will hand you when it breaks, then names the ones to fix first. It needs no traffic, no agent, and no deploy, so you get that list before the next incident instead of during it. Day one or year three, the work is the same list. See [adding it to an app already in production](/map).
