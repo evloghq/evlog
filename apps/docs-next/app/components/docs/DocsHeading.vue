@@ -41,16 +41,6 @@ const parts = computed(() => {
 const body = (given: { nodes: Child[] }) => given.nodes
 body.props = ['nodes']
 
-// A step is ahead of the reader, being read, or read: its mark is a ring that closes, then fills.
-const reading = useDocsReading()
-const sections = inject<Ref<string[]>>('docs-sections', ref([]))
-const state = computed(() => {
-  const at = sections.value.indexOf(reading.value ?? '')
-  const own = sections.value.indexOf(props.id ?? '')
-  if (at < 0 || own < 0 || own > at) return 'ahead'
-  return own === at ? 'reading' : 'read'
-})
-
 // Lit for a moment after a jump from the table of contents or a link, so the reader sees where they landed.
 const arrived = useDocsArrived()
 const landed = computed(() => Boolean(props.id) && arrived.value === props.id)
@@ -80,7 +70,6 @@ function copyLink() {
     <span
       v-if="parts.step"
       class="d-stepmark grid size-6 shrink-0 translate-y-[-1px] place-items-center rounded-full font-mono text-[12px] font-medium tracking-normal"
-      :data-state="state"
     >{{ parts.step }}</span>
     <a v-if="props.id" :href="`#${props.id}`" class="group/h relative" @click="copyLink">
       <span

@@ -31,12 +31,20 @@ const selected = computed({
   },
 })
 
+const open = ref(false)
+
+function clear() {
+  choose(undefined)
+  open.value = false
+}
+
 const frameworkOf = (item: unknown) => (item as { framework: Framework }).framework
 </script>
 
 <template>
   <USelectMenu
     v-model="selected"
+    v-model:open="open"
     :items
     value-key="value"
     :search-input="{ placeholder: 'Find a framework', variant: 'none', icon: 'i-lucide-search' }"
@@ -94,6 +102,15 @@ const frameworkOf = (item: unknown) => (item as { framework: Framework }).framew
     </template>
 
     <template #content-bottom>
+      <button
+        v-if="chosen"
+        type="button"
+        class="flex h-9 w-full shrink-0 items-center gap-2.5 border-t border-(--d-line) px-3 text-left text-[13px] text-muted transition-colors duration-150 hover:bg-(--d-raised-strong) hover:text-highlighted"
+        @click="clear"
+      >
+        <UIcon name="i-lucide-x" class="size-3.5 shrink-0" />
+        Show every framework
+      </button>
       <p class="border-t border-(--d-line) px-3 py-2.5 text-[12px]/[1.5] text-dimmed">
         Code tabs, file names and the integrations list follow this choice.
       </p>

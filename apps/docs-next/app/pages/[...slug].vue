@@ -125,15 +125,17 @@ const surround = computed(() => (blocks.value.some(block => block.steps) && surr
   || findSurroundLinks(navigation?.value, selfPath.value))
 
 // Read from this page's own data, so the list never shows the next page's sections while it loads.
+type TocNode = TocLink & { children?: TocNode[] }
+const flattenToc = (links: TocNode[]): TocLink[] =>
+  links.flatMap(({ id, text, depth, children }) => [{ id, text, depth }, ...flattenToc(children ?? [])])
 const toc = computed<TocLink[]>(() =>
-  ((page.value?.meta as { toc?: { links?: TocLink[] } } | undefined)?.toc?.links ?? []).map(({ id, text }) => ({ id, text })))
+  flattenToc((page.value?.meta as { toc?: { links?: TocNode[] } } | undefined)?.toc?.links ?? []))
 
 const publishEvent = usePublishEvent()
 watchEffect(() => publishEvent(page.value))
 
 const sections = computed(() => toc.value.map(link => link.id))
 useDocsScrollSpy(sections)
-provide('docs-sections', sections)
 
 const reading = useDocsReading()
 const section = computed(() => toc.value.find(link => link.id === reading.value))

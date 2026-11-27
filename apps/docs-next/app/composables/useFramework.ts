@@ -19,10 +19,11 @@ export function useFrameworkChoice() {
     choice.value ??= document.documentElement.dataset.framework
   })
 
-  function choose(id: string) {
+  function choose(id: string | undefined) {
     cookie.value = id
     choice.value = id
-    document.documentElement.dataset.framework = id
+    if (id) document.documentElement.dataset.framework = id
+    else delete document.documentElement.dataset.framework
   }
 
   return { choice, choose }
