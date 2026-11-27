@@ -236,7 +236,7 @@ function statusClass() {
             <span class="font-mono text-[10px] tracking-widest uppercase text-dimmed">server</span>
             <span class="ml-auto font-mono text-[9px] text-dimmed truncate max-w-[55%]">checkout.post.ts</span>
           </div>
-          <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto"><code><span class="text-violet-400">throw</span> <span class="text-amber-400">createError</span>({
+          <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto overflow-y-hidden"><code><span class="text-violet-400">throw</span> <span class="text-amber-400">createError</span>({
   <span class="text-sky-400">code</span>:    <span class="text-emerald-400">'PAYMENT_DECLINED'</span>,
   <span class="text-sky-400">message</span>: <span class="text-emerald-400">'Payment failed'</span>,
   <span class="text-sky-400">status</span>:  <span class="text-pink-400">402</span>,

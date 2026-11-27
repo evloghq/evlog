@@ -301,7 +301,7 @@ useHead({ link: [{ rel: 'canonical', href: canonicalUrl }] })
         </footer>
       </article>
 
-      <aside aria-label="On this page" class="sticky top-14 hidden h-[calc(100svh-3.5rem)] w-[13.5rem] shrink-0 flex-col pt-14 xl:flex">
+      <aside class="sticky top-14 hidden h-[calc(100svh-3.5rem)] w-[13.5rem] shrink-0 flex-col pt-14 xl:flex">
         <template v-if="toc.length">
           <p class="mb-3 text-[12px] font-medium text-dimmed">
             On this page

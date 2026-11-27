@@ -5,13 +5,20 @@ export interface SidebarGroup {
   label?: string
   /** Top-level content sections. One section lists its pages; several list one entry per section. */
   sections: string[]
+  /**
+   * Sections whose pages are a catalogue the reader picks one of (the drains). The section's own page
+   * lists them all, so the sidebar shows only the one being read.
+   */
+  catalogs?: string[]
 }
 
 export interface SidebarItem {
   title: string
   path: string
-  /** Pages of a multi-page product, listed under it while the reader is inside it. */
+  /** Pages of a multi-page product, listed under it. */
   children: SidebarItem[]
+  /** The children are a catalogue: only the one being read is listed. */
+  catalog: boolean
 }
 
 export interface SidebarBlock {
@@ -19,13 +26,19 @@ export interface SidebarBlock {
   items: SidebarItem[]
 }
 
-function toItem(node: NavigationItem): SidebarItem {
+function toItem(node: NavigationItem, catalog = false): SidebarItem {
   return {
     title: node.title,
     path: node.path,
     // A directory's index page is the directory's own link, not one of its children.
-    children: (node.children ?? []).filter(child => child.path !== node.path).map(toItem),
+    children: (node.children ?? []).filter(child => child.path !== node.path).map(child => toItem(child)),
+    catalog,
   }
+}
+
+/** The pages listed under a sidebar entry while the reader is at `path`. */
+export function listedChildren(item: SidebarItem, path: string): SidebarItem[] {
+  return item.catalog ? item.children.filter(child => child.path === path) : item.children
 }
 
 /**
@@ -49,7 +62,9 @@ export function useDocsSidebar() {
     return groups.map((group) => {
       const nodes = group.sections.map(section => bySection.get(section)).filter(Boolean) as NavigationItem[]
       const only = nodes.length === 1 ? nodes[0] : undefined
-      const items = only?.children?.length ? only.children.map(toItem) : nodes.map(toItem)
+      const items = only?.children?.length
+        ? only.children.map(node => toItem(node))
+        : nodes.map(node => toItem(node, group.catalogs?.includes(segmentOf(node.path, base))))
       return { label: group.label, items }
     }).filter(block => block.items.length)
   })

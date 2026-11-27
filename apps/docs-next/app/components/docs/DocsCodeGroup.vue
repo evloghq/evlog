@@ -78,7 +78,7 @@ const source = () => {
       <div
         ref="list"
         role="tablist"
-        class="relative flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]"
+        class="relative flex min-w-0 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
         @keydown="onKey"
       >
         <span

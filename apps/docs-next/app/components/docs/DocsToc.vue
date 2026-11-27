@@ -42,7 +42,7 @@ function go(event: MouseEvent, id: string) {
 </script>
 
 <template>
-  <div ref="list" class="relative border-l border-(--d-line) text-[13px]/[1.45]">
+  <nav ref="list" aria-label="On this page" class="relative border-l border-(--d-line) text-[13px]/[1.45]">
     <span
       aria-hidden="true"
       class="absolute top-0 -left-px w-px bg-(--ui-text-highlighted)"
@@ -62,5 +62,5 @@ function go(event: MouseEvent, id: string) {
         </a>
       </li>
     </ul>
-  </div>
+  </nav>
 </template>

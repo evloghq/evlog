@@ -167,13 +167,13 @@ const reachedRendered = computed(() => phase.value === 'rendered')
           </div>
 
           <div class="border border-muted bg-elevated/30 px-3.5 py-3 mb-3 min-h-[180px]">
-            <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto"><code><span class="text-violet-400">throw</span> <span class="text-amber-400">new</span> <span class="text-sky-400">Error</span>(<span class="text-emerald-400">"Payment failed"</span>)
+            <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto overflow-y-hidden"><code><span class="text-violet-400">throw</span> <span class="text-amber-400">new</span> <span class="text-sky-400">Error</span>(<span class="text-emerald-400">"Payment failed"</span>)
 </code></pre>
             <div class="mt-3 pt-3 border-t border-default/30 transition-opacity duration-500" :class="reachedCaught ? 'opacity-100' : 'opacity-0'">
               <div class="font-mono text-[9px] tracking-widest uppercase text-dimmed mb-1.5">
                 ↓ caller catches
               </div>
-              <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto"><code>err.message <span class="text-dimmed">→</span> <span class="text-emerald-400">"Payment failed"</span>
+              <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto overflow-y-hidden"><code>err.message <span class="text-dimmed">→</span> <span class="text-emerald-400">"Payment failed"</span>
 err.status  <span class="text-dimmed">→</span> <span class="text-rose-400/80">undefined</span>
 err.why     <span class="text-dimmed">→</span> <span class="text-rose-400/80">undefined</span>
 err.fix     <span class="text-dimmed">→</span> <span class="text-rose-400/80">undefined</span></code></pre>
@@ -205,7 +205,7 @@ err.fix     <span class="text-dimmed">→</span> <span class="text-rose-400/80">
             class="border bg-elevated/30 px-3.5 py-3 mb-3 transition-colors duration-500 min-h-[180px]"
             :class="reachedRendered ? 'border-primary/25' : 'border-muted'"
           >
-            <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto"><code><span class="text-violet-400">throw</span> <span class="text-sky-400">createError</span>({
+            <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto overflow-y-hidden"><code><span class="text-violet-400">throw</span> <span class="text-sky-400">createError</span>({
 <template v-for="(field, i) in fields" :key="`f-${field.key}`"><span
   class="transition-all duration-500"
   :class="fieldRevealed[i] ? 'opacity-100' : 'opacity-0'"
@@ -215,7 +215,7 @@ err.fix     <span class="text-dimmed">→</span> <span class="text-rose-400/80">
               <div class="font-mono text-[9px] tracking-widest uppercase text-dimmed mb-1.5">
                 ↓ parseError(err)
               </div>
-              <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto"><code>{ <span class="text-sky-400">message</span>, <span class="text-sky-400">status</span>, <span class="text-sky-400">why</span>, <span class="text-sky-400">fix</span>, <span class="text-sky-400">link</span> }
+              <pre class="font-mono text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto overflow-y-hidden"><code>{ <span class="text-sky-400">message</span>, <span class="text-sky-400">status</span>, <span class="text-sky-400">why</span>, <span class="text-sky-400">fix</span>, <span class="text-sky-400">link</span> }
 <span class="text-emerald-400">all fields available · safe by default</span></code></pre>
             </div>
           </div>

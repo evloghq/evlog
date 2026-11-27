@@ -63,7 +63,7 @@ const env = computed(() => drain.value.env.map(([key, value]) => `${key}=${value
         ref="list"
         role="radiogroup"
         aria-label="Destination"
-        class="relative flex gap-1 overflow-x-auto border-b border-(--d-line) p-2 [scrollbar-width:none] md:block md:overflow-visible md:border-r md:border-b-0"
+        class="relative flex gap-1 overflow-x-auto overflow-y-hidden border-b border-(--d-line) p-2 [scrollbar-width:none] md:block md:overflow-visible md:border-r md:border-b-0"
         @keydown="onKey"
       >
         <span
@@ -98,7 +98,7 @@ const env = computed(() => drain.value.env.map(([key, value]) => `${key}=${value
           evlog.config.ts
           <DocsCopyButton class="ml-auto font-sans" :source="() => config" />
         </div>
-        <pre class="overflow-x-auto px-4 py-4 font-mono text-[13px]/[1.75] text-default"><code><span style="color: #ff518d">import</span> { defineEvlog } <span style="color: #ff518d">from</span> <span style="color: #00ca52">'evlog'</span>
+        <pre class="overflow-x-auto overflow-y-hidden px-4 py-4 font-mono text-[13px]/[1.75] text-default"><code><span style="color: #ff518d">import</span> { defineEvlog } <span style="color: #ff518d">from</span> <span style="color: #00ca52">'evlog'</span>
 <span style="color: #ff518d">import</span> { <span :key="`f-${selected}`" :class="chosen && 'd-flash'">{{ drain.factory }}</span> } <span style="color: #ff518d">from</span> <span :key="`e-${selected}`" style="color: #00ca52" :class="chosen && 'd-flash'">'{{ drain.entry }}'</span>
 
 <span style="color: #ff518d">export default</span> <span style="color: #c472fb">defineEvlog</span>({
@@ -110,7 +110,7 @@ const env = computed(() => drain.value.env.map(([key, value]) => `${key}=${value
           .env
           <DocsCopyButton v-if="drain.env.length" class="ml-auto font-sans" :source="() => env" />
         </div>
-        <pre class="min-h-[5.5rem] overflow-x-auto px-4 py-4 font-mono text-[13px]/[1.75]"><code v-if="drain.env.length" :key="`env-${selected}`" :class="chosen && 'd-tab-in'"><template v-for="[key, value] in drain.env" :key><span class="text-highlighted">{{ key }}</span><span class="text-dimmed">=</span><span class="text-muted">{{ value }}</span>
+        <pre class="min-h-[5.5rem] overflow-x-auto overflow-y-hidden px-4 py-4 font-mono text-[13px]/[1.75]"><code v-if="drain.env.length" :key="`env-${selected}`" :class="chosen && 'd-tab-in'"><template v-for="[key, value] in drain.env" :key><span class="text-highlighted">{{ key }}</span><span class="text-dimmed">=</span><span class="text-muted">{{ value }}</span>
 </template></code><code v-else :key="`none-${selected}`" class="font-sans text-[13px] text-dimmed" :class="chosen && 'd-tab-in'">Nothing to set. It works without credentials.</code></pre>
 
         <div class="mt-auto flex items-center justify-between gap-4 border-t border-(--d-line) px-4 py-3 text-[13px]">

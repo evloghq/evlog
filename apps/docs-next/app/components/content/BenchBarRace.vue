@@ -265,7 +265,7 @@ const collapsed = computed(() => phase.value === 'collapsed' || phase.value === 
               <UIcon name="i-lucide-package-check" class="size-3 text-primary" />
               <span class="font-mono text-[9px] tracking-widest uppercase text-dimmed">evlog wide event</span>
             </div>
-            <pre class="font-mono text-[10px] leading-relaxed text-muted overflow-x-auto"><code>{
+            <pre class="font-mono text-[10px] leading-relaxed text-muted overflow-x-auto overflow-y-hidden"><code>{
   <span class="text-sky-400">user</span>:    { id, plan },
   <span class="text-sky-400">cart</span>:    { items, total },
   <span class="text-sky-400">payment</span>: { method },

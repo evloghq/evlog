@@ -31,7 +31,7 @@ const scanning = computed(() => scanned.value > 0 && scanned.value < fields.leng
     :duration
     @replay="replay"
   >
-    <div class="relative overflow-x-auto px-5 py-4 sm:px-6">
+    <div class="relative overflow-x-auto overflow-y-hidden px-5 py-4 sm:px-6">
       <span
         aria-hidden="true"
         class="pointer-events-none absolute inset-x-0 top-4 h-px bg-(--d-signal) transition-[transform,opacity] ease-(--d-ease-move)"

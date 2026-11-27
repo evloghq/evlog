@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { NavigationItem } from 'comark-content'
+import { en } from '@nuxt/ui/locale'
 
 const content = useDocsContent()
 const route = useRoute()
@@ -20,6 +21,8 @@ const navTree = computed<NavigationItem[]>(() => prefixNavigation(navigation.val
 provide('navigation', navTree)
 provide('sha', sha)
 
+const locale = extendLocale(en, { messages: { commandPalette: { placeholder: 'Search the docs' } } })
+
 const isLanding = computed(() => route.name === 'index' || route.name === 'landing-version')
 
 useHead({
@@ -35,7 +38,7 @@ useSeoMeta({
 </script>
 
 <template>
-  <UApp>
+  <UApp :locale>
     <NuxtLoadingIndicator :height="1" color="var(--ui-text-highlighted)" />
 
     <template v-if="isLanding">

@@ -73,7 +73,7 @@ function copyLink() {
   <component
     :is="`h${props.level}`"
     :id="props.id"
-    class="group/h scroll-mt-28 text-highlighted text-balance [&_code]:text-[0.88em]"
+    class="scroll-mt-28 text-highlighted text-balance [&_code]:text-[0.88em]"
     :class="[classes[props.level], parts.step ? 'flex items-baseline gap-3' : '']"
     :style="{ marginLeft: hang }"
   >
@@ -82,7 +82,7 @@ function copyLink() {
       class="d-stepmark grid size-6 shrink-0 translate-y-[-1px] place-items-center rounded-full font-mono text-[12px] font-medium tracking-normal"
       :data-state="state"
     >{{ parts.step }}</span>
-    <a v-if="props.id" :href="`#${props.id}`" class="relative" @click="copyLink">
+    <a v-if="props.id" :href="`#${props.id}`" class="group/h relative" @click="copyLink">
       <span
         v-if="!parts.step"
         aria-hidden="true"

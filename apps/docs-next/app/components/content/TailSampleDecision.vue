@@ -70,7 +70,7 @@ function lit(row: Request, i: number, rule: Request['rule']) {
     :duration
     @replay="replay"
   >
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto overflow-y-hidden">
       <table class="w-full min-w-[34rem] border-collapse text-left font-mono text-[12.5px]/5">
         <thead>
           <tr class="text-[12.5px] text-dimmed [&>th]:px-5 [&>th]:pt-5 [&>th]:pb-3 [&>th]:font-sans [&>th]:font-normal">

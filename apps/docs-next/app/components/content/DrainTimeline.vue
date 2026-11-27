@@ -76,7 +76,7 @@ const responded = computed(() => t.value >= 234)
     :duration
     @replay="replay"
   >
-    <div class="overflow-x-auto px-5 pt-5 pb-5 sm:px-6">
+    <div class="overflow-x-auto overflow-y-hidden px-5 pt-5 pb-5 sm:px-6">
       <div class="min-w-[32rem] pl-20">
         <div class="relative h-5">
           <span

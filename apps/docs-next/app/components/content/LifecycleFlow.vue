@@ -321,7 +321,7 @@ const isDone = computed(() => phase.value >= stages.length - 1)
                 <UIcon name="i-lucide-package-check" class="size-3 text-primary" />
                 <span class="text-[10px] uppercase tracking-widest text-dimmed">wide event</span>
               </div>
-              <pre class="text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto"><code>{
+              <pre class="text-[10px] sm:text-[11px] leading-relaxed text-muted overflow-x-auto overflow-y-hidden"><code>{
   <span class="text-sky-400">level</span>:    <span class="text-emerald-400">"info"</span>,
   <span class="text-sky-400">method</span>:   <span class="text-emerald-400">"POST"</span>,
   <span class="text-sky-400">path</span>:     <span class="text-emerald-400">"/api/checkout"</span>,

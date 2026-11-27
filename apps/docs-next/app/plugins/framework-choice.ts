@@ -7,7 +7,7 @@ import { frameworks } from '~/utils/frameworks'
 //
 // - `[data-fw-only="id"]` shows only while that framework is chosen.
 // - `[data-fw-none]` shows only while none is.
-// - `[data-fw-item="id"]` (sidebar entries) hides when another framework is chosen.
+// - `[data-fw-item="id"]` (sidebar entries) shows only while that framework is chosen.
 // - `[data-fw-other="id"]` shows only while a different framework is chosen.
 export default defineNuxtPlugin(() => {
   const ids = frameworks.map(f => f.id)
@@ -16,6 +16,7 @@ export default defineNuxtPlugin(() => {
     hide('html:not([data-framework]) [data-fw-only]'),
     hide('html[data-framework] [data-fw-none]'),
     hide('html:not([data-framework]) [data-fw-other]'),
+    hide('html:not([data-framework]) [data-fw-item]'),
     ...ids.flatMap(id => [
       hide(`html[data-framework="${id}"] [data-fw-only]:not([data-fw-only="${id}"])`),
       hide(`html[data-framework="${id}"] [data-fw-item]:not([data-fw-item="${id}"])`),

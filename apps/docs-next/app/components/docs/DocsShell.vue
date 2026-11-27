@@ -48,14 +48,14 @@ watch(() => route.path, () => {
         </div>
 
         <div class="shrink-0 px-5 pt-4 lg:px-6">
-          <!-- -mx-2.5 lines the card up with the sidebar's highlight. -->
-          <div class="d-card -mx-2.5 flex flex-col divide-y divide-(--d-line) overflow-hidden rounded-[8px] border border-(--d-line) bg-(--d-raised)">
+          <!-- -mx-2.5 lines both controls up with the sidebar's highlight. -->
+          <div class="d-controls -mx-2.5 flex flex-col gap-1">
             <DocsSearchButton />
             <DocsFrameworkSelect v-if="content.mode !== 'version'" />
           </div>
         </div>
 
-        <div class="d-scroll min-h-0 flex-1 px-5 pt-5 pb-12 lg:px-6">
+        <div class="d-scroll min-h-0 flex-1 px-5 pt-5 pb-6 lg:px-6">
           <DocsSidebar />
         </div>
       </aside>

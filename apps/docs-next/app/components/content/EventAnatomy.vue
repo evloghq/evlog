@@ -79,7 +79,7 @@ function lit(line: { parts: PartId[] }) {
 <template>
   <DocsFigure ref="root" :finished="false" still>
     <pre
-      class="overflow-x-auto px-5 pt-5 pb-4 font-mono text-[13px]/[1.85] sm:px-6"
+      class="overflow-x-auto overflow-y-hidden px-5 pt-5 pb-4 font-mono text-[13px]/[1.85] sm:px-6"
       aria-label="A wide event as evlog prints it"
     ><span
       v-for="(line, i) in lines"
@@ -109,7 +109,6 @@ function lit(line: { parts: PartId[] }) {
           :aria-selected="active === p.id"
           class="relative rounded-(--d-r-md) px-2 py-1 text-[13.5px] transition-[color,transform] duration-150 active:scale-[0.97]"
           :class="active === p.id ? 'text-highlighted' : 'text-dimmed hover:text-default'"
-          @pointerenter="active = p.id"
           @focus="active = p.id"
           @click="active = p.id"
         >

@@ -19,7 +19,7 @@ const entry = computed(() => glossary[props.of])
   >
     <NuxtLink
       :to="prefixLink(entry.to, content.routeBase)"
-      class="cursor-help text-inherit underline decoration-[#4a4a52] decoration-dotted decoration-1 underline-offset-[5px] transition-[text-decoration-color] duration-150 hover:decoration-(--d-signal-text)"
+      class="text-inherit underline decoration-[#4a4a52] decoration-dotted decoration-1 underline-offset-[5px] transition-[text-decoration-color] duration-150 hover:decoration-(--d-signal-text)"
     >
       <slot />
     </NuxtLink>

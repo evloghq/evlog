@@ -3,10 +3,10 @@ export default defineAppConfig({
     siteName: 'evlog',
   },
   // Docs sidebar. A group with one section lists that section's pages; a group with several lists one
-  // entry per section, with its pages nested under it while the reader is inside it.
+  // entry per section, with its pages nested under it. A catalogue section nests only the page being read.
   sidebar: [
     { sections: ['start'] },
-    { label: 'Core', sections: ['events', 'errors', 'drains', 'audit'] },
+    { label: 'Core', sections: ['events', 'errors', 'drains', 'audit'], catalogs: ['drains'] },
     { label: 'Tools', sections: ['map', 'signals', 'skills', 'telemetry'] },
     { label: 'Integrations', sections: ['integrations'] },
     { label: 'Reference', sections: ['reference'] },
@@ -27,6 +27,36 @@ export default defineAppConfig({
     colors: {
       primary: 'blue',
       neutral: 'zinc',
+    },
+    modal: {
+      variants: {
+        overlay: { true: { overlay: 'bg-black/60' } },
+      },
+    },
+    contentSearch: {
+      slots: {
+        modal: 'rounded-(--d-r-lg) divide-(--d-line) ring-(--d-line-strong) sm:max-w-2xl',
+      },
+    },
+    commandPalette: {
+      slots: {
+        root: 'divide-(--d-line)',
+        close: 'rounded-(--d-r-md) text-dimmed hover:bg-transparent hover:text-highlighted',
+        label: 'font-normal text-dimmed',
+        item: 'before:rounded-(--d-r-md) data-highlighted:not-data-disabled:before:bg-(--d-raised-strong)',
+        itemLeadingIcon: 'text-dimmed group-data-highlighted:text-highlighted',
+        itemLabelSuffix: 'text-dimmed',
+      },
+      variants: {
+        virtualize: { false: { viewport: 'divide-y divide-(--d-line)' } },
+        size: {
+          md: {
+            label: 'px-2 pt-2 pb-1 text-[12px]/4',
+            item: 'items-center gap-2.5 px-2 py-1.5 text-[13.5px]/5',
+            itemLeadingIcon: 'size-4',
+          },
+        },
+      },
     },
     prose: {
       codeGroup: {

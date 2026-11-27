@@ -146,16 +146,9 @@
   --d-ease-move: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
-/* A code block: a lit top edge, and a border that answers the pointer. */
+/* A code block: a lit top edge. */
 .d-block {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
-  transition: border-color 200ms ease;
-}
-
-@media (hover: hover) {
-  .d-block:hover {
-    border-color: var(--d-line-strong);
-  }
 }
 
 /* How far down the page the reader is, drawn on the top bar's own hairline. */
@@ -295,17 +288,29 @@
   border-radius: var(--d-r-sm);
 }
 
-/* Inside a scroll area or a clipped card an outside ring is cut off, so the ring is drawn inside. */
+/* The ring appears at once: a colour transition on the control would fade it in from the text colour. */
+.docs-shell :focus-visible {
+  transition-property: none;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+}
+
+/* Inside a scroll area an outside ring is cut off, so the ring is drawn inside. */
 .docs-shell nav a:focus-visible,
 .docs-shell nav button:focus-visible,
-.docs-shell .d-card :focus-visible {
+.docs-shell .d-controls :focus-visible {
   outline-offset: -2px;
   border-radius: 6px;
 }
 
 /* Blue stays out of the navigation: its keyboard ring is the rail's grey. */
 .docs-shell nav :focus-visible,
-.docs-shell .d-card :focus-visible {
+.docs-shell .d-controls :focus-visible {
   outline-color: #8a8a93;
   outline-width: 1.5px;
 }
@@ -313,26 +318,11 @@
 /*
  * The tree evlog prints its events with (├─ └─). Every pixel of line is drawn once: each row owns its
  * slice of trunk (stopping at its bend on the last row) and its rounded branch, which sits on top.
- * Hovering a row lights the way to it: the trunk through every row above, down to its bend, then its
- * branch. The current page's path is the same shape in a brighter step and wins over hover. Both trunk
- * halves are registered colours so the gradient fades instead of snapping.
+ * The way to the current page is the same shape in a brighter step.
  */
-@property --rail-top {
-  syntax: '<color>';
-  inherits: false;
-  initial-value: #4a4a52;
-}
-
-@property --rail-low {
-  syntax: '<color>';
-  inherits: false;
-  initial-value: #4a4a52;
-}
-
 .d-rail {
   --rail-mid: 14px;
   --rail-path: #a1a1aa;
-  --rail-hover: #7a7a83;
   --rail-base: #4a4a52;
   margin: 2px 0 4px 3px;
 }
@@ -353,7 +343,6 @@
   left: 0;
   width: 1px;
   background: linear-gradient(to bottom, var(--rail-top) var(--rail-turn), var(--rail-low) var(--rail-turn));
-  transition: --rail-top 160ms ease, --rail-low 160ms ease;
 }
 
 .d-rail > li:last-child::after {
@@ -372,40 +361,6 @@
   border-bottom: 1px solid var(--rail-base);
   border-left: 1px solid var(--rail-base);
   border-bottom-left-radius: var(--rail-bend, 6px);
-  transition: border-color 160ms ease;
-}
-
-@media (hover: hover) {
-  .d-rail > li:where(:has(~ li > a:hover))::after {
-    --rail-top: var(--rail-hover);
-    --rail-low: var(--rail-hover);
-    z-index: 2;
-  }
-
-  .d-rail > li:where(:has(> a:hover))::after {
-    --rail-top: var(--rail-hover);
-  }
-
-  .d-rail > li:where(:has(> a:hover))::before {
-    border-color: var(--rail-hover);
-  }
-}
-
-/* A tree of rows that are not links (the page header's fields) lights the same way. */
-@media (hover: hover) {
-  .d-rail[data-rows] > li:where(:has(~ li:hover))::after {
-    --rail-top: var(--rail-hover);
-    --rail-low: var(--rail-hover);
-    z-index: 2;
-  }
-
-  .d-rail[data-rows] > li:where(:hover)::after {
-    --rail-top: var(--rail-hover);
-  }
-
-  .d-rail[data-rows] > li:where(:hover)::before {
-    border-color: var(--rail-hover);
-  }
 }
 
 .d-rail > li[data-path]::after {
@@ -423,86 +378,9 @@
   border-color: var(--rail-path);
 }
 
-/*
- * A table is ruled, not boxed: one hairline under every row, the last one closing it. The two lines
- * around the row under the pointer brighten, as a code block's border does. Borders are collapsed,
- * so a row's top line belongs to the row above it.
- */
+/* A table is ruled, not boxed: one hairline under every row, the last one closing it. */
 .d-table tr {
   border-bottom: 1px solid var(--d-line);
-  transition: border-color 150ms ease;
-}
-
-@media (hover: hover) {
-  .d-table tbody tr:hover,
-  .d-table tbody tr:has(+ tr:hover),
-  .d-table thead:has(+ tbody > tr:first-child:hover) tr {
-    border-bottom-color: var(--d-line-strong);
-  }
-
-  .d-table tbody tr:hover td:not(:first-child) {
-    color: var(--ui-text-default);
-  }
-}
-
-/* A collapsible block that animates its real height. */
-.d-collapse {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-}
-
-[data-folding] .d-collapse {
-  transition: grid-template-rows 300ms var(--d-ease), opacity 200ms ease;
-}
-
-.d-collapse[data-open='true'] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-}
-
-.d-collapse > * {
-  min-height: 0;
-  overflow: hidden;
-}
-
-/*
- * A sidebar entry's pages or sections, opening and closing with the reader's path. The entry being
- * left folds away while the next one opens, on the same curve, so what is below slides instead of
- * jumping. The page itself still changes instantly.
- */
-.d-fold {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 280ms var(--d-ease);
-}
-
-.d-fold[data-open='true'] {
-  grid-template-rows: 1fr;
-}
-
-.d-fold > * {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.d-fold > * > * {
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 140ms ease, transform 280ms var(--d-ease);
-}
-
-.d-fold[data-open='true'] > * > * {
-  opacity: 1;
-  transform: none;
-  transition: opacity 220ms ease 70ms, transform 280ms var(--d-ease);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .d-fold,
-  .d-fold > * > * {
-    transition: none;
-  }
 }
 
 /* Scroll areas fade at the edge that has more content, following the scroll position. */
@@ -521,7 +399,6 @@
 .d-scroll {
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 200ms ease;
@@ -538,11 +415,15 @@
     animation-timeline: scroll(self);
   }
 
+  /*
+   * A scroll timeline only runs on an area that has something to scroll, so the scroll stays inside
+   * an area that overflows and passes through to the page from one that does not.
+   */
   @keyframes d-scroll-fade {
-    0% { --d-fade-top: 0px; --d-fade-bottom: 40px; }
+    0% { --d-fade-top: 0px; --d-fade-bottom: 40px; overscroll-behavior: contain; }
     6% { --d-fade-top: 32px; }
     94% { --d-fade-bottom: 40px; }
-    100% { --d-fade-top: 32px; --d-fade-bottom: 0px; }
+    100% { --d-fade-top: 32px; --d-fade-bottom: 0px; overscroll-behavior: contain; }
   }
 }
 
@@ -561,6 +442,7 @@
 
 .d-scroll-x {
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
   mask-image: linear-gradient(to right, transparent, #000 var(--d-fade-left), #000 calc(100% - var(--d-fade-right)), transparent);
 }
@@ -636,43 +518,5 @@
   .d-swap-enter-from,
   .d-swap-leave-to {
     transform: none;
-  }
-}
-
-/* Before a framework is chosen, its tile shows a few marks in turn: one every two seconds. */
-.fw-cycle > * {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  animation: fw-cycle 12s var(--d-ease) infinite both;
-}
-
-@keyframes fw-cycle {
-  0% {
-    opacity: 0;
-    filter: blur(2px);
-    transform: translateY(3px);
-  }
-  4%,
-  14% {
-    opacity: 1;
-    filter: blur(0);
-    transform: none;
-  }
-  18%,
-  100% {
-    opacity: 0;
-    filter: blur(2px);
-    transform: translateY(-3px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fw-cycle > * {
-    animation: none;
-  }
-
-  .fw-cycle > :first-child {
-    opacity: 1;
   }
 }

@@ -145,11 +145,15 @@ onBeforeUnmount(() => {
   margin: 1.75rem 0;
 }
 
-.emits-code > :deep(*) {
-  margin-block: 0;
+.emits-code > :deep(:first-child) {
+  margin-top: 0;
 }
 
-.emits-code:has(+ .emits-out) > :deep(*) {
+.emits-code > :deep(:last-child) {
+  margin-bottom: 0;
+}
+
+.emits-code:has(+ .emits-out) > :deep(:last-child) {
   border-bottom-right-radius: 0;
   border-bottom-left-radius: 0;
 }
@@ -179,15 +183,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--d-line);
   border-top: 0;
   border-radius: 0 0 var(--d-r-lg) var(--d-r-lg);
-  transition: border-color 200ms ease;
-}
-
-@media (hover: hover) {
-  .emits:hover .emits-code > :deep(*),
-  .emits:hover .emits-code > :deep(figure > .d-figure-frame),
-  .emits:hover .emits-out {
-    border-color: var(--d-line-strong);
-  }
 }
 
 .emits-wait {
