@@ -56,6 +56,8 @@ Read the changed pages together before shipping. Each should answer a distinct r
 
 ## Shipping a change
 
+If the work matches the `amp` skill, load it before you edit.
+
 The whole flow runs in `/workspace/repo`; nothing ships through the GitHub file API.
 
 1. Branch off the current `main` the session starts on: `git checkout -b <branch>`.

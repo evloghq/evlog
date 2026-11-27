@@ -20,6 +20,22 @@ describe('authored skill frontmatter', () => {
     }
   })
 
+  it('teaches Amp as the CLI, not as custom tools', () => {
+    const skill = readFileSync(join(import.meta.dirname, '..', 'skills', 'amp', 'SKILL.md'), 'utf8')
+    const contributing = readFileSync(join(import.meta.dirname, '..', 'skills', 'contributing', 'SKILL.md'), 'utf8')
+    expect(skill).toContain('amp --execute "PROMPT" --executor orb --project evloghq/evlog --visibility private --label evi --title EVL-42')
+    expect(skill).toContain('amp threads list --json')
+    expect(skill).toContain('amp threads markdown T-…')
+    expect(skill).toContain('amp threads search EVL-42')
+    expect(skill).toContain('amp threads continue T-… --execute --executor orb "PROMPT"')
+    expect(skill).toContain('> Written by an AI agent on behalf of @HugoRCD. @HugoRCD has not reviewed it yet.')
+    expect(skill).toContain('Never merge')
+    expect(skill).toContain('Do not pass `--stream-json`')
+    expect(skill).not.toContain('amp__execute')
+    expect(contributing).toContain('If the work matches the `amp` skill, load it before you edit.')
+    expect(contributing).not.toContain('amp__execute')
+  })
+
   it('keeps scheduled autonomous pull requests out of draft state', () => {
     const agentDir = join(import.meta.dirname, '..')
     const skillNames = ['adapter-alignment', 'content-pass', 'repo-health-sweep', 'self-review', 'upstream-sync']
