@@ -79,6 +79,17 @@ function isRequestLogger(value: unknown): value is RequestLogger {
     && typeof value.emit === 'function'
 }
 
+/**
+ * Kit's `redirect()` and 4xx `error()` are control flow Kit turns into the response, not application errors.
+ * Matched by shape: a built app bundles its own copy of Kit, so `isRedirect()` / `isHttpError()` imported here miss its instances.
+ */
+function isSvelteKitControlFlow(value: unknown): value is { status: number } {
+  return isPlainObject(value)
+    && !(value instanceof Error)
+    && typeof value.status === 'number'
+    && (typeof value.location === 'string' || (isPlainObject(value.body) && typeof value.body.message === 'string' && value.status < 500))
+}
+
 interface ContextEvlogError {
   name: 'EvlogError'
   status: number
@@ -187,6 +198,11 @@ export function evlog(options: EvlogSvelteKitOptions = {}): SvelteKitHandle {
 
         return finishResponse(response)
       } catch (error) {
+        if (isSvelteKitControlFlow(error)) {
+          await finish({ status: error.status })
+          throw error
+        }
+
         await finish({ error: error instanceof Error ? error : new Error(String(error)) })
 
         // Return structured JSON for EvlogError (like NextJS withEvlog / Nuxt errorHandler)
