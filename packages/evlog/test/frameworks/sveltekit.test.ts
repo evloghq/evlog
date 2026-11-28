@@ -171,9 +171,15 @@ describe('evlog/sveltekit', () => {
     await expect(handle({ event, resolve })).rejects.toThrow('Unexpected crash')
   })
 
+  // A built app bundles its own copy of Kit, so what it throws is not an instance of the Kit evlog imports
+  const throwRedirectFromAnotherKitCopy = () => {
+    throw { status: 303, location: '/login' }
+  }
+
   it.each([
     ['a redirect', () => redirect(303, '/login'), { status: 303, location: '/login' }],
     ['an http error', () => error(403, 'Admin access required'), { status: 403, body: { message: 'Admin access required' } }],
+    ['a redirect from another copy of Kit', throwRedirectFromAnotherKitCopy, { status: 303, location: '/login' }],
   ])('rethrows %s thrown by a later hook without logging it', async (_, throwFromResolve, thrown) => {
     const { drain } = createPipelineSpies()
     const handle = evlog({ drain })
@@ -181,6 +187,18 @@ describe('evlog/sveltekit', () => {
 
     await expect(handle({ event: createMockEvent('GET', '/admin'), resolve })).rejects.toMatchObject(thrown)
     expect(drain).not.toHaveBeenCalled()
+  })
+
+  it('logs a 5xx http error thrown by a later hook as an error', async () => {
+    const { drain } = createPipelineSpies()
+    const handle = evlog({ drain })
+    const resolve = vi.fn(() => error(503, 'Database unavailable'))
+
+    await expect(handle({ event: createMockEvent('GET', '/admin'), resolve })).rejects.toMatchObject({ status: 503 })
+    await waitForDrainCalls(drain)
+
+    const emitted = defined(findEventViaDrain(drain, e => e.path === '/admin'), 'http error event')
+    expect(emitted.level).toBe('error')
   })
 
   it('intercepts 500 response when handleError logged an EvlogError', async () => {

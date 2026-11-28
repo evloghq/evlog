@@ -1,4 +1,3 @@
-import { isHttpError, isRedirect } from '@sveltejs/kit'
 import type { RequestLogger } from '../types'
 import { registerDiskPrettyErrorSnippetReader } from '../shared/register-disk-snippet'
 import { defineFrameworkIntegration } from '../shared/integration'
@@ -78,6 +77,17 @@ function isRequestLogger(value: unknown): value is RequestLogger {
   return isPlainObject(value)
     && typeof value.error === 'function'
     && typeof value.emit === 'function'
+}
+
+/**
+ * Kit's `redirect()` and 4xx `error()` are control flow Kit turns into the response, not application errors.
+ * Matched by shape: a built app bundles its own copy of Kit, so `isRedirect()` / `isHttpError()` imported here miss its instances.
+ */
+function isSvelteKitControlFlow(value: unknown): boolean {
+  return isPlainObject(value)
+    && !(value instanceof Error)
+    && typeof value.status === 'number'
+    && (typeof value.location === 'string' || (isPlainObject(value.body) && value.status < 500))
 }
 
 interface ContextEvlogError {
@@ -188,8 +198,7 @@ export function evlog(options: EvlogSvelteKitOptions = {}): SvelteKitHandle {
 
         return finishResponse(response)
       } catch (error) {
-        // redirect() and error() are control flow Kit turns into the response, not application errors
-        if (isRedirect(error) || isHttpError(error)) throw error
+        if (isSvelteKitControlFlow(error)) throw error
 
         await finish({ error: error instanceof Error ? error : new Error(String(error)) })
 
