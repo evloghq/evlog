@@ -5,6 +5,7 @@ import type { RequestLogger } from '../../src/types'
 import { evlog, evlogHandleError, createEvlogHooks, useLogger } from '../../src/sveltekit/index'
 import { createDrainPipeline } from '../../src/pipeline'
 import { EvlogError } from '../../src/error'
+import { definePlugin } from '../../src/shared/plugin'
 import {
   assertDrainCalledWith,
   assertEnrichBeforeDrain,
@@ -180,21 +181,35 @@ describe('evlog/sveltekit', () => {
     ['a redirect', () => redirect(303, '/login'), { status: 303, location: '/login' }],
     ['an http error', () => error(403, 'Admin access required'), { status: 403, body: { message: 'Admin access required' } }],
     ['a redirect from another copy of Kit', throwRedirectFromAnotherKitCopy, { status: 303, location: '/login' }],
-  ])('rethrows %s thrown by a later hook without logging it', async (_, throwFromResolve, thrown) => {
+  ])('logs %s thrown by a later hook with its own status and rethrows it', async (_, throwFromResolve, thrown) => {
+    const { drain } = createPipelineSpies()
+    const onRequestFinish = vi.fn()
+    const handle = evlog({ drain, plugins: [definePlugin({ name: 'lifecycle', onRequestFinish })] })
+    const resolve = vi.fn(throwFromResolve)
+
+    await expect(handle({ event: createMockEvent('GET', '/admin'), resolve })).rejects.toMatchObject(thrown)
+    await waitForDrainCalls(drain)
+
+    const emitted = defined(findEventViaDrain(drain, e => e.path === '/admin'), 'event')
+    expect(emitted.status).toBe(thrown.status)
+    expect(emitted.level).toBe('info')
+    expect(emitted.error).toBeUndefined()
+    expect(onRequestFinish).toHaveBeenCalledOnce()
+  })
+
+  const throwResponse = () => {
+    throw new Response('Forbidden', { status: 403 })
+  }
+
+  it.each([
+    ['a 5xx http error', () => error(503, 'Database unavailable')],
+    ['a Response', throwResponse],
+  ])('logs %s thrown by a later hook as an error', async (_, throwFromResolve) => {
     const { drain } = createPipelineSpies()
     const handle = evlog({ drain })
     const resolve = vi.fn(throwFromResolve)
 
-    await expect(handle({ event: createMockEvent('GET', '/admin'), resolve })).rejects.toMatchObject(thrown)
-    expect(drain).not.toHaveBeenCalled()
-  })
-
-  it('logs a 5xx http error thrown by a later hook as an error', async () => {
-    const { drain } = createPipelineSpies()
-    const handle = evlog({ drain })
-    const resolve = vi.fn(() => error(503, 'Database unavailable'))
-
-    await expect(handle({ event: createMockEvent('GET', '/admin'), resolve })).rejects.toMatchObject({ status: 503 })
+    await expect(handle({ event: createMockEvent('GET', '/admin'), resolve })).rejects.toBeDefined()
     await waitForDrainCalls(drain)
 
     const emitted = defined(findEventViaDrain(drain, e => e.path === '/admin'), 'http error event')
